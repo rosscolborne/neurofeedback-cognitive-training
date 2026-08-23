@@ -31,6 +31,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [eegData, setEegData] = useState<EEGDataPoint | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [isFitAccepted, setIsFitAccepted] = useState(false);
   const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
@@ -104,7 +105,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegDataRef.current = data;
       setEegData(data);
 
-      if (!isPausedRef.current && phaseRef.current !== 'calibration') {
+      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
         // Collect rolling band averages
         const acc = bandAccumulatorRef.current;
         acc.delta += data.bands.delta;
@@ -132,11 +133,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegEngine.stop();
       audioEngine.stopAll();
     };
-  }, [client.assignedProtocol]);
+  }, [client.assignedProtocol, isFitAccepted]);
 
-  // Main session timer interval (Decoupled from high-frequency eegData so it ticks reliably every second)
+  // Main session timer interval: strictly starts ONLY after user clicks "Accept Current Fit"
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || !isFitAccepted) return;
 
     const interval = window.setInterval(() => {
       setTotalSecondsElapsed(prev => {
@@ -178,7 +179,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [finishSession, isPaused, sessionTotalDuration]);
+  }, [finishSession, isFitAccepted, isPaused, sessionTotalDuration]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -207,6 +208,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const handleStartDemoMode = () => {
     eegEngine.isDemoMode = true;
+    setIsFitAccepted(true);
     forceUpdate({});
   };
 
@@ -216,23 +218,25 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <div
         style={{
           width: '100%',
-          minHeight: '100vh',
+          height: '100vh',
+          maxHeight: '100vh',
           maxWidth: '520px',
           margin: '0 auto',
           backgroundColor: 'var(--surface-patient-base)',
-          padding: '40px 24px',
+          padding: '32px 24px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          gap: '24px',
+          gap: '20px',
           textAlign: 'center',
+          overflow: 'hidden',
         }}
       >
         <div
           style={{
-            width: '80px',
-            height: '80px',
+            width: '72px',
+            height: '72px',
             borderRadius: '50%',
             backgroundColor: 'var(--brand-primary-subtle)',
             color: 'var(--brand-primary)',
@@ -241,24 +245,24 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             justifyContent: 'center',
           }}
         >
-          <Wifi size={40} />
+          <Wifi size={36} />
         </div>
 
         <div>
-          <h1 className="font-display" style={{ fontSize: '26px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <h1 className="font-display" style={{ fontSize: '24px', fontWeight: 500, color: 'var(--text-primary)' }}>
             Connect Muse Headband
           </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px', maxWidth: '360px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '340px', lineHeight: 1.5 }}>
             Pair your Muse 2 or Muse S headband via Web Bluetooth to stream real 4-channel EEG (TP9, AF7, AF8, TP10).
           </p>
         </div>
 
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
           <button
             onClick={handleConnectHardware}
             disabled={isPairing}
             className="btn btn-primary"
-            style={{ padding: '15px', fontSize: '15px' }}
+            style={{ padding: '14px', fontSize: '14px' }}
           >
             {isPairing ? 'Opening Bluetooth Pairing...' : 'Pair Muse via Web Bluetooth (Zero Install)'}
           </button>
@@ -274,7 +278,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <button
             onClick={onCancel}
             className="btn btn-ghost"
-            style={{ padding: '10px', fontSize: '13px', marginTop: '6px' }}
+            style={{ padding: '10px', fontSize: '13px' }}
           >
             Cancel & Return to Dashboard
           </button>
@@ -288,6 +292,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     );
   }
 
+  // Pre-session fit confirmation prompt if connected but not yet accepted
+  if (eegEngine.isHardwareConnected && !isFitAccepted) {
+    return (
+      <HeadsetFitModal
+        onConfirmReady={() => {
+          setIsFitAccepted(true);
+          setShowFitModal(false);
+        }}
+        onClose={onCancel}
+      />
+    );
+  }
+
   const remainingSeconds = Math.max(0, sessionTotalDuration - totalSecondsElapsed);
   const worstQuality = eegData?.signalQuality || 'good';
 
@@ -296,6 +313,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       style={{
         width: '100%',
         height: '100vh',
+        maxHeight: '100vh',
         maxWidth: '520px',
         margin: '0 auto',
         backgroundColor: 'var(--surface-patient-base)',
@@ -303,17 +321,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         flexDirection: 'column',
         position: 'relative',
         boxShadow: '0 0 40px rgba(0,0,0,0.06)',
+        overflow: 'hidden',
       }}
     >
       {/* Session Top Header */}
       <header
         style={{
-          padding: '14px 20px',
+          padding: '12px 18px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           borderBottom: '1px solid var(--border-subtle)',
           backgroundColor: 'var(--surface-patient-card)',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -327,11 +347,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             }}
           />
           <div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-              Phase: <strong style={{ color: 'var(--text-primary)' }}>{phase}</strong> ({formatTime(totalSecondsElapsed)} elapsed)
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+              Phase: <strong style={{ color: 'var(--text-primary)' }}>{phase}</strong> ({formatTime(totalSecondsElapsed)})
             </div>
-            <div className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              {formatTime(remainingSeconds)} <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-tertiary)' }}>remaining</span>
+            <div className="font-mono" style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+              {formatTime(remainingSeconds)} <span style={{ fontSize: '10px', fontWeight: 400, color: 'var(--text-tertiary)' }}>remaining</span>
             </div>
           </div>
         </div>
@@ -348,18 +368,18 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             style={{
               background: worstQuality === 'poor' ? '#FEE2E2' : worstQuality === 'fair' ? '#FEF3C7' : 'var(--surface-patient-recessed)',
               border: `1px solid ${worstQuality === 'poor' ? '#EF4444' : worstQuality === 'fair' ? '#F59E0B' : 'var(--border-subtle)'}`,
-              padding: '5px 10px',
+              padding: '4px 8px',
               borderRadius: 'var(--radius-sm)',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '5px',
               fontSize: '11px',
               color: worstQuality === 'poor' ? '#B91C1C' : worstQuality === 'fair' ? '#92400E' : 'var(--text-secondary)',
               cursor: 'pointer',
               fontWeight: 600,
             }}
           >
-            <Activity size={13} color={worstQuality === 'poor' ? '#EF4444' : worstQuality === 'fair' ? '#F59E0B' : '#10B981'} />
+            <Activity size={12} color={worstQuality === 'poor' ? '#EF4444' : worstQuality === 'fair' ? '#F59E0B' : '#10B981'} />
             <span>{eegEngine.isHardwareConnected ? (eegEngine.deviceName || 'Muse S') : 'Simulator'}</span>
           </button>
         </div>
@@ -370,34 +390,34 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         <div
           style={{
             position: 'absolute',
-            top: 72,
-            left: 20,
-            right: 20,
+            top: 60,
+            left: 16,
+            right: 16,
             zIndex: 30,
             background: 'rgba(255, 255, 255, 0.95)',
             border: '1.5px solid var(--brand-primary)',
             borderRadius: 'var(--radius-md)',
-            padding: '10px 14px',
+            padding: '8px 12px',
             boxShadow: '0 4px 16px rgba(232, 150, 122, 0.25)',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '8px',
             animation: 'gentleFloat 0.3s ease',
           }}
         >
-          <Sparkles size={20} color="var(--brand-primary)" />
+          <Sparkles size={18} color="var(--brand-primary)" />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
               Adaptive Engine: Target {adjustmentNotice.direction}
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{adjustmentNotice.reason}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{adjustmentNotice.reason}</div>
           </div>
         </div>
       )}
 
       {/* Main Experience Viewport */}
-      <main style={{ flex: 1, padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div style={{ flex: 1, minHeight: '300px', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+      <main style={{ flex: 1, minHeight: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, borderRadius: 'var(--radius-lg)', overflow: 'hidden', position: 'relative' }}>
           {selectedExperience === 'skyline-drift' && (
             <SkylineDriftCanvas eegData={eegData} isPaused={isPaused} />
           )}
@@ -431,33 +451,34 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             display: 'flex',
             justifyContent: 'space-around',
             alignItems: 'center',
-            padding: '10px 14px',
+            padding: '8px 12px',
+            flexShrink: 0,
           }}
         >
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Theta/Beta</div>
-            <div className="font-mono" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Theta/Beta</div>
+            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
               {eegData ? eegData.thetaBetaRatio.toFixed(2) : '--'}
             </div>
           </div>
-          <div style={{ width: '1px', height: '24px', background: 'var(--border-default)' }} />
+          <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Alpha</div>
-            <div className="font-mono" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--chart-alpha)' }}>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Alpha</div>
+            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-alpha)' }}>
               {eegData ? eegData.bands.alpha.toFixed(1) + ' µV' : '--'}
             </div>
           </div>
-          <div style={{ width: '1px', height: '24px', background: 'var(--border-default)' }} />
+          <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>SMR (12-15Hz)</div>
-            <div className="font-mono" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--chart-smr)' }}>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>SMR (12-15Hz)</div>
+            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-smr)' }}>
               {eegData ? eegData.bands.smr.toFixed(1) + ' µV' : '--'}
             </div>
           </div>
-          <div style={{ width: '1px', height: '24px', background: 'var(--border-default)' }} />
+          <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone %</div>
-            <div className="font-mono" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--brand-primary)' }}>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone %</div>
+            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
               {totalSecondsElapsed > 60 ? Math.round((inZoneSeconds / (totalSecondsElapsed - 60)) * 100) : 0}%
             </div>
           </div>
@@ -469,13 +490,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             background: 'var(--surface-patient-card)',
             border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-md)',
-            padding: '8px 12px',
+            padding: '6px 10px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Sensors:</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Sensors:</span>
           <div style={{ display: 'flex', gap: '8px' }}>
             {[
               { label: 'TP9 (L-Ear)', key: 'tp9' as const },
@@ -483,7 +505,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               { label: 'AF8 (R-Forehead)', key: 'af8' as const },
               { label: 'TP10 (R-Ear)', key: 'tp10' as const },
             ].map(item => {
-              const st = eegData?.channelQuality[item.key] || 'poor';
+              const st = eegData?.channelQuality[item.key] || 'good';
               const dotColor = st === 'good' ? '#10B981' : st === 'fair' ? '#F59E0B' : '#EF4444';
               return (
                 <div
@@ -510,26 +532,27 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       {/* Session Footer Action Bar */}
       <footer
         style={{
-          padding: '14px 20px',
+          padding: '12px 18px',
           background: 'var(--surface-patient-card)',
           borderTop: '1px solid var(--border-subtle)',
           display: 'flex',
-          gap: '12px',
+          gap: '10px',
+          flexShrink: 0,
         }}
       >
         <button
           onClick={() => setIsPaused(!isPaused)}
           className="btn btn-secondary"
-          style={{ flex: 1 }}
+          style={{ flex: 1, padding: '10px' }}
         >
-          {isPaused ? <Play size={18} /> : <Pause size={18} />}
+          {isPaused ? <Play size={16} /> : <Pause size={16} />}
           {isPaused ? 'Resume' : 'Pause'}
         </button>
 
         <button
           onClick={() => setShowEndConfirm(true)}
           className="btn btn-primary"
-          style={{ flex: 2 }}
+          style={{ flex: 2, padding: '10px' }}
         >
           End Session & Save
         </button>
@@ -538,7 +561,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       {/* 4-Channel Headset Fit Modal */}
       {showFitModal && (
         <HeadsetFitModal
-          onConfirmReady={() => setShowFitModal(false)}
+          onConfirmReady={() => {
+            setIsFitAccepted(true);
+            setShowFitModal(false);
+          }}
           onClose={() => setShowFitModal(false)}
         />
       )}
