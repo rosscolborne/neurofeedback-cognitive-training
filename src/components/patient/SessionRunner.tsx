@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ClientProfile, EEGDataPoint, ExperienceType, ProtocolType, SessionPhase, SessionRecord } from '../../types';
+import { ClientProfile, EEGDataPoint, ExperienceType, SessionPhase, SessionRecord } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import { AdaptiveDifficultyEngine, AdaptiveAdjustmentLog } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
@@ -11,7 +11,8 @@ import { RhythmLockGame } from '../experiences/RhythmLockGame';
 import { MediaModePlayer } from '../experiences/MediaModePlayer';
 import { SoundscapePlayer } from '../experiences/SoundscapePlayer';
 import { MandalaBreathing } from '../experiences/MandalaBreathing';
-import { Play, Pause, AlertCircle, X, CheckCircle2, Battery, Wifi, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { HeadsetFitModal } from './HeadsetFitModal';
+import { Play, Pause, Wifi, Sparkles, Volume2, VolumeX, ShieldCheck, Activity } from 'lucide-react';
 
 interface SessionRunnerProps {
   client: ClientProfile;
@@ -30,101 +31,32 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [eegData, setEegData] = useState<EEGDataPoint | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
 
   // Timers (in seconds)
   // Standard duration: 25 mins total (60s calib, 120s warmup, 1140s training, 120s cooldown, 60s debrief)
-  // For interactive demo flow: we also allow speed-running or jumping to finish.
+  const sessionTotalDuration = 1500; // 25 minutes = 1500 seconds
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
-  const sessionTotalDuration = 1500; // 25 minutes
 
   const adaptiveEngineRef = useRef<AdaptiveDifficultyEngine>(new AdaptiveDifficultyEngine(client.assignedProtocol));
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
   const bandAccumulatorRef = useRef({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0, count: 0 });
+  const eegDataRef = useRef<EEGDataPoint | null>(null);
+  const isPausedRef = useRef(isPaused);
+  const phaseRef = useRef(phase);
 
   useEffect(() => {
-    eegEngine.setProtocol(client.assignedProtocol);
-    eegEngine.start(100);
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
-    const unsubscribe = eegEngine.subscribe(data => {
-      setEegData(data);
-
-      if (!isPaused && phase !== 'calibration') {
-        // Collect rolling band averages
-        const acc = bandAccumulatorRef.current;
-        acc.delta += data.bands.delta;
-        acc.theta += data.bands.theta;
-        acc.alpha += data.bands.alpha;
-        acc.smr += data.bands.smr;
-        acc.beta += data.bands.beta;
-        acc.gamma += data.bands.gamma;
-        acc.count += 1;
-
-        // Feed adaptive difficulty engine during Core Training
-        if (phase === 'training') {
-          const result = adaptiveEngineRef.current.addSample(data.inZone);
-          if (result.adjusted && result.log) {
-            eegEngine.setThreshold(result.log.newThreshold);
-            setAdjustmentNotice(result.log);
-            setTimeout(() => setAdjustmentNotice(null), 5000);
-          }
-        }
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      eegEngine.stop();
-      audioEngine.stopAll();
-    };
-  }, [client.assignedProtocol, phase, isPaused]);
-
-  // Main session ticker
   useEffect(() => {
-    if (isPaused) return;
+    phaseRef.current = phase;
+  }, [phase]);
 
-    const interval = window.setInterval(() => {
-      setTotalSecondsElapsed(prev => {
-        const next = prev + 1;
-
-        // Phase transitions
-        if (next >= 60 && phase === 'calibration') {
-          setPhase('warmup');
-          audioEngine.playChime('success');
-        } else if (next >= 180 && phase === 'warmup') {
-          setPhase('training');
-        } else if (next >= 1320 && phase === 'training') {
-          setPhase('cooldown');
-        } else if (next >= sessionTotalDuration) {
-          finishSession();
-        }
-
-        // Periodic time-series capture every 10 seconds
-        if (next % 10 === 0 && eegData) {
-          timeSeriesRef.current.push({
-            t: next,
-            thetaBetaRatio: eegData.thetaBetaRatio,
-            alpha: eegData.bands.alpha,
-            smr: eegData.bands.smr,
-            beta: eegData.bands.beta,
-            inZone: eegData.inZone,
-          });
-        }
-
-        return next;
-      });
-
-      if (eegData?.inZone && phase !== 'calibration') {
-        setInZoneSeconds(z => z + 1);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isPaused, phase, eegData]);
-
-  const finishSession = () => {
+  const finishSession = React.useCallback(() => {
     const totalTrainTime = Math.max(1, totalSecondsElapsed - 60);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
     const acc = bandAccumulatorRef.current;
@@ -141,19 +73,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       experience: selectedExperience,
       durationSeconds: totalSecondsElapsed,
       timeInZonePercent,
-      averageCoherence: eegData?.coherence || 78,
+      averageCoherence: eegDataRef.current?.coherence || 78,
       peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
       averageBands: {
-        delta: Math.round((acc.delta / count) * 10) / 10 || 12.5,
-        theta: Math.round((acc.theta / count) * 10) / 10 || 7.8,
-        alpha: Math.round((acc.alpha / count) * 10) / 10 || 10.4,
-        smr: Math.round((acc.smr / count) * 10) / 10 || 6.5,
-        beta: Math.round((acc.beta / count) * 10) / 10 || 9.2,
-        gamma: Math.round((acc.gamma / count) * 10) / 10 || 4.1,
+        delta: Math.round((acc.delta / count) * 10) / 10 || 10.5,
+        theta: Math.round((acc.theta / count) * 10) / 10 || 6.8,
+        alpha: Math.round((acc.alpha / count) * 10) / 10 || 9.4,
+        smr: Math.round((acc.smr / count) * 10) / 10 || 5.5,
+        beta: Math.round((acc.beta / count) * 10) / 10 || 7.2,
+        gamma: Math.round((acc.gamma / count) * 10) / 10 || 2.8,
       },
       timeSeries: timeSeriesRef.current.length > 0 ? timeSeriesRef.current : [
-        { t: 0, thetaBetaRatio: 1.9, alpha: 9.5, smr: 6.0, beta: 8.5, inZone: true },
-        { t: 60, thetaBetaRatio: 1.6, alpha: 11.2, smr: 7.1, beta: 9.8, inZone: true },
+        { t: 0, thetaBetaRatio: 1.8, alpha: 9.0, smr: 5.5, beta: 7.5, inZone: true },
+        { t: 60, thetaBetaRatio: 1.5, alpha: 10.8, smr: 6.8, beta: 8.5, inZone: true },
       ],
       adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
       finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
@@ -161,7 +93,92 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
     audioEngine.playChime('complete');
     onComplete(summary);
-  };
+  }, [client.assignedProtocol, client.id, client.name, inZoneSeconds, onComplete, selectedExperience, totalSecondsElapsed]);
+
+  // Subscribe to high-frequency EEG data stream (10 Hz)
+  useEffect(() => {
+    eegEngine.setProtocol(client.assignedProtocol);
+    eegEngine.start(100);
+
+    const unsubscribe = eegEngine.subscribe(data => {
+      eegDataRef.current = data;
+      setEegData(data);
+
+      if (!isPausedRef.current && phaseRef.current !== 'calibration') {
+        // Collect rolling band averages
+        const acc = bandAccumulatorRef.current;
+        acc.delta += data.bands.delta;
+        acc.theta += data.bands.theta;
+        acc.alpha += data.bands.alpha;
+        acc.smr += data.bands.smr;
+        acc.beta += data.bands.beta;
+        acc.gamma += data.bands.gamma;
+        acc.count += 1;
+
+        // Feed adaptive difficulty engine during Core Training
+        if (phaseRef.current === 'training') {
+          const result = adaptiveEngineRef.current.addSample(data.inZone);
+          if (result.adjusted && result.log) {
+            eegEngine.setThreshold(result.log.newThreshold);
+            setAdjustmentNotice(result.log);
+            setTimeout(() => setAdjustmentNotice(null), 5000);
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      eegEngine.stop();
+      audioEngine.stopAll();
+    };
+  }, [client.assignedProtocol]);
+
+  // Main session timer interval (Decoupled from high-frequency eegData so it ticks reliably every second)
+  useEffect(() => {
+    if (isPaused) return;
+
+    const interval = window.setInterval(() => {
+      setTotalSecondsElapsed(prev => {
+        const next = prev + 1;
+
+        // Phase transitions
+        if (next >= 60 && phaseRef.current === 'calibration') {
+          setPhase('warmup');
+          audioEngine.playChime('success');
+        } else if (next >= 180 && phaseRef.current === 'warmup') {
+          setPhase('training');
+        } else if (next >= 1320 && phaseRef.current === 'training') {
+          setPhase('cooldown');
+        } else if (next >= 1440 && phaseRef.current === 'cooldown') {
+          setPhase('debrief');
+        } else if (next >= sessionTotalDuration) {
+          finishSession();
+        }
+
+        // Periodic time-series capture every 10 seconds
+        const currentData = eegDataRef.current;
+        if (next % 10 === 0 && currentData) {
+          timeSeriesRef.current.push({
+            t: next,
+            thetaBetaRatio: currentData.thetaBetaRatio,
+            alpha: currentData.bands.alpha,
+            smr: currentData.bands.smr,
+            beta: currentData.bands.beta,
+            inZone: currentData.inZone,
+          });
+        }
+
+        return next;
+      });
+
+      if (eegDataRef.current?.inZone && phaseRef.current !== 'calibration') {
+        setInZoneSeconds(z => z + 1);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [finishSession, isPaused, sessionTotalDuration]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -183,6 +200,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     forceUpdate({});
+    if (res.success) {
+      setShowFitModal(true);
+    }
   };
 
   const handleStartDemoMode = () => {
@@ -190,6 +210,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     forceUpdate({});
   };
 
+  // Connection Gate Screen
   if (!eegEngine.isHardwareConnected && !eegEngine.isDemoMode) {
     return (
       <div
@@ -208,13 +229,27 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           textAlign: 'center',
         }}
       >
-        <Wifi size={48} color="var(--brand-primary)" />
+        <div
+          style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--brand-primary-subtle)',
+            color: 'var(--brand-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Wifi size={40} />
+        </div>
+
         <div>
           <h1 className="font-display" style={{ fontSize: '26px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Telemetry Connection Required
+            Connect Muse Headband
           </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '340px' }}>
-            A live Muse 2 or Muse S headband connection is required to begin this clinical training session.
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px', maxWidth: '360px', lineHeight: 1.5 }}>
+            Pair your Muse 2 or Muse S headband via Web Bluetooth to stream real 4-channel EEG (TP9, AF7, AF8, TP10).
           </p>
         </div>
 
@@ -223,32 +258,38 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             onClick={handleConnectHardware}
             disabled={isPairing}
             className="btn btn-primary"
-            style={{ padding: '14px', fontSize: '15px' }}
+            style={{ padding: '15px', fontSize: '15px' }}
           >
-            {isPairing ? 'Initializing Bluetooth GATT...' : 'Connect Muse Headband'}
+            {isPairing ? 'Opening Bluetooth Pairing...' : 'Pair Muse via Web Bluetooth (Zero Install)'}
           </button>
 
           <button
             onClick={handleStartDemoMode}
             className="btn btn-secondary"
-            style={{ padding: '12px', fontSize: '14px' }}
+            style={{ padding: '12px', fontSize: '13px' }}
           >
-            Use Demo Simulator (Simulated Telemetry)
+            Preview with Simulated Telemetry
           </button>
 
           <button
             onClick={onCancel}
             className="btn btn-ghost"
-            style={{ padding: '10px', fontSize: '13px', marginTop: '10px' }}
+            style={{ padding: '10px', fontSize: '13px', marginTop: '6px' }}
           >
             Cancel & Return to Dashboard
           </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-tertiary)', fontSize: '11px' }}>
+          <ShieldCheck size={14} />
+          <span>Runs 100% in your browser. No server downloads required.</span>
         </div>
       </div>
     );
   }
 
   const remainingSeconds = Math.max(0, sessionTotalDuration - totalSecondsElapsed);
+  const worstQuality = eegData?.signalQuality || 'good';
 
   return (
     <div
@@ -267,7 +308,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       {/* Session Top Header */}
       <header
         style={{
-          padding: '16px 20px',
+          padding: '14px 20px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -287,10 +328,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           />
           <div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-              Phase: <strong style={{ color: 'var(--text-primary)' }}>{phase}</strong>
+              Phase: <strong style={{ color: 'var(--text-primary)' }}>{phase}</strong> ({formatTime(totalSecondsElapsed)} elapsed)
             </div>
-            <div className="font-mono" style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {formatTime(remainingSeconds)} <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>remaining</span>
+            <div className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              {formatTime(remainingSeconds)} <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-tertiary)' }}>remaining</span>
             </div>
           </div>
         </div>
@@ -300,21 +341,27 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <button onClick={toggleMute} className="btn btn-ghost" style={{ padding: '6px 8px' }}>
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
           </button>
-          <div
+          
+          {/* Signal Quality & Headset Fit Button */}
+          <button
+            onClick={() => setShowFitModal(true)}
             style={{
-              background: 'var(--surface-patient-recessed)',
+              background: worstQuality === 'poor' ? '#FEE2E2' : worstQuality === 'fair' ? '#FEF3C7' : 'var(--surface-patient-recessed)',
+              border: `1px solid ${worstQuality === 'poor' ? '#EF4444' : worstQuality === 'fair' ? '#F59E0B' : 'var(--border-subtle)'}`,
               padding: '5px 10px',
               borderRadius: 'var(--radius-sm)',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               fontSize: '11px',
-              color: 'var(--text-secondary)',
+              color: worstQuality === 'poor' ? '#B91C1C' : worstQuality === 'fair' ? '#92400E' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontWeight: 600,
             }}
           >
-            <Wifi size={13} color="var(--status-active)" />
-            <span>Muse S (100% Signal)</span>
-          </div>
+            <Activity size={13} color={worstQuality === 'poor' ? '#EF4444' : worstQuality === 'fair' ? '#F59E0B' : '#10B981'} />
+            <span>{eegEngine.isHardwareConnected ? (eegEngine.deviceName || 'Muse S') : 'Simulator'}</span>
+          </button>
         </div>
       </header>
 
@@ -349,8 +396,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       )}
 
       {/* Main Experience Viewport */}
-      <main style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ flex: 1, minHeight: '320px', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+      <main style={{ flex: 1, padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ flex: 1, minHeight: '300px', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           {selectedExperience === 'skyline-drift' && (
             <SkylineDriftCanvas eegData={eegData} isPaused={isPaused} />
           )}
@@ -377,14 +424,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           )}
         </div>
 
-        {/* Live Monospace EEG Telemetry Panel (Matching Spec §4.1) */}
+        {/* Live Monospace EEG Telemetry Panel */}
         <div
           className="card-patient-recessed"
           style={{
             display: 'flex',
             justifyContent: 'space-around',
             alignItems: 'center',
-            padding: '10px 16px',
+            padding: '10px 14px',
           }}
         >
           <div style={{ textAlign: 'center' }}>
@@ -416,42 +463,46 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </div>
         </div>
 
-        {/* Mind State Simulator Controls */}
+        {/* 4-Channel Real-Time Mini Status Pills */}
         <div
           style={{
             background: 'var(--surface-patient-card)',
             border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-md)',
-            padding: '8px 14px',
+            padding: '8px 12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '12px',
           }}
         >
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Mind State:</span>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              onClick={() => { eegEngine.userFocus = 90; eegEngine.userCalm = 75; }}
-              className="btn btn-ghost"
-              style={{ fontSize: '11px', padding: '4px 8px', background: 'var(--surface-patient-recessed)' }}
-            >
-              Focus State
-            </button>
-            <button
-              onClick={() => { eegEngine.userFocus = 40; eegEngine.userCalm = 95; eegEngine.eyeClosed = true; }}
-              className="btn btn-ghost"
-              style={{ fontSize: '11px', padding: '4px 8px', background: 'var(--surface-patient-recessed)' }}
-            >
-              Calm Alpha
-            </button>
-            <button
-              onClick={() => { eegEngine.userFocus = 25; eegEngine.userCalm = 35; }}
-              className="btn btn-ghost"
-              style={{ fontSize: '11px', padding: '4px 8px', background: 'var(--surface-patient-recessed)' }}
-            >
-              Wandering
-            </button>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Sensors:</span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[
+              { label: 'TP9 (L-Ear)', key: 'tp9' as const },
+              { label: 'AF7 (L-Forehead)', key: 'af7' as const },
+              { label: 'AF8 (R-Forehead)', key: 'af8' as const },
+              { label: 'TP10 (R-Ear)', key: 'tp10' as const },
+            ].map(item => {
+              const st = eegData?.channelQuality[item.key] || 'poor';
+              const dotColor = st === 'good' ? '#10B981' : st === 'fair' ? '#F59E0B' : '#EF4444';
+              return (
+                <div
+                  key={item.key}
+                  onClick={() => setShowFitModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '10px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: dotColor }} />
+                  <span>{item.label.split(' ')[0]}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </main>
@@ -459,7 +510,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       {/* Session Footer Action Bar */}
       <footer
         style={{
-          padding: '16px 20px',
+          padding: '14px 20px',
           background: 'var(--surface-patient-card)',
           borderTop: '1px solid var(--border-subtle)',
           display: 'flex',
@@ -483,6 +534,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           End Session & Save
         </button>
       </footer>
+
+      {/* 4-Channel Headset Fit Modal */}
+      {showFitModal && (
+        <HeadsetFitModal
+          onConfirmReady={() => setShowFitModal(false)}
+          onClose={() => setShowFitModal(false)}
+        />
+      )}
 
       {/* End Session Confirmation Modal */}
       {showEndConfirm && (

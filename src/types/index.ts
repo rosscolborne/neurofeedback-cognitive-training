@@ -33,6 +33,14 @@ export interface MuseChannelQuality {
   tp10: 'good' | 'fair' | 'poor';
 }
 
+export interface BrainFlowScores {
+  focusScore: number;
+  relaxScore: number;
+  mindfulnessScore: number | null;
+  restfulnessScore: number | null;
+  method?: 'brainflow_welch_psd' | 'browser_dsp';
+}
+
 export interface EEGDataPoint {
   timestamp: number;
   rawSignal: number;
@@ -47,6 +55,7 @@ export interface EEGDataPoint {
     blink: boolean;
     clench: boolean;
   };
+  brainflowScores?: BrainFlowScores;
 }
 
 export interface ProtocolTemplate {

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
-import { ArrowRight, Check, Sparkles, Wifi, ShieldCheck, Target, Waves, Zap, Moon } from 'lucide-react';
+import { HeadsetFitModal } from './HeadsetFitModal';
+import { ArrowRight, Check, Sparkles, Wifi, ShieldCheck, Target, Waves, Zap, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
   client: ClientProfile;
@@ -14,15 +15,17 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
   const [isPairing, setIsPairing] = useState(false);
   const [isPaired, setIsPaired] = useState(false);
   const [pairedDeviceName, setPairedDeviceName] = useState<string | null>(null);
+  const [showFitModal, setShowFitModal] = useState(false);
 
   const handlePairHeadband = async () => {
     setIsPairing(true);
     const res = await eegEngine.connectMuseBluetooth();
-    setTimeout(() => {
-      setIsPairing(false);
+    setIsPairing(false);
+    if (res.success) {
       setIsPaired(true);
-      setPairedDeviceName(res.deviceName || 'Muse S Headband (4-Ch Active)');
-    }, 1200);
+      setPairedDeviceName(res.deviceName || 'Muse Headband (4-Ch Active)');
+      setShowFitModal(true);
+    }
   };
 
   const handleComplete = () => {
@@ -254,7 +257,14 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
                 {isPairing ? 'Establishing Signal...' : 'Connect Muse Headband via Bluetooth'}
               </button>
             ) : (
-              <div className="status-tag status-tag-active">✓ 100% Signal Quality</div>
+              <button
+                onClick={() => setShowFitModal(true)}
+                className="btn btn-secondary"
+                style={{ marginTop: '8px', fontSize: '13px' }}
+              >
+                <Activity size={15} color="#10B981" />
+                Check 4-Channel Electrode Contact
+              </button>
             )}
           </div>
 
@@ -271,6 +281,13 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
             Enter Patient Portal
           </button>
         </div>
+      )}
+
+      {showFitModal && (
+        <HeadsetFitModal
+          onConfirmReady={() => setShowFitModal(false)}
+          onClose={() => setShowFitModal(false)}
+        />
       )}
     </div>
   );
