@@ -268,6 +268,9 @@ export class EEGEngine {
     };
   }
 
+  // Demo Simulator Toggle
+  public isDemoMode = false;
+
   private generateSample(dt: number): EEGDataPoint {
     let bands: BandPowers;
     let rawSignal = 0;
@@ -278,8 +281,8 @@ export class EEGEngine {
       // Use the last raw sample from AF7 as the raw signal
       const af7 = this.rawBuffers.af7;
       rawSignal = af7.length > 0 ? af7[af7.length - 1] : 0;
-    } else {
-      // 2. SIMULATE VALUES ONLY WHEN TELEMETRY IS DISCONNECTED
+    } else if (this.isDemoMode) {
+      // 2. SIMULATE VALUES ONLY WHEN DEMO MODE IS EXPLICITLY ENABLED
       this.phaseAngle += dt * 2 * Math.PI;
       this.noiseSeed += dt * 0.5;
 
@@ -311,7 +314,7 @@ export class EEGEngine {
         gamma: Math.round(gamma * 10) / 10,
       };
 
-      rawSignal =
+        rawSignal =
         slowDrift +
         Math.sin(this.phaseAngle * 2) * (delta * 0.4) +
         Math.sin(this.phaseAngle * 6) * (theta * 0.5) +
@@ -319,6 +322,10 @@ export class EEGEngine {
         Math.sin(this.phaseAngle * 14) * (smr * 0.6) +
         Math.sin(this.phaseAngle * 22) * (beta * 0.5) +
         (Math.random() - 0.5) * 1.5;
+    } else {
+      // 3. DISCONNECTED & DEMO INACTIVE -> ZERO TELEMETRY (FLATLINE)
+      bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
+      rawSignal = 0;
     }
 
     const thetaBetaRatio = Math.round((bands.theta / Math.max(0.1, bands.beta)) * 100) / 100;

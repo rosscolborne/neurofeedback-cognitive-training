@@ -175,6 +175,79 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const [isPairing, setIsPairing] = useState(false);
+  const [, forceUpdate] = useState({});
+
+  const handleConnectHardware = async () => {
+    setIsPairing(true);
+    const res = await eegEngine.connectMuseBluetooth();
+    setIsPairing(false);
+    forceUpdate({});
+  };
+
+  const handleStartDemoMode = () => {
+    eegEngine.isDemoMode = true;
+    forceUpdate({});
+  };
+
+  if (!eegEngine.isHardwareConnected && !eegEngine.isDemoMode) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          minHeight: '100vh',
+          maxWidth: '520px',
+          margin: '0 auto',
+          backgroundColor: 'var(--surface-patient-base)',
+          padding: '40px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '24px',
+          textAlign: 'center',
+        }}
+      >
+        <Wifi size={48} color="var(--brand-primary)" />
+        <div>
+          <h1 className="font-display" style={{ fontSize: '26px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Telemetry Connection Required
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '340px' }}>
+            A live Muse 2 or Muse S headband connection is required to begin this clinical training session.
+          </p>
+        </div>
+
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+          <button
+            onClick={handleConnectHardware}
+            disabled={isPairing}
+            className="btn btn-primary"
+            style={{ padding: '14px', fontSize: '15px' }}
+          >
+            {isPairing ? 'Initializing Bluetooth GATT...' : 'Connect Muse Headband'}
+          </button>
+
+          <button
+            onClick={handleStartDemoMode}
+            className="btn btn-secondary"
+            style={{ padding: '12px', fontSize: '14px' }}
+          >
+            Use Demo Simulator (Simulated Telemetry)
+          </button>
+
+          <button
+            onClick={onCancel}
+            className="btn btn-ghost"
+            style={{ padding: '10px', fontSize: '13px', marginTop: '10px' }}
+          >
+            Cancel & Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const remainingSeconds = Math.max(0, sessionTotalDuration - totalSecondsElapsed);
 
   return (
