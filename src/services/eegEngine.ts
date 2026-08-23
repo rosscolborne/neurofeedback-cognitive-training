@@ -38,10 +38,10 @@ export class EEGEngine {
   private maxBufferSize = 512; // 2 seconds of buffer
 
   public channelQuality: MuseChannelQuality = {
-    tp9: 'good',
-    af7: 'good',
-    af8: 'good',
-    tp10: 'good',
+    tp9: 'poor',
+    af7: 'poor',
+    af8: 'poor',
+    tp10: 'poor',
   };
 
   // Channel RMS and Noise Statistics
@@ -216,9 +216,7 @@ export class EEGEngine {
         const val = await batteryChar.readValue();
         this.batteryLevel = val.getUint8(0);
       } catch (e) {}
-
-      // Set initial good state
-      this.channelQuality = { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' };
+      // Channel quality will be updated by parseChannelPacket() as real data arrives
 
       return { success: true, deviceName: this.deviceName || undefined };
     } catch (err: any) {
@@ -275,7 +273,7 @@ export class EEGEngine {
         }
       );
 
-      this.channelQuality = { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' };
+      // Channel quality will be updated as BrainFlow frames arrive
       return { success: true };
     } catch (err: any) {
       this.isBrainflowActive = false;
@@ -307,11 +305,13 @@ export class EEGEngine {
 
   private resetChannelQualities() {
     this.channelQuality = {
-      tp9: 'good',
-      af7: 'good',
-      af8: 'good',
-      tp10: 'good',
+      tp9: 'poor',
+      af7: 'poor',
+      af8: 'poor',
+      tp10: 'poor',
     };
+    this.rawBuffers = { tp9: [], af7: [], af8: [], tp10: [] };
+    this.channelRms = { tp9: 0, af7: 0, af8: 0, tp10: 0 };
   }
 
   /**

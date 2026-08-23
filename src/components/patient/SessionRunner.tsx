@@ -74,20 +74,17 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       experience: selectedExperience,
       durationSeconds: totalSecondsElapsed,
       timeInZonePercent,
-      averageCoherence: eegDataRef.current?.coherence || 78,
+      averageCoherence: eegDataRef.current?.coherence || 0,
       peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
       averageBands: {
-        delta: Math.round((acc.delta / count) * 10) / 10 || 10.5,
-        theta: Math.round((acc.theta / count) * 10) / 10 || 6.8,
-        alpha: Math.round((acc.alpha / count) * 10) / 10 || 9.4,
-        smr: Math.round((acc.smr / count) * 10) / 10 || 5.5,
-        beta: Math.round((acc.beta / count) * 10) / 10 || 7.2,
-        gamma: Math.round((acc.gamma / count) * 10) / 10 || 2.8,
+        delta: count > 0 ? Math.round((acc.delta / count) * 10) / 10 : 0,
+        theta: count > 0 ? Math.round((acc.theta / count) * 10) / 10 : 0,
+        alpha: count > 0 ? Math.round((acc.alpha / count) * 10) / 10 : 0,
+        smr: count > 0 ? Math.round((acc.smr / count) * 10) / 10 : 0,
+        beta: count > 0 ? Math.round((acc.beta / count) * 10) / 10 : 0,
+        gamma: count > 0 ? Math.round((acc.gamma / count) * 10) / 10 : 0,
       },
-      timeSeries: timeSeriesRef.current.length > 0 ? timeSeriesRef.current : [
-        { t: 0, thetaBetaRatio: 1.8, alpha: 9.0, smr: 5.5, beta: 7.5, inZone: true },
-        { t: 60, thetaBetaRatio: 1.5, alpha: 10.8, smr: 6.8, beta: 8.5, inZone: true },
-      ],
+      timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
       adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
       finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
     };

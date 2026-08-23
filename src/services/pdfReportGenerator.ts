@@ -59,19 +59,24 @@ export function generatePatientClinicalPDF(
   // 3. Clinical Trajectory & Quantitative EEG Findings
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('1. QUANTITATIVE EEG & SPECTRAL DENSITY PROGRESSION', 15, 80);
+  doc.text('1. SESSION SUMMARY & SPECTRAL BAND AVERAGES', 15, 80);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(40, 40, 40);
+
+  const totalSessions = sessions.length;
+  const avgInZone = totalSessions > 0 ? Math.round(sessions.reduce((s, r) => s + r.timeInZonePercent, 0) / totalSessions) : 0;
+  const avgCoherence = totalSessions > 0 ? Math.round(sessions.reduce((s, r) => s + r.averageCoherence, 0) / totalSessions) : 0;
+
   const summaryText = [
-    `Patient underwent longitudinal neurofeedback training utilizing ${client.assignedProtocol.replace(/-/g, ' ')} operant conditioning protocols.`,
-    `Quantitative continuous power spectral density analysis demonstrates statistically significant neuromodulatory changes across baseline vs. active training windows.`,
-    `Frontal Theta / Beta ratio downregulation exhibited a 16.4% improvement, stabilizing executive attention intervals and sensorimotor regulation.`,
+    `Patient completed ${totalSessions} neurofeedback session${totalSessions !== 1 ? 's' : ''} using the ${client.assignedProtocol.replace(/-/g, ' ')} protocol.`,
+    `Average time in target neural zone: ${avgInZone}%. Average inter-hemispheric coherence: ${avgCoherence}%.`,
+    `Band power averages below are computed from real EEG telemetry recorded during training sessions.`,
   ];
   doc.text(summaryText, 15, 86, { maxWidth: 180, lineHeightFactor: 1.4 });
 
-  // 4. Spectral Quantification Table
+  // 4. Spectral Quantification Table — computed from real session data
   let tableY = 110;
   doc.setFillColor(242, 241, 238);
   doc.rect(15, tableY, 180, 7, 'F');
@@ -79,17 +84,26 @@ export function generatePatientClinicalPDF(
   doc.setFontSize(8);
   doc.setTextColor(26, 26, 26);
   doc.text('METRIC / BAND', 20, tableY + 5);
-  doc.text('BASELINE (QEEG)', 70, tableY + 5);
-  doc.text('CURRENT 4-WK AVG', 115, tableY + 5);
-  doc.text('CLINICAL DELTA', 160, tableY + 5);
+  doc.text('AVERAGE (µV)', 80, tableY + 5);
+  doc.text('SESSIONS RECORDED', 130, tableY + 5);
 
-  const metricsData = [
-    { label: 'Theta / Beta Ratio (Fz/Cz)', base: '2.42', current: '1.74', delta: '-28.1% (Target Downregulation)' },
-    { label: 'Sensorimotor Rhythm (12-15 Hz)', base: '4.8 µV', current: '7.2 µV', delta: '+50.0% (Stillness Upregulation)' },
-    { label: 'Individual Alpha Peak (IAF)', base: '9.4 Hz', current: '10.2 Hz', delta: '+0.8 Hz (Cognitive Efficiency)' },
-    { label: 'Inter-Hemispheric Coherence', base: '58.0%', current: '78.5%', delta: '+20.5% (Synchrony Elevation)' },
-    { label: 'High-Beta Muscle Artifact Ratio', base: '14.2 µV', current: '7.8 µV', delta: '-45.0% (Somatic Relaxation)' },
-  ];
+  // Compute real averages across all sessions
+  const bandKeys: Array<keyof typeof sessions[0]['averageBands']> = ['delta', 'theta', 'alpha', 'smr', 'beta', 'gamma'];
+  const bandLabels: Record<string, string> = {
+    delta: 'Delta (1-4 Hz)',
+    theta: 'Theta (4-8 Hz)',
+    alpha: 'Alpha (8-12 Hz)',
+    smr: 'SMR (12-15 Hz)',
+    beta: 'Beta (15-30 Hz)',
+    gamma: 'Gamma (30-45 Hz)',
+  };
+
+  const metricsData = bandKeys.map(key => {
+    const avg = totalSessions > 0
+      ? Math.round((sessions.reduce((s, r) => s + (r.averageBands[key] || 0), 0) / totalSessions) * 10) / 10
+      : 0;
+    return { label: bandLabels[key], value: `${avg} µV`, count: `${totalSessions}` };
+  });
 
   tableY += 7;
   metricsData.forEach((row, i) => {
@@ -98,9 +112,8 @@ export function generatePatientClinicalPDF(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(row.label, 20, tableY + 4.5);
-    doc.text(row.base, 70, tableY + 4.5);
-    doc.text(row.current, 115, tableY + 4.5);
-    doc.text(row.delta, 160, tableY + 4.5);
+    doc.text(row.value, 80, tableY + 4.5);
+    doc.text(row.count, 130, tableY + 4.5);
     tableY += 6;
   });
 
@@ -145,10 +158,11 @@ export function generatePatientClinicalPDF(
   tableY += 6;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
+  const latestSession = sessions[0];
   const planNotes = [
-    `The patient exhibits robust positive operant learning with strong transference to daytime sustained concentration.`,
-    `Recommend continuing current ${client.assignedProtocol.replace(/-/g, ' ')} regimen at 4 sessions/week for an additional 4-week block.`,
-    `Adaptive difficulty engine has successfully adjusted reward thresholds from 1.85 to 1.74 without causing attentional fatigue.`,
+    `Patient has completed ${client.completedSessionsCount} of their ${client.prescribedSessionsPerWeek * 4} prescribed sessions.`,
+    `Recommend continuing current ${client.assignedProtocol.replace(/-/g, ' ')} regimen at ${client.prescribedSessionsPerWeek} sessions/week.`,
+    latestSession ? `Latest recorded session showed a peak focus score of ${latestSession.peakFocusScore} and ${latestSession.timeInZonePercent}% time in zone.` : 'No sessions recorded yet.',
   ];
   doc.text(planNotes, 15, tableY, { maxWidth: 180, lineHeightFactor: 1.4 });
 

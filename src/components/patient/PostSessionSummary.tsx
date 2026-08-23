@@ -50,10 +50,21 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
   };
 
   const timeSeries = session.timeSeries || [];
+
+  // Compute chart from REAL recorded data — theta/beta ratio over time
+  // Find min/max for proper Y-axis scaling
+  const ratioValues = timeSeries.map(d => d.thetaBetaRatio);
+  const dataMin = ratioValues.length > 0 ? Math.min(...ratioValues) : 0;
+  const dataMax = ratioValues.length > 0 ? Math.max(...ratioValues) : 3;
+  const yRange = Math.max(0.5, dataMax - dataMin); // Avoid division by zero
+  const chartPadding = yRange * 0.1;
+
   const points = timeSeries.map((d, i) => {
     const x = (i / Math.max(1, timeSeries.length - 1)) * 340 + 20;
-    const y = 130 - (d.inZone ? 75 : 35) + Math.sin(i * 0.8) * 12;
-    return `${x},${y}`;
+    // Map real thetaBetaRatio to Y pixel: lower ratio = higher on chart (better)
+    const normalized = (d.thetaBetaRatio - (dataMin - chartPadding)) / (yRange + 2 * chartPadding);
+    const y = 20 + normalized * 120; // 20px top margin, 120px chart height
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
 
   return (
@@ -147,16 +158,20 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         </svg>
       </div>
 
-      {/* Key Insights Section */}
+      {/* Key Insights Section — computed from real session data */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Sparkles size={16} color="var(--brand-primary)" />
-          <span>Session Neuroplastic Insights</span>
+          <span>Session Summary</span>
         </div>
         <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-          • Theta band suppression remained consistent throughout the mid-session window.<br />
-          • Reached peak focus stability for 8 consecutive minutes without threshold relaxation.<br />
-          • SMR rhythm showed a 14% elevation above baseline calibration.
+          • Trained for {Math.round(session.durationSeconds / 60)} minutes using {session.protocol.replace(/-/g, ' ')} protocol.<br />
+          • Spent {session.timeInZonePercent}% of active training time in the target neural zone.<br />
+          • Average band powers: θ={session.averageBands.theta.toFixed(1)} µV, α={session.averageBands.alpha.toFixed(1)} µV, SMR={session.averageBands.smr.toFixed(1)} µV, β={session.averageBands.beta.toFixed(1)} µV.<br />
+          {session.adaptiveAdjustmentsCount > 0 && (
+            <>• Adaptive engine made {session.adaptiveAdjustmentsCount} threshold adjustment{session.adaptiveAdjustmentsCount > 1 ? 's' : ''} (final threshold: {session.finalThreshold.toFixed(2)}).<br /></>
+          )}
+          • {timeSeries.length} data points recorded over the session.
         </div>
       </div>
 
