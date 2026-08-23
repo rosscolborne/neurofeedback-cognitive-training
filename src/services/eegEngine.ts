@@ -199,12 +199,18 @@ export class EEGEngine {
       // Send the Muse start streaming command to the control characteristic
       try {
         const controlChar = await eegService.getCharacteristic('273e0001-4c4d-454d-96be-f03bac821358');
-        // Preset 21 (256Hz 4-channel): '\x04p21\n'
-        const presetCmd = new Uint8Array([0x04, 0x70, 0x32, 0x31, 0x0a]);
-        await controlChar.writeValue(presetCmd).catch(() => {});
-        // Resume / Start streaming: '\x02d\n'
-        const startCmd = new Uint8Array([0x02, 0x64, 0x0a]);
-        await controlChar.writeValue(startCmd);
+        
+        // 1. Halt: '\x02h\n'
+        await controlChar.writeValue(new Uint8Array([0x02, 0x68, 0x0a])).catch(() => {});
+        
+        // 2. Preset 21 (256Hz 4-channel): '\x04p21\n'
+        await controlChar.writeValue(new Uint8Array([0x04, 0x70, 0x32, 0x31, 0x0a])).catch(() => {});
+        
+        // 3. Start transmission: '\x02s\n'
+        await controlChar.writeValue(new Uint8Array([0x02, 0x73, 0x0a])).catch(() => {});
+        
+        // 4. Resume: '\x02d\n'
+        await controlChar.writeValue(new Uint8Array([0x02, 0x64, 0x0a])).catch(() => {});
       } catch (ctrlErr) {
         console.log('Muse control characteristic notice:', ctrlErr);
       }
