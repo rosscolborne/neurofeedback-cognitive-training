@@ -70,5 +70,7 @@
 	<string>Brainwell connects via Bluetooth to your Muse EEG headband to provide real-time neurofeedback brain training and focus telemetry.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Brainwell connects via Bluetooth to your Muse EEG headband to stream live neural telemetry during training sessions.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
