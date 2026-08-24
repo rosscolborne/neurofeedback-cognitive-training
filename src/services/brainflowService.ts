@@ -1,7 +1,20 @@
 /**
- * BrainFlow Service Client
- * Connects to the local FastAPI BrainFlow acquisition & DSP microservice (http://127.0.0.1:8000)
+ * BrainFlow Service Client — v0.5.0
+ * Connects to the local FastAPI brainflow_service (http://127.0.0.1:8000)
+ *
+ * Primary flow for Web Bluetooth front-ends:
+ *   1. POST /headset-fit/sessions → fitSessionId
+ *   2. POST /headset-fit/sessions/{id}/analyze-window (per-window scoring + fit + training)
+ *   3. DELETE /headset-fit/sessions/{id} on disconnect
+ *
+ * All scoring (mindfulness, restfulness, focus, relax, valence/arousal,
+ * training, headset fit) runs server-side through the same analyze_window()
+ * pipeline that BrainFlow-direct sessions use — smoothing can't drift.
  */
+
+import { ServerFitState, TrainingMetricSample } from '../types';
+
+// ─── Response Interfaces ────────────────────────────────────────────────────
 
 export interface BrainFlowBandPowers {
   absolute: {
@@ -31,10 +44,23 @@ export interface BrainFlowFeatures {
   restfulnessScore?: number | null;
   focusScore?: number;
   relaxScore?: number;
+  valence?: number | null;
+  arousal?: number | null;
+  emotionLabel?: string | null;
 }
 
-export interface AnalyzeWindowResponse {
+export interface FitWindowResponse {
   features?: BrainFlowFeatures | null;
+  quality?: ServerFitState | null;
+  training?: TrainingMetricSample | null;
+}
+
+export interface FitAssessResponse {
+  state: string;
+  ready: boolean;
+  worn: boolean;
+  blockers: string[];
+  channels: Array<{ id: string; state: string; rms?: number }>;
 }
 
 export interface BrainFlowDeviceItem {
@@ -43,6 +69,11 @@ export interface BrainFlowDeviceItem {
   mode: string;
   boardId: string;
 }
+
+// Only scalp electrodes — never AUX channels (per Ross's guidance)
+const SCALP_CHANNEL_IDS = ['TP9', 'AF7', 'AF8', 'TP10'];
+
+// ─── Service Class ──────────────────────────────────────────────────────────
 
 class BrainFlowService {
   private baseUrl: string;
@@ -108,44 +139,127 @@ class BrainFlowService {
     }
   }
 
+  // ─── Headset Fit Sessions (Bluetooth front-end path) ────────────────────
+
   /**
-   * Send genuine raw EEG samples from Web Bluetooth or buffer to BrainFlow for
-   * Welch PSD filtering and ML scoring (stateless single-window computation).
-   * 
-   * @param samples 2D array of EEG channels (e.g. 4 rows: [TP9, AF7, AF8, TP10])
-   * @param sampleRateHz Sampling rate (e.g. 256 for Muse)
+   * Start a stateful analysis session for Bluetooth-connected Muse.
+   * Returns a fitSessionId used for all subsequent calls.
    */
-  public async analyzeWindow(samples: number[][], sampleRateHz = 256): Promise<BrainFlowFeatures | null> {
-    if (!samples || samples.length === 0 || samples[0].length === 0) {
+  public async startFitSession(): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/headset-fit/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to start fit session: ${errText}`);
+    }
+
+    const data = await res.json();
+    this.isOnline = true;
+    return data.fitSessionId;
+  }
+
+  /**
+   * Send a raw EEG window to the server for full scoring + fit assessment + training.
+   * This is the primary per-window endpoint — returns smoothed metrics, channel quality,
+   * and baseline-relative training score.
+   *
+   * Only sends scalp electrode data (TP9, AF7, AF8, TP10) — AUX channels excluded.
+   *
+   * @param fitSessionId  Session ID from startFitSession()
+   * @param samples       2D array: outer = time samples, inner = channels (TP9, AF7, AF8, TP10)
+   * @param sampleRateHz  Sampling rate (256 for Muse)
+   */
+  public async analyzeFitWindow(
+    fitSessionId: string,
+    samples: number[][],
+    sampleRateHz = 256,
+  ): Promise<FitWindowResponse | null> {
+    if (!samples || samples.length === 0) return null;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(
+        `${this.baseUrl}/headset-fit/sessions/${fitSessionId}/analyze-window`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sampleRateHz,
+            samples,
+            channelIds: SCALP_CHANNEL_IDS,
+          }),
+          signal: controller.signal,
+        },
+      );
+      clearTimeout(timeoutId);
+
+      if (!res.ok) return null;
+
+      const data: FitWindowResponse = await res.json();
+      this.isOnline = true;
+      return data;
+    } catch {
       return null;
     }
+  }
+
+  /**
+   * Fit-only assessment (no smoothing) — used during the headset fit modal
+   * before the session starts.
+   */
+  public async assessFitOnly(
+    fitSessionId: string,
+    samples: number[][],
+  ): Promise<FitAssessResponse | null> {
+    if (!samples || samples.length === 0) return null;
 
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1500);
 
-      const res = await fetch(`${this.baseUrl}/analyze-window`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sampleRateHz,
-          samples,
-        }),
-        signal: controller.signal,
-      });
+      const res = await fetch(
+        `${this.baseUrl}/headset-fit/sessions/${fitSessionId}/assess`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            samples,
+            channelIds: SCALP_CHANNEL_IDS,
+          }),
+          signal: controller.signal,
+        },
+      );
       clearTimeout(timeoutId);
 
-      if (!res.ok) {
-        return null;
-      }
+      if (!res.ok) return null;
 
-      const data: AnalyzeWindowResponse = await res.json();
+      const data: FitAssessResponse = await res.json();
       this.isOnline = true;
-      return data.features || null;
+      return data;
     } catch {
       return null;
     }
   }
+
+  /**
+   * Stop and release a headset fit session. Idle sessions auto-evict after ~2 min.
+   */
+  public async stopFitSession(fitSessionId: string): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/headset-fit/sessions/${fitSessionId}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+
+  // ─── BrainFlow-Direct Sessions (native board path) ──────────────────────
 
   /**
    * Start a native BrainFlow board session (e.g. Muse Athena or Synthetic Board)

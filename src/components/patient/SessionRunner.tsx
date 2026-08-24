@@ -45,6 +45,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const adaptiveEngineRef = useRef<AdaptiveDifficultyEngine>(new AdaptiveDifficultyEngine(client.assignedProtocol));
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
   const bandAccumulatorRef = useRef({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0, count: 0 });
+  const brainflowAccRef = useRef({ mindfulness: 0, valence: 0, arousal: 0, training: 0, count: 0 });
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const isPausedRef = useRef(isPaused);
   const phaseRef = useRef(phase);
@@ -62,6 +63,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
     const acc = bandAccumulatorRef.current;
     const count = Math.max(1, acc.count);
+
+    const bfAcc = brainflowAccRef.current;
+    const bfCount = Math.max(1, bfAcc.count);
 
     const summary: SessionRecord = {
       id: 'sess-' + Date.now(),
@@ -87,6 +91,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
       adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
       finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
+      averageTrainingScore: bfAcc.count > 0 ? Math.round(bfAcc.training / bfCount) : undefined,
+      averageMindfulness: bfAcc.count > 0 ? Math.round(bfAcc.mindfulness / bfCount) : undefined,
+      averageValence: bfAcc.count > 0 ? Math.round((bfAcc.valence / bfCount) * 100) / 100 : undefined,
+      averageArousal: bfAcc.count > 0 ? Math.round((bfAcc.arousal / bfCount) * 100) / 100 : undefined,
     };
 
     audioEngine.playChime('complete');
@@ -112,6 +120,16 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         acc.beta += data.bands.beta;
         acc.gamma += data.bands.gamma;
         acc.count += 1;
+
+        // Accumulate brainflow service metrics
+        if (data.brainflowScores) {
+          const bfAcc = brainflowAccRef.current;
+          if (data.brainflowScores.mindfulnessScore != null) bfAcc.mindfulness += data.brainflowScores.mindfulnessScore;
+          if (data.brainflowScores.valence != null) bfAcc.valence += data.brainflowScores.valence;
+          if (data.brainflowScores.arousal != null) bfAcc.arousal += data.brainflowScores.arousal;
+          if (data.trainingMetric?.score != null) bfAcc.training += data.trainingMetric.score;
+          bfAcc.count += 1;
+        }
 
         // Feed adaptive difficulty engine during Core Training
         if (phaseRef.current === 'training') {
@@ -460,9 +478,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Alpha</div>
-            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-alpha)' }}>
-              {eegData ? eegData.bands.alpha.toFixed(1) + ' µV' : '--'}
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Mindfulness</div>
+            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#7B68AE' }}>
+              {eegData?.brainflowScores?.mindfulnessScore != null ? Math.round(eegData.brainflowScores.mindfulnessScore) : '--'}
             </div>
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
@@ -480,6 +498,38 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Valence / Arousal + Emotion Label */}
+        {eegData?.brainflowScores?.emotionLabel && (
+          <div
+            className="card-patient-recessed"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 12px',
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '8px', height: '8px', borderRadius: '50%',
+                background: (eegData.brainflowScores.valence ?? 0) > 0 ? '#10B981' : '#F59E0B',
+              }} />
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                {eegData.brainflowScores.emotionLabel}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                V: <span className="font-mono" style={{ fontWeight: 600 }}>{(eegData.brainflowScores.valence ?? 0).toFixed(2)}</span>
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                A: <span className="font-mono" style={{ fontWeight: 600 }}>{(eegData.brainflowScores.arousal ?? 0).toFixed(2)}</span>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* 4-Channel Real-Time Mini Status Pills */}
         <div

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { eegEngine } from '../../services/eegEngine';
-import { EEGDataPoint, MuseChannelQuality } from '../../types';
-import { Wifi, ArrowRight, X, Activity } from 'lucide-react';
+import { EEGDataPoint, MuseChannelQuality, ServerFitState } from '../../types';
+import { Wifi, ArrowRight, X, Activity, AlertTriangle } from 'lucide-react';
 
 interface HeadsetFitModalProps {
   onConfirmReady: () => void;
@@ -10,20 +10,14 @@ interface HeadsetFitModalProps {
 
 export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady, onClose }) => {
   const [quality, setQuality] = useState<MuseChannelQuality>(eegEngine.channelQuality);
-  const [stableSeconds, setStableSeconds] = useState(0);
+  const [fitState, setFitState] = useState<ServerFitState | null>(eegEngine.serverFitState);
   const [isPairing, setIsPairing] = useState(false);
   const [pairError, setPairError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = eegEngine.subscribe((data: EEGDataPoint) => {
-      setQuality({ ...data.channelQuality });
-
-      const allGood = Object.values(data.channelQuality).every(q => q === 'good');
-      if (allGood && eegEngine.isHardwareConnected) {
-        setStableSeconds(prev => Math.min(3, prev + 0.1));
-      } else {
-        setStableSeconds(0);
-      }
+    const unsubscribe = eegEngine.subscribe((_data: EEGDataPoint) => {
+      setQuality({ ...eegEngine.channelQuality });
+      setFitState(eegEngine.serverFitState ? { ...eegEngine.serverFitState } : null);
     });
 
     return () => unsubscribe();
@@ -63,7 +57,8 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
     }
   };
 
-  const isReady = stableSeconds >= 3 || (eegEngine.isDemoMode);
+  // Server-driven readiness: use the fit session's `ready` flag
+  const isReady = fitState?.ready === true || eegEngine.isDemoMode;
 
   return (
     <div
@@ -99,10 +94,12 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 className="font-display" style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Headset Fit & Signal Quality Check
+              Headset Fit & Signal Quality
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Ensure all 4 sensors make snug, unobstructed skin contact.
+              {fitState
+                ? 'brainflow_service is assessing sensor contact quality.'
+                : 'Waiting for brainflow_service signal assessment...'}
             </p>
           </div>
           <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }}>
@@ -140,6 +137,70 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
                 {pairError}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Server Fit State Banner */}
+        {fitState && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: fitState.ready ? '#D1FAE5' : fitState.worn ? '#FEF3C7' : '#FEE2E2',
+              border: `1px solid ${fitState.ready ? '#10B981' : fitState.worn ? '#F59E0B' : '#EF4444'}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '13px',
+            }}
+          >
+            {fitState.ready ? (
+              <>
+                <Activity size={16} color="#10B981" />
+                <div>
+                  <strong style={{ color: '#065F46' }}>Signal Verified</strong>
+                  <span style={{ color: '#047857', marginLeft: '6px' }}>— sustained good contact across all sensors.</span>
+                </div>
+              </>
+            ) : fitState.worn ? (
+              <>
+                <AlertTriangle size={16} color="#F59E0B" />
+                <div>
+                  <strong style={{ color: '#92400E' }}>Headband Detected</strong>
+                  <span style={{ color: '#B45309', marginLeft: '6px' }}>— adjusting for stable contact...</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <AlertTriangle size={16} color="#EF4444" />
+                <div>
+                  <strong style={{ color: '#991B1B' }}>Poor Contact</strong>
+                  <span style={{ color: '#B91C1C', marginLeft: '6px' }}>— check sensor placement.</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Blockers from server */}
+        {fitState && fitState.blockers.length > 0 && (
+          <div
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#FEF3C7',
+              border: '1px solid #FCD34D',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '12px',
+              color: '#92400E',
+              lineHeight: 1.4,
+            }}
+          >
+            <strong>Issues detected:</strong>
+            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+              {fitState.blockers.map((b, i) => (
+                <li key={i}>{b}</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -277,7 +338,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
           </div>
         </div>
 
-        {/* 4-Channel Breakdown Cards with Hair & Placement Tips */}
+        {/* 4-Channel Breakdown Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
           {/* TP9 */}
           <div

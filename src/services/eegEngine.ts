@@ -1,4 +1,4 @@
-import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType } from '../types';
+import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample } from '../types';
 import { brainflowService, BrainFlowFeatures } from './brainflowService';
 
 export class EEGEngine {
@@ -37,6 +37,11 @@ export class EEGEngine {
   };
   private maxBufferSize = 512; // 2 seconds of buffer
 
+  // Server-side fit state from brainflow_service
+  public serverFitState: ServerFitState | null = null;
+  private fitSessionId: string | null = null;
+
+  // Channel quality — driven exclusively by server-side fit assessment
   public channelQuality: MuseChannelQuality = {
     tp9: 'poor',
     af7: 'poor',
@@ -44,18 +49,14 @@ export class EEGEngine {
     tp10: 'poor',
   };
 
-  // Channel RMS and Noise Statistics
-  public channelRms: Record<keyof MuseChannelQuality, number> = {
-    tp9: 0,
-    af7: 0,
-    af8: 0,
-    tp10: 0,
-  };
-
   // BrainFlow Async Scoring State
   private latestBrainFlowScores: BrainFlowScores | null = null;
+  private latestTrainingMetric: TrainingMetricSample | null = null;
   private lastBrainflowAnalysisTime = 0;
   private isAnalyzingBrainflow = false;
+
+  // Latest band powers from server
+  private latestServerBands: BandPowers | null = null;
 
   private gattServer: any = null;
   private activeCharacteristics: any[] = [];
@@ -115,9 +116,9 @@ export class EEGEngine {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Trigger periodic BrainFlow window analysis if hardware is streaming and service is active
-      if (this.isHardwareConnected && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 400) {
-        this.dispatchBrainflowAnalysis(now);
+      // Trigger periodic brainflow_service analysis if hardware is streaming
+      if (this.isHardwareConnected && this.fitSessionId && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 400) {
+        this.dispatchServerAnalysis(now);
       }
 
       const point = this.generateSample(dt);
@@ -134,8 +135,8 @@ export class EEGEngine {
   }
 
   /**
-   * Connect to real Muse 2 or Muse S Headband via standard Web Bluetooth GATT
-   * Subscribes to all 4 electrode channels (TP9, AF7, AF8, TP10), sends the start streaming command, and reads battery levels.
+   * Connect to real Muse 2 or Muse S Headband via standard Web Bluetooth GATT.
+   * Also creates a server-side fit session for scoring via brainflow_service.
    */
   public async connectMuseBluetooth(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
     if (!('bluetooth' in navigator)) {
@@ -144,6 +145,13 @@ export class EEGEngine {
     }
 
     try {
+      // Start server-side fit session first — required for all scoring
+      try {
+        this.fitSessionId = await brainflowService.startFitSession();
+      } catch (err: any) {
+        return { success: false, error: `brainflow_service unavailable: ${err?.message || 'Cannot connect to http://127.0.0.1:8000'}` };
+      }
+
       // @ts-ignore
       const device = await (navigator as any).bluetooth.requestDevice({
         filters: [{ namePrefix: 'Muse' }],
@@ -163,16 +171,12 @@ export class EEGEngine {
 
       // Disconnection listener
       device.addEventListener('gattserverdisconnected', () => {
-        this.isHardwareConnected = false;
-        this.deviceName = null;
-        this.gattServer = null;
-        this.activeCharacteristics = [];
-        this.resetChannelQualities();
+        this.disconnectHardware();
       });
 
       const eegService = await this.gattServer.getPrimaryService('0000fe8d-0000-1000-8000-00805f9b34fb');
 
-      // Muse EEG Characteristic UUIDs for TP9, AF7, AF8, and TP10
+      // Muse EEG Characteristic UUIDs for TP9, AF7, AF8, and TP10 (scalp electrodes only — no AUX)
       const channelUUIDs: Record<keyof MuseChannelQuality, string> = {
         tp9: '273e0003-4c4d-454d-96be-f03bac821358',
         af7: '273e0004-4c4d-454d-96be-f03bac821358',
@@ -222,12 +226,16 @@ export class EEGEngine {
         const val = await batteryChar.readValue();
         this.batteryLevel = val.getUint8(0);
       } catch (e) {}
-      // Channel quality will be updated by parseChannelPacket() as real data arrives
 
       return { success: true, deviceName: this.deviceName || undefined };
     } catch (err: any) {
+      // Clean up the fit session if BLE pairing fails
+      if (this.fitSessionId) {
+        brainflowService.stopFitSession(this.fitSessionId);
+        this.fitSessionId = null;
+      }
       this.isHardwareConnected = false;
-      this.resetChannelQualities();
+      this.resetState();
       return { success: false, error: err?.message || 'Connection failed' };
     }
   }
@@ -267,8 +275,22 @@ export class EEGEngine {
               relaxScore: frame.features.relaxScore ?? 50,
               mindfulnessScore: frame.features.mindfulnessScore ?? null,
               restfulnessScore: frame.features.restfulnessScore ?? null,
+              valence: frame.features.valence ?? null,
+              arousal: frame.features.arousal ?? null,
+              emotionLabel: frame.features.emotionLabel ?? null,
               method: 'brainflow_welch_psd',
             };
+          }
+
+          if (frame.training) {
+            this.latestTrainingMetric = {
+              score: frame.training.score ?? 50,
+              baselineReady: frame.training.baselineReady ?? false,
+            };
+          }
+
+          if (frame.quality) {
+            this.updateChannelQualityFromServer(frame.quality);
           }
         },
         () => {
@@ -279,7 +301,6 @@ export class EEGEngine {
         }
       );
 
-      // Channel quality will be updated as BrainFlow frames arrive
       return { success: true };
     } catch (err: any) {
       this.isBrainflowActive = false;
@@ -299,6 +320,11 @@ export class EEGEngine {
       brainflowService.stopSession(this.brainflowSessionId);
       this.brainflowSessionId = null;
     }
+    // Release server-side fit session
+    if (this.fitSessionId) {
+      brainflowService.stopFitSession(this.fitSessionId);
+      this.fitSessionId = null;
+    }
 
     this.isHardwareConnected = false;
     this.isBrainflowActive = false;
@@ -306,10 +332,13 @@ export class EEGEngine {
     this.gattServer = null;
     this.activeCharacteristics = [];
     this.latestBrainFlowScores = null;
-    this.resetChannelQualities();
+    this.latestTrainingMetric = null;
+    this.latestServerBands = null;
+    this.serverFitState = null;
+    this.resetState();
   }
 
-  private resetChannelQualities() {
+  private resetState() {
     this.channelQuality = {
       tp9: 'poor',
       af7: 'poor',
@@ -317,12 +346,12 @@ export class EEGEngine {
       tp10: 'poor',
     };
     this.rawBuffers = { tp9: [], af7: [], af8: [], tp10: [] };
-    this.channelRms = { tp9: 0, af7: 0, af8: 0, tp10: 0 };
   }
 
   /**
    * Decodes Muse raw EEG packets with 12-bit bit-unpacking.
    * Muse transmits 12 12-bit samples per 20-byte packet at 256Hz sampling rate.
+   * Raw samples are buffered for server-side analysis — no local quality assessment.
    */
   private parseChannelPacket(channel: keyof MuseChannelQuality, dataView: DataView) {
     if (dataView.byteLength < 2) return;
@@ -364,144 +393,130 @@ export class EEGEngine {
     if (buffer.length > this.maxBufferSize) {
       this.rawBuffers[channel] = buffer.slice(buffer.length - this.maxBufferSize);
     }
-
-    // Evaluate skin contact impedance matching clinical EEG thresholds
-    // minStdDev: 0.25 uV, maxGoodStdDev: 1200 uV, maxGoodPeakToPeak: 3600 uV
-    const recent = buffer.slice(-64);
-    const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
-    const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
-    const sd = Math.sqrt(variance);
-    const maxAbs = recent.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-
-    this.channelRms[channel] = Math.round(sd * 10) / 10;
-
-    if (recent.length < 8) {
-      this.channelQuality[channel] = 'good';
-    } else if (sd < 0.25 || maxAbs > 90000) {
-      this.channelQuality[channel] = 'poor'; // flatline or railed ADC
-    } else if (sd > 1400) {
-      this.channelQuality[channel] = 'fair'; // excessive movement or hair noise
-    } else {
-      this.channelQuality[channel] = 'good'; // Plausible solid contact
-    }
   }
 
   /**
-   * Send recent 256-sample window of all 4 channels to BrainFlow /analyze-window if running
+   * Send the latest sample window to brainflow_service for server-side analysis.
+   * Uses the stateful headset-fit session endpoint which provides:
+   * - All 4 metrics (mindfulness, restfulness, focus, relax) with EMA smoothing
+   * - Valence/arousal + emotion labelling
+   * - Headset fit / signal quality per-channel
+   * - Baseline-relative training score
+   *
+   * Samples are sent as row-major (time × channel) with only scalp electrodes.
    */
-  private async dispatchBrainflowAnalysis(now: number) {
+  private async dispatchServerAnalysis(now: number) {
     const tp9 = this.rawBuffers.tp9;
     const af7 = this.rawBuffers.af7;
     const af8 = this.rawBuffers.af8;
     const tp10 = this.rawBuffers.tp10;
 
     const minLen = Math.min(tp9.length, af7.length, af8.length, tp10.length);
-    if (minLen < 64) return;
+    if (minLen < 64 || !this.fitSessionId) return;
 
     const windowSize = Math.min(minLen, 256);
-    const samples = [
-      tp9.slice(-windowSize),
-      af7.slice(-windowSize),
-      af8.slice(-windowSize),
-      tp10.slice(-windowSize),
-    ];
+
+    // Build row-major format: one inner array per time sample, 4 columns (TP9, AF7, AF8, TP10)
+    const samples: number[][] = [];
+    for (let i = 0; i < windowSize; i++) {
+      samples.push([
+        tp9[tp9.length - windowSize + i],
+        af7[af7.length - windowSize + i],
+        af8[af8.length - windowSize + i],
+        tp10[tp10.length - windowSize + i],
+      ]);
+    }
 
     this.isAnalyzingBrainflow = true;
     this.lastBrainflowAnalysisTime = now;
 
     try {
-      const features: BrainFlowFeatures | null = await brainflowService.analyzeWindow(samples, 256);
-      if (features) {
-        this.latestBrainFlowScores = {
-          focusScore: features.focusScore ?? 50,
-          relaxScore: features.relaxScore ?? 50,
-          mindfulnessScore: features.mindfulnessScore ?? null,
-          restfulnessScore: features.restfulnessScore ?? null,
-          method: 'brainflow_welch_psd',
-        };
+      const response = await brainflowService.analyzeFitWindow(this.fitSessionId, samples, 256);
+
+      if (response) {
+        // Update scores from server features
+        if (response.features) {
+          const f = response.features;
+          this.latestBrainFlowScores = {
+            focusScore: f.focusScore ?? 50,
+            relaxScore: f.relaxScore ?? 50,
+            mindfulnessScore: f.mindfulnessScore ?? null,
+            restfulnessScore: f.restfulnessScore ?? null,
+            valence: f.valence ?? null,
+            arousal: f.arousal ?? null,
+            emotionLabel: f.emotionLabel ?? null,
+            method: 'brainflow_welch_psd',
+          };
+
+          // Extract band powers from server if available
+          if (f.bandPowers?.absolute) {
+            const abs = f.bandPowers.absolute;
+            this.latestServerBands = {
+              delta: abs.delta ?? 0,
+              theta: abs.theta ?? 0,
+              alpha: abs.alpha ?? 0,
+              smr: abs.smr ?? 0,
+              beta: abs.beta ?? 0,
+              gamma: abs.gamma ?? 0,
+            };
+          }
+        }
+
+        // Update channel quality from server fit assessment
+        if (response.quality) {
+          this.updateChannelQualityFromServer(response.quality);
+        }
+
+        // Update training metric
+        if (response.training) {
+          this.latestTrainingMetric = {
+            score: response.training.score ?? 50,
+            baselineReady: response.training.baselineReady ?? false,
+          };
+        }
       }
     } catch {
-      // In-browser spectral Fourier analysis continues seamlessly
+      // Server analysis failed — scores remain stale
     } finally {
       this.isAnalyzingBrainflow = false;
     }
   }
 
   /**
-   * Performs discrete Fourier spectral frequency estimation on raw electrode buffers.
-   * Calculates true dynamic frequency band powers (Delta, Theta, Alpha, SMR, Beta, Gamma) in µV.
+   * Map server-side fit quality to the local MuseChannelQuality and ServerFitState.
    */
-  private calculateBandsFromHardware(): BandPowers {
-    const af7 = this.rawBuffers.af7;
-    const af8 = this.rawBuffers.af8;
-    const tp9 = this.rawBuffers.tp9;
-    const tp10 = this.rawBuffers.tp10;
+  private updateChannelQualityFromServer(quality: any) {
+    this.serverFitState = {
+      state: quality.state || 'checking',
+      ready: quality.ready ?? false,
+      worn: quality.worn ?? false,
+      blockers: quality.blockers || [],
+      channels: quality.channels || [],
+    };
 
-    const N = Math.min(128, af7.length > 0 ? af7.length : 0);
-    if (N < 16) {
-      return { delta: 8.5, theta: 5.2, alpha: 9.4, smr: 5.0, beta: 6.8, gamma: 2.3 };
-    }
+    // Map server channel states to local MuseChannelQuality
+    const channelMap: Record<string, keyof MuseChannelQuality> = {
+      'TP9': 'tp9', 'tp9': 'tp9',
+      'AF7': 'af7', 'af7': 'af7',
+      'AF8': 'af8', 'af8': 'af8',
+      'TP10': 'tp10', 'tp10': 'tp10',
+    };
 
-    // Average frontal channels with reference
-    const windowSamples: number[] = [];
-    for (let i = 0; i < N; i++) {
-      const af7Val = af7[af7.length - N + i] || 0;
-      const af8Val = af8[af8.length - N + i] || af7Val;
-      const tp9Val = tp9[tp9.length - N + i] || 0;
-      const tp10Val = tp10[tp10.length - N + i] || 0;
-      const sample = ((af7Val + af8Val) / 2) - ((tp9Val + tp10Val) / 4);
-      windowSamples.push(sample);
-    }
-
-    // Remove DC offset & apply Hanning window
-    const mean = windowSamples.reduce((a, b) => a + b, 0) / N;
-    const windowed = windowSamples.map((v, i) => {
-      const han = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1)));
-      return (v - mean) * han;
-    });
-
-    const samplingRate = 256;
-    const binWidth = samplingRate / N; // 2 Hz per bin for N=128
-
-    const computePowerInFreqRange = (lowHz: number, highHz: number): number => {
-      let totalPower = 0;
-      let binCount = 0;
-
-      for (let k = 1; k < N / 2; k++) {
-        const freq = k * binWidth;
-        if (freq >= lowHz && freq < highHz) {
-          let real = 0;
-          let imag = 0;
-          for (let n = 0; n < N; n++) {
-            const angle = (2 * Math.PI * k * n) / N;
-            real += windowed[n] * Math.cos(angle);
-            imag -= windowed[n] * Math.sin(angle);
+    if (quality.channels && Array.isArray(quality.channels)) {
+      for (const ch of quality.channels) {
+        const localKey = channelMap[ch.id];
+        if (localKey) {
+          const serverState = (ch.state || 'poor').toLowerCase();
+          if (serverState === 'good') {
+            this.channelQuality[localKey] = 'good';
+          } else if (serverState === 'fair') {
+            this.channelQuality[localKey] = 'fair';
+          } else {
+            this.channelQuality[localKey] = 'poor';
           }
-          const mag = Math.sqrt(real * real + imag * imag) / N;
-          totalPower += mag * mag;
-          binCount++;
         }
       }
-
-      const avgPower = binCount > 0 ? totalPower / binCount : 0;
-      return Math.sqrt(avgPower) * 2.8;
-    };
-
-    const delta = Math.max(0.8, computePowerInFreqRange(1.0, 4.0));
-    const theta = Math.max(0.8, computePowerInFreqRange(4.0, 8.0));
-    const alpha = Math.max(0.8, computePowerInFreqRange(8.0, 12.0));
-    const smr = Math.max(0.4, computePowerInFreqRange(12.0, 15.0));
-    const beta = Math.max(0.5, computePowerInFreqRange(15.0, 30.0));
-    const gamma = Math.max(0.1, computePowerInFreqRange(30.0, 45.0));
-
-    return {
-      delta: Math.round(delta * 10) / 10,
-      theta: Math.round(theta * 10) / 10,
-      alpha: Math.round(alpha * 10) / 10,
-      smr: Math.round(smr * 10) / 10,
-      beta: Math.round(beta * 10) / 10,
-      gamma: Math.round(gamma * 10) / 10,
-    };
+    }
   }
 
   private generateSample(dt: number): EEGDataPoint {
@@ -509,12 +524,16 @@ export class EEGEngine {
     let rawSignal = 0;
 
     if (this.isHardwareConnected) {
-      // 1. COMPUTE 100% REAL DATA FROM HARDWARE
-      bands = this.calculateBandsFromHardware();
+      // Use server-provided band powers when available, otherwise zero
+      if (this.latestServerBands) {
+        bands = { ...this.latestServerBands };
+      } else {
+        bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
+      }
       const af7 = this.rawBuffers.af7;
       rawSignal = af7.length > 0 ? af7[af7.length - 1] : 0;
     } else if (this.isDemoMode) {
-      // 2. SIMULATE VALUES ONLY WHEN DEMO MODE IS EXPLICITLY ENABLED
+      // SIMULATE VALUES ONLY WHEN DEMO MODE IS EXPLICITLY ENABLED
       this.phaseAngle += dt * 2 * Math.PI;
       this.noiseSeed += dt * 0.5;
 
@@ -555,7 +574,7 @@ export class EEGEngine {
         Math.sin(this.phaseAngle * 22) * (beta * 0.5) +
         (Math.random() - 0.5) * 1.5;
     } else {
-      // 3. DISCONNECTED & DEMO INACTIVE -> ZERO TELEMETRY (FLATLINE)
+      // DISCONNECTED & DEMO INACTIVE -> ZERO TELEMETRY (FLATLINE)
       bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
       rawSignal = 0;
     }
@@ -584,11 +603,24 @@ export class EEGEngine {
     const rawCoherence = 45 + (bands.alpha / 20) * 30 + (bands.beta / 20) * 20;
     const coherence = Math.max(10, Math.min(99, Math.round(rawCoherence)));
 
-    // Overall signal quality based on worst channel
+    // Signal quality derived from server fit state
     const qualities = Object.values(this.channelQuality);
     let overallQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected' = 'excellent';
     if (!this.isHardwareConnected && !this.isDemoMode) {
       overallQuality = 'disconnected';
+    } else if (this.serverFitState) {
+      // Use server's overall assessment
+      if (this.serverFitState.state === 'good' && this.serverFitState.ready) {
+        overallQuality = 'good';
+      } else if (this.serverFitState.state === 'poor') {
+        overallQuality = 'poor';
+      } else if (qualities.includes('poor')) {
+        overallQuality = 'poor';
+      } else if (qualities.includes('fair')) {
+        overallQuality = 'fair';
+      } else {
+        overallQuality = 'good';
+      }
     } else if (qualities.includes('poor')) {
       overallQuality = 'poor';
     } else if (qualities.includes('fair')) {
@@ -612,6 +644,7 @@ export class EEGEngine {
         clench: this.jawClenched || (this.isHardwareConnected && (this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200))),
       },
       brainflowScores: this.latestBrainFlowScores || undefined,
+      trainingMetric: this.latestTrainingMetric || undefined,
     };
   }
 }

@@ -121,6 +121,39 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
             {session.timeInZonePercent}%
           </span>
         </div>
+        {session.averageTrainingScore != null && (
+          <>
+            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Training score (baseline-relative)</span>
+              <span className="font-mono" style={{ fontSize: '16px', fontWeight: 700, color: '#7B68AE' }}>
+                {session.averageTrainingScore}
+              </span>
+            </div>
+          </>
+        )}
+        {session.averageMindfulness != null && (
+          <>
+            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Average mindfulness</span>
+              <span className="font-mono" style={{ fontSize: '16px', fontWeight: 600, color: '#7B68AE' }}>
+                {session.averageMindfulness}
+              </span>
+            </div>
+          </>
+        )}
+        {(session.averageValence != null || session.averageArousal != null) && (
+          <>
+            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Valence / Arousal</span>
+              <span className="font-mono" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {session.averageValence?.toFixed(2) ?? '—'} / {session.averageArousal?.toFixed(2) ?? '—'}
+              </span>
+            </div>
+          </>
+        )}
         <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Inter-hemispheric coherence</span>
@@ -168,6 +201,12 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
           • Trained for {Math.round(session.durationSeconds / 60)} minutes using {session.protocol.replace(/-/g, ' ')} protocol.<br />
           • Spent {session.timeInZonePercent}% of active training time in the target neural zone.<br />
           • Average band powers: θ={session.averageBands.theta.toFixed(1)} µV, α={session.averageBands.alpha.toFixed(1)} µV, SMR={session.averageBands.smr.toFixed(1)} µV, β={session.averageBands.beta.toFixed(1)} µV.<br />
+          {session.averageMindfulness != null && (
+            <>• Average mindfulness score: {session.averageMindfulness} (brainflow_service, uncalibrated).<br /></>
+          )}
+          {session.averageTrainingScore != null && (
+            <>• Training score (baseline-relative): {session.averageTrainingScore}/100.<br /></>
+          )}
           {session.adaptiveAdjustmentsCount > 0 && (
             <>• Adaptive engine made {session.adaptiveAdjustmentsCount} threshold adjustment{session.adaptiveAdjustmentsCount > 1 ? 's' : ''} (final threshold: {session.finalThreshold.toFixed(2)}).<br /></>
           )}

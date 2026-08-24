@@ -38,7 +38,31 @@ export interface BrainFlowScores {
   relaxScore: number;
   mindfulnessScore: number | null;
   restfulnessScore: number | null;
+  valence?: number | null;       // -1 (negative) to +1 (positive)
+  arousal?: number | null;       // 0 (calm) to 1 (activated)
+  emotionLabel?: string | null;  // e.g. "calm", "excited", "stressed"
   method?: 'brainflow_welch_psd' | 'browser_dsp';
+}
+
+export type ServerFitChannelState = 'good' | 'fair' | 'poor' | 'off';
+
+export interface ServerFitChannel {
+  id: string;             // "TP9", "AF7", "AF8", "TP10"
+  state: ServerFitChannelState;
+  rms?: number;
+}
+
+export interface ServerFitState {
+  state: 'checking' | 'good' | 'poor' | 'off';
+  ready: boolean;
+  worn: boolean;
+  blockers: string[];
+  channels: ServerFitChannel[];
+}
+
+export interface TrainingMetricSample {
+  score: number;           // 0 – 100 baseline-relative
+  baselineReady: boolean;
 }
 
 export interface EEGDataPoint {
@@ -56,6 +80,7 @@ export interface EEGDataPoint {
     clench: boolean;
   };
   brainflowScores?: BrainFlowScores;
+  trainingMetric?: TrainingMetricSample;
 }
 
 export interface ProtocolTemplate {
@@ -149,6 +174,10 @@ export interface SessionRecord {
   }>;
   adaptiveAdjustmentsCount: number;
   finalThreshold: number;
+  averageTrainingScore?: number;        // brainflow_service training metric (0 – 100)
+  averageMindfulness?: number;          // brainflow_service mindfulness metric (0 – 100)
+  averageValence?: number;              // brainflow_service valence (-1 to +1)
+  averageArousal?: number;              // brainflow_service arousal (0 to 1)
   moodRating?: 1 | 2 | 3 | 4 | 5;
   patientNotes?: string;
   clinicianNotes?: string;
