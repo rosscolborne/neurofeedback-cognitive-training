@@ -1,5 +1,7 @@
 import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample } from '../types';
 import { brainflowService, BrainFlowFeatures } from './brainflowService';
+import { BleClient } from '@capacitor-community/bluetooth-le';
+import { Capacitor } from '@capacitor/core';
 
 export class EEGEngine {
   private isRunning = false;
@@ -139,7 +141,7 @@ export class EEGEngine {
    * Also creates a server-side fit session for scoring via brainflow_service.
    */
   public async connectMuseBluetooth(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
-    if (!('bluetooth' in navigator)) {
+    if (!Capacitor.isNativePlatform() && !('bluetooth' in navigator)) {
       this.isHardwareConnected = false;
       return { success: false, error: 'Web Bluetooth is not supported on this browser (Chrome / Edge recommended).' };
     }
@@ -153,13 +155,74 @@ export class EEGEngine {
       }
 
       // @ts-ignore
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ namePrefix: 'Muse' }],
-        optionalServices: [
-          '0000fe8d-0000-1000-8000-00805f9b34fb', // Muse Base EEG Service
-          '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
-        ],
-      });
+      let device: any = null;
+      
+      if (Capacitor.isNativePlatform()) {
+        await BleClient.initialize({ androidNeverForLocation: true });
+        const bleDevice = await BleClient.requestDevice({
+          services: ['0000fe8d-0000-1000-8000-00805f9b34fb'],
+        });
+        device = { id: bleDevice.deviceId, name: bleDevice.name };
+        
+        await BleClient.connect(device.id, (deviceId) => {
+          this.disconnectHardware();
+        });
+
+        this.isHardwareConnected = true;
+        this.deviceName = device.name || 'Muse Headband';
+        this.gattServer = { connected: true, deviceId: device.id };
+
+        const eegService = '0000fe8d-0000-1000-8000-00805f9b34fb';
+        const channelUUIDs: Record<keyof MuseChannelQuality, string> = {
+          tp9: '273e0003-4c4d-454d-96be-f03bac821358',
+          af7: '273e0004-4c4d-454d-96be-f03bac821358',
+          af8: '273e0005-4c4d-454d-96be-f03bac821358',
+          tp10: '273e0006-4c4d-454d-96be-f03bac821358',
+        };
+
+        for (const [channel, uuid] of Object.entries(channelUUIDs)) {
+          try {
+            await BleClient.startNotifications(
+              device.id,
+              eegService,
+              uuid,
+              (value) => {
+                this.packetsReceivedCount++;
+                this.parseChannelPacket(channel as keyof MuseChannelQuality, value);
+              }
+            );
+          } catch (err) {
+            console.warn(`Failed to connect channel ${channel}:`, err);
+          }
+        }
+
+        const controlChar = '273e0001-4c4d-454d-96be-f03bac821358';
+        try {
+          await BleClient.write(device.id, eegService, controlChar, new DataView(new Uint8Array([0x02, 0x68, 0x0a]).buffer));
+          await BleClient.write(device.id, eegService, controlChar, new DataView(new Uint8Array([0x04, 0x70, 0x32, 0x31, 0x0a]).buffer));
+          await BleClient.write(device.id, eegService, controlChar, new DataView(new Uint8Array([0x02, 0x73, 0x0a]).buffer));
+          await BleClient.write(device.id, eegService, controlChar, new DataView(new Uint8Array([0x02, 0x64, 0x0a]).buffer));
+        } catch (ctrlErr) {
+          console.log('Muse control characteristic notice:', ctrlErr);
+        }
+
+        try {
+          const batteryService = '0000180f-0000-1000-8000-00805f9b34fb';
+          const batteryChar = '00002a19-0000-1000-8000-00805f9b34fb';
+          const val = await BleClient.read(device.id, batteryService, batteryChar);
+          this.batteryLevel = val.getUint8(0);
+        } catch (e) {}
+
+        return { success: true, deviceName: this.deviceName || undefined };
+      } else {
+        device = await (navigator as any).bluetooth.requestDevice({
+          filters: [{ namePrefix: 'Muse' }],
+          optionalServices: [
+            '0000fe8d-0000-1000-8000-00805f9b34fb', // Muse Base EEG Service
+            '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+          ],
+        });
+      }
 
       if (!device || !device.gatt) {
         throw new Error('GATT connection failed');
@@ -309,7 +372,9 @@ export class EEGEngine {
   }
 
   public disconnectHardware() {
-    if (this.gattServer && this.gattServer.connected) {
+    if (Capacitor.isNativePlatform() && this.gattServer?.deviceId) {
+      BleClient.disconnect(this.gattServer.deviceId).catch(() => {});
+    } else if (this.gattServer && this.gattServer.connected) {
       this.gattServer.disconnect();
     }
     if (this.brainflowUnsubscribe) {

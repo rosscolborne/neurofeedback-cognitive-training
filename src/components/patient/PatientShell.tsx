@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
+import { auth, db } from '../../services/firebase';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
@@ -25,6 +29,40 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    window.location.href = '/';
+  };
+
+  const handleLinkClinician = async () => {
+    const code = window.prompt("Enter your clinician's code:");
+    if (code && auth.currentUser) {
+      try {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          linkedClinicianCode: code
+        });
+        alert('Clinician linked successfully! They now have access to your progress.');
+      } catch (err) {
+        alert('Failed to link clinician. Invalid code or network error.');
+      }
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
+      if (auth.currentUser) {
+        try {
+          await deleteDoc(doc(db, 'users', auth.currentUser.uid));
+          await auth.currentUser.delete();
+          window.location.href = '/welcome';
+        } catch (err) {
+          alert('Failed to delete account. Please log out and log back in to verify your identity, then try again.');
+        }
+      }
+    }
+  };
 
   const handleStartSession = (exp: ExperienceType) => {
     setActiveSessionExp(exp);
@@ -246,6 +284,48 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               style={{ marginTop: '10px' }}
             >
               Re-run Clinical Assessment & Headband Setup
+            </button>
+
+            <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '16px 0' }} />
+
+            <button
+              onClick={handleLinkClinician}
+              className="btn btn-secondary"
+              style={{ width: '100%' }}
+            >
+              Link Clinician (Premium)
+            </button>
+
+            <button
+              onClick={handleLogout}
+              style={{
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                padding: '12px',
+                borderRadius: '8px',
+                width: '100%',
+                cursor: 'pointer',
+                marginTop: '8px'
+              }}
+            >
+              Log Out
+            </button>
+
+            <button
+              onClick={handleDeleteAccount}
+              style={{
+                background: '#FF4C4C15',
+                color: '#FF4C4C',
+                border: 'none',
+                padding: '12px',
+                borderRadius: '8px',
+                width: '100%',
+                cursor: 'pointer',
+                marginTop: '8px'
+              }}
+            >
+              Delete Account
             </button>
           </div>
         )}
