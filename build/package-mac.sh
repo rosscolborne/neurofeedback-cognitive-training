@@ -66,5 +66,7 @@ case "$MODE" in
 esac
 
 echo "========================================================"
-echo " Brainwell Universal Build Completed Successfully!"
+echo " Brainswell Universal Build Completed Successfully!"
+echo " Universal Archive: $ARCHIVE_PATH"
+echo " Exported Artifacts: $EXPORT_PATH"
 echo "========================================================"
