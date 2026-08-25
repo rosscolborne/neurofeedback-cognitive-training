@@ -1,17 +1,39 @@
 import React, { useState } from 'react';
-import { ClientProfile, ClinicBrandConfig, MessageThread } from '../../types';
+import {
+  CalendarAppointment,
+  ClientProfile,
+  ClinicBrandConfig,
+  MessageThread,
+} from '../../types';
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
 import { MessagingView } from './MessagingView';
-import { Users, Calendar, MessageSquare, BarChart3, Settings, Sliders, ShieldCheck } from 'lucide-react';
+import { ClinicalCalendarView } from './ClinicalCalendarView';
+import { ClinicalReportsView } from './ClinicalReportsView';
+import { ClinicSettingsView } from './ClinicSettingsView';
+import {
+  Users,
+  Calendar,
+  MessageSquare,
+  BarChart3,
+  Settings,
+  Sliders,
+  ShieldCheck,
+} from 'lucide-react';
 
 interface ClinicianShellProps {
   brand: ClinicBrandConfig;
   clients: ClientProfile[];
   messages: MessageThread[];
+  appointments: CalendarAppointment[];
   onUpdateClient: (updated: ClientProfile) => void;
+  onDeleteClient?: (clientId: string) => void;
   onAddClient: (newClient: Partial<ClientProfile>) => void;
   onSendMessage: (clientId: string, text: string) => void;
+  onSaveAppointment: (appt: CalendarAppointment) => void;
+  onDeleteAppointment: (id: string) => void;
+  onClearDemoData: () => void;
+  onResetDemoData: () => void;
   onOpenRebrand: () => void;
 }
 
@@ -26,23 +48,40 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   brand,
   clients,
   messages,
+  appointments,
   onUpdateClient,
+  onDeleteClient,
   onAddClient,
   onSendMessage,
+  onSaveAppointment,
+  onDeleteAppointment,
+  onClearDemoData,
+  onResetDemoData,
   onOpenRebrand,
 }) => {
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
 
-  const totalUnread = messages.reduce((acc, t) => acc + t.unreadCount, 0);
+  const totalUnread = messages.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
 
   const navItems: ClinicianNavItem[] = [
-    { id: 'clients', label: 'Clients', icon: Users },
+    { id: 'clients', label: 'Patients', icon: Users },
     { id: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnread },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const handleSelectClient = (client: ClientProfile) => {
+    setSelectedClient(client);
+    setActiveNav('clients');
+  };
+
+  const handleOpenMessagesForClient = (clientId: string) => {
+    const client = clients.find((c) => c.id === clientId) || null;
+    setSelectedClient(client);
+    setActiveNav('messages');
+  };
 
   return (
     <div className="clinician-shell-container">
@@ -77,7 +116,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
               {brand.name}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Clinician Suite</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Clinician Suite • Muse S Athena</div>
           </div>
         </div>
 
@@ -125,13 +164,13 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
               <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                 {brand.name}
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Clinician Suite</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Neurofeedback Portal</div>
             </div>
           </div>
 
           {/* Navigation Links */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {navItems.map(item => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
               return (
@@ -199,8 +238,8 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           </button>
 
           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ShieldCheck size={13} />
-            <span>HIPAA Verified Portal</span>
+            <ShieldCheck size={13} color="var(--status-active)" />
+            <span>HIPAA Compliant Security</span>
           </div>
         </div>
       </aside>
@@ -210,8 +249,16 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         {activeNav === 'clients' && !selectedClient && (
           <ClientRosterView
             clients={clients}
-            onSelectClient={c => setSelectedClient(c)}
+            onSelectClient={(c) => setSelectedClient(c)}
             onAddClient={onAddClient}
+            onUpdateClient={onUpdateClient}
+            onDeleteClient={onDeleteClient}
+            onScheduleClient={(clientId) => {
+              const client = clients.find((c) => c.id === clientId);
+              if (client) setSelectedClient(client);
+              setActiveNav('calendar');
+            }}
+            onMessageClient={handleOpenMessagesForClient}
           />
         )}
 
@@ -220,7 +267,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             client={selectedClient}
             brand={brand}
             onBack={() => setSelectedClient(null)}
-            onUpdateClient={c => {
+            onUpdateClient={(c) => {
               onUpdateClient(c);
               setSelectedClient(c);
             }}
@@ -239,41 +286,37 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         )}
 
         {activeNav === 'calendar' && (
-          <div className="card-clinician" style={{ padding: '28px 20px', textAlign: 'center' }}>
-            <Calendar size={36} color="var(--text-tertiary)" style={{ margin: '0 auto 12px auto' }} />
-            <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Clinical Session Calendar</h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Synchronized scheduling with automated patient reminder notifications.
-            </p>
-          </div>
+          <ClinicalCalendarView
+            clients={clients}
+            appointments={appointments}
+            onSaveAppointment={onSaveAppointment}
+            onDeleteAppointment={onDeleteAppointment}
+            onSelectClient={handleSelectClient}
+            onOpenMessages={handleOpenMessagesForClient}
+          />
         )}
 
         {activeNav === 'reports' && (
-          <div className="card-clinician" style={{ padding: '28px 20px', textAlign: 'center' }}>
-            <BarChart3 size={36} color="var(--text-tertiary)" style={{ margin: '0 auto 12px auto' }} />
-            <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Clinic Aggregate Outcome Analytics</h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Cohort-wide neuroplastic trend metrics and symptom rating score improvements.
-            </p>
-          </div>
+          <ClinicalReportsView
+            clients={clients}
+            brand={brand}
+            onSelectClient={handleSelectClient}
+          />
         )}
 
         {activeNav === 'settings' && (
-          <div className="card-clinician" style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Clinic Platform Settings</h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Manage clinic license, EEG hardware drivers, and team practitioner access.
-            </p>
-            <button onClick={onOpenRebrand} className="btn btn-dense" style={{ alignSelf: 'flex-start' }}>
-              Open Clinic Branding Customizer
-            </button>
-          </div>
+          <ClinicSettingsView
+            brand={brand}
+            onOpenRebrand={onOpenRebrand}
+            onClearDemoData={onClearDemoData}
+            onResetDemoData={onResetDemoData}
+          />
         )}
       </main>
 
       {/* Mobile Bottom Navigation Bar (iPhone only) */}
       <nav className="clinician-mobile-bottom-nav">
-        {navItems.map(item => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeNav === item.id;
           return (

@@ -114,6 +114,7 @@ export interface ProtocolTemplate {
   sessionDurationMinutes: number;
   recommendedExperiences: ExperienceType[];
   clinicalNotes: string;
+  museChannelMapping?: string; // e.g. 'AF7 / AF8 Frontal (Derived Midline TBR)'
 }
 
 export interface QEEGBrainMap {
@@ -181,6 +182,7 @@ export interface SessionRecord {
   moodRating?: 1 | 2 | 3 | 4 | 5;
   patientNotes?: string;
   clinicianNotes?: string;
+  isDemo?: boolean;
 }
 
 export interface ClientProfile {
@@ -214,6 +216,8 @@ export interface ClientProfile {
   skylineBiomesUnlocked: string[];
   badges: string[];
   linkedClinicianCode?: string;
+  isDemo?: boolean;
+  notes?: string;
 }
 
 export interface MilestoneBadge {
@@ -241,4 +245,48 @@ export interface MessageThread {
   lastMessageTime: string;
   unreadCount: number;
   messages: MessageItem[];
+  isDemo?: boolean;
 }
+
+export type AppointmentType =
+  | 'remote-training'
+  | 'in-clinic-evaluation'
+  | 'qeeg-mapping'
+  | 'protocol-review'
+  | 'consultation';
+
+export type AppointmentStatus = 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'missed';
+
+export interface CalendarAppointment {
+  id: string;
+  clientId: string;
+  clientName: string;
+  clientAvatar: string;
+  clientCondition: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm (e.g., "10:30")
+  durationMinutes: number;
+  type: AppointmentType;
+  protocol: ProtocolType;
+  experience?: ExperienceType;
+  status: AppointmentStatus;
+  notes?: string;
+  isDemo?: boolean;
+  hardwareProfile?: 'Muse S (Athena)' | 'Muse 2' | '19-Ch QEEG Clinical';
+}
+
+export interface PracticeOutcomeMetrics {
+  totalActivePatients: number;
+  totalCompletedSessions: number;
+  averageCohortCompliance: number; // e.g. 86%
+  averageCohortInZone: number;     // e.g. 78%
+  averageTbrReductionPercent: number; // e.g. 24%
+  averageAlphaPeakFrequency: number;  // e.g. 10.2 Hz
+  cohortConditionsBreakdown: {
+    adhd: number;
+    anxiety: number;
+    insomnia: number;
+    peakPerformance: number;
+  };
+}
+

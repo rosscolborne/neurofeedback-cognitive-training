@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProtocolTemplate, ProtocolType } from '../../types';
-import { X } from 'lucide-react';
+import { X, Cpu, Info } from 'lucide-react';
 
 interface ProtocolBuilderModalProps {
   initialProtocol?: ProtocolTemplate;
@@ -16,6 +16,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     leadInvestigator: 'Joel F. Lubar, Ph.D. (BCN Pioneer)',
     indication: 'ADHD (Inattentive & Combined), Executive Dysfunction',
     montageSite: 'Fz / Cz (10-20 System)',
+    museChannelMapping: 'AF7 / AF8 Frontal (Virtual Fz Midline TBR)',
     rewardBand: {
       name: 'Beta Focus',
       freqMin: 15.0,
@@ -39,7 +40,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     sensitivity: 'balanced',
     sessionDurationMinutes: 25,
     recommendedExperiences: ['skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock'],
-    clinicalNotes: 'Target TBR < 1.85 at Fz midline. High efficacy for sustained concentration and reduced impulsivity.',
+    clinicalNotes: 'Target TBR < 1.85 at Fz midline. High efficacy for sustained concentration and reduced impulsivity on Muse S Athena.',
   },
   {
     id: 'proto-sterman-smr',
@@ -48,6 +49,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     leadInvestigator: 'M. Barry Sterman, Ph.D. (UCLA Brain Research)',
     indication: 'ADHD (Hyperactive), Physical Restlessness, Sleep Latency',
     montageSite: 'Cz (Central Sensorimotor Cortex)',
+    museChannelMapping: 'TP9 / TP10 & Central Sensorimotor Synchrony',
     rewardBand: {
       name: 'SMR Rhythm',
       freqMin: 12.0,
@@ -80,6 +82,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     leadInvestigator: 'James V. Hardt, Ph.D. (Biocybernaut Institute)',
     indication: 'Generalized Anxiety, Somatic Worry, Executive Burnout',
     montageSite: 'Pz / Oz (Parietal-Occipital)',
+    museChannelMapping: 'TP9 / TP10 Temporoparietal Posterior Alpha',
     rewardBand: {
       name: 'Alpha Synchrony',
       freqMin: 8.0,
@@ -106,6 +109,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     leadInvestigator: 'Eugene G. Peniston, Ed.D. (Addiction Protocol)',
     indication: 'Trauma Desensitization, PTSD, Emotional Regulation',
     montageSite: 'Pz (Midline Parietal)',
+    museChannelMapping: 'TP9 / TP10 Posterior Hypnagogic Crossover',
     rewardBand: {
       name: 'Theta Hypnagogia',
       freqMin: 4.0,
@@ -132,6 +136,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     leadInvestigator: 'Clinical Evidence-Based Guideline',
     indication: 'Insomnia, Cognitive Overdrive, Physical Muscle Guarding',
     montageSite: 'Cz / Pz',
+    museChannelMapping: 'AF7 / AF8 & TP9 / TP10 Global Beta Suppression',
     rewardBand: {
       name: 'Alpha Equilibrium',
       freqMin: 9.0,
@@ -163,6 +168,9 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   );
   const [name, setName] = useState(initialProtocol?.name || CLINICAL_PROTOCOL_TEMPLATES[0].name);
   const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || CLINICAL_PROTOCOL_TEMPLATES[0].montageSite);
+  const [museMapping, setMuseMapping] = useState(
+    initialProtocol?.museChannelMapping || CLINICAL_PROTOCOL_TEMPLATES[0].museChannelMapping || 'AF7 / AF8 Frontal'
+  );
   const [rewardMin, setRewardMin] = useState(initialProtocol?.rewardBand.freqMin || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMin);
   const [rewardMax, setRewardMax] = useState(initialProtocol?.rewardBand.freqMax || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMax);
   const [rewardThreshold, setRewardThreshold] = useState(initialProtocol?.rewardBand.targetThreshold || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.targetThreshold);
@@ -173,6 +181,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     setSelectedTemplate(tmpl);
     setName(tmpl.name);
     setMontageSite(tmpl.montageSite);
+    setMuseMapping(tmpl.museChannelMapping || 'AF7 / AF8 Frontal');
     setRewardMin(tmpl.rewardBand.freqMin);
     setRewardMax(tmpl.rewardBand.freqMax);
     setRewardThreshold(tmpl.rewardBand.targetThreshold);
@@ -187,6 +196,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
       id: 'custom-' + Date.now(),
       name,
       montageSite,
+      museChannelMapping: museMapping,
       rewardBand: {
         ...selectedTemplate.rewardBand,
         freqMin: Number(rewardMin),
@@ -218,7 +228,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         className="card-clinician"
         style={{
           width: '100%',
-          maxWidth: '720px',
+          maxWidth: '740px',
           maxHeight: '90vh',
           overflowY: 'auto',
           backgroundColor: '#FFFFFF',
@@ -234,10 +244,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
           <div>
             <h2 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              Clinical Protocol Architect
+              Clinical Protocol Architect (Muse S Athena Compatible)
             </h2>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Select an evidence-based clinical template or customize reward parameters.
+              Evidence-based neurofeedback templates mapped to standard 10-20 sites and 4-channel Muse S Athena biosensors.
             </p>
           </div>
           <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }}>
@@ -248,10 +258,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         {/* 1. Clinical Preset Templates Selection */}
         <div>
           <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
-            Clinical Protocol Templates
+            Clinical Evidence-Based Protocols
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-            {CLINICAL_PROTOCOL_TEMPLATES.map(tmpl => (
+            {CLINICAL_PROTOCOL_TEMPLATES.map((tmpl) => (
               <div
                 key={tmpl.id}
                 onClick={() => handleSelectTemplate(tmpl)}
@@ -283,23 +293,34 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Protocol Assignment Label
+                Protocol Assignment Name
               </label>
               <input
                 type="text"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                10-20 Electrode Site
+                10-20 Standard Site
               </label>
               <input
                 type="text"
                 value={montageSite}
-                onChange={e => setMontageSite(e.target.value)}
+                onChange={(e) => setMontageSite(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                Muse S Athena Channel Mapping
+              </label>
+              <input
+                type="text"
+                value={museMapping}
+                onChange={(e) => setMuseMapping(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -315,7 +336,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
                 type="number"
                 step="0.5"
                 value={rewardMin}
-                onChange={e => setRewardMin(parseFloat(e.target.value))}
+                onChange={(e) => setRewardMin(parseFloat(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -327,7 +348,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
                 type="number"
                 step="0.5"
                 value={rewardMax}
-                onChange={e => setRewardMax(parseFloat(e.target.value))}
+                onChange={(e) => setRewardMax(parseFloat(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -339,7 +360,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
                 type="number"
                 step="0.1"
                 value={rewardThreshold}
-                onChange={e => setRewardThreshold(parseFloat(e.target.value))}
+                onChange={(e) => setRewardThreshold(parseFloat(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -350,7 +371,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               <input
                 type="number"
                 value={durationMins}
-                onChange={e => setDurationMins(parseInt(e.target.value))}
+                onChange={(e) => setDurationMins(parseInt(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -362,7 +383,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             </label>
             <textarea
               value={clinicalNotes}
-              onChange={e => setClinicalNotes(e.target.value)}
+              onChange={(e) => setClinicalNotes(e.target.value)}
               style={{
                 width: '100%',
                 height: '56px',
@@ -378,7 +399,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
             <button type="submit" className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
-              Assign Protocol
+              Assign Protocol Configuration
             </button>
             <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>
               Cancel

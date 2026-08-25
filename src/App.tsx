@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ClientProfile, ClinicBrandConfig, MessageThread } from './types';
+import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment } from './types';
 import { storageEngine } from './services/storageEngine';
 import { applyBrandToDOM } from './services/brandEngine';
 import { PatientShell } from './components/patient/PatientShell';
@@ -23,6 +23,7 @@ export function App() {
   const [clients, setClients] = useState<ClientProfile[]>(() => storageEngine.getClients());
   const [currentClientId, setCurrentClientId] = useState<string>(() => storageEngine.getCurrentClient().id);
   const [messages, setMessages] = useState<MessageThread[]>(() => storageEngine.getMessages());
+  const [appointments, setAppointments] = useState<CalendarAppointment[]>(() => storageEngine.getAppointments());
   const [showRebrandModal, setShowRebrandModal] = useState(false);
 
   useEffect(() => {
@@ -41,12 +42,18 @@ export function App() {
     storageEngine.saveClients(next);
   };
 
+  const handleDeleteClient = (clientId: string) => {
+    const next = clients.filter(c => c.id !== clientId);
+    setClients(next);
+    storageEngine.saveClients(next);
+  };
+
   const handleAddClient = (newClient: Partial<ClientProfile>) => {
     const fullClient: ClientProfile = {
       id: 'client-' + Date.now(),
       name: newClient.name || 'New Patient',
       email: (newClient.name?.toLowerCase().replace(/\s+/g, '.') || 'patient') + '@example.com',
-      avatarUrl: '',
+      avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
       condition: newClient.condition || 'ADHD (Inattentive)',
       status: 'active',
       assignedProtocol: newClient.assignedProtocol || 'theta-beta-ratio',
@@ -54,15 +61,17 @@ export function App() {
       allowedExperiences: ['skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'mandala'],
       prescribedSessionsPerWeek: 4,
       completedSessionsCount: 0,
-      currentStreak: 1,
+      currentStreak: 0,
       streakFreezeRemaining: 1,
-      brainCapacityScore: 65,
+      brainCapacityScore: 60,
       lastSessionDate: 'Just Enrolled',
-      nextSessionDate: 'Tomorrow, 10:00 AM',
+      nextSessionDate: 'Ready to schedule',
+      isDemo: false,
+      notes: newClient.notes || '',
       tidalGardenState: {
         stage: 1,
         plantsUnlocked: ['amber-coral'],
-        growthPoints: 50,
+        growthPoints: 0,
         lastWatered: new Date().toISOString().split('T')[0],
       },
       skylineBiomesUnlocked: ['Alpine Meadows'],
@@ -72,23 +81,94 @@ export function App() {
     const next = [fullClient, ...clients];
     setClients(next);
     storageEngine.saveClients(next);
+
+    // Auto-create a welcome thread for this patient
+    const newThread: MessageThread = {
+      clientId: fullClient.id,
+      clientName: fullClient.name,
+      clientAvatar: fullClient.avatarUrl,
+      lastMessageTime: 'Just now',
+      unreadCount: 0,
+      isDemo: false,
+      messages: [
+        {
+          id: 'welcome-' + Date.now(),
+          sender: 'clinician',
+          text: `Welcome ${fullClient.name}! Your clinical neurofeedback profile has been initialized with the ${fullClient.assignedProtocol.replace(/-/g, ' ')} protocol for your Muse S (Athena) headset.`,
+          timestamp: 'Just now',
+          isRead: true,
+        },
+      ],
+    };
+    const nextThreads = [newThread, ...messages];
+    setMessages(nextThreads);
+    storageEngine.saveMessages(nextThreads);
   };
 
   const handleSendMessage = (clientId: string, text: string) => {
-    const thread = messages.find(t => t.clientId === clientId);
-    if (thread) {
-      thread.messages.push({
+    if (!text.trim()) return;
+
+    let targetThread = messages.find(t => t.clientId === clientId);
+    let nextThreads: MessageThread[];
+
+    if (targetThread) {
+      targetThread.messages.push({
         id: 'msg-' + Date.now(),
         sender: 'clinician',
         text,
         timestamp: 'Just now',
         isRead: true,
       });
-      thread.lastMessageTime = 'Just now';
-      const next = [...messages];
-      setMessages(next);
-      storageEngine.saveMessages(next);
+      targetThread.lastMessageTime = 'Just now';
+      nextThreads = [...messages];
+    } else {
+      const client = clients.find(c => c.id === clientId);
+      const newThread: MessageThread = {
+        clientId,
+        clientName: client ? client.name : 'Patient',
+        clientAvatar: client?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        lastMessageTime: 'Just now',
+        unreadCount: 0,
+        isDemo: client?.isDemo || false,
+        messages: [
+          {
+            id: 'msg-' + Date.now(),
+            sender: 'clinician',
+            text,
+            timestamp: 'Just now',
+            isRead: true,
+          },
+        ],
+      };
+      nextThreads = [newThread, ...messages];
     }
+
+    setMessages(nextThreads);
+    storageEngine.saveMessages(nextThreads);
+  };
+
+  const handleSaveAppointment = (appt: CalendarAppointment) => {
+    storageEngine.saveAppointment(appt);
+    setAppointments(storageEngine.getAppointments());
+  };
+
+  const handleDeleteAppointment = (id: string) => {
+    storageEngine.deleteAppointment(id);
+    setAppointments(storageEngine.getAppointments());
+  };
+
+  const handleClearDemoData = () => {
+    storageEngine.clearDemoData();
+    setClients(storageEngine.getClients());
+    setMessages(storageEngine.getMessages());
+    setAppointments(storageEngine.getAppointments());
+  };
+
+  const handleResetDemoData = () => {
+    storageEngine.resetToDefaultSeed();
+    setClients(storageEngine.getClients());
+    setMessages(storageEngine.getMessages());
+    setAppointments(storageEngine.getAppointments());
   };
 
   const handleSaveBrand = (newBrand: ClinicBrandConfig) => {
@@ -129,9 +209,15 @@ export function App() {
                   brand={brand}
                   clients={clients}
                   messages={messages}
+                  appointments={appointments}
                   onUpdateClient={handleUpdateClient}
+                  onDeleteClient={handleDeleteClient}
                   onAddClient={handleAddClient}
                   onSendMessage={handleSendMessage}
+                  onSaveAppointment={handleSaveAppointment}
+                  onDeleteAppointment={handleDeleteAppointment}
+                  onClearDemoData={handleClearDemoData}
+                  onResetDemoData={handleResetDemoData}
                   onOpenRebrand={() => setShowRebrandModal(true)}
                 />
               )
