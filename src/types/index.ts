@@ -213,6 +213,7 @@ export interface ClientProfile {
   };
   skylineBiomesUnlocked: string[];
   badges: string[];
+  linkedClinicianCode?: string;
 }
 
 export interface MilestoneBadge {

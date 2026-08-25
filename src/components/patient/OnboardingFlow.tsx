@@ -86,8 +86,8 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
               width: '200px',
               height: '200px',
               borderRadius: '50%',
-              background: 'radial-gradient(circle, #E8967A 0%, #E4B87C 40%, rgba(248, 247, 244, 0) 75%)',
-              border: '2px solid rgba(232, 150, 122, 0.4)',
+              background: 'radial-gradient(circle, var(--brand-primary) 0%, var(--chart-beta) 40%, rgba(248, 247, 244, 0) 75%)',
+              border: '2px solid var(--border-default)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -98,8 +98,8 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
                 width: '120px',
                 height: '120px',
                 borderRadius: '50%',
-                backgroundColor: '#FAF7F4',
-                border: '2px solid rgba(228, 184, 124, 0.6)',
+                backgroundColor: 'var(--surface-patient-base)',
+                border: '2px solid var(--border-default)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -139,7 +139,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
               What is your primary training intention?
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Your clinician will use this to assign and optimize your EEG training protocol.
+              This helps us personalize your training protocol.
             </p>
           </div>
 

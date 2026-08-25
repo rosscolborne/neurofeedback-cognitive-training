@@ -46,7 +46,7 @@ export function App() {
       id: 'client-' + Date.now(),
       name: newClient.name || 'New Patient',
       email: (newClient.name?.toLowerCase().replace(/\s+/g, '.') || 'patient') + '@example.com',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      avatarUrl: '',
       condition: newClient.condition || 'ADHD (Inattentive)',
       status: 'active',
       assignedProtocol: newClient.assignedProtocol || 'theta-beta-ratio',

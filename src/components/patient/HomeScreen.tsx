@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ClientProfile, ExperienceType } from '../../types';
-import { Play, Flame, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, BookOpen } from 'lucide-react';
+import { storageEngine } from '../../services/storageEngine';
+import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, BookOpen, ChevronRight as ScrollHint } from 'lucide-react';
 
 interface HomeScreenProps {
   client: ClientProfile;
@@ -19,17 +20,65 @@ const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ 
   'mandala': { name: 'Mandala Breathing', icon: Sparkles, desc: 'Calm concentric breathing mandala with live µV telemetry', tag: 'Calm' },
 };
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function getCompletedDaysThisWeek(): Set<number> {
+  const sessions = storageEngine.getSessions();
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  // Get start of this week (Sunday)
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - dayOfWeek);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const completedDays = new Set<number>();
+  for (const session of sessions) {
+    const sessionDate = new Date(session.timestamp);
+    if (sessionDate >= weekStart && sessionDate <= now) {
+      completedDays.add(sessionDate.getDay());
+    }
+  }
+  return completedDays;
+}
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   client,
   onStartSession,
   onNavigateTab,
 }) => {
   const [selectedExp, setSelectedExp] = useState<ExperienceType>(client.allowedExperiences[0] || 'skyline-drift');
+  const [showScrollHint, setShowScrollHint] = useState(true);
+  const pillsRef = useRef<HTMLDivElement>(null);
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const todayIndex = new Date().getDay();
+  const completedDays = getCompletedDaysThisWeek();
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
+
+  // Hide scroll hint once user scrolls the pills
+  useEffect(() => {
+    const el = pillsRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      if (el.scrollLeft > 20) setShowScrollHint(false);
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Check if pills overflow (need scroll hint)
+  useEffect(() => {
+    const el = pillsRef.current;
+    if (el && el.scrollWidth <= el.clientWidth) {
+      setShowScrollHint(false);
+    }
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
@@ -39,10 +88,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           className="font-display"
           style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15 }}
         >
-          Good morning,<br />{client.name.split(' ')[0]}.
+          {getGreeting()},<br />{client.name.split(' ')[0]}.
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Assigned Protocol: <strong style={{ color: 'var(--text-primary)' }}>{client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
+          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
         </p>
       </div>
 
@@ -51,7 +100,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-              Prescribed Training Session
+              Training Session
             </div>
             <div className="font-display" style={{ fontSize: '22px', color: 'var(--text-primary)', marginTop: '2px' }}>
               {EXPERIENCES_META[selectedExp].name}
@@ -77,33 +126,69 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {EXPERIENCES_META[selectedExp].desc}
         </p>
 
-        {/* Experience Selector Pills */}
-        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
-          {client.allowedExperiences.map(exp => {
-            const Icon = EXPERIENCES_META[exp].icon;
-            return (
-              <button
-                key={exp}
-                onClick={() => setSelectedExp(exp)}
-                style={{
-                  background: selectedExp === exp ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
-                  border: selectedExp === exp ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: selectedExp === exp ? 'var(--brand-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <Icon size={14} /> {EXPERIENCES_META[exp].name}
-              </button>
-            );
-          })}
+        {/* Experience Selector Pills — scrollable with fade hint */}
+        <div style={{ position: 'relative' }}>
+          <div
+            ref={pillsRef}
+            style={{
+              display: 'flex',
+              gap: '6px',
+              overflowX: 'auto',
+              paddingBottom: '4px',
+              scrollSnapType: 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+            }}
+          >
+            {client.allowedExperiences.map(exp => {
+              const Icon = EXPERIENCES_META[exp].icon;
+              return (
+                <button
+                  key={exp}
+                  onClick={() => setSelectedExp(exp)}
+                  style={{
+                    background: selectedExp === exp ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
+                    border: selectedExp === exp ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: selectedExp === exp ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    scrollSnapAlign: 'start',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon size={14} /> {EXPERIENCES_META[exp].name}
+                </button>
+              );
+            })}
+          </div>
+          {/* Right fade gradient to hint scrollability */}
+          {showScrollHint && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: '4px',
+                width: '48px',
+                background: 'linear-gradient(to right, transparent, var(--surface-patient-card))',
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: '4px',
+              }}
+            >
+              <ChevronRight size={16} color="var(--text-tertiary)" style={{ opacity: 0.7 }} />
+            </div>
+          )}
         </div>
 
         <button
@@ -117,36 +202,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* Your Progress & Weekly Streak */}
       <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-              Training Consistency
-            </div>
-            <div className="font-display" style={{ fontSize: '18px', color: 'var(--text-primary)' }}>
-              {client.currentStreak}-Day Active Streak
-            </div>
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+            Training Consistency
           </div>
+          <div className="font-display" style={{ fontSize: '18px', color: 'var(--text-primary)', marginTop: '2px' }}>
+            {client.currentStreak > 0 ? `${client.currentStreak}-Day Active Streak` : 'Build Your Streak'}
+          </div>
+        </div>
+
+        {/* Grace Day Badge — own row with spacing */}
+        {client.streakFreezeRemaining > 0 && (
           <div
             style={{
               background: 'var(--status-paused-bg)',
               color: 'var(--status-paused)',
-              padding: '4px 10px',
+              padding: '6px 12px',
               borderRadius: 'var(--radius-sm)',
               fontSize: '11px',
-              fontWeight: 700,
-              display: 'flex',
+              fontWeight: 600,
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
+              gap: '6px',
+              alignSelf: 'flex-start',
             }}
           >
-            <Flame size={14} /> {client.streakFreezeRemaining} Grace Day Available
+            {client.streakFreezeRemaining} grace {client.streakFreezeRemaining === 1 ? 'day' : 'days'} available
           </div>
-        </div>
+        )}
 
-        {/* 7-Day Dot Indicator Grid */}
+        {/* 7-Day Dot Indicator Grid — based on actual session data */}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
           {daysOfWeek.map((day, idx) => {
-            const isCompleted = idx <= todayIndex;
+            const isCompleted = completedDays.has(idx);
+            const isToday = idx === todayIndex;
             return (
               <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <div
@@ -154,7 +243,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     width: '28px',
                     height: '28px',
                     borderRadius: '50%',
-                    backgroundColor: isCompleted ? 'var(--status-paused)' : 'var(--surface-patient-recessed)',
+                    backgroundColor: isCompleted ? 'var(--status-active)' : 'var(--surface-patient-recessed)',
+                    border: isToday && !isCompleted ? '2px solid var(--brand-primary)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -165,7 +255,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 >
                   {isCompleted ? '✓' : ''}
                 </div>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{day}</span>
+                <span style={{
+                  fontSize: '11px',
+                  color: isToday ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontWeight: isToday ? 700 : 400,
+                }}>{day}</span>
               </div>
             );
           })}
@@ -173,8 +267,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         {/* Brain Capacity Trend Sparkline */}
         <div style={{ marginTop: '8px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Brain Capacity Index</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Brain Capacity Index</span>
+              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Past 7 days</div>
+            </div>
             <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--brand-primary)' }}>
               {client.brainCapacityScore} / 100
             </span>
@@ -194,6 +291,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 opacity="0.6"
               />
             </svg>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 4px' }}>
+            <span>Mon</span>
+            <span>Wed</span>
+            <span>Fri</span>
+            <span>Today</span>
           </div>
         </div>
       </div>

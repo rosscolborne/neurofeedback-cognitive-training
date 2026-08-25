@@ -102,7 +102,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
           Session Complete
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-          Session data synchronized with your clinician portal.
+          Your session data has been saved.
         </p>
       </div>
 

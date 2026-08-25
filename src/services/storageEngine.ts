@@ -69,7 +69,7 @@ export const createBlankProfile = (uid: string, email: string): ClientProfile =>
     id: uid,
     name: username,
     email: email,
-    avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
+    avatarUrl: '',
     condition: 'Peak Performance',
     status: 'active',
     assignedProtocol: 'theta-beta-ratio',

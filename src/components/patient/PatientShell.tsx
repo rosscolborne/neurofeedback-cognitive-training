@@ -10,7 +10,7 @@ import { OnboardingFlow } from './OnboardingFlow';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { EducationHub } from './EducationHub';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, Camera, LogOut, Trash2 } from 'lucide-react';
 
 interface PatientShellProps {
   brand: ClinicBrandConfig;
@@ -127,6 +127,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <header
         style={{
           padding: '16px 20px',
+          paddingTop: 'max(16px, env(safe-area-inset-top, 16px))',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -138,7 +139,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {brand.logoUrl && brand.logoUrl.startsWith('data:image') ? (
+          {client.linkedClinicianCode && brand.logoUrl && brand.logoUrl.startsWith('data:image') ? (
             <img
               src={brand.logoUrl}
               alt="Clinic Logo"
@@ -163,18 +164,20 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             </div>
           )}
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{brand.name}</div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Patient Training Portal</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{client.linkedClinicianCode ? brand.name : 'Brainwell'}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>
 
-        <button
-          onClick={onOpenRebrand}
-          className="btn btn-ghost"
-          style={{ padding: '6px 10px', fontSize: '11px', gap: '4px' }}
-        >
-          <Sliders size={13} /> Clinic Theme
-        </button>
+        {client.linkedClinicianCode && (
+          <button
+            onClick={onOpenRebrand}
+            className="btn btn-ghost"
+            style={{ padding: '6px 10px', fontSize: '11px', gap: '4px' }}
+          >
+            <Sliders size={13} /> Clinic Theme
+          </button>
+        )}
       </header>
 
       {/* Main Tab Content */}
@@ -188,26 +191,26 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         )}
 
         {activeTab === 'sessions' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '30px' }}>
             <div>
               <h1 className="font-display" style={{ fontSize: '28px', fontWeight: 400 }}>
                 Training Modalities
               </h1>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                Select an evidence-based brain-computer interface experience.
+                Choose your experience and begin training.
               </p>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
               {[
-                { id: 'skyline-drift', title: 'Skyline Drift', icon: Mountain, desc: 'Glider flight across procedural landscapes driven by Theta/Beta focus ratio', badge: 'ADHD Focus' },
-                { id: 'tidal-garden', title: 'Tidal Garden', icon: Waves, desc: 'Persistent marine biome growing across sessions with Alpha calm power', badge: 'Anxiety Track' },
-                { id: 'breath-weave', title: 'Breath Weave', icon: Wind, desc: 'Harmonic loom tapestry woven in rhythm with 4-7-8 and box breathing', badge: 'Breathing' },
-                { id: 'signal-sort', title: 'Signal Sort', icon: Target, desc: 'SMR stillness gating task for interference filtering & motor control', badge: 'SMR Poise' },
-                { id: 'rhythm-lock', title: 'Rhythm Lock', icon: Music, desc: 'Generative polyrhythmic ambient synthesizer reacting to sustained presence', badge: 'Attention' },
-                { id: 'media-mode', title: 'Media Mode', icon: Tv, desc: 'Streaming YouTube & nature videos with real-time neuro-luminosity modulation', badge: 'Streaming' },
-                { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Binaural & procedural nature soundscapes for eyes-closed sessions', badge: 'Audio' },
-                { id: 'mandala', title: 'Mandala Breathing', icon: Sparkles, desc: 'Gentle concentric breathing circles with live microvolt amplitude feedback', badge: 'Classic' },
+                { id: 'skyline-drift', title: 'Skyline Drift', icon: Mountain, desc: 'Focus-driven glider flight across procedural landscapes', badge: 'Focus', gradient: 'linear-gradient(135deg, #E8967A22, #E4B87C22)' },
+                { id: 'tidal-garden', title: 'Tidal Garden', icon: Waves, desc: 'Grow a marine garden powered by Alpha calm waves', badge: 'Calm', gradient: 'linear-gradient(135deg, #7B68AE22, #4A90D922)' },
+                { id: 'breath-weave', title: 'Breath Weave', icon: Wind, desc: 'Harmonic tapestry woven with guided breathing', badge: 'Breathing', gradient: 'linear-gradient(135deg, #5C8C4622, #C4A35A22)' },
+                { id: 'signal-sort', title: 'Signal Sort', icon: Target, desc: 'Stillness gating for motor control and focus', badge: 'SMR', gradient: 'linear-gradient(135deg, #C4A35A22, #E8967A22)' },
+                { id: 'rhythm-lock', title: 'Rhythm Lock', icon: Music, desc: 'Polyrhythmic ambient synthesizer with real-time feedback', badge: 'Attention', gradient: 'linear-gradient(135deg, #4A90D922, #7B68AE22)' },
+                { id: 'media-mode', title: 'Media Mode', icon: Tv, desc: 'Watch videos with neuro-luminosity modulation', badge: 'Streaming', gradient: 'linear-gradient(135deg, #E4B87C22, #C4A35A22)' },
+                { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural soundscapes for eyes-closed training', badge: 'Audio', gradient: 'linear-gradient(135deg, #5C8C4622, #7B68AE22)' },
+                { id: 'mandala', title: 'Mandala Breathing', icon: Sparkles, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)' },
               ].map(exp => {
                 const Icon = exp.icon;
                 return (
@@ -218,34 +221,42 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     style={{
                       cursor: 'pointer',
                       display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '14px',
-                      padding: '16px',
-                      transition: 'all 0.15s ease',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '24px 12px 16px',
+                      textAlign: 'center',
+                      transition: 'all 0.2s ease',
+                      background: exp.gradient,
+                      gap: '8px',
+                      position: 'relative',
+                      overflow: 'hidden',
                     }}
                   >
                     <div
                       style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: 'var(--radius-sm)',
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
                         backgroundColor: 'var(--brand-primary-subtle)',
                         color: 'var(--brand-primary)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        flexShrink: 0,
+                        marginBottom: '4px',
                       }}
                     >
-                      <Icon size={18} />
+                      <Icon size={24} />
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{exp.title}</div>
-                        <span className="status-tag status-tag-active" style={{ fontSize: '10px' }}>{exp.badge}</span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>{exp.desc}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                      {exp.title}
                     </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                      {exp.desc}
+                    </div>
+                    <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '2px 8px', marginTop: '4px' }}>
+                      {exp.badge}
+                    </span>
                   </div>
                 );
               })}
@@ -258,75 +269,147 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
         {activeTab === 'profile' && (
-          <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <img
-                src={client.avatarUrl}
-                alt={client.name}
-                style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
-              />
-              <div>
-                <h2 style={{ fontSize: '18px', fontWeight: 600 }}>{client.name}</h2>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{client.email}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
+            {/* Profile Info Card */}
+            <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {/* Avatar with upload overlay */}
+                <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/*';
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) {
+                      if (file.size > 2 * 1024 * 1024) {
+                        alert('Image must be under 2MB');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        const base64 = reader.result as string;
+                        onUpdateClient({ ...client, avatarUrl: base64 });
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  };
+                  input.click();
+                }}>
+                  {client.avatarUrl && (client.avatarUrl.startsWith('data:') || client.avatarUrl.startsWith('blob:')) ? (
+                    <img
+                      src={client.avatarUrl}
+                      alt={client.name}
+                      style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--brand-primary-subtle)',
+                        color: 'var(--brand-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '20px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {client.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: -2,
+                      right: -2,
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--brand-primary)',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid var(--surface-patient-card)',
+                    }}
+                  >
+                    <Camera size={11} />
+                  </div>
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '18px', fontWeight: 600 }}>{client.name}</h2>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{client.email}</div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div><strong>Goal:</strong> {client.condition}</div>
+                <div><strong>Protocol:</strong> {client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
+                <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek} sessions / week</div>
+                <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
               </div>
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div><strong>Condition:</strong> {client.condition}</div>
-              <div><strong>Prescribed Protocol:</strong> {client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
-              <div><strong>Prescribed Frequency:</strong> {client.prescribedSessionsPerWeek} sessions / week</div>
-              <div><strong>Completed Total:</strong> {client.completedSessionsCount} sessions</div>
+            {/* Actions Card */}
+            <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button
+                onClick={() => setShowOnboarding(true)}
+                className="btn btn-secondary"
+                style={{ width: '100%' }}
+              >
+                Re-run Assessment & Headband Setup
+              </button>
+
+              {!client.linkedClinicianCode && (
+                <button
+                  onClick={handleLinkClinician}
+                  className="btn btn-secondary"
+                  style={{ width: '100%' }}
+                >
+                  Link to Clinician
+                </button>
+              )}
             </div>
 
-            <button
-              onClick={() => setShowOnboarding(true)}
-              className="btn btn-secondary"
-              style={{ marginTop: '10px' }}
-            >
-              Re-run Clinical Assessment & Headband Setup
-            </button>
+            {/* Account Section — separated and pushed down */}
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', paddingLeft: '4px' }}>
+                Account
+              </div>
+              <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  onClick={handleLogout}
+                  className="btn btn-secondary"
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <LogOut size={15} /> Log Out
+                </button>
 
-            <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '16px 0' }} />
-
-            <button
-              onClick={handleLinkClinician}
-              className="btn btn-secondary"
-              style={{ width: '100%' }}
-            >
-              Link Clinician (Premium)
-            </button>
-
-            <button
-              onClick={handleLogout}
-              style={{
-                background: 'transparent',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)',
-                padding: '12px',
-                borderRadius: '8px',
-                width: '100%',
-                cursor: 'pointer',
-                marginTop: '8px'
-              }}
-            >
-              Log Out
-            </button>
-
-            <button
-              onClick={handleDeleteAccount}
-              style={{
-                background: '#FF4C4C15',
-                color: '#FF4C4C',
-                border: 'none',
-                padding: '12px',
-                borderRadius: '8px',
-                width: '100%',
-                cursor: 'pointer',
-                marginTop: '8px'
-              }}
-            >
-              Delete Account
-            </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  className="btn btn-secondary"
+                  style={{
+                    width: '100%',
+                    color: 'var(--status-alert)',
+                    borderColor: 'var(--status-alert)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Trash2 size={15} /> Delete Account
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -342,6 +425,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           display: 'flex',
           justifyContent: 'space-around',
           padding: '10px 0',
+          paddingBottom: 'max(10px, env(safe-area-inset-bottom, 10px))',
         }}
       >
         {[

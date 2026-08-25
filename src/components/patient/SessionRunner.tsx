@@ -71,7 +71,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       id: 'sess-' + Date.now(),
       patientId: client.id,
       patientName: client.name,
-      clinicId: 'evolve-brain-training',
+      clinicId: client.linkedClinicianCode || 'self-guided',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: Date.now(),
       protocol: client.assignedProtocol,
