@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update, delete: if isOwner(userId);
+    }
+
+    // Patient Profiles & Clinician Records
+    match /clients/{clientId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Neurofeedback Session Records
+    match /sessions/{sessionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Messaging Threads
+    match /messages/{messageId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Clinical Appointments
+    match /appointments/{appointmentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Clinic Brand Configurations
+    match /brands/{brandId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+  }
+}
