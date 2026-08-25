@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.brainwell.app</string>
+	<string>com.brainswell.app</string>
 	<key>PROJECT_ID</key>
 	<string>brainwell-327dc</string>
 	<key>STORAGE_BUCKET</key>

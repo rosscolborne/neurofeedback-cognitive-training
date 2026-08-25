@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.brainwell.app',
+  appId: 'com.brainswell.app',
   appName: 'Brainswell',
   webDir: 'dist'
 };
