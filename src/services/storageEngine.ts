@@ -553,8 +553,14 @@ class StorageEngine {
   public getCurrentClient(user?: { uid: string; email?: string | null } | null): ClientProfile {
     const clients = this.getClients();
     if (user?.uid) {
-      const existing = clients.find((c) => c.id === user.uid || c.email === user.email);
-      if (existing) return existing;
+      const existing = clients.find((c) => c.id === user.uid || (user.email && c.email === user.email));
+      if (existing) {
+        if (existing.isDemo) {
+          existing.isDemo = false;
+          this.saveClients(clients);
+        }
+        return existing;
+      }
 
       // Create new clean profile for this user
       const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app');
