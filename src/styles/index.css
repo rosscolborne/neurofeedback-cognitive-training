@@ -301,3 +301,118 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
+
+/* ==========================================================================
+   CLINICIAN SUITE RESPONSIVE DESIGN UTILITIES
+   iPhone (<768px), iPad (768px-1024px), MacBook / Desktop (>1024px)
+   ========================================================================== */
+
+.clinician-shell-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--surface-clinician-base);
+}
+
+.clinician-sidebar {
+  width: 240px;
+  background-color: var(--surface-clinician-sidebar);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 16px;
+  flex-shrink: 0;
+}
+
+.clinician-mobile-header {
+  display: none;
+  width: 100%;
+  background-color: var(--surface-clinician-sidebar);
+  border-bottom: 1px solid var(--border-default);
+  padding: 12px 16px;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.clinician-mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--surface-clinician-card);
+  border-top: 1px solid var(--border-default);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 8px)) 12px;
+  z-index: 50;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.clinician-main-content {
+  flex: 1;
+  padding: 32px;
+  max-width: 1320px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.clinician-table-desktop {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.clinician-roster-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.clinician-tabs-scroll {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.clinician-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .clinician-shell-container {
+    flex-direction: column;
+  }
+
+  .clinician-sidebar {
+    display: none !important;
+  }
+
+  .clinician-mobile-header {
+    display: flex !important;
+  }
+
+  .clinician-mobile-bottom-nav {
+    display: flex !important;
+  }
+
+  .clinician-main-content {
+    padding: 16px 12px calc(84px + env(safe-area-inset-bottom, 16px)) 12px !important;
+  }
+
+  .clinician-table-desktop {
+    display: none !important;
+  }
+
+  .clinician-roster-mobile {
+    display: flex !important;
+  }
+}
+

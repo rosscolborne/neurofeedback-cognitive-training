@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ExperienceType, ProtocolTemplate, ProtocolType } from '../../types';
-import { X, Check, Activity, Sliders, ShieldCheck, Sparkles, Plus } from 'lucide-react';
+import { ProtocolTemplate, ProtocolType } from '../../types';
+import { X } from 'lucide-react';
 
 interface ProtocolBuilderModalProps {
   initialProtocol?: ProtocolTemplate;
@@ -100,50 +100,56 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     clinicalNotes: 'Upregulates dominant posterior alpha rhythm to dissolve rumination and induce physiological equanimity.',
   },
   {
-    id: 'proto-peniston-alpha-theta',
-    name: 'Peniston Alpha-Theta Crossover',
-    clinicalName: 'Hypnagogic Twilight State Crossover (Eyes-Closed)',
-    leadInvestigator: 'Eugene G. Peniston, Ed.D. & Paul C. Kulkosky, Ph.D.',
-    indication: 'PTSD, Deep Trauma Reprocessing, Severe Stress',
-    montageSite: 'Pz (Parietal Midline)',
+    id: 'proto-peniston-alphatheta',
+    name: 'Peniston Alpha-Theta Protocol',
+    clinicalName: 'Alpha-Theta Crossover Deep State Training',
+    leadInvestigator: 'Eugene G. Peniston, Ed.D. (Addiction Protocol)',
+    indication: 'Trauma Desensitization, PTSD, Emotional Regulation',
+    montageSite: 'Pz (Midline Parietal)',
     rewardBand: {
-      name: 'Theta / Alpha Ratio',
-      freqMin: 5.0,
+      name: 'Theta Hypnagogia',
+      freqMin: 4.0,
       freqMax: 8.0,
       targetCondition: 'above',
-      targetThreshold: 1.0, // Crossover index
-    },
-    adaptiveStep: 0.05,
-    sensitivity: 'low',
-    sessionDurationMinutes: 30,
-    recommendedExperiences: ['soundscape-mode', 'breath-weave'],
-    clinicalNotes: 'Prescribed exclusively with clinician supervision. Fosters deep subconscious emotional integration.',
-  },
-  {
-    id: 'proto-beta-inhibit',
-    name: 'High-Beta Somatic Inhibit Protocol',
-    clinicalName: 'Central High-Beta Downtraining (19-32 Hz)',
-    leadInvestigator: 'Siegfried & Susan Othmer (EEG Spectrum)',
-    indication: 'Panic Disorder, Insomnia, Fibromyalgia Somatic Tension',
-    montageSite: 'C3 / C4 (Bilateral Sensorimotor)',
-    rewardBand: {
-      name: 'Low Beta / SMR',
-      freqMin: 12.0,
-      freqMax: 15.0,
-      targetCondition: 'above',
-      targetThreshold: 6.0,
+      targetThreshold: 1.0,
     },
     inhibitBand1: {
-      name: 'High-Beta Hyperarousal',
-      freqMin: 19.0,
-      freqMax: 32.0,
-      targetThreshold: 9.0,
+      name: 'Beta Cognition',
+      freqMin: 15.0,
+      freqMax: 25.0,
+      targetThreshold: 6.0,
     },
-    adaptiveStep: 0.8,
-    sensitivity: 'high',
+    adaptiveStep: 0.5,
+    sensitivity: 'low',
+    sessionDurationMinutes: 30,
+    recommendedExperiences: ['soundscape-mode', 'breath-weave', 'mandala'],
+    clinicalNotes: 'Facilitates restorative crossover states where theta power temporarily surpasses posterior alpha.',
+  },
+  {
+    id: 'proto-beta-down',
+    name: 'Beta De-arousal Downtraining',
+    clinicalName: 'High-Beta (18-30 Hz) Power Suppression',
+    leadInvestigator: 'Clinical Evidence-Based Guideline',
+    indication: 'Insomnia, Cognitive Overdrive, Physical Muscle Guarding',
+    montageSite: 'Cz / Pz',
+    rewardBand: {
+      name: 'Alpha Equilibrium',
+      freqMin: 9.0,
+      freqMax: 12.0,
+      targetCondition: 'above',
+      targetThreshold: 10.0,
+    },
+    inhibitBand1: {
+      name: 'High Beta Anxiety',
+      freqMin: 18.0,
+      freqMax: 30.0,
+      targetThreshold: 6.0,
+    },
+    adaptiveStep: 0.5,
+    sensitivity: 'balanced',
     sessionDurationMinutes: 20,
-    recommendedExperiences: ['breath-weave', 'tidal-garden', 'soundscape-mode'],
-    clinicalNotes: 'Reduces autonomic fight-or-flight sympathetic overdrive prior to evening rest.',
+    recommendedExperiences: ['breath-weave', 'tidal-garden', 'mandala'],
+    clinicalNotes: 'Direct inhibition of hyper-vigilant beta rhythms for rapid sympathetic nervous system down-regulation.',
   },
 ];
 
@@ -155,16 +161,13 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
     initialProtocol || CLINICAL_PROTOCOL_TEMPLATES[0]
   );
-
-  // Editable Form State
-  const [name, setName] = useState(selectedTemplate.name);
-  const [montageSite, setMontageSite] = useState(selectedTemplate.montageSite);
-  const [rewardMin, setRewardMin] = useState(selectedTemplate.rewardBand.freqMin);
-  const [rewardMax, setRewardMax] = useState(selectedTemplate.rewardBand.freqMax);
-  const [rewardThreshold, setRewardThreshold] = useState(selectedTemplate.rewardBand.targetThreshold);
-  const [inhibit1Threshold, setInhibit1Threshold] = useState(selectedTemplate.inhibitBand1?.targetThreshold || 7.0);
-  const [durationMins, setDurationMins] = useState(selectedTemplate.sessionDurationMinutes);
-  const [clinicalNotes, setClinicalNotes] = useState(selectedTemplate.clinicalNotes);
+  const [name, setName] = useState(initialProtocol?.name || CLINICAL_PROTOCOL_TEMPLATES[0].name);
+  const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || CLINICAL_PROTOCOL_TEMPLATES[0].montageSite);
+  const [rewardMin, setRewardMin] = useState(initialProtocol?.rewardBand.freqMin || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMin);
+  const [rewardMax, setRewardMax] = useState(initialProtocol?.rewardBand.freqMax || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMax);
+  const [rewardThreshold, setRewardThreshold] = useState(initialProtocol?.rewardBand.targetThreshold || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.targetThreshold);
+  const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || CLINICAL_PROTOCOL_TEMPLATES[0].sessionDurationMinutes);
+  const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || CLINICAL_PROTOCOL_TEMPLATES[0].clinicalNotes);
 
   const handleSelectTemplate = (tmpl: ProtocolTemplate) => {
     setSelectedTemplate(tmpl);
@@ -173,7 +176,6 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     setRewardMin(tmpl.rewardBand.freqMin);
     setRewardMax(tmpl.rewardBand.freqMax);
     setRewardThreshold(tmpl.rewardBand.targetThreshold);
-    setInhibit1Threshold(tmpl.inhibitBand1?.targetThreshold || 7.0);
     setDurationMins(tmpl.sessionDurationMinutes);
     setClinicalNotes(tmpl.clinicalNotes);
   };
@@ -191,10 +193,6 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         freqMax: Number(rewardMax),
         targetThreshold: Number(rewardThreshold),
       },
-      inhibitBand1: selectedTemplate.inhibitBand1 ? {
-        ...selectedTemplate.inhibitBand1,
-        targetThreshold: Number(inhibit1Threshold),
-      } : undefined,
       sessionDurationMinutes: Number(durationMins),
       clinicalNotes,
     };
@@ -213,7 +211,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px',
+        padding: '16px',
       }}
     >
       <div
@@ -225,21 +223,21 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           overflowY: 'auto',
           backgroundColor: '#FFFFFF',
           borderRadius: 'var(--radius-md)',
-          padding: '28px',
+          padding: '24px 20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
+          gap: '18px',
           boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
         }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
           <div>
-            <h2 style={{ fontSize: '19px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Clinical Neurofeedback Protocol Architect
+            <h2 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+              Clinical Protocol Architect
             </h2>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Select an evidence-based clinical template or customize reward/inhibit parameters for this patient.
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Select an evidence-based clinical template or customize reward parameters.
             </p>
           </div>
           <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }}>
@@ -250,15 +248,15 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         {/* 1. Clinical Preset Templates Selection */}
         <div>
           <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
-            Evidence-Based Clinical Protocol Templates
+            Clinical Protocol Templates
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
             {CLINICAL_PROTOCOL_TEMPLATES.map(tmpl => (
               <div
                 key={tmpl.id}
                 onClick={() => handleSelectTemplate(tmpl)}
                 style={{
-                  padding: '10px 14px',
+                  padding: '10px 12px',
                   borderRadius: 'var(--radius-sm)',
                   border: selectedTemplate.id === tmpl.id ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
                   backgroundColor: selectedTemplate.id === tmpl.id ? 'var(--brand-primary-subtle)' : 'var(--surface-clinician-base)',
@@ -268,7 +266,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{tmpl.name}</div>
-                  <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '2px 6px' }}>
+                  <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '1px 5px' }}>
                     {tmpl.montageSite.split(' ')[0]}
                   </span>
                 </div>
@@ -281,10 +279,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         </div>
 
         {/* 2. Editable Parameter Form */}
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid var(--border-default)', paddingTop: '16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px', borderTop: '1px solid var(--border-default)', paddingTop: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                 Protocol Assignment Label
               </label>
               <input
@@ -295,7 +293,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               />
             </div>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                 10-20 Electrode Site
               </label>
               <input
@@ -308,10 +306,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           </div>
 
           {/* Reward & Inhibit Frequency Bounds */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Freq Min (Hz)
+                Reward Min (Hz)
               </label>
               <input
                 type="number"
@@ -323,7 +321,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Freq Max (Hz)
+                Reward Max (Hz)
               </label>
               <input
                 type="number"
@@ -335,7 +333,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Threshold (µV)
+                Threshold (µV)
               </label>
               <input
                 type="number"
@@ -347,7 +345,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Session Duration (Min)
+                Duration (Min)
               </label>
               <input
                 type="number"
@@ -359,7 +357,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           </div>
 
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
               Physician Clinical Notes & Rationale
             </label>
             <textarea
@@ -367,8 +365,8 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               onChange={e => setClinicalNotes(e.target.value)}
               style={{
                 width: '100%',
-                height: '60px',
-                padding: '8px 12px',
+                height: '56px',
+                padding: '8px 10px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-default)',
                 fontSize: '12px',
@@ -378,11 +376,11 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-            <button type="submit" className="btn btn-dense" style={{ flex: 1, padding: '12px' }}>
-              Assign Protocol to Patient Profile
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
+            <button type="submit" className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
+              Assign Protocol
             </button>
-            <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1 }}>
+            <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>
               Cancel
             </button>
           </div>

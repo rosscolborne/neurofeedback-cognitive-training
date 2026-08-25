@@ -15,6 +15,13 @@ interface ClinicianShellProps {
   onOpenRebrand: () => void;
 }
 
+interface ClinicianNavItem {
+  id: 'clients' | 'calendar' | 'messages' | 'reports' | 'settings';
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  badge?: number;
+}
+
 export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   brand,
   clients,
@@ -29,27 +36,64 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
   const totalUnread = messages.reduce((acc, t) => acc + t.unreadCount, 0);
 
+  const navItems: ClinicianNavItem[] = [
+    { id: 'clients', label: 'Clients', icon: Users },
+    { id: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnread },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ];
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        minHeight: '100vh',
-        width: '100%',
-        backgroundColor: 'var(--surface-clinician-base)',
-      }}
-    >
-      {/* Clinician Left Sidebar Navigation (Matching Spec §8.6) */}
-      <aside
-        style={{
-          width: '240px',
-          backgroundColor: 'var(--surface-clinician-sidebar)',
-          borderRight: '1px solid var(--border-default)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          padding: '24px 16px',
-        }}
-      >
+    <div className="clinician-shell-container">
+      {/* Mobile Top Header (iPhone only) */}
+      <header className="clinician-mobile-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {brand.logoUrl && brand.logoUrl.startsWith('data:image') ? (
+            <img
+              src={brand.logoUrl}
+              alt="Clinic Logo"
+              style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px' }}
+            />
+          ) : (
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--brand-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                fontWeight: 700,
+                fontSize: '14px',
+              }}
+            >
+              ●
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+              {brand.name}
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Clinician Suite</div>
+          </div>
+        </div>
+
+        <button
+          onClick={onOpenRebrand}
+          className="btn btn-ghost"
+          style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          title="Clinic Branding"
+        >
+          <Sliders size={14} />
+          <span>Brand</span>
+        </button>
+      </header>
+
+      {/* Clinician Left Sidebar Navigation (iPad & Desktop >= 768px) */}
+      <aside className="clinician-sidebar">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {/* Clinic Brand Identity */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px' }}>
@@ -85,15 +129,9 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             </div>
           </div>
 
-          {/* Navigation Links (Matching Mockup) */}
+          {/* Navigation Links */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {[
-              { id: 'clients', label: 'Clients', icon: Users },
-              { id: 'calendar', label: 'Calendar', icon: Calendar },
-              { id: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnread },
-              { id: 'reports', label: 'Reports', icon: BarChart3 },
-              { id: 'settings', label: 'Settings', icon: Settings },
-            ].map(item => {
+            {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
               return (
@@ -168,7 +206,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
       </aside>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, padding: '32px', maxWidth: '1320px', overflowY: 'auto' }}>
+      <main className="clinician-main-content">
         {activeNav === 'clients' && !selectedClient && (
           <ClientRosterView
             clients={clients}
@@ -201,7 +239,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         )}
 
         {activeNav === 'calendar' && (
-          <div className="card-clinician" style={{ padding: '32px', textAlign: 'center' }}>
+          <div className="card-clinician" style={{ padding: '28px 20px', textAlign: 'center' }}>
             <Calendar size={36} color="var(--text-tertiary)" style={{ margin: '0 auto 12px auto' }} />
             <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Clinical Session Calendar</h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -211,7 +249,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         )}
 
         {activeNav === 'reports' && (
-          <div className="card-clinician" style={{ padding: '32px', textAlign: 'center' }}>
+          <div className="card-clinician" style={{ padding: '28px 20px', textAlign: 'center' }}>
             <BarChart3 size={36} color="var(--text-tertiary)" style={{ margin: '0 auto 12px auto' }} />
             <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Clinic Aggregate Outcome Analytics</h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -221,7 +259,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         )}
 
         {activeNav === 'settings' && (
-          <div className="card-clinician" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="card-clinician" style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Clinic Platform Settings</h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
               Manage clinic license, EEG hardware drivers, and team practitioner access.
@@ -232,6 +270,61 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           </div>
         )}
       </main>
+
+      {/* Mobile Bottom Navigation Bar (iPhone only) */}
+      <nav className="clinician-mobile-bottom-nav">
+        {navItems.map(item => {
+          const Icon = item.icon;
+          const isActive = activeNav === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveNav(item.id as any);
+                if (item.id === 'clients') setSelectedClient(null);
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '3px',
+                border: 'none',
+                background: 'transparent',
+                color: isActive ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                position: 'relative',
+                minWidth: '54px',
+              }}
+            >
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                {item.badge ? (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-8px',
+                      background: 'var(--brand-primary)',
+                      color: '#FFFFFF',
+                      fontSize: '9px',
+                      padding: '1px 5px',
+                      borderRadius: 'var(--radius-full)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {item.badge}
+                  </span>
+                ) : null}
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: isActive ? 700 : 500 }}>
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };

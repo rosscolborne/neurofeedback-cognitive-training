@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { MessageThread } from '../../types';
-import { storageEngine } from '../../services/storageEngine';
-import { Search, Send, Paperclip, CheckCheck } from 'lucide-react';
+import { Search, Send, Paperclip, CheckCheck, ArrowLeft } from 'lucide-react';
 
 interface MessagingViewProps {
   threads: MessageThread[];
@@ -14,11 +13,11 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
   selectedClientId,
   onSendMessage,
 }) => {
-  const [activeClientId, setActiveClientId] = useState<string>(selectedClientId || threads[0]?.clientId);
+  const [activeClientId, setActiveClientId] = useState<string | null>(selectedClientId || (window.innerWidth >= 768 ? threads[0]?.clientId || null : null));
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
 
-  const activeThread = threads.find(t => t.clientId === activeClientId) || threads[0];
+  const activeThread = threads.find(t => t.clientId === activeClientId);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,25 +36,27 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
       className="card-clinician"
       style={{
         padding: '0',
-        height: 'calc(100vh - 160px)',
-        minHeight: '520px',
+        height: 'calc(100vh - 170px)',
+        minHeight: '480px',
         display: 'flex',
         overflow: 'hidden',
         backgroundColor: '#FFFFFF',
+        position: 'relative',
       }}
     >
-      {/* Left Conversation List (Matching Mockup §8.8) */}
+      {/* Left Conversation List (Full width on mobile when no thread active, 320px on desktop) */}
       <div
         style={{
-          width: '320px',
-          borderRight: '1px solid var(--border-default)',
-          display: 'flex',
+          width: activeClientId ? (window.innerWidth < 768 ? '0' : '320px') : '100%',
+          display: activeClientId && window.innerWidth < 768 ? 'none' : 'flex',
           flexDirection: 'column',
+          borderRight: '1px solid var(--border-default)',
           backgroundColor: 'var(--surface-clinician-card)',
+          flexShrink: 0,
         }}
       >
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-default)' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '10px' }}>Conversations</h2>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-default)' }}>
+          <h2 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Conversations</h2>
           <div
             style={{
               background: 'var(--surface-clinician-sidebar)',
@@ -71,7 +72,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search conversations..."
+              placeholder="Search patient chats..."
               style={{
                 border: 'none',
                 background: 'transparent',
@@ -92,7 +93,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
                 key={thread.clientId}
                 onClick={() => setActiveClientId(thread.clientId)}
                 style={{
-                  padding: '14px 16px',
+                  padding: '12px 16px',
                   borderBottom: '1px solid var(--border-subtle)',
                   cursor: 'pointer',
                   background: isSelected ? 'var(--surface-patient-base)' : 'transparent',
@@ -151,28 +152,51 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
         </div>
       </div>
 
-      {/* Right Active Thread View (Matching Mockup §8.8) */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* Right Active Thread View */}
+      <div
+        style={{
+          flex: 1,
+          display: activeClientId || window.innerWidth >= 768 ? 'flex' : 'none',
+          flexDirection: 'column',
+          minWidth: 0,
+        }}
+      >
         {activeThread ? (
           <>
             {/* Thread Header */}
             <div
               style={{
-                padding: '14px 20px',
+                padding: '12px 16px',
                 borderBottom: '1px solid var(--border-default)',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 gap: '12px',
               }}
             >
-              <img
-                src={activeThread.clientAvatar}
-                alt={activeThread.clientName}
-                style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
-              />
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>{activeThread.clientName}</div>
-                <div style={{ fontSize: '11px', color: 'var(--status-active)' }}>● Active Patient Thread</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => setActiveClientId(null)}
+                  className="btn btn-ghost"
+                  style={{
+                    padding: '4px 6px',
+                    marginRight: '2px',
+                    display: window.innerWidth < 768 ? 'flex' : 'none',
+                    alignItems: 'center',
+                  }}
+                  title="Back to conversations"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <img
+                  src={activeThread.clientAvatar}
+                  alt={activeThread.clientName}
+                  style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600 }}>{activeThread.clientName}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--status-active)' }}>● Patient Active</div>
+                </div>
               </div>
             </div>
 
@@ -180,11 +204,11 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
             <div
               style={{
                 flex: 1,
-                padding: '20px',
+                padding: '16px',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '14px',
+                gap: '12px',
                 backgroundColor: 'var(--surface-clinician-base)',
               }}
             >
@@ -195,7 +219,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
                     key={msg.id}
                     style={{
                       alignSelf: isClinician ? 'flex-end' : 'flex-start',
-                      maxWidth: '70%',
+                      maxWidth: '82%',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: isClinician ? 'flex-end' : 'flex-start',
@@ -203,10 +227,10 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
                   >
                     <div
                       style={{
-                        padding: '12px 16px',
+                        padding: '10px 14px',
                         borderRadius: 'var(--radius-md)',
                         fontSize: '13px',
-                        lineHeight: 1.5,
+                        lineHeight: 1.45,
                         backgroundColor: isClinician ? '#E4E7EB' : 'var(--surface-patient-base)',
                         color: 'var(--text-primary)',
                         border: '1px solid var(--border-subtle)',
@@ -227,16 +251,16 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
             <form
               onSubmit={handleSend}
               style={{
-                padding: '14px 20px',
+                padding: '10px 14px',
                 borderTop: '1px solid var(--border-default)',
                 display: 'flex',
-                gap: '10px',
+                gap: '8px',
                 alignItems: 'center',
                 backgroundColor: '#FFFFFF',
               }}
             >
               <button type="button" className="btn btn-ghost" style={{ padding: '6px 8px' }}>
-                <Paperclip size={18} color="var(--text-tertiary)" />
+                <Paperclip size={16} color="var(--text-tertiary)" />
               </button>
               <input
                 type="text"
@@ -245,20 +269,20 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
                 placeholder={`Message ${activeThread.clientName}...`}
                 style={{
                   flex: 1,
-                  padding: '10px 14px',
+                  padding: '8px 12px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-default)',
                   fontSize: '13px',
                   outline: 'none',
                 }}
               />
-              <button type="submit" className="btn btn-dense" style={{ padding: '9px 18px' }}>
-                <Send size={15} /> Send
+              <button type="submit" className="btn btn-dense" style={{ padding: '8px 14px', fontSize: '12px' }}>
+                <Send size={14} />
               </button>
             </form>
           </>
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
             Select a conversation to view messages
           </div>
         )}

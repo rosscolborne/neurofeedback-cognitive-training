@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ClientProfile } from '../../types';
-import { Search, Plus, MoreVertical, Filter, UserCheck } from 'lucide-react';
+import { Search, Plus, MoreVertical } from 'lucide-react';
 
 interface ClientRosterViewProps {
   clients: ClientProfile[];
@@ -43,30 +43,30 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Top Header & Action */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="font-body" style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)' }}>
+          <h1 className="font-body" style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
             Client Roster
           </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             {clients.length} Total Patients • {clients.filter(c => c.status === 'active').length} Active Training
           </p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
           className="btn btn-dense"
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '13px' }}
         >
-          <Plus size={16} /> Add Client
+          <Plus size={16} /> Add Patient
         </button>
       </div>
 
-      {/* Search & Filter Bar (Matching Mockup §8.6) */}
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Search & Filter Bar */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <div
           style={{
             flex: '1',
-            minWidth: '240px',
+            minWidth: '200px',
             position: 'relative',
             background: 'var(--surface-clinician-card)',
             border: '1px solid var(--border-default)',
@@ -82,7 +82,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search by client name, condition, or protocol..."
+            placeholder="Search patients, conditions..."
             style={{
               border: 'none',
               outline: 'none',
@@ -96,7 +96,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </div>
 
         {/* Filter Chips */}
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: '2px' }}>
           {(['all', 'active', 'paused', 'completed'] as const).map(f => (
             <button
               key={f}
@@ -106,12 +106,13 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 color: statusFilter === f ? '#FFFFFF' : 'var(--text-secondary)',
                 border: '1px solid var(--border-default)',
                 borderRadius: 'var(--radius-sm)',
-                padding: '6px 14px',
+                padding: '6px 12px',
                 fontSize: '12px',
                 fontWeight: 600,
                 textTransform: 'capitalize',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
               }}
             >
               {f}
@@ -120,9 +121,9 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </div>
       </div>
 
-      {/* High Information Density Data Table (Matching Spec §7.6 & §8.6) */}
+      {/* High Information Density Data Table (Desktop & iPad >= 768px) */}
       <div
-        className="card-clinician"
+        className="card-clinician clinician-table-desktop"
         style={{
           padding: '0',
           overflow: 'hidden',
@@ -202,6 +203,66 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </table>
       </div>
 
+      {/* Mobile Patient Cards List (iPhone < 768px) */}
+      <div className="clinician-roster-mobile">
+        {filteredClients.map(client => (
+          <div
+            key={client.id}
+            onClick={() => onSelectClient(client)}
+            className="card-clinician"
+            style={{
+              padding: '16px',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              backgroundColor: 'var(--surface-clinician-card)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img
+                  src={client.avatarUrl}
+                  alt={client.name}
+                  style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{client.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{client.email}</div>
+                </div>
+              </div>
+              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '10px', padding: '3px 8px' }}>
+                ● {client.status.toUpperCase()}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
+              <span style={{ background: 'var(--surface-clinician-sidebar)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
+                {client.condition}
+              </span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                Protocol: <strong>{client.assignedProtocol.replace(/-/g, ' ')}</strong>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
+              <div>
+                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: </span>
+                <span className="font-mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
+                  {client.brainCapacityScore}%
+                </span>
+                <span style={{ color: 'var(--text-tertiary)', marginLeft: '12px' }}>Sessions: </span>
+                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount}</span>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                {client.lastSessionDate}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Add Client Modal */}
       {showAddModal && (
         <div
@@ -214,7 +275,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '20px',
+            padding: '16px',
           }}
         >
           <div
@@ -252,7 +313,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                  Clinical Indication
+                  Primary Clinical Indication
                 </label>
                 <select
                   value={newClientCondition}
@@ -267,25 +328,29 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     background: '#FFFFFF',
                   }}
                 >
-                  <option value="ADHD (Inattentive)">ADHD (Inattentive Focus)</option>
+                  <option value="ADHD (Inattentive)">ADHD (Inattentive)</option>
                   <option value="ADHD (Combined)">ADHD (Combined)</option>
-                  <option value="Generalized Anxiety">Generalized Anxiety (Alpha Regulation)</option>
-                  <option value="Stress / Insomnia">Stress & Insomnia (Beta Downtraining)</option>
-                  <option value="Peak Performance">Peak Cognitive Performance (SMR Stillness)</option>
+                  <option value="Generalized Anxiety">Generalized Anxiety</option>
+                  <option value="Executive Functioning & Burnout">Executive Functioning & Burnout</option>
+                  <option value="Peak Performance & Flow">Peak Performance & Flow</option>
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="submit" className="btn btn-dense" style={{ flex: 1 }}>
-                  Create Patient Record
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
                   className="btn btn-ghost"
-                  style={{ flex: 1 }}
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-dense"
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Enroll Patient
                 </button>
               </div>
             </form>
