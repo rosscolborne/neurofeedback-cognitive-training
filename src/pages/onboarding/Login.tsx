@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -19,30 +20,38 @@ export const Login: React.FC = () => {
       code === 'auth/invalid-credential' ||
       code === 'auth/invalid-login-credentials' ||
       code === 'auth/user-not-found' ||
-      code === 'auth/wrong-password' ||
-      message.includes('INVALID_LOGIN_CREDENTIALS')
+      code === 'auth/wrong-password'
     ) {
-      return 'Invalid email or password. Please check your credentials or create a new account.';
+      return 'Incorrect email or password. Please check your credentials and try again.';
     }
-    if (code === 'auth/invalid-email') return 'Please enter a valid email address.';
+    if (code === 'auth/invalid-email') {
+      return 'Please enter a valid email address.';
+    }
     if (code === 'auth/too-many-requests') {
-      return 'Too many failed login attempts. Please try again later.';
+      return 'Access temporarily locked due to multiple failed login attempts. Please reset your password or try again later.';
     }
     if (code === 'auth/network-request-failed') {
-      return 'Network connection failed. Please check your internet connection.';
+      return 'Network connection error. Please verify your internet connection.';
     }
-    return message || 'Failed to log in. Please try again.';
+    if (message.toLowerCase().includes('timed out')) {
+      return 'The login attempt timed out. Please check your network connection and try again.';
+    }
+    return message || 'An unexpected error occurred during login. Please try again.';
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    if (!email || !password) {
+      setError('Please fill in all fields.');
+      return;
+    }
     setLoading(true);
-
+    setError('');
     try {
-      await login(email.trim(), password);
+      await login(email, password);
       navigate('/');
     } catch (err: any) {
+      console.error(err);
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -51,24 +60,34 @@ export const Login: React.FC = () => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'var(--surface-patient-base)',
       color: 'var(--text-primary)',
-      padding: '40px 20px',
+      padding: '32px 20px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      boxSizing: 'border-box',
     }}>
-      <button 
-        onClick={() => navigate(-1)}
-        style={{
-          background: 'none', border: 'none', color: 'var(--text-primary)',
-          display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-          padding: 0, marginBottom: '32px'
-        }}
-      >
-        <ArrowLeft size={24} /> Back
-      </button>
+      <div style={{ width: '100%', maxWidth: '380px' }}>
+        <button 
+          onClick={() => navigate(-1)}
+          style={{
+            background: 'none', border: 'none', color: 'var(--text-secondary)',
+            display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+            padding: 0, marginBottom: '24px', fontSize: '14px'
+          }}
+        >
+          <ArrowLeft size={18} /> Back
+        </button>
 
-      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px' }}>Log In</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>Welcome back to Brainwell</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <BrandLogo size={44} variant="terracotta" />
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Log In</h1>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Welcome back to Brainswell</p>
+          </div>
+        </div>
 
       {error && (
         <div style={{
@@ -137,6 +156,7 @@ export const Login: React.FC = () => {
           {loading ? 'Logging in...' : 'Log In'}
         </button>
       </form>
+      </div>
     </div>
   );
 };

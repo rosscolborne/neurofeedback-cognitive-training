@@ -31,7 +31,7 @@ export function App() {
   }, [brand]);
 
   if (loading) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-patient-base)', color: 'var(--text-primary)' }}>Loading Brainwell...</div>;
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-patient-base)', color: 'var(--text-primary)' }}>Loading Brainswell...</div>;
   }
 
   const currentClient = storageEngine.getCurrentClient(user);

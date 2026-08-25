@@ -9,12 +9,12 @@ import {
 import { BRAND_PRESETS } from './brandEngine';
 
 const STORAGE_KEYS = {
-  BRAND: 'brainwell_brand_config',
-  CLIENTS: 'brainwell_clients',
-  SESSIONS: 'brainwell_sessions',
-  MESSAGES: 'brainwell_messages',
-  APPOINTMENTS: 'brainwell_appointments',
-  CURRENT_CLIENT_ID: 'brainwell_current_client_id',
+  BRAND: 'brainswell_brand_config',
+  CLIENTS: 'brainswell_clients',
+  SESSIONS: 'brainswell_sessions',
+  MESSAGES: 'brainswell_messages',
+  APPOINTMENTS: 'brainswell_appointments',
+  CURRENT_CLIENT_ID: 'brainswell_current_client_id',
 };
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
@@ -521,7 +521,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
 
 class StorageEngine {
   public getBrandConfig(): ClinicBrandConfig {
-    const raw = localStorage.getItem(STORAGE_KEYS.BRAND);
+    const raw = localStorage.getItem(STORAGE_KEYS.BRAND) || localStorage.getItem('brainwell_brand_config');
     if (raw) {
       try {
         return JSON.parse(raw);
@@ -535,7 +535,7 @@ class StorageEngine {
   }
 
   public getClients(): ClientProfile[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+    const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS) || localStorage.getItem('brainwell_clients');
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
@@ -557,12 +557,12 @@ class StorageEngine {
       if (existing) return existing;
 
       // Create new clean profile for this user
-      const fresh = createBlankProfile(user.uid, user.email || 'user@brainwell.app');
+      const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app');
       this.saveClients([fresh, ...clients]);
       return fresh;
     }
 
-    const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_CLIENT_ID);
+    const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_CLIENT_ID) || localStorage.getItem('brainwell_current_client_id');
     if (currentId) {
       const match = clients.find((c) => c.id === currentId);
       if (match) return match;
@@ -570,7 +570,7 @@ class StorageEngine {
 
     if (clients.length > 0) return clients[0];
 
-    return createBlankProfile('default-patient', 'patient@brainwell.app');
+    return createBlankProfile('default-patient', 'patient@brainswell.app');
   }
 
   public setCurrentClientId(id: string) {

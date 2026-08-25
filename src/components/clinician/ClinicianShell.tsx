@@ -11,6 +11,7 @@ import { MessagingView } from './MessagingView';
 import { ClinicalCalendarView } from './ClinicalCalendarView';
 import { ClinicalReportsView } from './ClinicalReportsView';
 import { ClinicSettingsView } from './ClinicSettingsView';
+import { BrandLogo } from '../brand/BrandLogo';
 import {
   Users,
   Calendar,
@@ -95,22 +96,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
               style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px' }}
             />
           ) : (
-            <div
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: 'var(--brand-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                fontWeight: 700,
-                fontSize: '14px',
-              }}
-            >
-              ●
-            </div>
+            <BrandLogo size={28} variant="terracotta" />
           )}
           <div>
             <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
@@ -143,22 +129,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                 style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
               />
             ) : (
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--brand-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#FFFFFF',
-                  fontWeight: 700,
-                  fontSize: '16px',
-                }}
-              >
-                ●
-              </div>
+              <BrandLogo size={32} variant="terracotta" />
             )}
             <div>
               <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>

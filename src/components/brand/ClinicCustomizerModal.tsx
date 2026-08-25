@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ClinicBrandConfig } from '../../types';
 import { BRAND_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM } from '../../services/brandEngine';
+import { BrandLogo } from './BrandLogo';
 import { X, Check, Upload, Image as ImageIcon, ShieldCheck, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface ClinicCustomizerModalProps {
@@ -194,49 +195,46 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
               backgroundColor: 'var(--surface-clinician-base)',
             }}
           >
-            {logoUrl && logoUrl.startsWith('data:image') ? (
+            {logoUrl && (logoUrl.startsWith('data:image') || logoUrl.startsWith('http')) ? (
               <img
                 src={logoUrl}
                 alt="Clinic Logo Preview"
-                style={{ width: '42px', height: '42px', objectFit: 'contain', borderRadius: '4px' }}
+                style={{ width: '42px', height: '42px', objectFit: 'contain', borderRadius: '8px' }}
               />
             ) : (
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--brand-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#FFFFFF',
-                  fontWeight: 700,
-                  fontSize: '18px',
-                }}
-              >
-                ●
-              </div>
+              <BrandLogo size={42} variant="terracotta" />
             )}
 
             <div style={{ flex: 1 }}>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/svg+xml,image/jpeg,image/webp"
-                onChange={handleLogoUpload}
+                accept="image/*"
                 style={{ display: 'none' }}
+                onChange={handleLogoUpload}
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="btn btn-ghost"
-                style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid var(--border-default)', backgroundColor: '#FFFFFF' }}
-              >
-                <Upload size={14} /> Upload Custom Logo File
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '12px', gap: '6px' }}
+                >
+                  <Upload size={14} /> Upload Custom Logo File
+                </button>
+                {logoUrl !== '/app-logo.png' && (
+                  <button
+                    type="button"
+                    onClick={() => setLogoUrl('/app-logo.png')}
+                    className="btn btn-ghost"
+                    style={{ padding: '6px 10px', fontSize: '11px' }}
+                  >
+                    Reset to Default
+                  </button>
+                )}
+              </div>
               <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                Recommended: transparent PNG or vector SVG (max 2MB)
+                Supported formats: SVG vector, transparent PNG, or WebP (square recommended)
               </div>
             </div>
           </div>

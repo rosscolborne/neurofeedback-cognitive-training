@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Brainwell Universal iOS / iPadOS / macOS Build & Packaging Automation Script
+# Brainswell Universal iOS / iPadOS / macOS Build & Packaging Automation Script
 # Supports: iPhone, iPad, and Mac (Designed for iPad on Apple Silicon & macOS)
 # ==============================================================================
 
@@ -12,7 +12,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODE="${1:---app-store}" # Options: --app-store, --local
 
 echo "========================================================"
-echo " Starting Brainwell Universal Build Pipeline (Mode: $MODE)"
+echo " Starting Brainswell Universal Build Pipeline (Mode: $MODE)"
 echo " Supported Destinations: iPhone, iPad, and Mac (Apple Silicon)"
 echo " Repository Root: $REPO_ROOT"
 echo "========================================================"
@@ -29,7 +29,7 @@ npx cap sync ios
 
 # Step 3: Clean & Prepare Build Directory
 mkdir -p "$REPO_ROOT/build/output"
-ARCHIVE_PATH="$REPO_ROOT/build/Brainwell.xcarchive"
+ARCHIVE_PATH="$REPO_ROOT/build/Brainswell.xcarchive"
 EXPORT_PATH="$REPO_ROOT/build/output"
 
 rm -rf "$ARCHIVE_PATH"

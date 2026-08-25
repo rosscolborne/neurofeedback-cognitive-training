@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, UserRole } from '../../contexts/AuthContext';
-import { Brain, Stethoscope } from 'lucide-react';
+import { BrandLogo } from '../../components/brand/BrandLogo';
+import { Stethoscope } from 'lucide-react';
 
 export const RoleSelection: React.FC = () => {
   const { user, selectRole } = useAuth();
@@ -37,7 +38,7 @@ export const RoleSelection: React.FC = () => {
       flexDirection: 'column',
       alignItems: 'center'
     }}>
-      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>How will you use Brainwell?</h1>
+      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>How will you use Brainswell?</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: '40px', textAlign: 'center' }}>
         Select your account type to customize your experience.
       </p>
@@ -59,7 +60,7 @@ export const RoleSelection: React.FC = () => {
             textAlign: 'left'
           }}
         >
-          <Brain size={32} color="var(--brand-primary)" />
+          <BrandLogo size={36} variant="terracotta" />
           <div>
             <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '4px', color: 'var(--text-primary)' }}>Train my brain</h3>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>I want to use the headband to improve my focus and relaxation.</p>

@@ -10,6 +10,7 @@ import { OnboardingFlow } from './OnboardingFlow';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { EducationHub } from './EducationHub';
+import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, Camera, LogOut, Trash2 } from 'lucide-react';
 
 interface PatientShellProps {
@@ -143,28 +144,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <img
               src={brand.logoUrl}
               alt="Clinic Logo"
-              style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+              style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px' }}
             />
           ) : (
-            <div
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--brand-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                fontSize: '14px',
-                fontWeight: 700,
-              }}
-            >
-              ●
-            </div>
+            <BrandLogo size={28} variant="terracotta" />
           )}
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{client.linkedClinicianCode ? brand.name : 'Brainwell'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{client.linkedClinicianCode ? brand.name : 'Brainswell'}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>

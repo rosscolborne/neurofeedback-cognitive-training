@@ -43,7 +43,7 @@ export const PrivacyPolicy: React.FC = () => {
         <p>You have the right to access, correct, or delete your personal data. You can delete your account entirely from the Settings menu within the app.</p>
         
         <h2>5. Contact Us</h2>
-        <p>If you have any questions about this Privacy Policy, please contact us at support@brainwell.app.</p>
+        <p>If you have any questions about this Privacy Policy, please contact us at support@brainswell.app.</p>
       </div>
     </div>
   );

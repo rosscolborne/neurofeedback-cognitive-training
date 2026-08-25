@@ -31,10 +31,10 @@ export const TermsOfService: React.FC = () => {
         <p><strong>Last Updated:</strong> August 2026</p>
         
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using the Brainwell application, you agree to be bound by these Terms. If you disagree with any part of the terms, you may not access the service.</p>
+        <p>By accessing or using the Brainswell application, you agree to be bound by these Terms. If you disagree with any part of the terms, you may not access the service.</p>
         
         <h2>2. Medical Disclaimer</h2>
-        <p>Brainwell is designed for wellness and focus enhancement. It is not intended to diagnose, treat, cure, or prevent any medical condition. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition.</p>
+        <p>Brainswell is designed for wellness and focus enhancement. It is not intended to diagnose, treat, cure, or prevent any medical condition. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition.</p>
         
         <h2>3. Hardware Usage</h2>
         <p>You must use compatible hardware (e.g., a Muse headband) to use the core features of this app. We are not responsible for hardware malfunctions.</p>

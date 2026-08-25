@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft } from 'lucide-react';
 
 export const SignUp: React.FC = () => {
@@ -44,92 +45,113 @@ export const SignUp: React.FC = () => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'var(--surface-patient-base)',
       color: 'var(--text-primary)',
-      padding: '40px 20px',
+      padding: '32px 20px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      boxSizing: 'border-box',
     }}>
-      <button 
-        onClick={() => navigate(-1)}
-        style={{
-          background: 'none', border: 'none', color: 'var(--text-primary)',
-          display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-          padding: 0, marginBottom: '32px'
-        }}
-      >
-        <ArrowLeft size={24} /> Back
-      </button>
-
-      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px' }}>Create Account</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>Start your neurofeedback journey with Brainwell</p>
-
-      {error && (
-        <div style={{
-          background: '#FF4C4C15',
-          color: '#D32F2F',
-          padding: '14px',
-          borderRadius: '8px',
-          marginBottom: '24px',
-          fontSize: '14px',
-          lineHeight: '1.4',
-          border: '1px solid rgba(211, 47, 47, 0.2)'
-        }}>
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Email</label>
-          <input 
-            type="email" 
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="name@example.com"
-            required
-            style={{
-              width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
-              color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Password</label>
-          <input 
-            type="password" 
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="At least 6 characters"
-            required
-            style={{
-              width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
-              color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
+      <div style={{ width: '100%', maxWidth: '380px' }}>
         <button 
-          type="submit" 
-          disabled={loading}
+          onClick={() => navigate(-1)}
           style={{
-            background: 'var(--brand-primary)',
-            color: 'var(--brand-on-primary)',
-            border: 'none',
-            padding: '16px',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '18px',
-            fontWeight: '600',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            marginTop: '8px',
-            opacity: loading ? 0.7 : 1
+            background: 'none', border: 'none', color: 'var(--text-secondary)',
+            display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+            padding: 0, marginBottom: '24px', fontSize: '14px'
           }}
         >
-          {loading ? 'Creating account...' : 'Sign Up'}
+          <ArrowLeft size={18} /> Back
         </button>
-      </form>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <BrandLogo size={44} variant="terracotta" />
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Create Account</h1>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Start your journey with Brainswell</p>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#FF4C4C15',
+            color: '#D32F2F',
+            padding: '14px',
+            borderRadius: '8px',
+            marginBottom: '24px',
+            fontSize: '14px',
+            lineHeight: '1.4',
+            border: '1px solid rgba(211, 47, 47, 0.2)'
+          }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Email</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              style={{
+                width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
+                background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
+                color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+              style={{
+                width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
+                background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
+                color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            style={{
+              background: 'var(--brand-primary)',
+              color: 'var(--brand-on-primary)',
+              border: 'none',
+              padding: '16px',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '18px',
+              fontWeight: '600',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              marginTop: '8px',
+              opacity: loading ? 0.7 : 1
+            }}
+          >
+            {loading ? 'Creating account...' : 'Create Account'}
+          </button>
+        </form>
+
+        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>
+          Already have an account?{' '}
+          <span 
+            onClick={() => navigate('/login')}
+            style={{ color: 'var(--brand-primary)', fontWeight: '600', cursor: 'pointer' }}
+          >
+            Log in
+          </span>
+        </div>
+      </div>
     </div>
   );
 };

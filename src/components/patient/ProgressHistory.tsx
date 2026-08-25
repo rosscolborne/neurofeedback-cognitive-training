@@ -106,7 +106,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `brainwell_progress_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `brainswell_progress_${new Date().toISOString().split('T')[0]}.csv`;
     link.style.display = 'none';
     document.body.appendChild(link);
     link.click();

@@ -58,7 +58,7 @@ export function adjustColorBrightness(hex: string, percent: number): string {
   return rgbToHex(r * factor, g * factor, b * factor);
 }
 
-export function createBrandPalette(accentHex: string, clinicName = 'Evolve Brain Training', logoUrl = ''): ClinicBrandConfig {
+export function createBrandPalette(accentHex: string, clinicName = 'Brainswell', logoUrl = '/app-logo.png'): ClinicBrandConfig {
   const { r, g, b } = hexToRgb(accentHex);
   const lum = getRelativeLuminance(r, g, b);
   
@@ -78,7 +78,7 @@ export function createBrandPalette(accentHex: string, clinicName = 'Evolve Brain
     clinicId: clinicName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
     name: clinicName,
     tagline: 'Neurofeedback & Cognitive Training Suite',
-    logoUrl: logoUrl || 'brain-coral',
+    logoUrl: logoUrl || '/app-logo.png',
     primaryAccent: accentHex,
     primaryHover,
     primarySubtle,
@@ -92,10 +92,24 @@ export function createBrandPalette(accentHex: string, clinicName = 'Evolve Brain
 
 export const BRAND_PRESETS: ClinicBrandConfig[] = [
   {
+    clinicId: 'brainswell-core',
+    name: 'Brainswell',
+    tagline: 'Neurofeedback & Brain Training Suite',
+    logoUrl: '/app-logo.png',
+    primaryAccent: '#D16D4D', // Warm Terracotta Coral
+    primaryHover: '#BA5B3D',
+    primarySubtle: '#FBF2EE',
+    onPrimary: '#FFFFFF',
+    patientBaseSurface: '#F8F7F4',
+    clinicianBaseSurface: '#FAFAFA',
+    typographyStyle: 'editorial-serif',
+    createdAt: '2026-08-20T00:00:00Z',
+  },
+  {
     clinicId: 'evolve-brain-training',
     name: 'Evolve Brain Training',
     tagline: 'Personalized Neurofeedback & Focus Therapy',
-    logoUrl: 'brain-coral',
+    logoUrl: '/app-logo.png',
     primaryAccent: '#E8967A', // Soft Warm Coral
     primaryHover: '#D4805E',
     primarySubtle: '#FDF0EB',

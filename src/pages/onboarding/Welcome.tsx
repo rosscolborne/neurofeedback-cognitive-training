@@ -1,97 +1,190 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { BrandLogo } from '../../components/brand/BrandLogo';
+import { audioEngine } from '../../services/audioEngine';
 
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
+  const hasPlayedAudio = useRef(false);
+
+  useEffect(() => {
+    // Auto-play the serene 432Hz meditative singing bowl chime on startup
+    const playChimeOnce = () => {
+      if (!hasPlayedAudio.current) {
+        hasPlayedAudio.current = true;
+        try {
+          audioEngine.playMeditativeIntroChime();
+        } catch (e) {
+          // Gracefully ignore any browser autoplay restrictions
+        }
+      }
+    };
+
+    // Attempt immediate playback
+    playChimeOnce();
+
+    // Fallback: If browser audio context was blocked until first gesture, play on first touch/click
+    const handleFirstInteraction = () => {
+      playChimeOnce();
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+    };
+
+    window.addEventListener('pointerdown', handleFirstInteraction, { once: true });
+    window.addEventListener('keydown', handleFirstInteraction, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+    };
+  }, []);
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'var(--surface-patient-base)',
-      color: 'var(--text-primary)',
-      padding: '40px 20px',
-      justifyContent: 'center',
-      alignItems: 'center'
-    }}>
-      <div style={{
-        background: 'var(--surface-patient-card)',
-        padding: '24px',
-        borderRadius: 'var(--radius-lg)',
-        border: `1px solid var(--border-subtle)`,
-        marginBottom: '40px',
-        boxShadow: `0 8px 32px var(--brand-primary-subtle)`
-      }}>
-        <Brain size={64} color="var(--brand-primary)" />
-      </div>
+    <main
+      style={{
+        minHeight: '100dvh',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '32px 24px',
+        boxSizing: 'border-box',
+        backgroundColor: 'var(--surface-patient-base)',
+        backgroundImage: 'radial-gradient(circle at 50% 35%, rgba(209, 109, 77, 0.09) 0%, rgba(248, 247, 244, 0) 65%)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Centered Content Container */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '400px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          margin: 'auto 0',
+          gap: '24px',
+          animation: 'fadeIn 0.6s ease-out',
+        }}
+      >
+        {/* Meditative Glowing Brand Logo */}
+        <div style={{ marginBottom: '8px' }}>
+          <BrandLogo size={112} variant="terracotta" glow />
+        </div>
 
-      <h1 style={{
-        fontSize: '32px',
-        fontWeight: 'bold',
-        marginBottom: '16px',
-        textAlign: 'center',
-        background: `linear-gradient(135deg, var(--text-primary), var(--text-secondary))`,
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-      }}>
-        Welcome to Brainwell
-      </h1>
-      
-      <p style={{
-        fontSize: '18px',
-        color: 'var(--text-secondary)',
-        textAlign: 'center',
-        maxWidth: '300px',
-        marginBottom: '60px',
-        lineHeight: 1.5
-      }}>
-        Train your brain, improve your focus, and achieve deep relaxation.
-      </p>
+        {/* Header & Subtitle */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h1
+            className="font-display"
+            style={{
+              fontSize: '32px',
+              fontWeight: 400,
+              lineHeight: 1.25,
+              color: 'var(--text-primary)',
+              letterSpacing: '-0.02em',
+              margin: 0,
+            }}
+          >
+            Welcome to your<br />brain training journey
+          </h1>
 
-      <div style={{ width: '100%', maxWidth: '320px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <button
-          onClick={() => navigate('/signup')}
+          <p
+            style={{
+              fontSize: '15px',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.55,
+              maxWidth: '320px',
+              margin: '0 auto',
+            }}
+          >
+            Personalized neurofeedback to calm your mind, sharpen focus, and restore balance.
+          </p>
+        </div>
+
+        {/* Primary & Secondary Action CTAs */}
+        <div
           style={{
-            background: 'var(--brand-primary)',
-            color: 'var(--brand-on-primary)',
-            border: 'none',
-            padding: '16px',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '18px',
-            fontWeight: '600',
-            cursor: 'pointer',
+            width: '100%',
+            maxWidth: '320px',
             display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '8px'
+            flexDirection: 'column',
+            gap: '12px',
+            marginTop: '12px',
           }}
         >
-          Get Started <ArrowRight size={20} />
-        </button>
-        
-        <button
-          onClick={() => navigate('/login')}
-          style={{
-            background: 'transparent',
-            color: 'var(--text-primary)',
-            border: `1px solid var(--border-subtle)`,
-            padding: '16px',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '18px',
-            fontWeight: '600',
-            cursor: 'pointer',
-          }}
-        >
-          I already have an account
-        </button>
-      </div>
+          <button
+            onClick={() => navigate('/signup')}
+            className="btn btn-primary"
+            style={{
+              width: '100%',
+              padding: '16px',
+              fontSize: '16px',
+              borderRadius: 'var(--radius-xl)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 18px rgba(209, 109, 77, 0.25)',
+            }}
+          >
+            <span>Begin Journey</span>
+            <ArrowRight size={18} />
+          </button>
 
-      <div style={{ marginTop: 'auto', paddingTop: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-        By continuing, you agree to our <br/>
-        <a href="/legal/terms" onClick={(e) => { e.preventDefault(); navigate('/legal/terms'); }} style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}>Terms of Service</a> and <a href="/legal/privacy" onClick={(e) => { e.preventDefault(); navigate('/legal/privacy'); }} style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}>Privacy Policy</a>.
+          <button
+            onClick={() => navigate('/login')}
+            className="btn btn-secondary"
+            style={{
+              width: '100%',
+              padding: '14px',
+              fontSize: '15px',
+              borderRadius: 'var(--radius-xl)',
+              backgroundColor: 'var(--surface-patient-card)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            Sign In
+          </button>
+        </div>
+
+        {/* Minimal Legal Footer */}
+        <div
+          style={{
+            marginTop: '8px',
+            fontSize: '12px',
+            color: 'var(--text-tertiary)',
+            lineHeight: 1.5,
+          }}
+        >
+          By continuing, you agree to our{' '}
+          <a
+            href="#/legal/terms"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/legal/terms');
+            }}
+            style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}
+          >
+            Terms
+          </a>{' '}
+          and{' '}
+          <a
+            href="#/legal/privacy"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/legal/privacy');
+            }}
+            style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}
+          >
+            Privacy Policy
+          </a>.
+        </div>
       </div>
-    </div>
+    </main>
   );
 };

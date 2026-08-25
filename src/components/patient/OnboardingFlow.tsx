@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import { HeadsetFitModal } from './HeadsetFitModal';
+import { BrandLogo } from '../brand/BrandLogo';
 import { ArrowRight, Check, Sparkles, Wifi, ShieldCheck, Target, Waves, Zap, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
@@ -43,18 +44,20 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
     <div
       style={{
         width: '100%',
-        minHeight: '100vh',
-        maxWidth: '520px',
+        minHeight: '100dvh',
+        maxWidth: '480px',
         margin: '0 auto',
         backgroundColor: 'var(--surface-patient-base)',
-        padding: '36px 24px',
+        padding: '32px 24px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
+        alignItems: 'center',
+        boxSizing: 'border-box',
       }}
     >
       {/* Top Step Indicator */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: step === 1 ? '0' : '20px' }}>
         {[1, 2, 3].map(s => (
           <div
             key={s}
@@ -69,64 +72,50 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
         ))}
       </div>
 
-      {/* Step 1: Welcome & Overview */}
+      {/* Step 1: Welcome & Overview (Properly Centered) */}
       {step === 1 && (
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
-          <h1
-            className="font-display"
-            style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.2 }}
-          >
-            Welcome to your<br />brain training<br />journey
-          </h1>
-
-          {/* Abstract Concentric Organic Ripple Mandala */}
-          <div
-            className="animate-breathe"
-            style={{
-              width: '200px',
-              height: '200px',
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, var(--brand-primary) 0%, var(--chart-beta) 40%, rgba(248, 247, 244, 0) 75%)',
-              border: '2px solid var(--border-default)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: '120px',
-                height: '120px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--surface-patient-base)',
-                border: '2px solid var(--border-default)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <div
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--brand-primary)',
-                  opacity: 0.85,
-                }}
-              />
-            </div>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '380px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '20px',
+            margin: 'auto 0',
+            animation: 'fadeIn 0.4s ease-out',
+          }}
+        >
+          <div style={{ margin: '8px 0' }}>
+            <BrandLogo size={104} variant="terracotta" glow />
           </div>
 
-          <p style={{ fontSize: '15px', color: 'var(--text-secondary)', maxWidth: '340px', lineHeight: 1.6 }}>
-            Personalized sessions to help you focus, relax, and perform at your best using real-time neurofeedback.
+          <h1
+            className="font-display"
+            style={{ fontSize: '30px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.25, margin: 0 }}
+          >
+            Welcome to your<br />brain training journey
+          </h1>
+
+          <p style={{ fontSize: '15px', color: 'var(--text-secondary)', maxWidth: '320px', lineHeight: 1.55, margin: 0 }}>
+            Personalized neurofeedback sessions to help you focus, relax, and perform at your best using real-time EEG biofeedback.
           </p>
 
           <button
             onClick={() => setStep(2)}
             className="btn btn-primary"
-            style={{ width: '100%', padding: '16px', fontSize: '16px', marginTop: '20px' }}
+            style={{
+              width: '100%',
+              maxWidth: '320px',
+              padding: '16px',
+              fontSize: '16px',
+              marginTop: '12px',
+              boxShadow: '0 4px 18px rgba(209, 109, 77, 0.25)',
+            }}
           >
-            Get Started
+            Get Started <ArrowRight size={18} />
           </button>
         </div>
       )}
