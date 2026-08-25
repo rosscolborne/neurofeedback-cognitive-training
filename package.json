@@ -8,7 +8,12 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "sync:ios": "npm run build && npx cap sync ios"
+    "sync:ios": "npm run build && npx cap sync ios",
+    "sync:mac": "npm run build && npx cap sync ios",
+    "build:mac": "bash build/package-mac.sh --local",
+    "export:mac:appstore": "bash build/package-mac.sh --app-store",
+    "export:mac:dmg": "bash build/package-mac.sh --dmg",
+    "open:xcode": "npx cap open ios"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.3.0",
