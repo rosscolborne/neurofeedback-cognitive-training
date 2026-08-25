@@ -577,15 +577,31 @@ class StorageEngine {
     localStorage.setItem(STORAGE_KEYS.CURRENT_CLIENT_ID, id);
   }
 
-  public getSessions(): SessionRecord[] {
+  public getSessions(clientId?: string): SessionRecord[] {
+    let all: SessionRecord[] = [];
     const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) all = parsed;
       } catch (e) {}
+    } else {
+      all = [...INITIAL_DEMO_SESSIONS];
     }
-    return INITIAL_DEMO_SESSIONS;
+
+    if (clientId) {
+      if (clientId.startsWith('demo-')) {
+        // Return demo client sessions
+        const match = all.filter(s => s.patientId === clientId);
+        if (match.length > 0) return match;
+        return INITIAL_DEMO_SESSIONS.filter(s => s.patientId === clientId);
+      } else {
+        // For real registered users, strictly return only their own recorded non-demo sessions
+        return all.filter(s => s.patientId === clientId && !s.isDemo);
+      }
+    }
+
+    return all.length > 0 ? all : INITIAL_DEMO_SESSIONS;
   }
 
   public saveSession(session: SessionRecord) {

@@ -27,8 +27,8 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getCompletedDaysThisWeek(): Set<number> {
-  const sessions = storageEngine.getSessions();
+function getCompletedDaysThisWeek(clientId: string): Set<number> {
+  const sessions = storageEngine.getSessions(clientId);
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0 = Sunday
   // Get start of this week (Sunday)
@@ -57,7 +57,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const todayIndex = new Date().getDay();
-  const completedDays = getCompletedDaysThisWeek();
+  const completedDays = getCompletedDaysThisWeek(client.id);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
 

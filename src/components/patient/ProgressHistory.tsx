@@ -75,7 +75,7 @@ function generateChartPath(sessions: SessionRecord[], width: number, height: num
 
 export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
   const [period, setPeriod] = useState<'week' | 'month' | 'all'>('month');
-  const [allSessions] = useState<SessionRecord[]>(() => storageEngine.getSessions());
+  const [allSessions] = useState<SessionRecord[]>(() => storageEngine.getSessions(client.id));
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
 
