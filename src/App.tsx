@@ -185,13 +185,15 @@ export function App() {
 
         {!user ? (
           <>
+            <Route path="/" element={<Welcome />} />
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
-            <Route path="*" element={<Navigate to="/welcome" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (
           <>
+            <Route path="/welcome" element={<Welcome />} />
             <Route path="/role-selection" element={<RoleSelection />} />
             <Route path="/hardware-setup" element={<HardwareSetup />} />
             
