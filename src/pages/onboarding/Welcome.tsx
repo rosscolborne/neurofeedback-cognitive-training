@@ -49,7 +49,7 @@ export const Welcome: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '32px 24px',
+        padding: 'calc(32px + env(safe-area-inset-top, 0px)) 24px calc(32px + env(safe-area-inset-bottom, 0px))',
         boxSizing: 'border-box',
         backgroundColor: 'var(--surface-patient-base)',
         backgroundImage: 'radial-gradient(circle at 50% 35%, rgba(209, 109, 77, 0.09) 0%, rgba(248, 247, 244, 0) 65%)',

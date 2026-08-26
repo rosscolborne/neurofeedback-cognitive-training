@@ -68,14 +68,14 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
   },
 ];
 
-export const createBlankProfile = (uid: string, email: string): ClientProfile => {
-  const username = (email.split('@')[0] || 'User')
+export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
+  const name = displayName?.trim() || (email.split('@')[0] || 'User')
     .replace(/[._]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return {
     id: uid,
-    name: username,
+    name: name,
     email: email,
     avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
     condition: 'Peak Performance',
@@ -550,7 +550,7 @@ class StorageEngine {
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
   }
 
-  public getCurrentClient(user?: { uid: string; email?: string | null } | null): ClientProfile {
+  public getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): ClientProfile {
     const clients = this.getClients();
     if (user?.uid) {
       const existing = clients.find((c) => c.id === user.uid || (user.email && c.email === user.email));
@@ -563,7 +563,7 @@ class StorageEngine {
       }
 
       // Create new clean profile for this user
-      const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app');
+      const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app', user.displayName);
       this.saveClients([fresh, ...clients]);
       return fresh;
     }

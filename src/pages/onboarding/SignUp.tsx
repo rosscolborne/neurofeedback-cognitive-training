@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 export const SignUp: React.FC = () => {
   const navigate = useNavigate();
   const { signup } = useAuth();
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,7 +35,7 @@ export const SignUp: React.FC = () => {
     setLoading(true);
 
     try {
-      await signup(email, password);
+      await signup(email, password, displayName);
       navigate('/role-selection');
     } catch (err: any) {
       setError(getErrorMessage(err));
@@ -48,7 +49,7 @@ export const SignUp: React.FC = () => {
       minHeight: '100dvh',
       background: 'var(--surface-patient-base)',
       color: 'var(--text-primary)',
-      padding: '32px 20px',
+      padding: 'calc(32px + env(safe-area-inset-top, 0px)) 20px calc(32px + env(safe-area-inset-bottom, 0px))',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -90,6 +91,23 @@ export const SignUp: React.FC = () => {
         )}
 
         <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Your Name</label>
+            <input 
+              type="text" 
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              placeholder="How should we call you?"
+              required
+              autoComplete="name"
+              style={{
+                width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
+                background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
+                color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
           <div>
             <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Email</label>
             <input 

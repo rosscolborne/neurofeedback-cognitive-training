@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bluetooth, CheckCircle2 } from 'lucide-react';
 import { eegEngine } from '../../services/eegEngine';
@@ -29,12 +29,23 @@ export const HardwareSetup: React.FC = () => {
     }
   };
 
+  // Auto-trigger BLE pairing on mount so users don't have to tap manually
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!connected && !connecting) {
+        handleConnect();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div style={{
       minHeight: '100vh',
       background: 'var(--surface-patient-base)',
       color: 'var(--text-primary)',
-      padding: '60px 20px',
+      padding: 'calc(60px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px))',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',

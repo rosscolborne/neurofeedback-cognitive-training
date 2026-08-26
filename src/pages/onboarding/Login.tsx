@@ -63,7 +63,7 @@ export const Login: React.FC = () => {
       minHeight: '100dvh',
       background: 'var(--surface-patient-base)',
       color: 'var(--text-primary)',
-      padding: '32px 20px',
+      padding: 'calc(32px + env(safe-area-inset-top, 0px)) 20px calc(32px + env(safe-area-inset-bottom, 0px))',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',

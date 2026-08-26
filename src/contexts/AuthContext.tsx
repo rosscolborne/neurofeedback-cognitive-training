@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -16,7 +17,7 @@ interface AuthContextType {
   role: UserRole;
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
-  signup: (email: string, pass: string) => Promise<void>;
+  signup: (email: string, pass: string, displayName?: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -92,17 +93,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const signup = async (email: string, pass: string) => {
+  const signup = async (email: string, pass: string, displayName?: string) => {
     const authPromise = createUserWithEmailAndPassword(auth, email.trim(), pass);
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Sign up timed out. Please check your network connection.')), 7000)
     );
     const cred = await Promise.race([authPromise, timeoutPromise]);
+
+    // Set displayName on the Firebase Auth profile
+    if (displayName?.trim()) {
+      await updateProfile(cred.user, { displayName: displayName.trim() }).catch((err) => {
+        console.warn('Failed to set display name:', err);
+      });
+    }
+
     setUser(cred.user);
     setRole(null);
 
     setDoc(doc(db, 'users', cred.user.uid), {
       email: cred.user.email,
+      displayName: displayName?.trim() || null,
       createdAt: new Date().toISOString(),
       role: null,
     }).catch((err) => {

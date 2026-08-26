@@ -15,12 +15,19 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
   const [pairError, setPairError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Start the engine tick loop so dispatchServerAnalysis fires
+    // and brainflow_service can assess channel quality
+    eegEngine.start(100);
+
     const unsubscribe = eegEngine.subscribe((_data: EEGDataPoint) => {
       setQuality({ ...eegEngine.channelQuality });
       setFitState(eegEngine.serverFitState ? { ...eegEngine.serverFitState } : null);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      eegEngine.stop();
+    };
   }, []);
 
   const handlePair = async () => {
@@ -293,8 +300,8 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
           <div
             style={{
               position: 'absolute',
-              top: '105px',
-              left: '12%',
+              top: '90px',
+              left: '7%',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -317,8 +324,8 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
           <div
             style={{
               position: 'absolute',
-              top: '105px',
-              right: '12%',
+              top: '90px',
+              right: '7%',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',

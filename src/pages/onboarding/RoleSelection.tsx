@@ -33,7 +33,7 @@ export const RoleSelection: React.FC = () => {
       minHeight: '100vh',
       background: 'var(--surface-patient-base)',
       color: 'var(--text-primary)',
-      padding: '60px 20px',
+      padding: 'calc(60px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px))',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center'
