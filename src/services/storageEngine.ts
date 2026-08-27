@@ -5,6 +5,7 @@ import {
   MilestoneBadge,
   SessionRecord,
   CalendarAppointment,
+  ExperienceType,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
 
@@ -539,15 +540,37 @@ class StorageEngine {
   }
 
   public getClients(): ClientProfile[] {
+    let clients: ClientProfile[] = [];
     const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS) || localStorage.getItem('brainwell_clients');
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) clients = parsed;
       } catch (e) {}
     }
-    // Return initial clinical seed data
-    return INITIAL_DEMO_CLIENTS;
+    if (clients.length === 0) {
+      clients = [...INITIAL_DEMO_CLIENTS];
+    }
+
+    // Auto-migrate to inject new modalities for all clients if missing
+    let migrated = false;
+    const requiredNewExperiences: ExperienceType[] = ['immersive-3d', 'spatial-audio', 'narrative-story'];
+    clients.forEach(c => {
+      if (c.allowedExperiences) {
+        requiredNewExperiences.forEach(exp => {
+          if (!c.allowedExperiences.includes(exp)) {
+            c.allowedExperiences.push(exp);
+            migrated = true;
+          }
+        });
+      }
+    });
+
+    if (migrated && raw) {
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    }
+
+    return clients;
   }
 
   public saveClients(clients: ClientProfile[]) {

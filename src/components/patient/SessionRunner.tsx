@@ -15,7 +15,76 @@ import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
 import { SpatialAudioMode } from '../experiences/SpatialAudioMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { HeadsetFitModal } from './HeadsetFitModal';
-import { Play, Pause, Wifi, Sparkles, Volume2, VolumeX, ShieldCheck, Activity } from 'lucide-react';
+import { Play, Pause, Wifi, Sparkles, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, BrainCircuit } from 'lucide-react';
+
+const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism: string; benefit: string; instructions: string }> = {
+  'skyline-drift': {
+    title: 'Skyline Drift',
+    mechanism: 'Uses SMR (12-15Hz) neurofeedback to control horizontal movement.',
+    benefit: 'Trains the brain to sustain attention while maintaining physical relaxation, heavily prescribed for ADHD and motor control.',
+    instructions: 'Keep your body perfectly still and maintain soft focus on the center. As your SMR increases, the path will straighten.',
+  },
+  'tidal-garden': {
+    title: 'Tidal Garden',
+    mechanism: 'Utilizes Alpha (8-12Hz) amplitude training to govern environmental growth.',
+    benefit: 'Teaches the brain to rapidly decouple from stress and lower cortisol levels, treating general anxiety.',
+    instructions: 'Relax your jaw and shoulders. Allow your mind to wander gently. The garden flourishes when you achieve deep relaxation.',
+  },
+  'breath-weave': {
+    title: 'Breath Weave',
+    mechanism: 'Combines slow-cortical potential (SCP) shifts with rhythmic visual pacing.',
+    benefit: 'Synchronizes respiration with brainwave states, improving heart-rate variability (HRV) and vagal tone.',
+    instructions: 'Breathe in time with the visual expansion and contraction. Let the colors guide your nervous system into equilibrium.',
+  },
+  'signal-sort': {
+    title: 'Signal Sort',
+    mechanism: 'Leverages Beta (15-20Hz) operant conditioning through discrete cognitive tasks.',
+    benefit: 'Enhances executive function, working memory, and sharpens analytical focus.',
+    instructions: 'Sort the incoming signals as quickly as possible. Your score increases when you maintain sharp, active concentration.',
+  },
+  'rhythm-lock': {
+    title: 'Rhythm Lock',
+    mechanism: 'Trains Theta-Beta ratio optimization through rhythmic timing.',
+    benefit: 'Reduces impulsivity and improves timing circuits in the basal ganglia.',
+    instructions: 'Tap or focus precisely on the beat. The game rewards calm anticipation rather than anxious, early reactions.',
+  },
+  'media-mode': {
+    title: 'Media Mode',
+    mechanism: 'Applies Alpha/Theta thresholding to control video opacity and volume.',
+    benefit: 'Conditions the brain to maintain a relaxed, receptive state while engaging with external stimuli.',
+    instructions: 'Watch the video. If your mind wanders or you become tense, the screen will dim. Relax to restore clarity.',
+  },
+  'soundscape-mode': {
+    title: 'Soundscape Mode',
+    mechanism: 'Uses multi-band frequency analysis to modulate binaural audio layers.',
+    benefit: 'Promotes deep auditory processing and hemispheric synchronization.',
+    instructions: 'Close your eyes. Listen to the layers of sound. The audio will harmonize as your brainwaves balance.',
+  },
+  'mandala': {
+    title: 'Mandala Breathing',
+    mechanism: 'Alpha (8-12Hz) and Theta (4-8Hz) coherence visually construct geometric patterns.',
+    benefit: 'Facilitates transition into flow states and deep mindfulness practices.',
+    instructions: 'Focus on the center of the mandala. Let your breath guide the geometry. The pattern completes as you achieve inner stillness.',
+  },
+  'immersive-3d': {
+    title: 'Generative XR',
+    mechanism: 'Translates real-time coherence metrics into dynamic 3D spatial particle systems.',
+    benefit: 'Provides powerful, immediate visual biofeedback, accelerating the brain\'s operant conditioning loop.',
+    instructions: 'Observe the 3D space. Your coherence score directly manipulates the gravity, color, and flow of the particles.',
+  },
+  'spatial-audio': {
+    title: 'Spatial Audio',
+    mechanism: 'Maps frontal lobe asymmetry to 3D audio panning and reverb.',
+    benefit: 'Aids in emotional regulation and trauma processing by grounding the user in an immersive auditory environment.',
+    instructions: 'Use headphones. Pay attention to where the sounds originate. Keep your emotional state neutral to center the audio.',
+  },
+  'narrative-story': {
+    title: 'Narrative Therapy',
+    mechanism: 'Advances narrative progression only when target EEG thresholds are sustained.',
+    benefit: 'Enhances emotional resilience and cognitive reframing by rewarding regulated states with story resolution.',
+    instructions: 'Follow the story. The narrative will pause if you become overly stressed or distracted. Breathe to continue the journey.',
+  }
+};
 
 interface SessionRunnerProps {
   client: ClientProfile;
@@ -35,6 +104,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isFitAccepted, setIsFitAccepted] = useState(false);
+  const [isSessionStarted, setIsSessionStarted] = useState(false);
   const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
@@ -154,9 +224,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     };
   }, [client.assignedProtocol, isFitAccepted]);
 
-  // Main session timer interval: strictly starts ONLY after user clicks "Accept Current Fit"
+  // Main session timer interval: strictly starts ONLY after user clicks "Begin Training" on Briefing
   useEffect(() => {
-    if (isPaused || !isFitAccepted) return;
+    if (isPaused || !isSessionStarted) return;
 
     const interval = window.setInterval(() => {
       setTotalSecondsElapsed(prev => {
@@ -356,6 +426,85 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         overflow: 'hidden',
       }}
     >
+      {/* Pre-Session Briefing Overlay */}
+      {isFitAccepted && !isSessionStarted && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1000,
+            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--surface-patient-card)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.1)',
+              padding: '32px',
+              width: '100%',
+              maxWidth: '400px',
+              border: '1px solid var(--border-subtle)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: 'var(--brand-primary-subtle)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BrainCircuit size={24} />
+              </div>
+              <h2 className="font-display" style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {MODALITY_BRIEFING_DATA[selectedExperience]?.title || 'Session Briefing'}
+              </h2>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-primary)', marginBottom: '4px', fontWeight: 500, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <Activity size={14} /> Mechanism
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
+                  {MODALITY_BRIEFING_DATA[selectedExperience]?.mechanism || 'Uses real-time EEG biofeedback.'}
+                </p>
+              </div>
+              
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-primary)', marginBottom: '4px', fontWeight: 500, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <BookOpen size={14} /> Clinical Benefit
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
+                  {MODALITY_BRIEFING_DATA[selectedExperience]?.benefit || 'Trains brain resilience.'}
+                </p>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-primary)', marginBottom: '4px', fontWeight: 500, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <Target size={14} /> Instructions
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
+                  {MODALITY_BRIEFING_DATA[selectedExperience]?.instructions || 'Follow the on-screen prompts.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: 600, marginTop: '32px' }}
+              onClick={() => setIsSessionStarted(true)}
+            >
+              Begin Training
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Session Top Header */}
       <header
         style={{
