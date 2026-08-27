@@ -5,6 +5,7 @@ interface TidalGardenProps {
   eegData: EEGDataPoint | null;
   stage?: number;
   growthPoints?: number;
+  inZonePercent?: number;
   isPaused?: boolean;
 }
 
@@ -12,6 +13,7 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
   eegData,
   stage = 3,
   growthPoints = 420,
+  inZonePercent = 0,
   isPaused = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -136,6 +138,8 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
         { x: width * 0.75, r: 48, color: '#D4805E' },
       ];
 
+      const bloomMultiplier = 1 + (inZonePercent / 100) * 0.5;
+
       corals.forEach(coral => {
         const coralY = height - 40;
         ctx.save();
@@ -144,7 +148,7 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
         // Multi-layered rounded coral domes
         for (let branch = 0; branch < 5; branch++) {
           const angle = -Math.PI / 2 + (branch - 2) * 0.35;
-          const len = coral.r * (0.8 + Math.sin(timeElapsed * 0.8 + branch) * 0.06 * alphaRatio);
+          const len = coral.r * bloomMultiplier * (0.8 + Math.sin(timeElapsed * 0.8 + branch) * 0.06 * alphaRatio);
           const bx = Math.cos(angle) * len;
           const by = Math.sin(angle) * len;
 

@@ -49,6 +49,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const isPausedRef = useRef(isPaused);
   const phaseRef = useRef(phase);
+  const cleanSignalSecondsRef = useRef(0);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -188,8 +189,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         return next;
       });
 
-      if (eegDataRef.current?.inZone && phaseRef.current !== 'calibration') {
-        setInZoneSeconds(z => z + 1);
+      // Clean Signal Multiplier logic
+      const currentData = eegDataRef.current;
+      if (currentData) {
+        const hasArtifact = currentData.artifacts.blink || currentData.artifacts.clench || currentData.signalQuality === 'poor' || currentData.signalQuality === 'disconnected';
+        if (!hasArtifact) {
+          cleanSignalSecondsRef.current += 1;
+        } else {
+          cleanSignalSecondsRef.current = 0;
+        }
+      }
+
+      if (currentData?.inZone && phaseRef.current !== 'calibration') {
+        setInZoneSeconds(z => z + (cleanSignalSecondsRef.current > 30 ? 1.5 : 1));
       }
     }, 1000);
 
@@ -323,6 +335,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const remainingSeconds = Math.max(0, sessionTotalDuration - totalSecondsElapsed);
   const worstQuality = eegData?.signalQuality || 'good';
+  const inZonePercent = totalSecondsElapsed > 60 ? Math.min(100, Math.round((inZoneSeconds / (totalSecondsElapsed - 60)) * 100)) : 0;
 
   return (
     <div
@@ -439,7 +452,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <SkylineDriftCanvas eegData={eegData} isPaused={isPaused} />
           )}
           {selectedExperience === 'tidal-garden' && (
-            <TidalGardenCanvas eegData={eegData} stage={client.tidalGardenState.stage} growthPoints={client.tidalGardenState.growthPoints} isPaused={isPaused} />
+            <TidalGardenCanvas 
+              eegData={eegData} 
+              stage={client.tidalGardenState.stage} 
+              growthPoints={client.tidalGardenState.growthPoints + Math.floor(inZoneSeconds * 10)} 
+              inZonePercent={inZonePercent}
+              isPaused={isPaused} 
+            />
           )}
           {selectedExperience === 'breath-weave' && (
             <BreathWeaveCanvas eegData={eegData} isPaused={isPaused} />
@@ -496,7 +515,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone %</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {totalSecondsElapsed > 60 ? Math.round((inZoneSeconds / (totalSecondsElapsed - 60)) * 100) : 0}%
+              {inZonePercent}%
             </div>
           </div>
         </div>
@@ -649,7 +668,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               Complete Training Session?
             </h3>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              You have trained for {formatTime(totalSecondsElapsed)} with {inZoneSeconds}s in optimal neural zone.
+              You have trained for {formatTime(totalSecondsElapsed)} with {Math.floor(inZoneSeconds)}s in optimal neural zone.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button onClick={finishSession} className="btn btn-primary" style={{ width: '100%' }}>
