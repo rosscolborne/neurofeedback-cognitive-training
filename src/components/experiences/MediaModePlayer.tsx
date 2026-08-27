@@ -10,17 +10,17 @@ interface MediaModeProps {
 const VIDEO_CHANNELS = [
   {
     title: 'Earth & Alpine Wilderness (4K Relax)',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-forest-stream-in-the-sunlight-529-large.mp4',
+    videoUrl: 'https://media.w3.org/2010/05/sintel/trailer.mp4',
     category: 'Nature & Calm',
   },
   {
     title: 'Deep Space & Galactic Nebulae',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1610-large.mp4',
+    videoUrl: 'https://media.w3.org/2010/05/bunny/trailer.mp4',
     category: 'Curiosity & Focus',
   },
   {
     title: 'Ocean Waves & Marine Life',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4',
+    videoUrl: 'https://media.w3.org/2010/05/video/movie_300.mp4',
     category: 'Alpha Meditation',
   },
 ];
