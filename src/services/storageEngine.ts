@@ -76,7 +76,7 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
 
   return {
     id: uid,
-    name: name,
+    name: cleanName,
     email: email,
     avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
     condition: 'Peak Performance',
@@ -556,8 +556,19 @@ class StorageEngine {
     if (user?.uid) {
       const existing = clients.find((c) => c.id === user.uid || (user.email && c.email === user.email));
       if (existing) {
+        let updated = false;
         if (existing.isDemo) {
           existing.isDemo = false;
+          updated = true;
+        }
+        if (!existing.name && user.displayName) {
+          existing.name = user.displayName
+            .trim()
+            .replace(/[._]/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          updated = true;
+        }
+        if (updated) {
           this.saveClients(clients);
         }
         return existing;

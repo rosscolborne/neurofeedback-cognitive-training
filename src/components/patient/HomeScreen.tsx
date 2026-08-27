@@ -88,7 +88,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           className="font-display"
           style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15 }}
         >
-          {getGreeting()},<br />{client.name.split(' ')[0]}.
+          {getGreeting()}{client.name ? ',' : '.'}<br />{client.name ? `${client.name.split(' ')[0]}.` : ''}
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
           Protocol: <strong style={{ color: 'var(--text-primary)' }}>{client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
