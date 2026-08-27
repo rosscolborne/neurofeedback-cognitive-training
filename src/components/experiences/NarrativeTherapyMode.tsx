@@ -12,8 +12,6 @@ export const NarrativeTherapyMode: React.FC = () => {
   });
 
   useEffect(() => {
-    let progressTimer: ReturnType<typeof setTimeout>;
-    
     const unsubscribe = eegEngine.subscribe((data) => {
       setInZone(data.inZone);
       
@@ -35,7 +33,6 @@ export const NarrativeTherapyMode: React.FC = () => {
 
     return () => {
       unsubscribe();
-      if (progressTimer) clearTimeout(progressTimer);
     };
   }, [currentScene.requiresReflection]);
 
