@@ -3,7 +3,8 @@ export type ProtocolType =
   | 'smr-enhancement'
   | 'alpha-enhancement'
   | 'alpha-theta-crossover'
-  | 'beta-downtraining';
+  | 'beta-downtraining'
+  | 'individualized-upper-alpha';
 
 export type ExperienceType =
   | 'skyline-drift'
@@ -13,7 +14,10 @@ export type ExperienceType =
   | 'rhythm-lock'
   | 'media-mode'
   | 'soundscape-mode'
-  | 'mandala';
+  | 'mandala'
+  | 'immersive-3d'
+  | 'spatial-audio'
+  | 'narrative-story';
 
 export type SessionPhase = 'calibration' | 'warmup' | 'training' | 'cooldown' | 'debrief';
 
@@ -81,6 +85,13 @@ export interface EEGDataPoint {
   };
   brainflowScores?: BrainFlowScores;
   trainingMetric?: TrainingMetricSample;
+  isCalibrating?: boolean;
+}
+
+export interface IndividualBaselineModel {
+  alphaPeakHz: number;
+  oneOverFSlope: number;
+  lastCalibratedAt: string;
 }
 
 export interface ProtocolTemplate {
@@ -183,6 +194,7 @@ export interface SessionRecord {
   patientNotes?: string;
   clinicianNotes?: string;
   isDemo?: boolean;
+  learningRateScore?: number;
 }
 
 export interface ClientProfile {
@@ -194,6 +206,7 @@ export interface ClientProfile {
   status: 'active' | 'paused' | 'completed';
   assignedProtocol: ProtocolType;
   customProtocolConfig?: ProtocolTemplate;
+  individualBaselineModel?: IndividualBaselineModel;
   brainMaps: QEEGBrainMap[];
   allowedExperiences: ExperienceType[];
   prescribedSessionsPerWeek: number;

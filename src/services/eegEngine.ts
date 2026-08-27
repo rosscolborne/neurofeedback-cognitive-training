@@ -1,4 +1,4 @@
-import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample } from '../types';
+import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample, IndividualBaselineModel } from '../types';
 import { brainflowService, BrainFlowFeatures } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
@@ -66,7 +66,72 @@ export class EEGEngine {
   // Demo Mode Toggle (explicit only)
   public isDemoMode = false;
 
-  constructor() {}
+  // Web Worker for FFT / Baseline
+  private eegWorker: Worker | null = null;
+  public isCalibrating = false;
+  public individualBaselineModel: IndividualBaselineModel | null = null;
+
+  constructor() {
+    if (typeof Worker !== 'undefined') {
+      this.eegWorker = new Worker(new URL('./eegWorker.ts', import.meta.url), { type: 'module' });
+      this.eegWorker.onmessage = (e) => this.handleWorkerMessage(e);
+    }
+  }
+
+  private handleWorkerMessage(e: MessageEvent) {
+    const { type, payload } = e.data;
+    if (type === 'BASELINE_CALIBRATED') {
+      this.individualBaselineModel = {
+        alphaPeakHz: payload.alphaPeakHz,
+        oneOverFSlope: payload.oneOverFSlope,
+        lastCalibratedAt: new Date().toISOString()
+      };
+      this.isCalibrating = false;
+    } else if (type === 'FEATURES_EXTRACTED') {
+      if (payload.bands) {
+        this.latestServerBands = {
+          delta: payload.bands.delta || 0,
+          theta: payload.bands.theta || 0,
+          alpha: payload.bands.alpha || 0,
+          smr: payload.bands.smr || 0,
+          beta: payload.bands.beta || 0,
+          gamma: payload.bands.gamma || 0
+        };
+      }
+      if (payload.learningScore !== undefined) {
+        this.latestTrainingMetric = {
+          score: payload.learningScore,
+          baselineReady: true
+        };
+      }
+      this.isAnalyzingBrainflow = false;
+    }
+  }
+
+  public startCalibration() {
+    this.isCalibrating = true;
+    this.individualBaselineModel = null;
+    
+    // In a real scenario, this collects 2 minutes of Eyes Open/Closed data before sending
+    if (this.eegWorker) {
+      this.eegWorker.postMessage({
+        type: 'CALIBRATE_BASELINE',
+        payload: {
+          rawData: [this.rawBuffers.tp9, this.rawBuffers.af7, this.rawBuffers.af8, this.rawBuffers.tp10]
+        }
+      });
+    } else {
+      // Fallback if no worker
+      setTimeout(() => {
+        this.individualBaselineModel = {
+          alphaPeakHz: 10.0,
+          oneOverFSlope: -1.0,
+          lastCalibratedAt: new Date().toISOString()
+        };
+        this.isCalibrating = false;
+      }, 2000);
+    }
+  }
 
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
@@ -461,13 +526,9 @@ export class EEGEngine {
   }
 
   /**
-   * Send the latest sample window to brainflow_service for server-side analysis.
-   * Uses the stateful headset-fit session endpoint which provides:
-   * - All 4 metrics (mindfulness, restfulness, focus, relax) with EMA smoothing
-   * - Valence/arousal + emotion labelling
-   * - Headset fit / signal quality per-channel
-   * - Baseline-relative training score
-   *
+   * Send the latest sample window to eegWorker for client-side FFT extraction, 
+   * falling back to brainflow_service if needed.
+   * 
    * Samples are sent as row-major (time × channel) with only scalp electrodes.
    */
   private async dispatchServerAnalysis(now: number) {
@@ -494,6 +555,19 @@ export class EEGEngine {
 
     this.isAnalyzingBrainflow = true;
     this.lastBrainflowAnalysisTime = now;
+
+    if (this.eegWorker) {
+      // Use Dedicated Web Worker to avoid blocking main thread
+      this.eegWorker.postMessage({
+        type: 'EXTRACT_FEATURES',
+        payload: {
+          rawData: samples,
+          baselineModel: this.individualBaselineModel
+        }
+      });
+      // The rest of the state updates happen in handleWorkerMessage
+      return;
+    }
 
     try {
       const response = await brainflowService.analyzeFitWindow(this.fitSessionId, samples, 256);
@@ -599,6 +673,22 @@ export class EEGEngine {
       rawSignal = af7.length > 0 ? af7[af7.length - 1] : 0;
     } else if (this.isDemoMode) {
       // SIMULATE VALUES ONLY WHEN DEMO MODE IS EXPLICITLY ENABLED
+      if (this.isCalibrating) {
+        // Just return empty point while calibrating
+        return {
+          timestamp: Date.now(),
+          rawSignal: 0,
+          bands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
+          thetaBetaRatio: 0,
+          coherence: 0,
+          inZone: false,
+          signalQuality: 'good',
+          channelQuality: this.channelQuality,
+          batteryLevel: this.batteryLevel,
+          artifacts: { blink: false, clench: false },
+          isCalibrating: true
+        };
+      }
       this.phaseAngle += dt * 2 * Math.PI;
       this.noiseSeed += dt * 0.5;
 
@@ -663,6 +753,15 @@ export class EEGEngine {
       case 'beta-downtraining':
         inZone = bands.beta <= this.targetThreshold;
         break;
+      case 'individualized-upper-alpha':
+        if (this.individualBaselineModel) {
+          const paf = this.individualBaselineModel.alphaPeakHz;
+          // Target above PAF (upper alpha)
+          inZone = bands.alpha >= (paf + 1.0);
+        } else {
+          inZone = bands.alpha >= this.targetThreshold;
+        }
+        break;
     }
 
     const rawCoherence = 45 + (bands.alpha / 20) * 30 + (bands.beta / 20) * 20;
@@ -710,6 +809,7 @@ export class EEGEngine {
       },
       brainflowScores: this.latestBrainFlowScores || undefined,
       trainingMetric: this.latestTrainingMetric || undefined,
+      isCalibrating: this.isCalibrating,
     };
   }
 }

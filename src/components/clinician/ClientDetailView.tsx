@@ -277,6 +277,52 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 })}
               </svg>
             </div>
+            
+            {/* Learning Curve Chart */}
+            <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                    Self-Regulation Learning Curve
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Tracking physiological learning rate vs. baseline across sessions (Score 0-100)
+                  </p>
+                </div>
+              </div>
+              
+              <div style={{ width: '100%', height: '160px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <svg viewBox="0 0 700 160" style={{ width: '100%', minWidth: '460px', height: '100%' }}>
+                  {[0, 25, 50, 75, 100].map((val) => {
+                    const y = 140 - val * 1.2;
+                    return (
+                      <g key={`lc-${val}`}>
+                        <text x="25" y={y + 4} fill="var(--text-tertiary)" fontSize="10" textAnchor="end" fontFamily="var(--font-mono)">
+                          {val}
+                        </text>
+                        <line x1="35" y1={y} x2="680" y2={y} stroke="var(--border-subtle)" strokeWidth="1" strokeDasharray="4 4" />
+                      </g>
+                    );
+                  })}
+                  
+                  {/* Line Path */}
+                  <path
+                    d={`M 65 ${sessions.length > 0 ? 140 - (sessions[0].learningRateScore || 50) * 1.2 : 140 - 50 * 1.2} ` + 
+                       sessions.slice(1).map((s, idx) => `L ${65 + (idx + 1) * 100} ${140 - (s.learningRateScore || 50) * 1.2}`).join(' ')}
+                    fill="none"
+                    stroke="var(--brand-primary)"
+                    strokeWidth="3"
+                  />
+                  
+                  {/* Points */}
+                  {sessions.length > 0 ? sessions.map((s, idx) => (
+                    <circle key={s.id} cx={65 + idx * 100} cy={140 - (s.learningRateScore || 50) * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
+                  )) : (
+                    <circle cx="65" cy={140 - 50 * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
+                  )}
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
       )}

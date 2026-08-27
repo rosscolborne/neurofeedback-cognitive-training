@@ -19,13 +19,17 @@
     "@capacitor-community/bluetooth-le": "^8.3.0",
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@react-three/xr": "^6.6.30",
     "canvas-confetti": "^1.9.4",
     "firebase": "^12.18.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2"
+    "react-router-dom": "^7.18.2",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

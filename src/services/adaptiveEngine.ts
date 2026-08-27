@@ -25,6 +25,7 @@ export class AdaptiveDifficultyEngine {
     'alpha-enhancement': { min: 6.0, max: 18.0, step: 0.6, lowerIsBetter: false },
     'alpha-theta-crossover': { min: 0.7, max: 1.6, step: 0.05, lowerIsBetter: false },
     'beta-downtraining': { min: 8.0, max: 20.0, step: 0.8, lowerIsBetter: true },
+    'individualized-upper-alpha': { min: 4.0, max: 15.0, step: 0.5, lowerIsBetter: false },
   };
 
   constructor(protocol: ProtocolType = 'theta-beta-ratio', initialThreshold?: number) {
