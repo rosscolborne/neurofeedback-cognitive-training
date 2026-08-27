@@ -68,7 +68,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
       <div style={{ position: 'relative', flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
         <iframe
           key={activeVideo.youtubeId}
-          src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${activeVideo.youtubeId}&modestbranding=1&rel=0`}
+          src={`https://www.youtube.com/embed/${activeVideo.youtubeId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${activeVideo.youtubeId}&modestbranding=1&rel=0&origin=${window.location.origin}`}
           title={activeVideo.title}
           referrerPolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
