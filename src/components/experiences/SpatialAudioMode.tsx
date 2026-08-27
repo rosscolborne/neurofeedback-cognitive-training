@@ -48,13 +48,13 @@ export const SpatialAudioMode: React.FC = () => {
         style={{
           position: 'absolute',
           top: '50%', left: '50%',
-          width: \`\${150 + i * 50}px\`,
-          height: \`\${150 + i * 50}px\`,
-          marginLeft: \`-\${(150 + i * 50) / 2}px\`,
-          marginTop: \`-\${(150 + i * 50) / 2}px\`,
+          width: `${150 + i * 50}px`,
+          height: `${150 + i * 50}px`,
+          marginLeft: `-${(150 + i * 50) / 2}px`,
+          marginTop: `-${(150 + i * 50) / 2}px`,
           borderRadius: '50%',
-          border: \`1px solid rgba(255,255,255,\${node.active ? 0.1 : 0.02})\`,
-          animation: \`spin \${node.speed} linear infinite\`,
+          border: `1px solid rgba(255,255,255,${node.active ? 0.1 : 0.02})`,
+          animation: `spin ${node.speed} linear infinite`,
           animationDelay: node.delay,
           pointerEvents: 'none',
         }}
@@ -68,7 +68,7 @@ export const SpatialAudioMode: React.FC = () => {
           height: '12px',
           backgroundColor: node.color,
           borderRadius: '50%',
-          boxShadow: \`0 0 15px \${node.color}\`,
+          boxShadow: `0 0 15px ${node.color}`,
           opacity: node.active ? 1 : 0.1,
           transition: 'opacity 1s ease',
         }} />

@@ -91,14 +91,14 @@ export const NarrativeTherapyMode: React.FC = () => {
           key={i}
           style={{
             position: 'absolute',
-            left: \`\${Math.random() * 100}%\`,
-            width: \`\${Math.random() * 4 + 2}px\`,
-            height: \`\${Math.random() * 4 + 2}px\`,
+            left: `${Math.random() * 100}%`,
+            width: `${Math.random() * 4 + 2}px`,
+            height: `${Math.random() * 4 + 2}px`,
             backgroundColor: '#FFD700',
             borderRadius: '50%',
             boxShadow: '0 0 10px #FFD700, 0 0 20px #FFA500',
-            animation: \`floatUp \${Math.random() * 5 + 5}s linear infinite\`,
-            animationDelay: \`\${Math.random() * 5}s\`,
+            animation: `floatUp ${Math.random() * 5 + 5}s linear infinite`,
+            animationDelay: `${Math.random() * 5}s`,
             opacity: 0
           }}
         />
@@ -147,7 +147,7 @@ export const NarrativeTherapyMode: React.FC = () => {
               <div style={{
                 position: 'absolute',
                 top: 0, left: 0, bottom: 0,
-                width: \`\${reflectionProgress}%\`,
+                width: `${reflectionProgress}%`,
                 background: 'linear-gradient(90deg, #E8967A, #FFD700)',
                 transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 boxShadow: '0 0 15px rgba(255, 215, 0, 0.6)'
