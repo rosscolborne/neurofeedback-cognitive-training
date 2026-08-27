@@ -71,16 +71,16 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
     <div
       style={{
         width: '100%',
-        minHeight: '100vh',
+        height: '100dvh',
         maxWidth: '520px',
         margin: '0 auto',
         backgroundColor: 'var(--surface-patient-base)',
-        padding: '24px 20px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        overflow: 'hidden',
       }}
     >
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header Banner */}
       <div style={{ textAlign: 'center', marginTop: '10px' }}>
         <div
@@ -271,8 +271,19 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         />
       </div>
 
+      </div>
+
       {/* Bottom Action Buttons */}
-      <div style={{ display: 'flex', gap: '12px', marginTop: '10px', marginBottom: '20px' }}>
+      <div style={{ 
+        padding: '16px 20px', 
+        paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+        background: 'var(--surface-patient-card)',
+        borderTop: '1px solid var(--border-subtle)',
+        display: 'flex', 
+        gap: '12px',
+        flexShrink: 0,
+        zIndex: 10
+      }}>
         <button
           onClick={handleSave}
           className="btn btn-secondary"

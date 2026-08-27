@@ -146,7 +146,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               return (
                 <button
                   key={exp}
-                  onClick={() => setSelectedExp(exp)}
+                  onClick={(e) => {
+                    setSelectedExp(exp);
+                    (e.currentTarget as HTMLButtonElement).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                  }}
                   style={{
                     background: selectedExp === exp ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
                     border: selectedExp === exp ? '1.5px solid var(--brand-primary)' : '1px solid transparent',

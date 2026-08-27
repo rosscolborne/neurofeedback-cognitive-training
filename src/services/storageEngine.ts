@@ -69,7 +69,8 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
 ];
 
 export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
-  const name = displayName?.trim() || (email.split('@')[0] || 'User')
+  const name = displayName?.trim() || '';
+  const cleanName = name
     .replace(/[._]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -612,6 +613,14 @@ class StorageEngine {
 
   public saveSession(session: SessionRecord) {
     const sessions = this.getSessions();
+    const existingIndex = sessions.findIndex(s => s.id === session.id);
+
+    if (existingIndex >= 0) {
+      sessions[existingIndex] = session;
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+      return;
+    }
+
     sessions.unshift(session);
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
 
@@ -621,6 +630,11 @@ class StorageEngine {
       client.completedSessionsCount += 1;
       client.lastSessionDate = 'Just now';
       client.currentStreak += 1;
+      
+      if (client.completedSessionsCount === 1 && !client.badges.includes('first-light')) {
+        client.badges.push('first-light');
+      }
+
       const consistency = Math.min(100, (client.currentStreak / client.prescribedSessionsPerWeek) * 100);
       const newScore = Math.round(
         session.timeInZonePercent * 0.4 +

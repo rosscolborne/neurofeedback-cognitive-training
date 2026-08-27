@@ -11,7 +11,9 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { EducationHub } from './EducationHub';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, Camera, LogOut, Trash2 } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, Camera, LogOut, Trash2, FileText, VolumeX, Volume2 } from 'lucide-react';
+import { storageEngine } from '../../services/storageEngine';
+import { audioEngine } from '../../services/audioEngine';
 
 interface PatientShellProps {
   brand: ClinicBrandConfig;
@@ -30,6 +32,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
+  const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -71,7 +75,68 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
   const handleSessionComplete = (session: SessionRecord) => {
     setActiveSessionExp(null);
+    storageEngine.saveSession(session);
+    const updatedClient = storageEngine.getCurrentClient({ uid: client.id });
+    onUpdateClient(updatedClient);
     setCompletedSession(session);
+  };
+
+  const handleToggleMute = () => {
+    const newState = !isMuted;
+    audioEngine.setMuted(newState);
+    setIsMuted(newState);
+  };
+
+  const exportCSV = () => {
+    const allSessions = storageEngine.getSessions(client.id);
+    if (allSessions.length === 0) {
+      alert('No session data to export.');
+      return;
+    }
+    const headers = ['Date', 'Protocol', 'Experience', 'Duration (s)', 'Time In Zone %', 'Coherence %', 'Peak Score', 'Mood'];
+    const rows = allSessions.map(s => [
+      s.date,
+      s.protocol,
+      s.experience,
+      s.durationSeconds,
+      s.timeInZonePercent,
+      s.averageCoherence,
+      s.peakFocusScore,
+      s.moodRating || 'N/A',
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const filename = `brainswell_progress_${new Date().toISOString().split('T')[0]}.csv`;
+
+    if (navigator.share && navigator.canShare) {
+      const file = new File([blob], filename, { type: 'text/csv' });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({
+          files: [file],
+          title: 'Session Progress',
+        }).then(() => {
+          setExportStatus('done');
+          setTimeout(() => setExportStatus('idle'), 3000);
+        }).catch(() => {
+          setExportStatus('idle');
+        });
+        return;
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 200);
+    setExportStatus('done');
+    setTimeout(() => setExportStatus('idle'), 3000);
   };
 
   if (activeSessionExp) {
@@ -365,6 +430,36 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 Account
               </div>
               <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  onClick={handleToggleMute}
+                  className="btn btn-secondary"
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                  {isMuted ? 'Unmute App Audio' : 'Mute App Audio'}
+                </button>
+
+                <button
+                  onClick={exportCSV}
+                  className="btn btn-secondary"
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <FileText size={15} />
+                  {exportStatus === 'done' ? 'Exported ✓' : 'Export Data (CSV)'}
+                </button>
+
                 <button
                   onClick={handleLogout}
                   className="btn btn-secondary"

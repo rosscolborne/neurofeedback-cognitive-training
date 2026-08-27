@@ -103,17 +103,35 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     ]);
     const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const filename = `brainswell_progress_${new Date().toISOString().split('T')[0]}.csv`;
+
+    if (navigator.share && navigator.canShare) {
+      const file = new File([blob], filename, { type: 'text/csv' });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({
+          files: [file],
+          title: 'Session Progress',
+        }).then(() => {
+          setExportStatus('done');
+          setTimeout(() => setExportStatus('idle'), 3000);
+        }).catch(() => {
+          setExportStatus('idle');
+        });
+        return;
+      }
+    }
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `brainswell_progress_${new Date().toISOString().split('T')[0]}.csv`;
-    link.style.display = 'none';
+    link.download = filename;
+    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     setTimeout(() => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-    }, 100);
+    }, 200);
     setExportStatus('done');
     setTimeout(() => setExportStatus('idle'), 3000);
   };
@@ -377,22 +395,24 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
         </div>
       </div>
 
-      {/* Export CSV — prominent button */}
-      <button
-        onClick={exportCSV}
-        className="btn btn-secondary"
-        style={{
-          width: '100%',
-          padding: '14px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-        }}
-      >
-        <FileText size={16} />
-        {exportStatus === 'done' ? 'Exported ✓' : 'Export Session Data (CSV)'}
-      </button>
+      {/* Export CSV — small button */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+        <button
+          onClick={exportCSV}
+          className="btn btn-secondary"
+          style={{
+            padding: '8px 16px',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+          }}
+        >
+          <FileText size={14} />
+          {exportStatus === 'done' ? 'Exported ✓' : 'Export Data (CSV)'}
+        </button>
+      </div>
     </div>
   );
 };

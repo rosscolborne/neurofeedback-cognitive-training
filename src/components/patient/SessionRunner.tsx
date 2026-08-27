@@ -238,7 +238,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           maxWidth: '520px',
           margin: '0 auto',
           backgroundColor: 'var(--surface-patient-base)',
-          padding: '32px 24px',
+          padding: '24px',
+          paddingTop: 'max(32px, env(safe-area-inset-top, 32px))',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -343,6 +344,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <header
         style={{
           padding: '12px 18px',
+          paddingTop: 'max(12px, env(safe-area-inset-top, 12px))',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -580,6 +582,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <footer
         style={{
           padding: '12px 18px',
+          paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
           background: 'var(--surface-patient-card)',
           borderTop: '1px solid var(--border-subtle)',
           display: 'flex',
