@@ -539,7 +539,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                       </div>
                     )}
                   </div>
-                  <button onClick={handleDownloadPDF} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button onClick={() => generatePatientClinicalPDF(client, [s], brand)} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileText size={12} /> PDF
                   </button>
                 </div>

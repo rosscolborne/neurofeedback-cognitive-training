@@ -22,7 +22,7 @@ export function generatePatientClinicalPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(26, 26, 26);
-  doc.text(brand.name.toUpperCase(), 15, 16);
+  doc.text((brand?.name || 'Clinic').toUpperCase(), 15, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -31,7 +31,7 @@ export function generatePatientClinicalPDF(
   doc.text(`Attending Physician: ${doctorName} | Board Certified Neurotherapist (BCN)`, 15, 27);
 
   doc.text(`Generated: ${reportDate}`, 150, 16);
-  doc.text(`Protocol: ${client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}`, 150, 22);
+  doc.text(`Protocol: ${(client?.assignedProtocol || 'unknown').replace(/-/g, ' ').toUpperCase()}`, 150, 22);
   doc.text(`Hardware: Muse S (Athena) 4-Ch`, 150, 27);
 
   // 2. Patient Demographics Box
@@ -49,10 +49,10 @@ export function generatePatientClinicalPDF(
   doc.text('BRAIN CAPACITY INDEX:', 110, 60);
 
   doc.setFont('helvetica', 'normal');
-  doc.text(`${client.name} ${client.isDemo ? '(Sample Record)' : ''}`, 65, 52);
-  doc.text(client.condition, 65, 60);
-  doc.text(`${client.completedSessionsCount} of ${client.prescribedSessionsPerWeek * 4} Prescribed Sessions`, 160, 52);
-  doc.text(`${client.brainCapacityScore}% (Active Neuroplastic Score)`, 160, 60);
+  doc.text(`${client?.name || 'Patient'} ${client?.isDemo ? '(Sample Record)' : ''}`, 65, 52);
+  doc.text(client?.condition || 'Unknown', 65, 60);
+  doc.text(`${client?.completedSessionsCount || 0} of ${(client?.prescribedSessionsPerWeek || 4) * 4} Prescribed Sessions`, 160, 52);
+  doc.text(`${client?.brainCapacityScore || 0}% (Active Neuroplastic Score)`, 160, 60);
 
   // 3. Clinical Trajectory & Quantitative EEG Findings
   doc.setFont('helvetica', 'bold');
@@ -68,7 +68,7 @@ export function generatePatientClinicalPDF(
   const avgCoherence = totalSessions > 0 ? Math.round(sessions.reduce((s, r) => s + r.averageCoherence, 0) / totalSessions) : 0;
 
   const summaryText = [
-    `Patient completed ${totalSessions} neurofeedback session${totalSessions !== 1 ? 's' : ''} using the ${client.assignedProtocol.replace(/-/g, ' ')} protocol.`,
+    `Patient completed ${totalSessions} neurofeedback session${totalSessions !== 1 ? 's' : ''} using the ${(client?.assignedProtocol || '').replace(/-/g, ' ')} protocol.`,
     `Average time in target neural zone: ${avgInZone}%. Average inter-hemispheric coherence: ${avgCoherence}%.`,
     `Band power averages below are computed from real EEG telemetry recorded during training sessions at AF7, AF8, TP9, TP10.`,
   ];
@@ -139,11 +139,11 @@ export function generatePatientClinicalPDF(
       doc.rect(15, tableY, 180, 6, 'F');
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(s.date, 20, tableY + 4.5);
-      doc.text(s.experience.replace(/-/g, ' ').toUpperCase(), 55, tableY + 4.5);
-      doc.text(`${Math.round(s.durationSeconds / 60)} min`, 105, tableY + 4.5);
-      doc.text(`${s.timeInZonePercent}%`, 135, tableY + 4.5);
-      doc.text(`${s.peakFocusScore}`, 165, tableY + 4.5);
+      doc.text(s.date || 'Unknown', 20, tableY + 4.5);
+      doc.text((s.experience || 'unknown').replace(/-/g, ' ').toUpperCase(), 55, tableY + 4.5);
+      doc.text(`${Math.round((s.durationSeconds || 0) / 60)} min`, 105, tableY + 4.5);
+      doc.text(`${s.timeInZonePercent || 0}%`, 135, tableY + 4.5);
+      doc.text(`${s.peakFocusScore || 0}`, 165, tableY + 4.5);
       tableY += 6;
     });
   } else {
@@ -166,9 +166,9 @@ export function generatePatientClinicalPDF(
   doc.setFontSize(8.5);
   const latestSession = sessions[0];
   const planNotes = [
-    `Patient has completed ${client.completedSessionsCount} of their ${client.prescribedSessionsPerWeek * 4} prescribed sessions.`,
-    `Recommend continuing current ${client.assignedProtocol.replace(/-/g, ' ')} regimen at ${client.prescribedSessionsPerWeek} sessions/week.`,
-    latestSession ? `Latest recorded session showed a peak focus score of ${latestSession.peakFocusScore} and ${latestSession.timeInZonePercent}% time in zone.` : 'Prescription active. Baseline awaiting recording.',
+    `Patient has completed ${client?.completedSessionsCount || 0} of their ${(client?.prescribedSessionsPerWeek || 4) * 4} prescribed sessions.`,
+    `Recommend continuing current ${(client?.assignedProtocol || '').replace(/-/g, ' ')} regimen at ${client?.prescribedSessionsPerWeek || 4} sessions/week.`,
+    latestSession ? `Latest recorded session showed a peak focus score of ${latestSession.peakFocusScore || 0} and ${latestSession.timeInZonePercent || 0}% time in zone.` : 'Prescription active. Baseline awaiting recording.',
   ];
   doc.text(planNotes, 15, tableY, { maxWidth: 180, lineHeightFactor: 1.4 });
 
@@ -186,7 +186,7 @@ export function generatePatientClinicalPDF(
   doc.text(`Official Document Seal • Verified ${reportDate}`, 125, tableY + 9);
 
   // Download PDF
-  doc.save(`Neurofeedback_Report_${client.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.save(`Neurofeedback_Report_${(client?.name || 'Patient').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
 export function generatePracticeOutcomePDF(
@@ -210,7 +210,7 @@ export function generatePracticeOutcomePDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(26, 26, 26);
-  doc.text(brand.name.toUpperCase(), 15, 16);
+  doc.text((brand?.name || 'Clinic').toUpperCase(), 15, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -286,7 +286,7 @@ export function generatePracticeOutcomePDF(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(client.name + (client.isDemo ? ' *' : ''), 20, tableY + 4.5);
-    doc.text(`${client.condition.slice(0, 18)} (${client.assignedProtocol.replace(/-/g, ' ')})`, 65, tableY + 4.5);
+    doc.text(`${(client?.condition || 'Unknown').slice(0, 18)} (${(client?.assignedProtocol || '').replace(/-/g, ' ')})`, 65, tableY + 4.5);
     doc.text(`${client.completedSessionsCount} / ${client.prescribedSessionsPerWeek * 4}`, 125, tableY + 4.5);
     doc.text(`${client.brainCapacityScore}%`, 150, tableY + 4.5);
     doc.text(client.status.toUpperCase(), 175, tableY + 4.5);
@@ -322,5 +322,5 @@ export function generatePracticeOutcomePDF(
   doc.text(`Official Practice Seal • Verified ${reportDate}`, 125, tableY + 9);
 
   // Download Practice PDF
-  doc.save(`Practice_Outcome_Report_${brand.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.save(`Practice_Outcome_Report_${(brand?.name || 'Clinic').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
 }
