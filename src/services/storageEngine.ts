@@ -642,8 +642,21 @@ class StorageEngine {
       client.lastSessionDate = 'Just now';
       client.currentStreak += 1;
       
-      if (client.completedSessionsCount === 1 && !client.badges.includes('first-light')) {
+      if (client.completedSessionsCount >= 1 && !client.badges.includes('first-light')) {
         client.badges.push('first-light');
+      }
+      
+      if (client.currentStreak >= 7 && !client.badges.includes('steady-state')) {
+        client.badges.push('steady-state');
+      }
+
+      if (session.protocol === 'theta-beta-ratio' && session.timeInZonePercent >= 80 && !client.badges.includes('deep-focus')) {
+        client.badges.push('deep-focus');
+      }
+
+      // Sustained alpha: >= 15 min (900s) with good time in zone (e.g. >= 60%)
+      if (session.protocol === 'alpha-enhancement' && session.durationSeconds >= 900 && session.timeInZonePercent >= 60 && !client.badges.includes('still-waters')) {
+        client.badges.push('still-waters');
       }
 
       const consistency = Math.min(100, (client.currentStreak / client.prescribedSessionsPerWeek) * 100);
@@ -663,7 +676,16 @@ class StorageEngine {
           client.tidalGardenState.stage = 3;
         if (client.tidalGardenState.growthPoints > 800 && client.tidalGardenState.stage < 4)
           client.tidalGardenState.stage = 4;
+          
+        if (client.tidalGardenState.stage >= 3 && !client.badges.includes('garden-keeper')) {
+          client.badges.push('garden-keeper');
+        }
       }
+      
+      if (client.skylineBiomesUnlocked.length >= 5 && !client.badges.includes('skyline-explorer')) {
+        client.badges.push('skyline-explorer');
+      }
+
       this.saveClients(clients);
     }
   }
