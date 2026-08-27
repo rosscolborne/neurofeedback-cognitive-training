@@ -10,7 +10,7 @@ class AudioFeedbackEngine {
   private voices: { osc: OscillatorNode, panner: PannerNode, gain: GainNode, angle: number, speed: number }[] = [];
   
   private unsubscribe: (() => void) | null = null;
-  private orbitInterval: NodeJS.Timeout | null = null;
+  private orbitInterval: ReturnType<typeof setInterval> | null = null;
 
   public async initialize() {
     if (this.isInitialized) return;
