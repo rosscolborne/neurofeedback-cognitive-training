@@ -4,64 +4,58 @@ class AudioFeedbackEngine {
   private ctx: AudioContext | null = null;
   private isInitialized = false;
 
-  // Nodes
   private masterGain: GainNode | null = null;
-  private noiseNode: AudioBufferSourceNode | null = null;
-  private filterNode: BiquadFilterNode | null = null;
-  private pannerNode: StereoPannerNode | null = null;
-  private droneOsc: OscillatorNode | null = null;
-  private droneGain: GainNode | null = null;
-
+  
+  // Harmonic Drones
+  private voices: { osc: OscillatorNode, panner: PannerNode, gain: GainNode, angle: number, speed: number }[] = [];
+  
   private unsubscribe: (() => void) | null = null;
+  private orbitInterval: NodeJS.Timeout | null = null;
 
   public async initialize() {
     if (this.isInitialized) return;
 
     this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = 0.5;
     this.masterGain.connect(this.ctx.destination);
-    
-    // Create an atmospheric noise buffer (Pink Noise approximation for Ocean/Rain)
-    const bufferSize = this.ctx.sampleRate * 2; // 2 seconds
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      const white = Math.random() * 2 - 1;
-      output[i] = (lastOut + (0.02 * white)) / 1.02;
-      lastOut = output[i];
-      output[i] *= 3.5; // Compensate for gain
-    }
 
-    this.noiseNode = this.ctx.createBufferSource();
-    this.noiseNode.buffer = noiseBuffer;
-    this.noiseNode.loop = true;
+    // Setup 3 harmonic voices (e.g., A2, E3, A3 - Root, Fifth, Octave)
+    const frequencies = [110, 164.81, 220]; 
+    const speeds = [0.2, 0.35, 0.5]; // Orbit speeds
+    const angles = [0, Math.PI * (2/3), Math.PI * (4/3)]; // Starting angles
 
-    // Filter node (Lowpass to muffle when out of zone)
-    this.filterNode = this.ctx.createBiquadFilter();
-    this.filterNode.type = 'lowpass';
-    this.filterNode.frequency.value = 400; // Start muffled
+    frequencies.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const panner = this.ctx!.createPanner();
+      const gain = this.ctx!.createGain();
 
-    // Panner for spatial expansion
-    this.pannerNode = this.ctx.createStereoPanner();
-    this.pannerNode.pan.value = 0;
+      osc.type = i === 0 ? 'sine' : 'triangle'; // Richer harmonics
+      osc.frequency.value = freq;
 
-    this.noiseNode.connect(this.filterNode);
-    this.filterNode.connect(this.pannerNode);
-    this.pannerNode.connect(this.masterGain);
+      // True Spatial 3D Panner
+      panner.panningModel = 'HRTF';
+      panner.distanceModel = 'inverse';
+      panner.refDistance = 1;
+      panner.maxDistance = 10000;
+      panner.rolloffFactor = 1;
+      panner.setPosition(Math.cos(angles[i]) * 2, 0, Math.sin(angles[i]) * 2);
 
-    // Binaural Drone (Ambient layer)
-    this.droneOsc = this.ctx.createOscillator();
-    this.droneOsc.type = 'sine';
-    this.droneOsc.frequency.value = 110; // A2
-    this.droneGain = this.ctx.createGain();
-    this.droneGain.gain.value = 0; // Starts silent
-    this.droneOsc.connect(this.droneGain);
-    this.droneGain.connect(this.masterGain);
+      gain.gain.value = 0; // Starts silent
 
-    this.noiseNode.start();
-    this.droneOsc.start();
+      osc.connect(panner);
+      panner.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start();
+
+      this.voices.push({ osc, panner, gain, angle: angles[i], speed: speeds[i] });
+    });
 
     this.isInitialized = true;
+
+    // Start Orbital Math Loop
+    this.orbitInterval = setInterval(() => this.updateOrbits(), 1000 / 30); // 30 FPS for audio positional updates
 
     // Subscribe to EEG Engine telemetry
     this.unsubscribe = eegEngine.subscribe((data) => {
@@ -69,18 +63,45 @@ class AudioFeedbackEngine {
     });
   }
 
+  private updateOrbits() {
+    if (!this.ctx) return;
+    
+    this.voices.forEach(voice => {
+      voice.angle += voice.speed * 0.05;
+      const x = Math.cos(voice.angle) * 3; // Orbit radius of 3
+      const z = Math.sin(voice.angle) * 3;
+      
+      // Update spatial position
+      if (voice.panner.positionX) {
+        // Modern Web Audio API
+        voice.panner.positionX.setTargetAtTime(x, this.ctx!.currentTime, 0.1);
+        voice.panner.positionY.setTargetAtTime(0, this.ctx!.currentTime, 0.1);
+        voice.panner.positionZ.setTargetAtTime(z, this.ctx!.currentTime, 0.1);
+      } else {
+        // Legacy fallback
+        voice.panner.setPosition(x, 0, z);
+      }
+    });
+  }
+
   private updateParameters(inZone: boolean, coherence: number) {
-    if (!this.ctx || !this.filterNode || !this.droneGain) return;
+    if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
     
-    // Guardrail: Use setTargetAtTime to prevent audio clicks/pops from telemetry jitter
-    const targetFreq = inZone ? 8000 : 400; // Open up filter when in zone
-    this.filterNode.frequency.setTargetAtTime(targetFreq, now, 0.25);
-
-    // Fade in drone based on coherence
-    const targetDroneVol = inZone ? 0.05 + (coherence / 100) * 0.1 : 0.0;
-    this.droneGain.gain.setTargetAtTime(targetDroneVol, now, 0.5);
+    // Fade in voices based on state and coherence
+    this.voices.forEach((voice, i) => {
+      // Voice 0 (Root) is always present if inZone
+      // Voices 1 and 2 (Harmonics) require higher coherence
+      let targetVol = 0;
+      if (inZone) {
+        if (i === 0) targetVol = 0.2 + (coherence / 100) * 0.2;
+        if (i === 1 && coherence > 30) targetVol = (coherence / 100) * 0.3;
+        if (i === 2 && coherence > 60) targetVol = ((coherence - 40) / 100) * 0.2;
+      }
+      
+      voice.gain.gain.setTargetAtTime(targetVol, now, 1.0);
+    });
   }
 
   public suspend() {
@@ -100,14 +121,15 @@ class AudioFeedbackEngine {
       this.unsubscribe();
       this.unsubscribe = null;
     }
-    if (this.noiseNode) this.noiseNode.stop();
-    if (this.droneOsc) this.droneOsc.stop();
+    if (this.orbitInterval) {
+      clearInterval(this.orbitInterval);
+      this.orbitInterval = null;
+    }
+    this.voices.forEach(v => v.osc.stop());
+    this.voices = [];
     if (this.ctx) this.ctx.close();
     this.isInitialized = false;
   }
 }
-
-// Global variable for pseudo-pink noise generation
-let lastOut = 0;
 
 export const audioFeedbackEngine = new AudioFeedbackEngine();
