@@ -7,26 +7,26 @@ interface MediaModeProps {
   isPaused?: boolean;
 }
 
-const YOUTUBE_CHANNELS = [
+const VIDEO_CHANNELS = [
   {
     title: 'Earth & Alpine Wilderness (4K Relax)',
-    youtubeId: 'LXb3EKWsInQ',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-forest-stream-in-the-sunlight-529-large.mp4',
     category: 'Nature & Calm',
   },
   {
     title: 'Deep Space & Galactic Nebulae',
-    youtubeId: 'f_J8QU1m0NE',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1610-large.mp4',
     category: 'Curiosity & Focus',
   },
   {
-    title: 'Coral Reef Coralscapes & Marine Life',
-    youtubeId: 'a9_qjXFvQhU',
+    title: 'Ocean Waves & Marine Life',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4',
     category: 'Alpha Meditation',
   },
 ];
 
 export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = false }) => {
-  const [activeVideo, setActiveVideo] = useState(YOUTUBE_CHANNELS[0]);
+  const [activeVideo, setActiveVideo] = useState(VIDEO_CHANNELS[0]);
   const [customUrl, setCustomUrl] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const inZone = eegData?.inZone ?? true;
@@ -35,16 +35,9 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
     e.preventDefault();
     if (!customUrl.trim()) return;
 
-    // Extract YouTube ID from standard formats (youtu.be/ID or youtube.com/watch?v=ID)
-    let id = customUrl.trim();
-    const match = customUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    if (match && match[1]) {
-      id = match[1];
-    }
-
     setActiveVideo({
-      title: 'Custom YouTube Stream',
-      youtubeId: id,
+      title: 'Custom Media Stream',
+      videoUrl: customUrl.trim(),
       category: 'User Custom',
     });
     setShowCustomInput(false);
@@ -64,19 +57,20 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
         flexDirection: 'column',
       }}
     >
-      {/* YouTube Video Viewport Layer */}
+      {/* Video Viewport Layer */}
       <div style={{ position: 'relative', flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
-        <iframe
-          key={activeVideo.youtubeId}
-          src={`https://www.youtube.com/embed/${activeVideo.youtubeId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${activeVideo.youtubeId}&modestbranding=1&rel=0&origin=${window.location.origin}`}
-          title={activeVideo.title}
-          referrerPolicy="strict-origin-when-cross-origin"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
+        <video
+          key={activeVideo.videoUrl}
+          src={activeVideo.videoUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+          controls={false}
           style={{
             width: '100%',
             height: '100%',
-            border: 'none',
+            objectFit: 'cover',
             filter: inZone ? 'brightness(1.0) contrast(1.0)' : 'brightness(0.4) contrast(0.85)',
             transition: 'filter 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
             pointerEvents: isPaused ? 'none' : 'auto',
@@ -114,37 +108,39 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
             position: 'absolute',
             top: 12,
             right: 12,
-            backgroundColor: 'rgba(20, 20, 20, 0.85)',
-            backdropFilter: 'blur(8px)',
-            padding: '6px 12px',
-            borderRadius: 'var(--radius-sm)',
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            padding: '6px 10px',
+            borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#FFFFFF',
-            fontSize: '11px',
+            gap: '6px',
+            color: '#FFF',
+            border: '1px solid rgba(255,255,255,0.1)',
             pointerEvents: 'none',
           }}
         >
           <div
             style={{
-              width: '8px',
-              height: '8px',
+              width: 8,
+              height: 8,
               borderRadius: '50%',
-              backgroundColor: inZone ? 'var(--status-active)' : 'var(--status-paused)',
-              boxShadow: inZone ? '0 0 8px var(--status-active)' : 'none',
+              backgroundColor: inZone ? '#4CAF50' : '#FF5252',
+              boxShadow: inZone ? '0 0 10px #4CAF50' : 'none',
+              transition: 'background-color 0.5s ease',
             }}
           />
-          <span>{inZone ? 'In Focus Zone (100% Clarity)' : 'Dimming Engaged'}</span>
+          <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.5px' }}>
+            {inZone ? 'SYNC' : 'DRIFT'}
+          </span>
         </div>
       </div>
 
-      {/* Video Channel Selector Bar */}
+      {/* Control & Channel Strip */}
       <div
         style={{
+          padding: '12px 16px',
           backgroundColor: '#1A1A1A',
-          padding: '10px 16px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -161,12 +157,12 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
         </div>
 
         <div style={{ display: 'flex', gap: '6px' }}>
-          {YOUTUBE_CHANNELS.map((ch, idx) => (
+          {VIDEO_CHANNELS.map((ch, idx) => (
             <button
-              key={ch.youtubeId}
+              key={ch.videoUrl}
               onClick={() => setActiveVideo(ch)}
               style={{
-                backgroundColor: activeVideo.youtubeId === ch.youtubeId ? 'var(--brand-primary)' : 'rgba(255, 255, 255, 0.12)',
+                backgroundColor: activeVideo.videoUrl === ch.videoUrl ? 'var(--brand-primary)' : 'rgba(255, 255, 255, 0.12)',
                 color: '#FFFFFF',
                 border: 'none',
                 borderRadius: 'var(--radius-sm)',
@@ -199,7 +195,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
         </div>
       </div>
 
-      {/* Custom YouTube URL Modal / Inset Form */}
+      {/* Custom URL Modal / Inset Form */}
       {showCustomInput && (
         <form
           onSubmit={handleLoadCustom}
@@ -215,7 +211,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
             type="text"
             value={customUrl}
             onChange={e => setCustomUrl(e.target.value)}
-            placeholder="Paste any YouTube video URL or ID..."
+            placeholder="Paste any MP4 video URL..."
             style={{
               flex: 1,
               padding: '6px 10px',
