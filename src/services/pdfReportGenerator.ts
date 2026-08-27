@@ -1,12 +1,64 @@
 import { jsPDF } from 'jspdf';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { ClientProfile, ClinicBrandConfig, SessionRecord } from '../types';
 
-export function generatePatientClinicalPDF(
+export async function saveOrExportPDF(doc: jsPDF, filename: string): Promise<void> {
+  // If running inside Capacitor (iOS / iPadOS / macOS Catalyst)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const dataUri = doc.output('datauristring');
+      const base64Data = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
+
+      const fileResult = await Filesystem.writeFile({
+        path: filename,
+        data: base64Data,
+        directory: Directory.Cache,
+      });
+
+      await Share.share({
+        title: filename,
+        url: fileResult.uri,
+        dialogTitle: 'Export PDF Report',
+      });
+      return;
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.message?.includes('canceled') || e?.message?.includes('cancelled')) {
+        return;
+      }
+      console.warn('Native Capacitor Share failed, trying Web Share API fallback...', e);
+    }
+  }
+
+  // Web Share API fallback for mobile browsers
+  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    try {
+      const blob = doc.output('blob');
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: filename,
+        });
+        return;
+      }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return;
+      console.warn('Web Share failed, falling back to doc.save()...', e);
+    }
+  }
+
+  // Standard web browser fallback
+  doc.save(filename);
+}
+
+export async function generatePatientClinicalPDF(
   client: ClientProfile,
   sessions: SessionRecord[],
   brand: ClinicBrandConfig,
   doctorName = 'Dr. Vance Aris, MD, BCN'
-) {
+): Promise<void> {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -185,16 +237,17 @@ export function generatePatientClinicalPDF(
   doc.text('Clinical Quality Director Approval', 125, tableY + 5);
   doc.text(`Official Document Seal • Verified ${reportDate}`, 125, tableY + 9);
 
-  // Download PDF
-  doc.save(`Neurofeedback_Report_${(client?.name || 'Patient').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  // Download or Share PDF
+  const filename = `Neurofeedback_Report_${(client?.name || 'Patient').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+  await saveOrExportPDF(doc, filename);
 }
 
-export function generatePracticeOutcomePDF(
+export async function generatePracticeOutcomePDF(
   clients: ClientProfile[],
   sessions: SessionRecord[],
   brand: ClinicBrandConfig,
   doctorName = 'Dr. Vance Aris, MD, BCN'
-) {
+): Promise<void> {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -321,6 +374,7 @@ export function generatePracticeOutcomePDF(
   doc.text('Clinic Quality Assurance Verification', 125, tableY + 5);
   doc.text(`Official Practice Seal • Verified ${reportDate}`, 125, tableY + 9);
 
-  // Download Practice PDF
-  doc.save(`Practice_Outcome_Report_${(brand?.name || 'Clinic').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  // Download or Share Practice PDF
+  const filename = `Practice_Outcome_Report_${(brand?.name || 'Clinic').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+  await saveOrExportPDF(doc, filename);
 }
