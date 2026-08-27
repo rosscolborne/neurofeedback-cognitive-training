@@ -65,6 +65,7 @@ export class EEGEngine {
 
   // Demo Mode Toggle (explicit only)
   public isDemoMode = false;
+  public demoTimeElapsed = 0;
 
   // Web Worker for FFT / Baseline
   private eegWorker: Worker | null = null;
@@ -691,6 +692,17 @@ export class EEGEngine {
       }
       this.phaseAngle += dt * 2 * Math.PI;
       this.noiseSeed += dt * 0.5;
+      this.demoTimeElapsed += dt;
+
+      // Loop every 15 seconds. 0-10s ramp up to 100, 10-15s poor state.
+      const cycleTime = this.demoTimeElapsed % 15;
+      if (cycleTime < 10) {
+        this.userFocus = 50 + (cycleTime / 10) * 50;
+        this.userCalm = 50 + (cycleTime / 10) * 50;
+      } else {
+        this.userFocus = 30;
+        this.userCalm = 30;
+      }
 
       const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
       const calmNorm = Math.max(0, Math.min(100, this.userCalm)) / 100;
