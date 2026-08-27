@@ -254,6 +254,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
               {[
+                { id: 'immersive-3d', title: 'Generative XR', icon: Sparkles, desc: 'Subtle atmospheric WebXR experience', badge: 'VR', gradient: 'linear-gradient(135deg, #7B68AE22, #E8967A22)' },
+                { id: 'spatial-audio', title: 'Spatial Audio', icon: Headphones, desc: 'Layered drone and nature soundscapes', badge: 'Audio', gradient: 'linear-gradient(135deg, #4A90D922, #5C8C4622)' },
+                { id: 'narrative-story', title: 'Graphic Novel', icon: BookOpen, desc: 'Biometric driven narrative therapy', badge: 'Narrative', gradient: 'linear-gradient(135deg, #E8967A22, #C4A35A22)' },
                 { id: 'skyline-drift', title: 'Skyline Drift', icon: Mountain, desc: 'Focus-driven glider flight across procedural landscapes', badge: 'Focus', gradient: 'linear-gradient(135deg, #E8967A22, #E4B87C22)' },
                 { id: 'tidal-garden', title: 'Tidal Garden', icon: Waves, desc: 'Grow a marine garden powered by Alpha calm waves', badge: 'Calm', gradient: 'linear-gradient(135deg, #7B68AE22, #4A90D922)' },
                 { id: 'breath-weave', title: 'Breath Weave', icon: Wind, desc: 'Harmonic tapestry woven with guided breathing', badge: 'Breathing', gradient: 'linear-gradient(135deg, #5C8C4622, #C4A35A22)' },
