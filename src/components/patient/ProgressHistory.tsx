@@ -240,16 +240,24 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               alignItems: 'center',
               justifyContent: 'center',
               height: '100%',
-              color: 'var(--text-tertiary)',
-              fontSize: '13px',
+              color: 'var(--brand-primary)',
               flexDirection: 'column',
-              gap: '8px',
+              gap: '12px',
             }}>
-              <svg viewBox="0 0 360 120" style={{ width: '100%', height: '80px', opacity: 0.3 }}>
-                <line x1="20" y1="60" x2="340" y2="60" stroke="var(--border-default)" strokeWidth="1" strokeDasharray="6 4" />
-                <line x1="20" y1="110" x2="340" y2="110" stroke="var(--border-default)" strokeWidth="1" />
-              </svg>
-              <span>Complete sessions to see your trend</span>
+              <div style={{ 
+                background: 'var(--brand-primary-subtle)', 
+                padding: '12px', 
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Sparkles size={24} />
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Your Journey Starts Here</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>Complete your first session to unlock insights.</div>
+              </div>
             </div>
           )}
         </div>
@@ -262,9 +270,11 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
         </h2>
 
         {filteredSessions.length === 0 ? (
-          <div className="card-patient" style={{ padding: '24px', textAlign: 'center' }}>
-            <p style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-              No sessions recorded for this period.
+          <div className="card-patient" style={{ padding: '32px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <Target size={32} color="var(--border-default)" />
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>No sessions yet</div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Head over to the Train tab and start your first neurofeedback session to see it here.
             </p>
           </div>
         ) : (

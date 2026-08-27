@@ -17,15 +17,19 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
   const [isPaired, setIsPaired] = useState(false);
   const [pairedDeviceName, setPairedDeviceName] = useState<string | null>(null);
   const [showFitModal, setShowFitModal] = useState(false);
+  const [pairingError, setPairingError] = useState<string | null>(null);
 
   const handlePairHeadband = async () => {
     setIsPairing(true);
+    setPairingError(null);
     const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     if (res.success) {
       setIsPaired(true);
       setPairedDeviceName(res.deviceName || 'Muse Headband (4-Ch Active)');
       setShowFitModal(true);
+    } else {
+      setPairingError('Bluetooth pairing failed or was cancelled. Please try again.');
     }
   };
 
@@ -237,14 +241,21 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
             </div>
 
             {!isPaired ? (
-              <button
-                onClick={handlePairHeadband}
-                disabled={isPairing}
-                className="btn btn-secondary"
-                style={{ marginTop: '8px' }}
-              >
-                {isPairing ? 'Establishing Signal...' : 'Connect Muse Headband via Bluetooth'}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', marginTop: '8px' }}>
+                <button
+                  onClick={handlePairHeadband}
+                  disabled={isPairing}
+                  className="btn btn-secondary"
+                  style={{ width: '100%' }}
+                >
+                  {isPairing ? 'Establishing Signal...' : 'Connect Muse Headband via Bluetooth'}
+                </button>
+                {pairingError && (
+                  <div style={{ fontSize: '13px', color: '#D32F2F', textAlign: 'center' }}>
+                    {pairingError}
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 onClick={() => setShowFitModal(true)}
@@ -262,13 +273,25 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
             <span>Clinical HIPAA & GDPR Compliant Telemetry</span>
           </div>
 
-          <button
-            onClick={handleComplete}
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '16px', fontSize: '16px', marginTop: '10px' }}
-          >
-            Enter Patient Portal
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+            <button
+              onClick={handleComplete}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '16px', fontSize: '16px' }}
+            >
+              Enter Patient Portal
+            </button>
+            
+            {!isPaired && (
+              <button
+                onClick={handleComplete}
+                className="btn btn-ghost"
+                style={{ width: '100%', fontSize: '14px' }}
+              >
+                Continue without Headband (Audio-Only Mode)
+              </button>
+            )}
+          </div>
         </div>
       )}
 

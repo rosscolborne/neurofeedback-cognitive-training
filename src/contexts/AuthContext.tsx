@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -109,6 +110,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setUser(cred.user);
     setRole(null);
+    
+    // Send email verification
+    try {
+      await sendEmailVerification(cred.user);
+    } catch (err) {
+      console.warn('Failed to send verification email:', err);
+    }
 
     setDoc(doc(db, 'users', cred.user.uid), {
       email: cred.user.email,
