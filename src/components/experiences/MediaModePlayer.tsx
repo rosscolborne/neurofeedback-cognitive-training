@@ -70,6 +70,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
           key={activeVideo.youtubeId}
           src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${activeVideo.youtubeId}&modestbranding=1&rel=0`}
           title={activeVideo.title}
+          referrerPolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           style={{
