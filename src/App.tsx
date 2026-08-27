@@ -59,7 +59,7 @@ export function App() {
       status: 'active',
       assignedProtocol: newClient.assignedProtocol || 'theta-beta-ratio',
       brainMaps: [],
-      allowedExperiences: ['skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'mandala', 'immersive-3d', 'spatial-audio', 'narrative-story'],
+      allowedExperiences: ['immersive-3d', 'spatial-audio', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'mandala'],
       prescribedSessionsPerWeek: 4,
       completedSessionsCount: 0,
       currentStreak: 0,
