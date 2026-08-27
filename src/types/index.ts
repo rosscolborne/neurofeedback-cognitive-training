@@ -76,6 +76,7 @@ export interface EEGDataPoint {
   thetaBetaRatio: number;
   coherence: number; // 0 - 100%
   inZone: boolean;
+  zoneScore: number; // 0.0 - 1.0 continuous feedback score
   signalQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected';
   channelQuality: MuseChannelQuality;
   batteryLevel?: number;

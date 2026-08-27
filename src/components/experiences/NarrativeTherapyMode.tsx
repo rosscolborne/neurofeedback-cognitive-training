@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { eegEngine } from '../../services/eegEngine';
+import { EEGDataPoint } from '../../types';
 
-export const NarrativeTherapyMode: React.FC = () => {
+interface NarrativeTherapyProps {
+  eegData: EEGDataPoint | null;
+}
+
+export const NarrativeTherapyMode: React.FC<NarrativeTherapyProps> = ({ eegData }) => {
   const [inZone, setInZone] = useState(false);
   const [reflectionProgress, setReflectionProgress] = useState(0);
 
@@ -12,29 +16,24 @@ export const NarrativeTherapyMode: React.FC = () => {
   });
 
   useEffect(() => {
-    const unsubscribe = eegEngine.subscribe((data) => {
-      setInZone(data.inZone);
-      
-      if (currentScene.requiresReflection) {
-        if (data.inZone) {
-          setReflectionProgress(p => {
-            const next = p + 2.5; // Progresses roughly over 4 seconds
-            if (next >= 100) {
-              handleNextClick();
-              return 0;
-            }
-            return next;
-          });
-        } else {
-          setReflectionProgress(p => Math.max(0, p - 5));
-        }
+    if (!eegData) return;
+    setInZone(eegData.inZone);
+    
+    if (currentScene.requiresReflection) {
+      if (eegData.inZone) {
+        setReflectionProgress(p => {
+          const next = p + 2.5; // Progresses roughly over 4 seconds
+          if (next >= 100) {
+            handleNextClick();
+            return 0;
+          }
+          return next;
+        });
+      } else {
+        setReflectionProgress(p => Math.max(0, p - 5));
       }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [currentScene.requiresReflection]);
+    }
+  }, [eegData, currentScene.requiresReflection]);
 
   const handleNextClick = () => {
     setReflectionProgress(0);

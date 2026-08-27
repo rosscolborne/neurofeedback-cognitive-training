@@ -1,22 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Square, Headphones } from 'lucide-react';
 import { audioFeedbackEngine } from '../../services/audioFeedbackEngine';
-import { eegEngine } from '../../services/eegEngine';
+import { EEGDataPoint } from '../../types';
 
-export const SpatialAudioMode: React.FC = () => {
+interface SpatialAudioProps {
+  eegData: EEGDataPoint | null;
+}
+
+export const SpatialAudioMode: React.FC<SpatialAudioProps> = ({ eegData }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [coherence, setCoherence] = useState(0);
   const [inZone, setInZone] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = eegEngine.subscribe((data) => {
-      setCoherence(data.coherence);
-      setInZone(data.inZone);
-    });
+    if (eegData) {
+      setCoherence(eegData.coherence);
+      setInZone(eegData.inZone);
+    }
+  }, [eegData]);
 
+  useEffect(() => {
     return () => {
       audioFeedbackEngine.cleanup();
-      unsubscribe();
     };
   }, []);
 

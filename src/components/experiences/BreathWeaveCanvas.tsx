@@ -116,15 +116,19 @@ export const BreathWeaveCanvas: React.FC<BreathWeaveProps> = ({
       const minRadius = 45;
       const maxRadius = 110;
       const currentRadius = minRadius + (maxRadius - minRadius) * circleScale;
+      
+      const coherence = eegData?.coherence || 50;
+      const coherenceNorm = Math.max(0.0, Math.min(1.0, coherence / 100));
+      const auraExpand = 30 + 50 * coherenceNorm;
 
-      // Outer soft aura
-      const auraGrad = ctx.createRadialGradient(centerX, centerY, minRadius * 0.8, centerX, centerY, currentRadius + 30);
-      auraGrad.addColorStop(0, 'rgba(232, 150, 122, 0.35)');
-      auraGrad.addColorStop(0.7, 'rgba(228, 184, 124, 0.15)');
+      // Outer soft aura linked to coherence
+      const auraGrad = ctx.createRadialGradient(centerX, centerY, minRadius * 0.8, centerX, centerY, currentRadius + auraExpand);
+      auraGrad.addColorStop(0, `rgba(232, 150, 122, ${0.15 + 0.5 * coherenceNorm})`);
+      auraGrad.addColorStop(0.7, `rgba(228, 184, 124, ${0.05 + 0.3 * coherenceNorm})`);
       auraGrad.addColorStop(1, 'rgba(248, 247, 244, 0)');
       ctx.fillStyle = auraGrad;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, currentRadius + 30, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, currentRadius + auraExpand, 0, Math.PI * 2);
       ctx.fill();
 
       // Main Breathing Ring
@@ -137,7 +141,7 @@ export const BreathWeaveCanvas: React.FC<BreathWeaveProps> = ({
       // Inner Core Circle
       ctx.beginPath();
       ctx.arc(centerX, centerY, currentRadius * 0.55, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(245, 212, 199, 0.6)';
+      ctx.fillStyle = `rgba(245, 212, 199, ${0.3 + 0.6 * coherenceNorm})`;
       ctx.fill();
 
       animationId = requestAnimationFrame(render);

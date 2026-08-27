@@ -61,10 +61,12 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
         const tbr = eegData.thetaBetaRatio;
         // TBR of 1.2 = high flight (0.2), TBR of 2.8 = low flight (0.8)
         const target = Math.max(0.15, Math.min(0.85, (tbr - 1.0) / 2.0));
-        gliderPosRef.current.targetY = target;
+        // Apply EMA smoothing to targetY to reduce pitch jitter
+        gliderPosRef.current.targetY += (target - gliderPosRef.current.targetY) * 0.05;
         
-        // Speed responds to inZone
-        const targetSpeed = eegData.inZone ? 1.4 : 0.7;
+        // Speed responds continuously to zoneScore
+        const zoneScore = eegData.zoneScore ?? (eegData.inZone ? 1.0 : 0.0);
+        const targetSpeed = 0.7 + 0.7 * zoneScore;
         speedRef.current += (targetSpeed - speedRef.current) * 0.05;
       }
 
@@ -178,13 +180,14 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       ctx.stroke();
 
       // Trailing wingtip vapor trails
-      if (eegData?.inZone) {
+      const zoneScore = eegData?.zoneScore ?? (eegData?.inZone ? 1.0 : 0.0);
+      if (zoneScore > 0.1) {
         ctx.beginPath();
         ctx.moveTo(-24, -18);
         ctx.lineTo(-55, -20);
         ctx.moveTo(-24, 18);
         ctx.lineTo(-55, 20);
-        ctx.strokeStyle = 'rgba(232, 150, 122, 0.7)';
+        ctx.strokeStyle = `rgba(232, 150, 122, ${0.7 * zoneScore})`;
         ctx.lineWidth = 2.0;
         ctx.stroke();
       }

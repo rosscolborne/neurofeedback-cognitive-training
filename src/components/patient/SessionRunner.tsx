@@ -631,13 +631,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <MandalaBreathing eegData={eegData} isPaused={isPaused} />
           )}
           {selectedExperience === 'immersive-3d' && (
-            <GenerativeWebXRCanvas />
+            <GenerativeWebXRCanvas eegData={eegData} />
           )}
           {selectedExperience === 'spatial-audio' && (
-            <SpatialAudioMode />
+            <SpatialAudioMode eegData={eegData} />
           )}
           {selectedExperience === 'narrative-story' && (
-            <NarrativeTherapyMode />
+            <NarrativeTherapyMode eegData={eegData} />
           )}
         </div>
 

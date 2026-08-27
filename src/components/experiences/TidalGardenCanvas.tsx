@@ -73,18 +73,20 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
       const alphaVal = eegData?.bands.alpha || 8.5;
       const alphaRatio = Math.max(0.2, Math.min(1.0, (alphaVal - 5) / 12));
       const inZone = eegData?.inZone ?? true;
+      const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 
-      // Deep tranquil warm sea background gradient
+      // Deep tranquil warm sea background gradient (interpolated)
+      const interpolateColor = (c1: number[], c2: number[], t: number) => {
+        const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+        const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+        const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+        return `rgb(${r},${g},${b})`;
+      };
       const seaGrad = ctx.createLinearGradient(0, 0, 0, height);
-      if (inZone) {
-        seaGrad.addColorStop(0, '#E8DED1');
-        seaGrad.addColorStop(0.5, '#F5EDE4');
-        seaGrad.addColorStop(1, '#F8F5F0');
-      } else {
-        seaGrad.addColorStop(0, '#DED6CB');
-        seaGrad.addColorStop(0.5, '#EDE6DC');
-        seaGrad.addColorStop(1, '#F2ECE4');
-      }
+      seaGrad.addColorStop(0, interpolateColor([222, 214, 203], [232, 222, 209], zoneScore));
+      seaGrad.addColorStop(0.5, interpolateColor([237, 230, 220], [245, 237, 228], zoneScore));
+      seaGrad.addColorStop(1, interpolateColor([242, 236, 228], [248, 245, 240], zoneScore));
+      
       ctx.fillStyle = seaGrad;
       ctx.fillRect(0, 0, width, height);
 
@@ -113,7 +115,12 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
         const topY = baseY - k.height;
 
         ctx.quadraticCurveTo(cp1x, cp1y, topX, topY);
-        ctx.strokeStyle = inZone ? 'rgba(125, 166, 104, 0.65)' : 'rgba(150, 170, 140, 0.4)';
+        
+        const kr = 150 + (125 - 150) * zoneScore;
+        const kg = 170 + (166 - 170) * zoneScore;
+        const kb = 140 + (104 - 140) * zoneScore;
+        const ka = 0.4 + (0.65 - 0.4) * zoneScore;
+        ctx.strokeStyle = `rgba(${kr}, ${kg}, ${kb}, ${ka})`;
         ctx.lineWidth = k.width;
         ctx.lineCap = 'round';
         ctx.stroke();
@@ -126,7 +133,12 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
           const leafDir = seg % 2 === 0 ? 1 : -1;
           ctx.beginPath();
           ctx.ellipse(leafX + leafDir * 14, leafY, 14, 6, (leafDir * Math.PI) / 6, 0, Math.PI * 2);
-          ctx.fillStyle = inZone ? 'rgba(168, 196, 148, 0.7)' : 'rgba(180, 195, 175, 0.5)';
+          
+          const lr = 180 + (168 - 180) * zoneScore;
+          const lg = 195 + (196 - 195) * zoneScore;
+          const lb = 175 + (148 - 175) * zoneScore;
+          const la = 0.5 + (0.7 - 0.5) * zoneScore;
+          ctx.fillStyle = `rgba(${lr}, ${lg}, ${lb}, ${la})`;
           ctx.fill();
         }
       });
@@ -189,7 +201,13 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
 
         ctx.beginPath();
         ctx.arc(pX, p.y, pRadius, 0, Math.PI * 2);
-        ctx.fillStyle = inZone ? `rgba(232, 150, 122, ${0.4 + alphaRatio * 0.45})` : 'rgba(200, 180, 160, 0.25)';
+        
+        const pr = 200 + (232 - 200) * zoneScore;
+        const pg = 180 + (150 - 180) * zoneScore;
+        const pb = 160 + (122 - 160) * zoneScore;
+        const pa = 0.25 + ((0.4 + alphaRatio * 0.45) - 0.25) * zoneScore;
+        ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${pa})`;
+        
         ctx.fill();
       });
 

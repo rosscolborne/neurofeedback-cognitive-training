@@ -30,6 +30,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
   const [customUrl, setCustomUrl] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const inZone = eegData?.inZone ?? true;
+  const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 
   const handleLoadCustom = (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,14 +72,14 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            filter: inZone ? 'brightness(1.0) contrast(1.0)' : 'brightness(0.4) contrast(0.85)',
+            filter: `brightness(${0.4 + 0.6 * zoneScore}) contrast(${0.85 + 0.15 * zoneScore})`,
             transition: 'filter 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
             pointerEvents: isPaused ? 'none' : 'auto',
           }}
         />
 
         {/* Gentle Neuro-Dimming Banner when brain drifts out of target range */}
-        {!inZone && (
+        {zoneScore < 0.3 && (
           <div
             style={{
               position: 'absolute',

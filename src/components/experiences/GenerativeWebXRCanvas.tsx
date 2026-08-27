@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { XR, createXRStore } from '@react-three/xr';
 import { Stars, Cloud, Environment, Sparkles, Icosahedron } from '@react-three/drei';
 import * as THREE from 'three';
-import { eegEngine } from '../../services/eegEngine';
+import { EEGDataPoint } from '../../types';
 
 const store = createXRStore();
 
@@ -59,7 +59,7 @@ const NeuralArtifact = ({ eegDataRef }: { eegDataRef: React.MutableRefObject<{ i
   );
 };
 
-const AtmosphericScene = () => {
+const AtmosphericScene = ({ eegData }: { eegData: EEGDataPoint | null }) => {
   const fogRef = useRef<THREE.FogExp2>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   
@@ -67,15 +67,14 @@ const AtmosphericScene = () => {
   const eegDataRef = useRef({ inZone: false, alpha: 0, coherence: 0 });
 
   useEffect(() => {
-    const unsubscribe = eegEngine.subscribe((data) => {
+    if (eegData) {
       eegDataRef.current = {
-        inZone: data.inZone,
-        alpha: data.bands.alpha,
-        coherence: data.coherence,
+        inZone: eegData.inZone,
+        alpha: eegData.bands.alpha,
+        coherence: eegData.coherence,
       };
-    });
-    return unsubscribe;
-  }, []);
+    }
+  }, [eegData]);
 
   useFrame((state, delta) => {
     const { inZone, coherence } = eegDataRef.current;
@@ -116,7 +115,11 @@ const AtmosphericScene = () => {
   );
 };
 
-export const GenerativeWebXRCanvas: React.FC = () => {
+interface GenerativeWebXRProps {
+  eegData: EEGDataPoint | null;
+}
+
+export const GenerativeWebXRCanvas: React.FC<GenerativeWebXRProps> = ({ eegData }) => {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh', background: 'radial-gradient(circle at center, #0a0a1a 0%, #000000 100%)' }}>
       <button 
@@ -155,7 +158,7 @@ export const GenerativeWebXRCanvas: React.FC = () => {
       
       <Canvas camera={{ position: [0, 1.5, 2], fov: 60 }}>
         <XR store={store}>
-          <AtmosphericScene />
+          <AtmosphericScene eegData={eegData} />
         </XR>
       </Canvas>
     </div>

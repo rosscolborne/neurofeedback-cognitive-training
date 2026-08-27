@@ -683,6 +683,7 @@ export class EEGEngine {
           thetaBetaRatio: 0,
           coherence: 0,
           inZone: false,
+          zoneScore: 0,
           signalQuality: 'good',
           channelQuality: this.channelQuality,
           batteryLevel: this.batteryLevel,
@@ -694,15 +695,21 @@ export class EEGEngine {
       this.noiseSeed += dt * 0.5;
       this.demoTimeElapsed += dt;
 
-      // Loop every 15 seconds. 0-10s ramp up to 100, 10-15s poor state.
-      const cycleTime = this.demoTimeElapsed % 15;
-      if (cycleTime < 10) {
-        this.userFocus = 50 + (cycleTime / 10) * 50;
-        this.userCalm = 50 + (cycleTime / 10) * 50;
-      } else {
-        this.userFocus = 30;
-        this.userCalm = 30;
-      }
+      // Ornstein-Uhlenbeck process for smoothed random walk
+      // dx = theta * (mu - x) * dt + sigma * dW
+      const thetaVal = 0.2; // Mean reversion speed
+      const mu = 65;        // Mean target state
+      const sigma = 18;     // Volatility
+
+      const dW1 = (Math.random() - 0.5) * 2 * Math.sqrt(dt);
+      const dW2 = (Math.random() - 0.5) * 2 * Math.sqrt(dt);
+      
+      this.userFocus += thetaVal * (mu - this.userFocus) * dt + sigma * dW1;
+      this.userCalm += thetaVal * (mu - this.userCalm) * dt + sigma * dW2;
+      
+      // Keep within bounds
+      this.userFocus = Math.max(10, Math.min(90, this.userFocus));
+      this.userCalm = Math.max(10, Math.min(90, this.userCalm));
 
       const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
       const calmNorm = Math.max(0, Math.min(100, this.userCalm)) / 100;
@@ -749,29 +756,37 @@ export class EEGEngine {
     const thetaBetaRatio = Math.round((bands.theta / Math.max(0.1, bands.beta)) * 100) / 100;
 
     let inZone = false;
+    let zoneScore = 0.0;
+    
     switch (this.currentProtocol) {
       case 'theta-beta-ratio':
         inZone = thetaBetaRatio <= this.targetThreshold;
+        zoneScore = Math.max(0, Math.min(1, 1 - (thetaBetaRatio - this.targetThreshold) / 1.5));
         break;
       case 'smr-enhancement':
         inZone = bands.smr >= this.targetThreshold;
+        zoneScore = Math.max(0, Math.min(1, (bands.smr - this.targetThreshold + 1.5) / 3.0));
         break;
       case 'alpha-enhancement':
         inZone = bands.alpha >= this.targetThreshold;
+        zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
         break;
       case 'alpha-theta-crossover':
         inZone = bands.theta >= bands.alpha * this.targetThreshold;
+        zoneScore = Math.max(0, Math.min(1, (bands.theta / Math.max(0.1, bands.alpha) - this.targetThreshold + 0.5) / 1.5));
         break;
       case 'beta-downtraining':
         inZone = bands.beta <= this.targetThreshold;
+        zoneScore = Math.max(0, Math.min(1, 1 - (bands.beta - this.targetThreshold) / 5.0));
         break;
       case 'individualized-upper-alpha':
         if (this.individualBaselineModel) {
           const paf = this.individualBaselineModel.alphaPeakHz;
-          // Target above PAF (upper alpha)
           inZone = bands.alpha >= (paf + 1.0);
+          zoneScore = Math.max(0, Math.min(1, (bands.alpha - paf + 1.0) / 4.0));
         } else {
           inZone = bands.alpha >= this.targetThreshold;
+          zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
         }
         break;
     }
@@ -812,6 +827,7 @@ export class EEGEngine {
       thetaBetaRatio,
       coherence,
       inZone,
+      zoneScore,
       signalQuality: overallQuality,
       channelQuality: this.channelQuality,
       batteryLevel: this.batteryLevel,

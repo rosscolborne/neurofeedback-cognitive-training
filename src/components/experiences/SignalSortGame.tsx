@@ -56,6 +56,7 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
 
       const smr = eegData?.bands.smr || 6.5;
       const inZone = eegData?.inZone ?? false;
+      const zoneScore = eegData?.zoneScore ?? (inZone ? 1 : 0);
       const smrRatio = Math.max(0.2, Math.min(1.0, (smr - 4) / 8));
 
       // Background
@@ -109,13 +110,13 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
       // Update and draw orbs
       orbsRef.current.forEach(orb => {
         if (!isPaused && !orb.collected) {
-          // Falling speed influenced by stillness (higher SMR = smoother guided trajectory)
-          const speed = 100 + smrRatio * 60;
+          // Falling speed influenced by stillness (higher SMR = slower/smoother trajectory)
+          const speed = 160 - smrRatio * 80;
           orb.y += dt * speed;
 
-          // Magnetic pull into the correct sorting basket when brain is in SMR zone
-          if (inZone) {
-            orb.x += (orb.targetX - orb.x) * (dt * 3.5);
+          // Magnetic pull into the correct sorting basket scales with zoneScore
+          if (zoneScore > 0) {
+            orb.x += (orb.targetX - orb.x) * (dt * 3.5 * zoneScore);
           }
 
           // Check if reached basket
@@ -138,9 +139,9 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
           ctx.fillStyle = orb.color;
           ctx.fill();
 
-          if (orb.isTarget && inZone) {
+          if (orb.isTarget && zoneScore > 0.5) {
             // Glowing aura on target shapes during high SMR stillness
-            ctx.strokeStyle = 'rgba(232, 150, 122, 0.6)';
+            ctx.strokeStyle = `rgba(232, 150, 122, ${0.6 * zoneScore})`;
             ctx.lineWidth = 4;
             ctx.stroke();
           }
