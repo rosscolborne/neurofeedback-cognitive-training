@@ -11,6 +11,9 @@ import { RhythmLockGame } from '../experiences/RhythmLockGame';
 import { MediaModePlayer } from '../experiences/MediaModePlayer';
 import { SoundscapePlayer } from '../experiences/SoundscapePlayer';
 import { MandalaBreathing } from '../experiences/MandalaBreathing';
+import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
+import { SpatialAudioMode } from '../experiences/SpatialAudioMode';
+import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { Play, Pause, Wifi, Sparkles, Volume2, VolumeX, ShieldCheck, Activity } from 'lucide-react';
 
@@ -477,6 +480,15 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           )}
           {selectedExperience === 'mandala' && (
             <MandalaBreathing eegData={eegData} isPaused={isPaused} />
+          )}
+          {selectedExperience === 'immersive-3d' && (
+            <GenerativeWebXRCanvas eegData={eegData} isPaused={isPaused} />
+          )}
+          {selectedExperience === 'spatial-audio' && (
+            <SpatialAudioMode eegData={eegData} isPaused={isPaused} />
+          )}
+          {selectedExperience === 'narrative-story' && (
+            <NarrativeTherapyMode eegData={eegData} isPaused={isPaused} />
           )}
         </div>
 
