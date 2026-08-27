@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EEGDataPoint } from '../../types';
 import { Play, Link, Video, AlertCircle } from 'lucide-react';
 
@@ -10,17 +10,17 @@ interface MediaModeProps {
 const VIDEO_CHANNELS = [
   {
     title: 'Earth & Alpine Wilderness (4K Relax)',
-    videoUrl: 'https://media.w3.org/2010/05/sintel/trailer.mp4',
+    videoUrl: 'https://res.cloudinary.com/demo/video/upload/v1642599496/elephants.mp4',
     category: 'Nature & Calm',
   },
   {
     title: 'Deep Space & Galactic Nebulae',
-    videoUrl: 'https://media.w3.org/2010/05/bunny/trailer.mp4',
+    videoUrl: 'https://res.cloudinary.com/demo/video/upload/v1648028723/rooster.mp4',
     category: 'Curiosity & Focus',
   },
   {
     title: 'Ocean Waves & Marine Life',
-    videoUrl: 'https://media.w3.org/2010/05/video/movie_300.mp4',
+    videoUrl: 'https://res.cloudinary.com/demo/video/upload/v1648028825/dog.mp4',
     category: 'Alpha Meditation',
   },
 ];
@@ -29,8 +29,20 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
   const [activeVideo, setActiveVideo] = useState(VIDEO_CHANNELS[0]);
   const [customUrl, setCustomUrl] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
   const inZone = eegData?.inZone ?? true;
   const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isPaused) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play().catch(e => console.error("AutoPlay failed:", e));
+      }
+    }
+  }, [isPaused, activeVideo]);
 
   const handleLoadCustom = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,12 +73,14 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
       {/* Video Viewport Layer */}
       <div style={{ position: 'relative', flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
         <video
+          ref={videoRef}
           key={activeVideo.videoUrl}
           src={activeVideo.videoUrl}
           autoPlay
           loop
           muted
           playsInline
+          crossOrigin="anonymous"
           controls={false}
           style={{
             width: '100%',
@@ -74,7 +88,6 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
             objectFit: 'cover',
             filter: `brightness(${0.4 + 0.6 * zoneScore}) contrast(${0.85 + 0.15 * zoneScore})`,
             transition: 'filter 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
-            pointerEvents: isPaused ? 'none' : 'auto',
           }}
         />
 
