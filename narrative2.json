@@ -1,0 +1,1170 @@
+{
+  "meta": {
+    "count": 1778,
+    "db_response_time_ms": 13,
+    "page": 1,
+    "per_page": 1,
+    "groups_count": null,
+    "x_query": {
+      "oql": "works where title has (biofeedback storytelling or interactive narrative)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "join": "or",
+            "filters": [
+              {
+                "column_id": "display_name.search",
+                "value": "biofeedback storytelling",
+                "operator": "has"
+              },
+              {
+                "column_id": "display_name.search",
+                "value": "interactive narrative",
+                "operator": "has"
+              }
+            ]
+          }
+        ]
+      },
+      "url": "/works?filter=display_name.search:biofeedback storytelling|interactive narrative&per_page=1&page=1"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W1992043772",
+      "doi": "https://doi.org/10.5860/choice.39-1975",
+      "title": "Narrative as virtual reality: immersion and interactivity in literature and electronic media",
+      "display_name": "Narrative as virtual reality: immersion and interactivity in literature and electronic media",
+      "publication_year": 2001,
+      "publication_date": "2001-12-01",
+      "ids": {
+        "openalex": "https://openalex.org/W1992043772",
+        "doi": "https://doi.org/10.5860/choice.39-1975",
+        "mag": "1992043772"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.5860/choice.39-1975",
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.5860/choice.39-1975",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S2764375719",
+          "display_name": "Choice Reviews Online",
+          "issn_l": "0009-4978",
+          "issn": [
+            "0009-4978",
+            "1523-8253",
+            "1943-5975"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310316146",
+          "host_organization_name": "Association of College and Research Libraries",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310316146",
+            "https://openalex.org/P4310315903"
+          ],
+          "host_organization_lineage_names": [
+            "Association of College and Research Libraries",
+            "American Library Association"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Choice Reviews Online",
+        "raw_type": "journal-article"
+      },
+      "type": "book-review",
+      "indexed_in": [
+        "crossref"
+      ],
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "authorships": [],
+      "institutions": [],
+      "countries_distinct_count": 0,
+      "institutions_distinct_count": 0,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": null,
+      "apc_paid": null,
+      "fwci": null,
+      "has_fulltext": false,
+      "cited_by_count": 1073,
+      "citation_normalized_percentile": null,
+      "cited_by_percentile_year": null,
+      "biblio": {
+        "volume": "39",
+        "issue": "04",
+        "first_page": "39",
+        "last_page": "1975"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T12377",
+        "display_name": "Digital Humanities and Scholarship",
+        "score": 0.9763000011444092,
+        "subfield": {
+          "id": "https://openalex.org/subfields/1208",
+          "display_name": "Literature and Literary Theory"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/12",
+          "display_name": "Arts and Humanities"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/2",
+          "display_name": "Social Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T12377",
+          "display_name": "Digital Humanities and Scholarship",
+          "score": 0.9763000011444092,
+          "subfield": {
+            "id": "https://openalex.org/subfields/1208",
+            "display_name": "Literature and Literary Theory"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/12",
+            "display_name": "Arts and Humanities"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11197",
+          "display_name": "Digital Games and Media",
+          "score": 0.9746000170707703,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3312",
+            "display_name": "Sociology and Political Science"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/33",
+            "display_name": "Social Sciences"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11574",
+          "display_name": "Artificial Intelligence in Games",
+          "score": 0.9277999997138977,
+          "subfield": {
+            "id": "https://openalex.org/subfields/1702",
+            "display_name": "Artificial Intelligence"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/17",
+            "display_name": "Computer Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/immersion",
+          "display_name": "Immersion (mathematics)",
+          "score": 0.9016107320785522
+        },
+        {
+          "id": "https://openalex.org/keywords/interactivity",
+          "display_name": "Interactivity",
+          "score": 0.8641971349716187
+        },
+        {
+          "id": "https://openalex.org/keywords/narrative",
+          "display_name": "Narrative",
+          "score": 0.8170371055603027
+        },
+        {
+          "id": "https://openalex.org/keywords/virtual-reality",
+          "display_name": "Virtual reality",
+          "score": 0.5602867007255554
+        },
+        {
+          "id": "https://openalex.org/keywords/electronic-media",
+          "display_name": "Electronic media",
+          "score": 0.529952883720398
+        },
+        {
+          "id": "https://openalex.org/keywords/multimedia",
+          "display_name": "Multimedia",
+          "score": 0.44109785556793213
+        },
+        {
+          "id": "https://openalex.org/keywords/aesthetics",
+          "display_name": "Aesthetics",
+          "score": 0.35632702708244324
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.35073190927505493
+        },
+        {
+          "id": "https://openalex.org/keywords/art",
+          "display_name": "Art",
+          "score": 0.35054993629455566
+        },
+        {
+          "id": "https://openalex.org/keywords/literature",
+          "display_name": "Literature",
+          "score": 0.23066425323486328
+        },
+        {
+          "id": "https://openalex.org/keywords/human\u2013computer-interaction",
+          "display_name": "Human\u2013computer interaction",
+          "score": 0.19689813256263733
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C199068039",
+          "wikidata": "https://www.wikidata.org/wiki/Q574523",
+          "display_name": "Immersion (mathematics)",
+          "level": 2,
+          "score": 0.9016107320785522
+        },
+        {
+          "id": "https://openalex.org/C144430266",
+          "wikidata": "https://www.wikidata.org/wiki/Q839721",
+          "display_name": "Interactivity",
+          "level": 2,
+          "score": 0.8641971349716187
+        },
+        {
+          "id": "https://openalex.org/C199033989",
+          "wikidata": "https://www.wikidata.org/wiki/Q1318295",
+          "display_name": "Narrative",
+          "level": 2,
+          "score": 0.8170371055603027
+        },
+        {
+          "id": "https://openalex.org/C194969405",
+          "wikidata": "https://www.wikidata.org/wiki/Q170519",
+          "display_name": "Virtual reality",
+          "level": 2,
+          "score": 0.5602867007255554
+        },
+        {
+          "id": "https://openalex.org/C117774814",
+          "wikidata": "https://www.wikidata.org/wiki/Q1209283",
+          "display_name": "Electronic media",
+          "level": 2,
+          "score": 0.529952883720398
+        },
+        {
+          "id": "https://openalex.org/C49774154",
+          "wikidata": "https://www.wikidata.org/wiki/Q131765",
+          "display_name": "Multimedia",
+          "level": 1,
+          "score": 0.44109785556793213
+        },
+        {
+          "id": "https://openalex.org/C107038049",
+          "wikidata": "https://www.wikidata.org/wiki/Q35986",
+          "display_name": "Aesthetics",
+          "level": 1,
+          "score": 0.35632702708244324
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.35073190927505493
+        },
+        {
+          "id": "https://openalex.org/C142362112",
+          "wikidata": "https://www.wikidata.org/wiki/Q735",
+          "display_name": "Art",
+          "level": 0,
+          "score": 0.35054993629455566
+        },
+        {
+          "id": "https://openalex.org/C124952713",
+          "wikidata": "https://www.wikidata.org/wiki/Q8242",
+          "display_name": "Literature",
+          "level": 1,
+          "score": 0.23066425323486328
+        },
+        {
+          "id": "https://openalex.org/C107457646",
+          "wikidata": "https://www.wikidata.org/wiki/Q207434",
+          "display_name": "Human\u2013computer interaction",
+          "level": 1,
+          "score": 0.19689813256263733
+        },
+        {
+          "id": "https://openalex.org/C33923547",
+          "wikidata": "https://www.wikidata.org/wiki/Q395",
+          "display_name": "Mathematics",
+          "level": 0,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C202444582",
+          "wikidata": "https://www.wikidata.org/wiki/Q837863",
+          "display_name": "Pure mathematics",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [],
+      "locations_count": 1,
+      "locations": [
+        {
+          "id": "doi:10.5860/choice.39-1975",
+          "is_oa": false,
+          "landing_page_url": "https://doi.org/10.5860/choice.39-1975",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S2764375719",
+            "display_name": "Choice Reviews Online",
+            "issn_l": "0009-4978",
+            "issn": [
+              "0009-4978",
+              "1523-8253",
+              "1943-5975"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310316146",
+            "host_organization_name": "Association of College and Research Libraries",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310316146",
+              "https://openalex.org/P4310315903"
+            ],
+            "host_organization_lineage_names": [
+              "Association of College and Research Libraries",
+              "American Library Association"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Choice Reviews Online",
+          "raw_type": "journal-article"
+        }
+      ],
+      "best_oa_location": null,
+      "sustainable_development_goals": [
+        {
+          "score": 0.9200000166893005,
+          "display_name": "Quality Education",
+          "id": "https://metadata.un.org/sdg/4"
+        }
+      ],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "grobid_xml": false,
+        "pdf": false
+      },
+      "content_urls": null,
+      "referenced_works_count": 0,
+      "referenced_works": [],
+      "related_works": [
+        "https://openalex.org/W2066308633",
+        "https://openalex.org/W2378132701",
+        "https://openalex.org/W3000714840",
+        "https://openalex.org/W2902011785",
+        "https://openalex.org/W2075956514",
+        "https://openalex.org/W2969274546",
+        "https://openalex.org/W2017424540",
+        "https://openalex.org/W3178192039",
+        "https://openalex.org/W2746925882",
+        "https://openalex.org/W4379656179"
+      ],
+      "abstract_inverted_index": {
+        "From": [
+          0
+        ],
+        "the": [
+          1,
+          23,
+          30,
+          45,
+          87,
+          103,
+          123,
+          130,
+          134,
+          156,
+          201,
+          219,
+          232,
+          250,
+          264,
+          268,
+          281,
+          292
+        ],
+        "Publisher:\r\nIs": [
+          2
+        ],
+        "there": [
+          3
+        ],
+        "a": [
+          4,
+          12,
+          17,
+          64,
+          71,
+          80,
+          93,
+          111,
+          241,
+          252
+        ],
+        "significant": [
+          5
+        ],
+        "difference": [
+          6
+        ],
+        "in": [
+          7,
+          11,
+          16,
+          40,
+          57,
+          70,
+          225,
+          235,
+          263
+        ],
+        "attitude": [
+          8
+        ],
+        "between": [
+          9,
+          240
+        ],
+        "immersion": [
+          10,
+          15,
+          106
+        ],
+        "game": [
+          13
+        ],
+        "and": [
+          14,
+          55,
+          60,
+          107,
+          122,
+          145,
+          150,
+          187,
+          209,
+          255,
+          275,
+          288,
+          291,
+          299
+        ],
+        "movie": [
+          18
+        ],
+        "or": [
+          19,
+          192
+        ],
+        "novel?": [
+          20
+        ],
+        "What": [
+          21
+        ],
+        "are": [
+          22,
+          76,
+          159
+        ],
+        "new": [
+          24,
+          124
+        ],
+        "possibilities": [
+          25
+        ],
+        "for": [
+          26,
+          74,
+          95
+        ],
+        "representation": [
+          27
+        ],
+        "offered": [
+          28
+        ],
+        "by": [
+          29,
+          48,
+          129,
+          206,
+          249
+        ],
+        "emerging": [
+          31
+        ],
+        "technology": [
+          32
+        ],
+        "of": [
+          33,
+          66,
+          89,
+          105,
+          113,
+          133,
+          180,
+          221,
+          231,
+          283,
+          294
+        ],
+        "virtual": [
+          176
+        ],
+        "reality?": [
+          35
+        ],
+        "As": [
+          36,
+          216
+        ],
+        "Marie-Laure": [
+          37
+        ],
+        "Ryan": [
+          38,
+          78,
+          217,
+          270
+        ],
+        "demonstrates": [
+          39
+        ],
+        "Narrative": [
+          41,
+          98,
+          289
+        ],
+        "as": [
+          42,
+          92,
+          99,
+          139
+        ],
+        "Virtual": [
+          43,
+          100
+        ],
+        "Reality,": [
+          44
+        ],
+        "questions": [
+          46
+        ],
+        "raised": [
+          47
+        ],
+        "new,": [
+          49
+        ],
+        "interactive": [
+          50,
+          143,
+          197,
+          214
+        ],
+        "technologies": [
+          51
+        ],
+        "have": [
+          52
+        ],
+        "their": [
+          53
+        ],
+        "precursors": [
+          54
+        ],
+        "echoes": [
+          56
+        ],
+        "pre-electronic": [
+          58
+        ],
+        "literary": [
+          59,
+          120,
+          168,
+          237
+        ],
+        "artistic": [
+          61
+        ],
+        "traditions.": [
+          62
+        ],
+        "Formerly": [
+          63
+        ],
+        "culture": [
+          65,
+          81
+        ],
+        "immersive": [
+          67
+        ],
+        "ideals\u0097getting": [
+          68
+        ],
+        "lost": [
+          69
+        ],
+        "good": [
+          72
+        ],
+        "book,": [
+          73
+        ],
+        "example\u0097we": [
+          75
+        ],
+        "becoming,": [
+          77
+        ],
+        "claims,": [
+          79
+        ],
+        "more": [
+          82
+        ],
+        "concerned": [
+          83
+        ],
+        "with": [
+          84
+        ],
+        "interactivity.": [
+          85
+        ],
+        "Approaching": [
+          86
+        ],
+        "idea": [
+          88
+        ],
+        "reality": [
+          91
+        ],
+        "metaphor": [
+          94
+        ],
+        "total": [
+          96
+        ],
+        "art,": [
+          97,
+          149
+        ],
+        "Reality": [
+          101
+        ],
+        "applies": [
+          102
+        ],
+        "concepts": [
+          104
+        ],
+        "interactivity": [
+          108
+        ],
+        "to": [
+          109,
+          195
+        ],
+        "develop": [
+          110
+        ],
+        "phenomenology": [
+          112
+        ],
+        "reading.": [
+          114
+        ],
+        "\r\nRyan's": [
+          115
+        ],
+        "analysis": [
+          116
+        ],
+        "encompasses": [
+          117
+        ],
+        "both": [
+          118
+        ],
+        "traditional": [
+          119,
+          222
+        ],
+        "narratives": [
+          121
+        ],
+        "textual": [
+          125
+        ],
+        "genres": [
+          126
+        ],
+        "made": [
+          127
+        ],
+        "possible": [
+          128
+        ],
+        "electronic": [
+          131,
+          141
+        ],
+        "revolution": [
+          132
+        ],
+        "past": [
+          135
+        ],
+        "few": [
+          136
+        ],
+        "years,": [
+          137
+        ],
+        "such": [
+          138
+        ],
+        "hypertext,": [
+          140
+        ],
+        "poetry,": [
+          142
+        ],
+        "movies": [
+          144
+        ],
+        "drama,": [
+          146
+        ],
+        "digital": [
+          147,
+          226
+        ],
+        "installation": [
+          148
+        ],
+        "computer": [
+          151
+        ],
+        "role-playing": [
+          152
+        ],
+        "games.": [
+          153
+        ],
+        "Interspersed": [
+          154
+        ],
+        "among": [
+          155
+        ],
+        "book's": [
+          157
+        ],
+        "chapters": [
+          158
+        ],
+        "several": [
+          160
+        ],
+        "interludes": [
+          161
+        ],
+        "that": [
+          162,
+          170,
+          245,
+          260
+        ],
+        "focus": [
+          163
+        ],
+        "exclusively": [
+          164
+        ],
+        "on": [
+          165
+        ],
+        "either": [
+          166
+        ],
+        "key": [
+          167
+        ],
+        "texts": [
+          169
+        ],
+        "foreshadow": [
+          171
+        ],
+        "what": [
+          172
+        ],
+        "we": [
+          173
+        ],
+        "now": [
+          174
+        ],
+        "call": [
+          175
+        ],
+        "reality,": [
+          177
+        ],
+        "including": [
+          178
+        ],
+        "those": [
+          179
+        ],
+        "Baudelaire,": [
+          181
+        ],
+        "Huysmans,": [
+          182
+        ],
+        "Ignatius": [
+          183
+        ],
+        "de": [
+          184
+        ],
+        "Loyola,": [
+          185
+        ],
+        "Calvino,": [
+          186
+        ],
+        "science-fiction": [
+          188
+        ],
+        "author": [
+          189,
+          282
+        ],
+        "Neal": [
+          190
+        ],
+        "Stephenson,": [
+          191
+        ],
+        "recent": [
+          193
+        ],
+        "efforts": [
+          194
+        ],
+        "produce": [
+          196
+        ],
+        "art": [
+          198
+        ],
+        "forms,": [
+          199
+        ],
+        "like": [
+          200
+        ],
+        "hypertext": [
+          202
+        ],
+        "novel": [
+          203
+        ],
+        "Twelve": [
+          204
+        ],
+        "Blue,": [
+          205
+        ],
+        "Michael": [
+          207
+        ],
+        "Joyce,": [
+          208
+        ],
+        "I'm": [
+          210
+        ],
+        "Your": [
+          211
+        ],
+        "Man,": [
+          212
+        ],
+        "an": [
+          213,
+          256,
+          272
+        ],
+        "movie.": [
+          215
+        ],
+        "considers": [
+          218
+        ],
+        "fate": [
+          220
+        ],
+        "narrative": [
+          223
+        ],
+        "patterns": [
+          224
+        ],
+        "culture,": [
+          227
+        ],
+        "she": [
+          228
+        ],
+        "revisits": [
+          229
+        ],
+        "one": [
+          230
+        ],
+        "central": [
+          233
+        ],
+        "issues": [
+          234
+        ],
+        "modern": [
+          236
+        ],
+        "theory\u0097the": [
+          238
+        ],
+        "opposition": [
+          239
+        ],
+        "presumably": [
+          242
+        ],
+        "passive": [
+          243
+        ],
+        "reading": [
+          244,
+          259
+        ],
+        "is": [
+          246,
+          271,
+          280
+        ],
+        "taken": [
+          247
+        ],
+        "over": [
+          248
+        ],
+        "world": [
+          251
+        ],
+        "text": [
+          253
+        ],
+        "represents": [
+          254
+        ],
+        "active,": [
+          257
+        ],
+        "deconstructive": [
+          258
+        ],
+        "imaginatively": [
+          261
+        ],
+        "participates": [
+          262
+        ],
+        "text's": [
+          265
+        ],
+        "creation.": [
+          266
+        ],
+        "\r\n\r\nAbout": [
+          267
+        ],
+        "Author:\r\nMarie-Laure": [
+          269
+        ],
+        "independent": [
+          273
+        ],
+        "scholar": [
+          274
+        ],
+        "former": [
+          276
+        ],
+        "software": [
+          277
+        ],
+        "consultant.": [
+          278
+        ],
+        "She": [
+          279
+        ],
+        "Possible": [
+          284
+        ],
+        "Worlds,": [
+          285
+        ],
+        "Artificial": [
+          286
+        ],
+        "Intelligence,": [
+          287
+        ],
+        "Theory": [
+          290
+        ],
+        "editor": [
+          293
+        ],
+        "Cyberspace": [
+          295
+        ],
+        "Textuality:": [
+          296
+        ],
+        "Computer": [
+          297
+        ],
+        "Technology": [
+          298
+        ],
+        "Literary": [
+          300
+        ],
+        "Theory.": [
+          301
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2025,
+          "cited_by_count": 28
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 43
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 69
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 54
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 81
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 77
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 129
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 62
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 57
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 43
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 45
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 30
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 37
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 58
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2016-06-24T00:00:00"
+    }
+  ],
+  "group_by": []
+}

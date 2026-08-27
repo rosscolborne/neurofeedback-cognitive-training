@@ -1,0 +1,1670 @@
+{
+  "meta": {
+    "count": 97,
+    "db_response_time_ms": 12,
+    "page": 1,
+    "per_page": 1,
+    "groups_count": null,
+    "x_query": {
+      "oql": "works where title has (virtual reality neurofeedback)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "column_id": "display_name.search",
+            "value": "virtual reality neurofeedback",
+            "operator": "has"
+          }
+        ]
+      },
+      "url": "/works?filter=display_name.search:virtual reality neurofeedback&per_page=1&page=1"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W2952436042",
+      "doi": "https://doi.org/10.3389/fnhum.2019.00210",
+      "title": "Effects of a Brain-Computer Interface With Virtual Reality (VR) Neurofeedback: A Pilot Study in Chronic Stroke Patients",
+      "display_name": "Effects of a Brain-Computer Interface With Virtual Reality (VR) Neurofeedback: A Pilot Study in Chronic Stroke Patients",
+      "publication_year": 2019,
+      "publication_date": "2019-06-19",
+      "ids": {
+        "openalex": "https://openalex.org/W2952436042",
+        "doi": "https://doi.org/10.3389/fnhum.2019.00210",
+        "mag": "2952436042",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/31275126"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.3389/fnhum.2019.00210",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.3389/fnhum.2019.00210",
+        "pdf_url": "https://www.frontiersin.org/articles/10.3389/fnhum.2019.00210/pdf",
+        "source": {
+          "id": "https://openalex.org/S146364893",
+          "display_name": "Frontiers in Human Neuroscience",
+          "issn_l": "1662-5161",
+          "issn": [
+            "1662-5161"
+          ],
+          "is_oa": true,
+          "is_in_doaj": true,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320527",
+          "host_organization_name": "Frontiers Media",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320527"
+          ],
+          "host_organization_lineage_names": [
+            "Frontiers Media"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Frontiers in Human Neuroscience",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "doaj",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_url": "https://www.frontiersin.org/articles/10.3389/fnhum.2019.00210/pdf",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5068837454",
+            "display_name": "Athanasios Vourvopoulos",
+            "orcid": "https://orcid.org/0000-0001-9676-8599"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": true,
+          "raw_author_name": "Athanasios Vourvopoulos",
+          "raw_affiliation_strings": [
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5078928949",
+            "display_name": "Octavio Marin Pardo",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Octavio Marin Pardo",
+          "raw_affiliation_strings": [
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5087876632",
+            "display_name": "St\u00e9phanie Lefebvre",
+            "orcid": "https://orcid.org/0000-0003-4833-2197"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "St\u00e9phanie Lefebvre",
+          "raw_affiliation_strings": [
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5059150423",
+            "display_name": "Meghan Neureither",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Meghan Neureither",
+          "raw_affiliation_strings": [
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5101560320",
+            "display_name": "David Salda\u00f1a",
+            "orcid": "https://orcid.org/0000-0001-9378-629X"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "David Saldana",
+          "raw_affiliation_strings": [
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5059143373",
+            "display_name": "Esther Jahng",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Esther Jahng",
+          "raw_affiliation_strings": [
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5039882545",
+            "display_name": "Sook\u2010Lei Liew",
+            "orcid": "https://orcid.org/0000-0001-5935-4215"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1174212",
+              "display_name": "University of Southern California",
+              "ror": "https://ror.org/03taz7m60",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": true,
+          "raw_author_name": "Sook-Lei Liew",
+          "raw_affiliation_strings": [
+            "Department of Neurology, Stevens Neuroimaging and Informatics Institute, University of Southern California, Los Angeles, CA, United States",
+            "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Neurology, Stevens Neuroimaging and Informatics Institute, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Neural Plasticity and Neurorehabilitation Laboratory, Occupational Science and Occupational Therapy, University of Southern California, Los Angeles, CA, United States",
+              "institution_ids": [
+                "https://openalex.org/I1174212"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 1,
+      "institutions_distinct_count": 1,
+      "corresponding_author_ids": [
+        "https://openalex.org/A5039882545",
+        "https://openalex.org/A5068837454"
+      ],
+      "corresponding_institution_ids": [
+        "https://openalex.org/I1174212"
+      ],
+      "apc_list": {
+        "value": 3150,
+        "currency": "CHF",
+        "value_usd": 3801
+      },
+      "apc_paid": {
+        "value": 3150,
+        "currency": "CHF",
+        "value_usd": 3801
+      },
+      "fwci": 7.1465,
+      "has_fulltext": true,
+      "cited_by_count": 147,
+      "citation_normalized_percentile": {
+        "value": 0.97989519,
+        "is_in_top_1_percent": false,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 97,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "13",
+        "issue": null,
+        "first_page": "210",
+        "last_page": "210"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10429",
+        "display_name": "EEG and Brain-Computer Interfaces",
+        "score": 1.0,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2805",
+          "display_name": "Cognitive Neuroscience"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/28",
+          "display_name": "Neuroscience"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/1",
+          "display_name": "Life Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10429",
+          "display_name": "EEG and Brain-Computer Interfaces",
+          "score": 1.0,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2805",
+            "display_name": "Cognitive Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10510",
+          "display_name": "Stroke Rehabilitation and Recovery",
+          "score": 0.9993000030517578,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2742",
+            "display_name": "Rehabilitation"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10784",
+          "display_name": "Muscle activation and electromyography studies",
+          "score": 0.9973000288009644,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2204",
+            "display_name": "Biomedical Engineering"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/22",
+            "display_name": "Engineering"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/neurofeedback",
+          "display_name": "Neurofeedback",
+          "score": 0.8484905958175659
+        },
+        {
+          "id": "https://openalex.org/keywords/brain\u2013computer-interface",
+          "display_name": "Brain\u2013computer interface",
+          "score": 0.7865205407142639
+        },
+        {
+          "id": "https://openalex.org/keywords/physical-medicine-and-rehabilitation",
+          "display_name": "Physical medicine and rehabilitation",
+          "score": 0.73873370885849
+        },
+        {
+          "id": "https://openalex.org/keywords/rehabilitation",
+          "display_name": "Rehabilitation",
+          "score": 0.7115573883056641
+        },
+        {
+          "id": "https://openalex.org/keywords/motor-imagery",
+          "display_name": "Motor imagery",
+          "score": 0.6239579319953918
+        },
+        {
+          "id": "https://openalex.org/keywords/virtual-reality",
+          "display_name": "Virtual reality",
+          "score": 0.6049113869667053
+        },
+        {
+          "id": "https://openalex.org/keywords/stroke",
+          "display_name": "Stroke (engine)",
+          "score": 0.5912001132965088
+        },
+        {
+          "id": "https://openalex.org/keywords/electroencephalography",
+          "display_name": "Electroencephalography",
+          "score": 0.5575300455093384
+        },
+        {
+          "id": "https://openalex.org/keywords/electromyography",
+          "display_name": "Electromyography",
+          "score": 0.5486385226249695
+        },
+        {
+          "id": "https://openalex.org/keywords/chronic-stroke",
+          "display_name": "Chronic stroke",
+          "score": 0.5349546670913696
+        },
+        {
+          "id": "https://openalex.org/keywords/psychology",
+          "display_name": "Psychology",
+          "score": 0.5214792490005493
+        },
+        {
+          "id": "https://openalex.org/keywords/motor-impairment",
+          "display_name": "Motor impairment",
+          "score": 0.4543338418006897
+        },
+        {
+          "id": "https://openalex.org/keywords/neurorehabilitation",
+          "display_name": "Neurorehabilitation",
+          "score": 0.4524666965007782
+        },
+        {
+          "id": "https://openalex.org/keywords/medicine",
+          "display_name": "Medicine",
+          "score": 0.31454795598983765
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.22930559515953064
+        },
+        {
+          "id": "https://openalex.org/keywords/neuroscience",
+          "display_name": "Neuroscience",
+          "score": 0.20407810807228088
+        },
+        {
+          "id": "https://openalex.org/keywords/human\u2013computer-interaction",
+          "display_name": "Human\u2013computer interaction",
+          "score": 0.16280555725097656
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C2434490",
+          "wikidata": "https://www.wikidata.org/wiki/Q1306920",
+          "display_name": "Neurofeedback",
+          "level": 3,
+          "score": 0.8484905958175659
+        },
+        {
+          "id": "https://openalex.org/C173201364",
+          "wikidata": "https://www.wikidata.org/wiki/Q897410",
+          "display_name": "Brain\u2013computer interface",
+          "level": 3,
+          "score": 0.7865205407142639
+        },
+        {
+          "id": "https://openalex.org/C99508421",
+          "wikidata": "https://www.wikidata.org/wiki/Q2678675",
+          "display_name": "Physical medicine and rehabilitation",
+          "level": 1,
+          "score": 0.73873370885849
+        },
+        {
+          "id": "https://openalex.org/C2778818304",
+          "wikidata": "https://www.wikidata.org/wiki/Q1819478",
+          "display_name": "Rehabilitation",
+          "level": 2,
+          "score": 0.7115573883056641
+        },
+        {
+          "id": "https://openalex.org/C54808283",
+          "wikidata": "https://www.wikidata.org/wiki/Q6918191",
+          "display_name": "Motor imagery",
+          "level": 4,
+          "score": 0.6239579319953918
+        },
+        {
+          "id": "https://openalex.org/C194969405",
+          "wikidata": "https://www.wikidata.org/wiki/Q170519",
+          "display_name": "Virtual reality",
+          "level": 2,
+          "score": 0.6049113869667053
+        },
+        {
+          "id": "https://openalex.org/C2780645631",
+          "wikidata": "https://www.wikidata.org/wiki/Q671554",
+          "display_name": "Stroke (engine)",
+          "level": 2,
+          "score": 0.5912001132965088
+        },
+        {
+          "id": "https://openalex.org/C522805319",
+          "wikidata": "https://www.wikidata.org/wiki/Q179965",
+          "display_name": "Electroencephalography",
+          "level": 2,
+          "score": 0.5575300455093384
+        },
+        {
+          "id": "https://openalex.org/C2777515770",
+          "wikidata": "https://www.wikidata.org/wiki/Q507369",
+          "display_name": "Electromyography",
+          "level": 2,
+          "score": 0.5486385226249695
+        },
+        {
+          "id": "https://openalex.org/C3018579778",
+          "wikidata": "https://www.wikidata.org/wiki/Q12202",
+          "display_name": "Chronic stroke",
+          "level": 3,
+          "score": 0.5349546670913696
+        },
+        {
+          "id": "https://openalex.org/C15744967",
+          "wikidata": "https://www.wikidata.org/wiki/Q9418",
+          "display_name": "Psychology",
+          "level": 0,
+          "score": 0.5214792490005493
+        },
+        {
+          "id": "https://openalex.org/C2989058681",
+          "wikidata": "https://www.wikidata.org/wiki/Q1179623",
+          "display_name": "Motor impairment",
+          "level": 2,
+          "score": 0.4543338418006897
+        },
+        {
+          "id": "https://openalex.org/C47177892",
+          "wikidata": "https://www.wikidata.org/wiki/Q3510101",
+          "display_name": "Neurorehabilitation",
+          "level": 3,
+          "score": 0.4524666965007782
+        },
+        {
+          "id": "https://openalex.org/C71924100",
+          "wikidata": "https://www.wikidata.org/wiki/Q11190",
+          "display_name": "Medicine",
+          "level": 0,
+          "score": 0.31454795598983765
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.22930559515953064
+        },
+        {
+          "id": "https://openalex.org/C169760540",
+          "wikidata": "https://www.wikidata.org/wiki/Q207011",
+          "display_name": "Neuroscience",
+          "level": 1,
+          "score": 0.20407810807228088
+        },
+        {
+          "id": "https://openalex.org/C107457646",
+          "wikidata": "https://www.wikidata.org/wiki/Q207434",
+          "display_name": "Human\u2013computer interaction",
+          "level": 1,
+          "score": 0.16280555725097656
+        },
+        {
+          "id": "https://openalex.org/C78519656",
+          "wikidata": "https://www.wikidata.org/wiki/Q101333",
+          "display_name": "Mechanical engineering",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C127413603",
+          "wikidata": "https://www.wikidata.org/wiki/Q11023",
+          "display_name": "Engineering",
+          "level": 0,
+          "score": 0.0
+        }
+      ],
+      "mesh": [],
+      "locations_count": 4,
+      "locations": [
+        {
+          "id": "doi:10.3389/fnhum.2019.00210",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.3389/fnhum.2019.00210",
+          "pdf_url": "https://www.frontiersin.org/articles/10.3389/fnhum.2019.00210/pdf",
+          "source": {
+            "id": "https://openalex.org/S146364893",
+            "display_name": "Frontiers in Human Neuroscience",
+            "issn_l": "1662-5161",
+            "issn": [
+              "1662-5161"
+            ],
+            "is_oa": true,
+            "is_in_doaj": true,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310320527",
+            "host_organization_name": "Frontiers Media",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310320527"
+            ],
+            "host_organization_lineage_names": [
+              "Frontiers Media"
+            ],
+            "type": "journal"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Frontiers in Human Neuroscience",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:31275126",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/31275126",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Frontiers in human neuroscience",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:pubmedcentral.nih.gov:6593205",
+          "is_oa": true,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/6593205",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S2764455111",
+            "display_name": "PubMed Central",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": true,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Front Hum Neurosci",
+          "raw_type": "Text"
+        },
+        {
+          "id": "pmh:oai:doaj.org/article:686c591c84344841903f9644a13d0370",
+          "is_oa": false,
+          "landing_page_url": "https://doaj.org/article/686c591c84344841903f9644a13d0370",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401280",
+            "display_name": "DOAJ (DOAJ: Directory of Open Access Journals)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": null,
+            "host_organization_name": null,
+            "host_organization_lineage": [],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Frontiers in Human Neuroscience, Vol 13 (2019)",
+          "raw_type": "article"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.3389/fnhum.2019.00210",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.3389/fnhum.2019.00210",
+        "pdf_url": "https://www.frontiersin.org/articles/10.3389/fnhum.2019.00210/pdf",
+        "source": {
+          "id": "https://openalex.org/S146364893",
+          "display_name": "Frontiers in Human Neuroscience",
+          "issn_l": "1662-5161",
+          "issn": [
+            "1662-5161"
+          ],
+          "is_oa": true,
+          "is_in_doaj": true,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320527",
+          "host_organization_name": "Frontiers Media",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320527"
+          ],
+          "host_organization_lineage_names": [
+            "Frontiers Media"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Frontiers in Human Neuroscience",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [],
+      "awards": [
+        {
+          "id": "https://openalex.org/G1011807626",
+          "display_name": "Big Data Neuroimaging to Predict Motor Behavior After Stroke",
+          "funder_award_id": "3k01hd091283-02s1",
+          "funder_id": "https://openalex.org/F4320332161",
+          "funder_display_name": "National Institutes of Health"
+        },
+        {
+          "id": "https://openalex.org/G1281611712",
+          "display_name": null,
+          "funder_award_id": "W911NNF-14-D-0005",
+          "funder_id": "https://openalex.org/F4320338281",
+          "funder_display_name": "Army Research Office"
+        },
+        {
+          "id": "https://openalex.org/G2035603297",
+          "display_name": "Big Data Neuroimaging to Predict Motor Behavior After Stroke",
+          "funder_award_id": "5k01hd091283-04",
+          "funder_id": "https://openalex.org/F4320332161",
+          "funder_display_name": "National Institutes of Health"
+        },
+        {
+          "id": "https://openalex.org/G2823640320",
+          "display_name": null,
+          "funder_award_id": "16IRG26960017",
+          "funder_id": "https://openalex.org/F4320332161",
+          "funder_display_name": "National Institutes of Health"
+        },
+        {
+          "id": "https://openalex.org/G3320279205",
+          "display_name": null,
+          "funder_award_id": "K01 HD091283",
+          "funder_id": "https://openalex.org/F4320337611",
+          "funder_display_name": "Eunice Kennedy Shriver National Institute of Child Health and Human Development"
+        },
+        {
+          "id": "https://openalex.org/G422467812",
+          "display_name": null,
+          "funder_award_id": "K01HD091283",
+          "funder_id": "https://openalex.org/F4320306230",
+          "funder_display_name": "American Heart Association"
+        },
+        {
+          "id": "https://openalex.org/G5320508680",
+          "display_name": null,
+          "funder_award_id": "D-0005",
+          "funder_id": "https://openalex.org/F4320332161",
+          "funder_display_name": "National Institutes of Health"
+        },
+        {
+          "id": "https://openalex.org/G8384642455",
+          "display_name": "REINVENT: A Closed-Loop VR Neurofeedback System for Motor Recovery after Severe Stroke",
+          "funder_award_id": "16IRG26960017",
+          "funder_id": "https://openalex.org/F4320306230",
+          "funder_display_name": "American Heart Association"
+        }
+      ],
+      "funders": [
+        {
+          "id": "https://openalex.org/F4320306230",
+          "display_name": "American Heart Association",
+          "ror": "https://ror.org/013kjyp64"
+        },
+        {
+          "id": "https://openalex.org/F4320325957",
+          "display_name": "Novo Nordisk Fonden",
+          "ror": "https://ror.org/04txyc737"
+        },
+        {
+          "id": "https://openalex.org/F4320332161",
+          "display_name": "National Institutes of Health",
+          "ror": "https://ror.org/01cwqze88"
+        },
+        {
+          "id": "https://openalex.org/F4320337611",
+          "display_name": "Eunice Kennedy Shriver National Institute of Child Health and Human Development",
+          "ror": "https://ror.org/04byxyr05"
+        },
+        {
+          "id": "https://openalex.org/F4320338281",
+          "display_name": "Army Research Office",
+          "ror": "https://ror.org/05epdh915"
+        }
+      ],
+      "has_content": {
+        "pdf": true,
+        "grobid_xml": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2952436042.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2952436042.grobid-xml"
+      },
+      "referenced_works_count": 62,
+      "referenced_works": [
+        "https://openalex.org/W1206391664",
+        "https://openalex.org/W1481951402",
+        "https://openalex.org/W1497431575",
+        "https://openalex.org/W1541876825",
+        "https://openalex.org/W1547702425",
+        "https://openalex.org/W1969137913",
+        "https://openalex.org/W1979847571",
+        "https://openalex.org/W1981546044",
+        "https://openalex.org/W1982976404",
+        "https://openalex.org/W1985178999",
+        "https://openalex.org/W1987539631",
+        "https://openalex.org/W1991557943",
+        "https://openalex.org/W1994877858",
+        "https://openalex.org/W2000227776",
+        "https://openalex.org/W2010371409",
+        "https://openalex.org/W2045695914",
+        "https://openalex.org/W2049166497",
+        "https://openalex.org/W2052684349",
+        "https://openalex.org/W2058364692",
+        "https://openalex.org/W2068378933",
+        "https://openalex.org/W2072805425",
+        "https://openalex.org/W2086974178",
+        "https://openalex.org/W2088564476",
+        "https://openalex.org/W2097588601",
+        "https://openalex.org/W2100741386",
+        "https://openalex.org/W2103731086",
+        "https://openalex.org/W2108790161",
+        "https://openalex.org/W2116308679",
+        "https://openalex.org/W2120497817",
+        "https://openalex.org/W2121860971",
+        "https://openalex.org/W2122048922",
+        "https://openalex.org/W2123181592",
+        "https://openalex.org/W2128495200",
+        "https://openalex.org/W2133561518",
+        "https://openalex.org/W2145839404",
+        "https://openalex.org/W2157765880",
+        "https://openalex.org/W2163611642",
+        "https://openalex.org/W2163801252",
+        "https://openalex.org/W2176015223",
+        "https://openalex.org/W2286906813",
+        "https://openalex.org/W2321409658",
+        "https://openalex.org/W2341130570",
+        "https://openalex.org/W2480525835",
+        "https://openalex.org/W2498264865",
+        "https://openalex.org/W2505007294",
+        "https://openalex.org/W2513825464",
+        "https://openalex.org/W2517624906",
+        "https://openalex.org/W2565840646",
+        "https://openalex.org/W2594379660",
+        "https://openalex.org/W2605183841",
+        "https://openalex.org/W2780579586",
+        "https://openalex.org/W2883519378",
+        "https://openalex.org/W2892596134",
+        "https://openalex.org/W2922354527",
+        "https://openalex.org/W3007529783",
+        "https://openalex.org/W3020838970",
+        "https://openalex.org/W4229677255",
+        "https://openalex.org/W4242017171",
+        "https://openalex.org/W4293084779",
+        "https://openalex.org/W4295135118",
+        "https://openalex.org/W6627949721",
+        "https://openalex.org/W6683344597"
+      ],
+      "related_works": [
+        "https://openalex.org/W2996330157",
+        "https://openalex.org/W2994817153",
+        "https://openalex.org/W2070915706",
+        "https://openalex.org/W2905872009",
+        "https://openalex.org/W3032957021",
+        "https://openalex.org/W3210087700",
+        "https://openalex.org/W2060460256",
+        "https://openalex.org/W4237890275",
+        "https://openalex.org/W4246435553",
+        "https://openalex.org/W2047090254"
+      ],
+      "abstract_inverted_index": {
+        "Rehabilitation": [
+          0
+        ],
+        "for": [
+          1
+        ],
+        "stroke": [
+          2,
+          118,
+          172,
+          188
+        ],
+        "patients": [
+          3,
+          41,
+          119,
+          202,
+          216
+        ],
+        "with": [
+          4,
+          203,
+          217
+        ],
+        "severe": [
+          5,
+          205
+        ],
+        "motor": [
+          6,
+          77,
+          82,
+          124,
+          195,
+          206
+        ],
+        "impairments": [
+          7,
+          207,
+          220
+        ],
+        "(e.g.,": [
+          8
+        ],
+        "inability": [
+          9
+        ],
+        "to": [
+          10,
+          33,
+          80,
+          98,
+          135,
+          162,
+          240,
+          253
+        ],
+        "perform": [
+          11
+        ],
+        "wrist": [
+          12
+        ],
+        "or": [
+          13
+        ],
+        "finger": [
+          14
+        ],
+        "extension": [
+          15
+        ],
+        "on": [
+          16,
+          115
+        ],
+        "the": [
+          17,
+          35,
+          87,
+          100,
+          139,
+          210,
+          241
+        ],
+        "affected": [
+          18,
+          36
+        ],
+        "side)": [
+          19
+        ],
+        "is": [
+          20,
+          237,
+          251
+        ],
+        "burdensome": [
+          21
+        ],
+        "and": [
+          22,
+          64,
+          104,
+          111,
+          137,
+          174,
+          260
+        ],
+        "difficult": [
+          23
+        ],
+        "because": [
+          24
+        ],
+        "most": [
+          25,
+          211
+        ],
+        "current": [
+          26
+        ],
+        "rehabilitation": [
+          27
+        ],
+        "options": [
+          28
+        ],
+        "require": [
+          29
+        ],
+        "some": [
+          30,
+          72
+        ],
+        "volitional": [
+          31,
+          46,
+          90
+        ],
+        "movement": [
+          32,
+          140
+        ],
+        "retrain": [
+          34
+        ],
+        "side.": [
+          37
+        ],
+        "However,": [
+          38
+        ],
+        "although": [
+          39,
+          234
+        ],
+        "these": [
+          40,
+          245,
+          255
+        ],
+        "participate": [
+          42
+        ],
+        "in": [
+          43,
+          74,
+          86,
+          106,
+          151,
+          257
+        ],
+        "therapy": [
+          44
+        ],
+        "requiring": [
+          45
+        ],
+        "movement,": [
+          47
+        ],
+        "previous": [
+          48
+        ],
+        "research": [
+          49,
+          250
+        ],
+        "has": [
+          50
+        ],
+        "shown": [
+          51,
+          71
+        ],
+        "that": [
+          52,
+          131,
+          176,
+          201,
+          233
+        ],
+        "they": [
+          53
+        ],
+        "may": [
+          54,
+          208,
+          221
+        ],
+        "receive": [
+          55
+        ],
+        "modest": [
+          56
+        ],
+        "benefits": [
+          57
+        ],
+        "from": [
+          58,
+          212,
+          224
+        ],
+        "action": [
+          59,
+          148
+        ],
+        "observation,": [
+          60
+        ],
+        "virtual": [
+          61,
+          143
+        ],
+        "reality": [
+          62
+        ],
+        "(VR),": [
+          63
+        ],
+        "brain-computer": [
+          65
+        ],
+        "interfaces": [
+          66
+        ],
+        "(BCIs).": [
+          67
+        ],
+        "These": [
+          68
+        ],
+        "approaches": [
+          69
+        ],
+        "have": [
+          70
+        ],
+        "success": [
+          73
+        ],
+        "strengthening": [
+          75
+        ],
+        "key": [
+          76
+        ],
+        "pathways": [
+          78
+        ],
+        "thought": [
+          79
+        ],
+        "support": [
+          81
+        ],
+        "recovery": [
+          83
+        ],
+        "after": [
+          84
+        ],
+        "stroke,": [
+          85
+        ],
+        "absence": [
+          88
+        ],
+        "of": [
+          89,
+          94,
+          102,
+          123,
+          141,
+          194
+        ],
+        "movement.": [
+          91
+        ],
+        "The": [
+          92
+        ],
+        "purpose": [
+          93
+        ],
+        "this": [
+          95,
+          177,
+          235
+        ],
+        "study": [
+          96
+        ],
+        "was": [
+          97
+        ],
+        "combine": [
+          99
+        ],
+        "principles": [
+          101
+        ],
+        "VR": [
+          103
+        ],
+        "BCI": [
+          105,
+          179
+        ],
+        "a": [
+          107,
+          142,
+          191,
+          258
+        ],
+        "platform": [
+          108
+        ],
+        "called": [
+          109
+        ],
+        "REINVENT": [
+          110,
+          126
+        ],
+        "assess": [
+          112
+        ],
+        "its": [
+          113
+        ],
+        "effects": [
+          114
+        ],
+        "four": [
+          116,
+          170
+        ],
+        "chronic": [
+          117,
+          171
+        ],
+        "across": [
+          120,
+          190
+        ],
+        "different": [
+          121
+        ],
+        "levels": [
+          122
+        ],
+        "impairment.": [
+          125
+        ],
+        "acquires": [
+          127
+        ],
+        "post-stroke": [
+          128
+        ],
+        "EEG": [
+          129
+        ],
+        "signals": [
+          130
+        ],
+        "indicate": [
+          132
+        ],
+        "an": [
+          133
+        ],
+        "attempt": [
+          134
+        ],
+        "move": [
+          136
+        ],
+        "drives": [
+          138
+        ],
+        "avatar": [
+          144
+        ],
+        "arm,": [
+          145
+        ],
+        "allowing": [
+          146
+        ],
+        "patient-driven": [
+          147
+        ],
+        "observation": [
+          149
+        ],
+        "neurofeedback": [
+          150
+        ],
+        "VR.": [
+          152
+        ],
+        "In": [
+          153
+        ],
+        "addition,": [
+          154
+        ],
+        "synchronous": [
+          155
+        ],
+        "electromyography": [
+          156
+        ],
+        "(EMG)": [
+          157
+        ],
+        "data": [
+          158
+        ],
+        "were": [
+          159
+        ],
+        "also": [
+          160
+        ],
+        "captured": [
+          161
+        ],
+        "monitor": [
+          163
+        ],
+        "overt": [
+          164
+        ],
+        "muscle": [
+          165
+        ],
+        "activity.": [
+          166
+        ],
+        "Here": [
+          167
+        ],
+        "we": [
+          168
+        ],
+        "tested": [
+          169
+        ],
+        "survivors": [
+          173,
+          189
+        ],
+        "show": [
+          175
+        ],
+        "EEG-based": [
+          178,
+          213
+        ],
+        "can": [
+          180
+        ],
+        "be": [
+          181
+        ],
+        "safely": [
+          182
+        ],
+        "used": [
+          183
+        ],
+        "over": [
+          184
+        ],
+        "repeated": [
+          185
+        ],
+        "sessions": [
+          186
+        ],
+        "by": [
+          187
+        ],
+        "wide": [
+          192
+        ],
+        "range": [
+          193
+        ],
+        "disabilities.": [
+          196
+        ],
+        "Finally,": [
+          197
+        ],
+        "individual": [
+          198
+        ],
+        "results": [
+          199,
+          246
+        ],
+        "suggest": [
+          200
+        ],
+        "more": [
+          204,
+          218,
+          223,
+          261
+        ],
+        "benefit": [
+          209,
+          222
+        ],
+        "neurofeedback,": [
+          214
+        ],
+        "while": [
+          215
+        ],
+        "mild": [
+          219
+        ],
+        "EMG-based": [
+          225
+        ],
+        "feedback,": [
+          226
+        ],
+        "harnessing": [
+          227
+        ],
+        "existing": [
+          228
+        ],
+        "sensorimotor": [
+          229
+        ],
+        "pathways.": [
+          230
+        ],
+        "We": [
+          231
+        ],
+        "note": [
+          232
+        ],
+        "work": [
+          236
+        ],
+        "promising,": [
+          238
+        ],
+        "due": [
+          239
+        ],
+        "small": [
+          242
+        ],
+        "sample": [
+          243
+        ],
+        "size,": [
+          244
+        ],
+        "are": [
+          247
+        ],
+        "preliminary.": [
+          248
+        ],
+        "Future": [
+          249
+        ],
+        "needed": [
+          252
+        ],
+        "confirm": [
+          254
+        ],
+        "findings": [
+          256
+        ],
+        "larger": [
+          259
+        ],
+        "diverse": [
+          262
+        ],
+        "population.": [
+          263
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 8
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 10
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 37
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 25
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 19
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 26
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 18
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 4
+        }
+      ],
+      "updated_date": "2026-08-21T09:56:20.448147",
+      "created_date": "2025-10-10T00:00:00"
+    }
+  ],
+  "group_by": []
+}

@@ -1,0 +1,5721 @@
+{
+  "meta": {
+    "count": 12793,
+    "db_response_time_ms": 52,
+    "page": 1,
+    "per_page": 3,
+    "groups_count": null,
+    "x_query": {
+      "oql": "works where full text has (narrative biofeedback)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "column_id": "fulltext.search",
+            "value": "narrative biofeedback",
+            "operator": "has"
+          }
+        ]
+      },
+      "url": "/works?filter=fulltext.search:narrative biofeedback&per_page=3&page=1"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W2182271449",
+      "doi": "https://doi.org/10.1002/14651858",
+      "title": "Cochrane Database of Systematic Reviews",
+      "display_name": "Cochrane Database of Systematic Reviews",
+      "publication_year": 2003,
+      "publication_date": "2003-11-20",
+      "ids": {
+        "openalex": "https://openalex.org/W2182271449",
+        "doi": "https://doi.org/10.1002/14651858",
+        "mag": "2182271449",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/38812899"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1002/14651858",
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.1002/14651858",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4210172715",
+          "display_name": "Cochrane Database of Systematic Reviews",
+          "issn_l": "1361-6137",
+          "issn": [
+            "1361-6137",
+            "1464-780X",
+            "1465-184X",
+            "1465-1858",
+            "1469-493X"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320990",
+          "host_organization_name": "Elsevier BV",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320990"
+          ],
+          "host_organization_lineage_names": [
+            "Elsevier BV"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": null,
+        "raw_type": "journal"
+      },
+      "type": "paratext",
+      "indexed_in": [
+        "crossref",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "green",
+        "oa_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7616025/pdf/EMS195990.pdf",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": null,
+            "display_name": "Elspeth Pennington",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210103766",
+              "display_name": "North West Ambulance Service NHS Trust",
+              "ror": "https://ror.org/018qh5t24",
+              "country_code": "GB",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210103766"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Elspeth Pennington",
+          "raw_affiliation_strings": [
+            "Research Paramedic, North West Ambulance Service NHS Trust"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Research Paramedic, North West Ambulance Service NHS Trust",
+              "institution_ids": [
+                "https://openalex.org/I4210103766"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5052442247",
+            "display_name": "Steve Bell",
+            "orcid": "https://orcid.org/0000-0003-3891-6623"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210103766",
+              "display_name": "North West Ambulance Service NHS Trust",
+              "ror": "https://ror.org/018qh5t24",
+              "country_code": "GB",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210103766"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Steve Bell",
+          "raw_affiliation_strings": [
+            "Consultant Paramedic, North West Ambulance Service NHS Trust"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Consultant Paramedic, North West Ambulance Service NHS Trust",
+              "institution_ids": [
+                "https://openalex.org/I4210103766"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5110842170",
+            "display_name": "J. Hill",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "James E Hill",
+          "raw_affiliation_strings": [
+            "University of Central Lancashire, Colne, Lancashire"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "University of Central Lancashire, Colne, Lancashire",
+              "institution_ids": []
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 1,
+      "institutions_distinct_count": 1,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": {
+        "value": 5100,
+        "currency": "USD",
+        "value_usd": 5100
+      },
+      "apc_paid": null,
+      "fwci": null,
+      "has_fulltext": true,
+      "cited_by_count": 11412,
+      "citation_normalized_percentile": null,
+      "cited_by_percentile_year": null,
+      "biblio": {
+        "volume": "15",
+        "issue": "6",
+        "first_page": "255",
+        "last_page": "259"
+      },
+      "is_retracted": false,
+      "is_paratext": true,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10830",
+        "display_name": "Airway Management and Intubation Techniques",
+        "score": 1.0,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2703",
+          "display_name": "Anesthesiology and Pain Medicine"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/27",
+          "display_name": "Medicine"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/4",
+          "display_name": "Health Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10830",
+          "display_name": "Airway Management and Intubation Techniques",
+          "score": 1.0,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2703",
+            "display_name": "Anesthesiology and Pain Medicine"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11260",
+          "display_name": "Tracheal and airway disorders",
+          "score": 0.9958000183105469,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2740",
+            "display_name": "Pulmonary and Respiratory Medicine"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11095",
+          "display_name": "Emergency and Acute Care Studies",
+          "score": 0.9947999715805054,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2711",
+            "display_name": "Emergency Medicine"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/laryngoscopes",
+          "display_name": "Laryngoscopes",
+          "score": 0.8806810975074768
+        },
+        {
+          "id": "https://openalex.org/keywords/endotracheal-intubation",
+          "display_name": "Endotracheal intubation",
+          "score": 0.7322993278503418
+        },
+        {
+          "id": "https://openalex.org/keywords/medicine",
+          "display_name": "Medicine",
+          "score": 0.7031017541885376
+        },
+        {
+          "id": "https://openalex.org/keywords/context",
+          "display_name": "Context (archaeology)",
+          "score": 0.6908312439918518
+        },
+        {
+          "id": "https://openalex.org/keywords/intubation",
+          "display_name": "Intubation",
+          "score": 0.6323907971382141
+        },
+        {
+          "id": "https://openalex.org/keywords/psychological-intervention",
+          "display_name": "Psychological intervention",
+          "score": 0.5641223788261414
+        },
+        {
+          "id": "https://openalex.org/keywords/systematic-review",
+          "display_name": "Systematic review",
+          "score": 0.5192123055458069
+        },
+        {
+          "id": "https://openalex.org/keywords/clinical-practice",
+          "display_name": "Clinical Practice",
+          "score": 0.5024476051330566
+        },
+        {
+          "id": "https://openalex.org/keywords/intensive-care-medicine",
+          "display_name": "Intensive care medicine",
+          "score": 0.4553234875202179
+        },
+        {
+          "id": "https://openalex.org/keywords/medical-emergency",
+          "display_name": "Medical emergency",
+          "score": 0.41160207986831665
+        },
+        {
+          "id": "https://openalex.org/keywords/medline",
+          "display_name": "MEDLINE",
+          "score": 0.3782700002193451
+        },
+        {
+          "id": "https://openalex.org/keywords/nursing",
+          "display_name": "Nursing",
+          "score": 0.23691391944885254
+        },
+        {
+          "id": "https://openalex.org/keywords/anesthesia",
+          "display_name": "Anesthesia",
+          "score": 0.19397565722465515
+        },
+        {
+          "id": "https://openalex.org/keywords/laryngoscopy",
+          "display_name": "Laryngoscopy",
+          "score": 0.08708849549293518
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C2910000593",
+          "wikidata": "https://www.wikidata.org/wiki/Q2357917",
+          "display_name": "Laryngoscopes",
+          "level": 4,
+          "score": 0.8806810975074768
+        },
+        {
+          "id": "https://openalex.org/C2991710064",
+          "wikidata": "https://www.wikidata.org/wiki/Q750195",
+          "display_name": "Endotracheal intubation",
+          "level": 3,
+          "score": 0.7322993278503418
+        },
+        {
+          "id": "https://openalex.org/C71924100",
+          "wikidata": "https://www.wikidata.org/wiki/Q11190",
+          "display_name": "Medicine",
+          "level": 0,
+          "score": 0.7031017541885376
+        },
+        {
+          "id": "https://openalex.org/C2779343474",
+          "wikidata": "https://www.wikidata.org/wiki/Q3109175",
+          "display_name": "Context (archaeology)",
+          "level": 2,
+          "score": 0.6908312439918518
+        },
+        {
+          "id": "https://openalex.org/C2778716859",
+          "wikidata": "https://www.wikidata.org/wiki/Q939018",
+          "display_name": "Intubation",
+          "level": 2,
+          "score": 0.6323907971382141
+        },
+        {
+          "id": "https://openalex.org/C27415008",
+          "wikidata": "https://www.wikidata.org/wiki/Q7256382",
+          "display_name": "Psychological intervention",
+          "level": 2,
+          "score": 0.5641223788261414
+        },
+        {
+          "id": "https://openalex.org/C189708586",
+          "wikidata": "https://www.wikidata.org/wiki/Q1504425",
+          "display_name": "Systematic review",
+          "level": 3,
+          "score": 0.5192123055458069
+        },
+        {
+          "id": "https://openalex.org/C2779974597",
+          "wikidata": "https://www.wikidata.org/wiki/Q28448986",
+          "display_name": "Clinical Practice",
+          "level": 2,
+          "score": 0.5024476051330566
+        },
+        {
+          "id": "https://openalex.org/C177713679",
+          "wikidata": "https://www.wikidata.org/wiki/Q679690",
+          "display_name": "Intensive care medicine",
+          "level": 1,
+          "score": 0.4553234875202179
+        },
+        {
+          "id": "https://openalex.org/C545542383",
+          "wikidata": "https://www.wikidata.org/wiki/Q2751242",
+          "display_name": "Medical emergency",
+          "level": 1,
+          "score": 0.41160207986831665
+        },
+        {
+          "id": "https://openalex.org/C2779473830",
+          "wikidata": "https://www.wikidata.org/wiki/Q1540899",
+          "display_name": "MEDLINE",
+          "level": 2,
+          "score": 0.3782700002193451
+        },
+        {
+          "id": "https://openalex.org/C159110408",
+          "wikidata": "https://www.wikidata.org/wiki/Q121176",
+          "display_name": "Nursing",
+          "level": 1,
+          "score": 0.23691391944885254
+        },
+        {
+          "id": "https://openalex.org/C42219234",
+          "wikidata": "https://www.wikidata.org/wiki/Q131130",
+          "display_name": "Anesthesia",
+          "level": 1,
+          "score": 0.19397565722465515
+        },
+        {
+          "id": "https://openalex.org/C2776888792",
+          "wikidata": "https://www.wikidata.org/wiki/Q2357917",
+          "display_name": "Laryngoscopy",
+          "level": 3,
+          "score": 0.08708849549293518
+        },
+        {
+          "id": "https://openalex.org/C151730666",
+          "wikidata": "https://www.wikidata.org/wiki/Q7205",
+          "display_name": "Paleontology",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C86803240",
+          "wikidata": "https://www.wikidata.org/wiki/Q420",
+          "display_name": "Biology",
+          "level": 0,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C199539241",
+          "wikidata": "https://www.wikidata.org/wiki/Q7748",
+          "display_name": "Law",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C17744445",
+          "wikidata": "https://www.wikidata.org/wiki/Q36442",
+          "display_name": "Political science",
+          "level": 0,
+          "score": 0.0
+        }
+      ],
+      "mesh": [],
+      "locations_count": 11,
+      "locations": [
+        {
+          "id": "doi:10.1002/14651858",
+          "is_oa": false,
+          "landing_page_url": "https://doi.org/10.1002/14651858",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4210172715",
+            "display_name": "Cochrane Database of Systematic Reviews",
+            "issn_l": "1361-6137",
+            "issn": [
+              "1361-6137",
+              "1464-780X",
+              "1465-184X",
+              "1465-1858",
+              "1469-493X"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310320990",
+            "host_organization_name": "Elsevier BV",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310320990"
+            ],
+            "host_organization_lineage_names": [
+              "Elsevier BV"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": null,
+          "raw_type": "journal"
+        },
+        {
+          "id": "pmid:38812899",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/38812899",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Journal of paramedic practice : the clinical monthly for emergency care professionals",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:clok.uclan.ac.uk:16769",
+          "is_oa": false,
+          "landing_page_url": "http://orcid.org/0000-0002-1216-5158>,",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306402361",
+            "display_name": "CLOK (University of Central Lancashire)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I185852735",
+            "host_organization_name": "University of Lancashire",
+            "host_organization_lineage": [
+              "https://openalex.org/I185852735"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "acceptedVersion",
+          "is_accepted": true,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Article"
+        },
+        {
+          "id": "pmh:oai:pubmedcentral.nih.gov:7616025",
+          "is_oa": true,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/7616025",
+          "pdf_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7616025/pdf/EMS195990.pdf",
+          "source": {
+            "id": "https://openalex.org/S2764455111",
+            "display_name": "PubMed Central",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": true,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "J Paramed Pract",
+          "raw_type": "Text"
+        },
+        {
+          "id": "pmh:oai:www.tara.tcd.ie:2262/107347",
+          "is_oa": true,
+          "landing_page_url": "http://hdl.handle.net/2262/107347",
+          "pdf_url": "https://www.tara.tcd.ie/bitstream/2262/107347/1/Battel_et_al-2024-Cochrane_Database_of_Systematic_Reviews.pdf",
+          "source": {
+            "id": "https://openalex.org/S4306400387",
+            "display_name": "Trinity's Access to Research Output (TARA) (Trinity College Dublin)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I205274468",
+            "host_organization_name": "Trinity College Dublin",
+            "host_organization_lineage": [
+              "https://openalex.org/I205274468"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by-nc-sa",
+          "license_id": "https://openalex.org/licenses/cc-by-nc-sa",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:espace.curtin.edu.au:20.500.11937/75643",
+          "is_oa": false,
+          "landing_page_url": "http://hdl.handle.net/20.500.11937/75643",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401790",
+            "display_name": "eSpace (Curtin University)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I205640436",
+            "host_organization_name": "Curtin University",
+            "host_organization_lineage": [
+              "https://openalex.org/I205640436"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:ir.lib.uwo.ca:tools-1286",
+          "is_oa": false,
+          "landing_page_url": "https://ir.lib.uwo.ca/tools/287",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400648",
+            "display_name": "Scholarship@Western (Western University)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I125749732",
+            "host_organization_name": "Western University",
+            "host_organization_lineage": [
+              "https://openalex.org/I125749732"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Data and Test Instruments",
+          "raw_type": "text"
+        },
+        {
+          "id": "pmh:oai:iris.unica.it:11584/336842",
+          "is_oa": false,
+          "landing_page_url": "https://hdl.handle.net/11584/336842",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4377196293",
+            "display_name": "UNICA IRIS Institutional Research Information System (University of Cagliari)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I172446870",
+            "host_organization_name": "University of Cagliari",
+            "host_organization_lineage": [
+              "https://openalex.org/I172446870"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "info:eu-repo/semantics/article"
+        },
+        {
+          "id": "pmh:oai:nottingham-repository.worktribe.com:788317",
+          "is_oa": true,
+          "landing_page_url": "https://nottingham-repository.worktribe.com/output/788317",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306402483",
+            "display_name": "Repository@Nottingham (University of Nottingham)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I142263535",
+            "host_organization_name": "University of Nottingham",
+            "host_organization_lineage": [
+              "https://openalex.org/I142263535"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:pure.atira.dk:openaire_cris_publications/cf1250d8-1fef-4788-aba7-0adb38abd0d3",
+          "is_oa": false,
+          "landing_page_url": "https://research.manchester.ac.uk/en/publications/cf1250d8-1fef-4788-aba7-0adb38abd0d3",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400662",
+            "display_name": "Research Explorer (The University of Manchester)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I28407311",
+            "host_organization_name": "University of Manchester",
+            "host_organization_lineage": [
+              "https://openalex.org/I28407311"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Wang, R 2020, 'Anti-IL-5 therapies for chronic obstructive pulmonary disease : Anti-IL-5 therapies for chronic obstructive pulmonary disease', Cochrane Database of Systematic Reviews. https://doi.org/10.1002/14651858",
+          "raw_type": "article"
+        },
+        {
+          "id": "pmh:oai:sdu.dk:openaire_cris_publications/cb3e014e-74fb-419d-bfde-7fe3d4eb1016",
+          "is_oa": true,
+          "landing_page_url": "https://portal.findresearcher.sdu.dk/da/publications/cb3e014e-74fb-419d-bfde-7fe3d4eb1016",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400423",
+            "display_name": "University of Southern Denmark Research Portal (University of Southern Denmark)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I177969490",
+            "host_organization_name": "University of Southern Denmark",
+            "host_organization_lineage": [
+              "https://openalex.org/I177969490"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "other-oa",
+          "license_id": "https://openalex.org/licenses/other-oa",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Markotic , F , Grgic , S , Poropat , G , Fox , A , Nikolova , D , Vukojevic , K , Jakobsen , J C &amp; Gluud , C 2020 , ' Antibiotics for adults with acute cholecystitis or acute cholangitis or both (Protocol) ' , Cochrane Database of Systematic Reviews , vol. 2020 , no. 6 , CD013646 , pp. CD013646 . https://doi.org/10.1002/14651858.CD013646",
+          "raw_type": null
+        }
+      ],
+      "best_oa_location": {
+        "id": "pmh:oai:pubmedcentral.nih.gov:7616025",
+        "is_oa": true,
+        "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/7616025",
+        "pdf_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7616025/pdf/EMS195990.pdf",
+        "source": {
+          "id": "https://openalex.org/S2764455111",
+          "display_name": "PubMed Central",
+          "issn_l": null,
+          "issn": null,
+          "is_oa": true,
+          "is_in_doaj": false,
+          "is_core": false,
+          "host_organization": "https://openalex.org/I1299303238",
+          "host_organization_name": "National Institutes of Health",
+          "host_organization_lineage": [
+            "https://openalex.org/I1299303238"
+          ],
+          "host_organization_lineage_names": [],
+          "type": "repository"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "submittedVersion",
+        "is_accepted": false,
+        "is_published": false,
+        "raw_source_name": "J Paramed Pract",
+        "raw_type": "Text"
+      },
+      "sustainable_development_goals": [
+        {
+          "id": "https://metadata.un.org/sdg/16",
+          "display_name": "Peace, Justice and strong institutions",
+          "score": 0.7900000214576721
+        }
+      ],
+      "awards": [
+        {
+          "id": "https://openalex.org/G1856172361",
+          "display_name": null,
+          "funder_award_id": "21133",
+          "funder_id": "https://openalex.org/F4320319985",
+          "funder_display_name": "Cancer Research UK"
+        },
+        {
+          "id": "https://openalex.org/G1876383076",
+          "display_name": "NIHR Senior Investigator Award",
+          "funder_award_id": "NF-SI-0617-10068",
+          "funder_id": "https://openalex.org/F4320319990",
+          "funder_display_name": "National Institute for Health and Care Research"
+        },
+        {
+          "id": "https://openalex.org/G5798829177",
+          "display_name": "Models of maternity care for women living socially complex lives: What works, for whom, and in what circumstances?",
+          "funder_award_id": "DRF-2017-10-033",
+          "funder_id": "https://openalex.org/F4320319990",
+          "funder_display_name": "National Institute for Health and Care Research"
+        },
+        {
+          "id": "https://openalex.org/G6248868631",
+          "display_name": null,
+          "funder_award_id": "NIHR200182",
+          "funder_id": "https://openalex.org/F4320319990",
+          "funder_display_name": "National Institute for Health and Care Research"
+        },
+        {
+          "id": "https://openalex.org/G6704655098",
+          "display_name": "Birth Cohort Study in Mongolia-Towards Solving Global Problems in the Maternal and Child Health",
+          "funder_award_id": "26305020",
+          "funder_id": "https://openalex.org/F4320334764",
+          "funder_display_name": "Japan Society for the Promotion of Science"
+        },
+        {
+          "id": "https://openalex.org/G7158253802",
+          "display_name": null,
+          "funder_award_id": "SP/05/001/18616",
+          "funder_id": "https://openalex.org/F4320319992",
+          "funder_display_name": "British Heart Foundation"
+        },
+        {
+          "id": "https://openalex.org/G727940591",
+          "display_name": "Develop the evidence base for Ear, Nose and Throat (ENT) medicine and surgery, ensuring new and current treatments in ENT are tested and evaluated so that patients can benefit from the best treatments in the field.",
+          "funder_award_id": "NIHR-RP-011-045",
+          "funder_id": "https://openalex.org/F4320319990",
+          "funder_display_name": "National Institute for Health and Care Research"
+        },
+        {
+          "id": "https://openalex.org/G7589365328",
+          "display_name": "The use of convalescent plasma to treat hospitalised and critically ill patients with COVID-19 disease",
+          "funder_award_id": "COVID-19-RECPLAS",
+          "funder_id": "https://openalex.org/F4320319990",
+          "funder_display_name": "National Institute for Health and Care Research"
+        }
+      ],
+      "funders": [
+        {
+          "id": "https://openalex.org/F4320312224",
+          "display_name": "North Carolina Pork Council",
+          "ror": "https://ror.org/02b1krb80"
+        },
+        {
+          "id": "https://openalex.org/F4320319985",
+          "display_name": "Cancer Research UK",
+          "ror": "https://ror.org/054225q67"
+        },
+        {
+          "id": "https://openalex.org/F4320319990",
+          "display_name": "National Institute for Health and Care Research",
+          "ror": "https://ror.org/0187kwz08"
+        },
+        {
+          "id": "https://openalex.org/F4320319992",
+          "display_name": "British Heart Foundation",
+          "ror": "https://ror.org/02wdwnk04"
+        },
+        {
+          "id": "https://openalex.org/F4320319994",
+          "display_name": "Department of Health and Social Care",
+          "ror": "https://ror.org/03sbpja79"
+        },
+        {
+          "id": "https://openalex.org/F4320320006",
+          "display_name": "Royal Society",
+          "ror": "https://ror.org/03wnrjx87"
+        },
+        {
+          "id": "https://openalex.org/F4320320217",
+          "display_name": "Marie Curie",
+          "ror": "https://ror.org/02aqv1x10"
+        },
+        {
+          "id": "https://openalex.org/F4320332161",
+          "display_name": "National Institutes of Health",
+          "ror": "https://ror.org/01cwqze88"
+        },
+        {
+          "id": "https://openalex.org/F4320332281",
+          "display_name": "Maryland Sea Grant, University of Maryland",
+          "ror": "https://ror.org/03db51w68"
+        },
+        {
+          "id": "https://openalex.org/F4320334311",
+          "display_name": "Center for Evolutionary Biology and Medicine, University of Pittsburgh",
+          "ror": null
+        },
+        {
+          "id": "https://openalex.org/F4320334764",
+          "display_name": "Japan Society for the Promotion of Science",
+          "ror": "https://ror.org/00hhkn466"
+        }
+      ],
+      "has_content": {
+        "grobid_xml": true,
+        "pdf": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2182271449.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2182271449.grobid-xml"
+      },
+      "referenced_works_count": 141,
+      "referenced_works": [
+        "https://openalex.org/W55453292",
+        "https://openalex.org/W96744481",
+        "https://openalex.org/W1486000670",
+        "https://openalex.org/W1490578302",
+        "https://openalex.org/W1503013760",
+        "https://openalex.org/W1528683178",
+        "https://openalex.org/W1533472770",
+        "https://openalex.org/W1535823036",
+        "https://openalex.org/W1556446511",
+        "https://openalex.org/W1562967275",
+        "https://openalex.org/W1841211243",
+        "https://openalex.org/W1924614200",
+        "https://openalex.org/W1964314813",
+        "https://openalex.org/W1971646678",
+        "https://openalex.org/W1973722655",
+        "https://openalex.org/W1973815343",
+        "https://openalex.org/W1978906563",
+        "https://openalex.org/W1983567231",
+        "https://openalex.org/W1984592139",
+        "https://openalex.org/W1984794043",
+        "https://openalex.org/W1985020513",
+        "https://openalex.org/W1986122796",
+        "https://openalex.org/W1986215651",
+        "https://openalex.org/W1986483500",
+        "https://openalex.org/W1988081502",
+        "https://openalex.org/W1988540170",
+        "https://openalex.org/W1992178412",
+        "https://openalex.org/W1996492782",
+        "https://openalex.org/W1996885396",
+        "https://openalex.org/W1999993331",
+        "https://openalex.org/W2001585848",
+        "https://openalex.org/W2001717618",
+        "https://openalex.org/W2001751369",
+        "https://openalex.org/W2001956321",
+        "https://openalex.org/W2002396272",
+        "https://openalex.org/W2002443275",
+        "https://openalex.org/W2005150989",
+        "https://openalex.org/W2005374086",
+        "https://openalex.org/W2007149428",
+        "https://openalex.org/W2007689247",
+        "https://openalex.org/W2008004063",
+        "https://openalex.org/W2009326492",
+        "https://openalex.org/W2010263117",
+        "https://openalex.org/W2011586047",
+        "https://openalex.org/W2013186536",
+        "https://openalex.org/W2014948121",
+        "https://openalex.org/W2017294588",
+        "https://openalex.org/W2019561281",
+        "https://openalex.org/W2020111136",
+        "https://openalex.org/W2026596500",
+        "https://openalex.org/W2027475954",
+        "https://openalex.org/W2028743553",
+        "https://openalex.org/W2029601739",
+        "https://openalex.org/W2032531048",
+        "https://openalex.org/W2036814749",
+        "https://openalex.org/W2040761545",
+        "https://openalex.org/W2042257768",
+        "https://openalex.org/W2043565183",
+        "https://openalex.org/W2044114971",
+        "https://openalex.org/W2046600515",
+        "https://openalex.org/W2046857153",
+        "https://openalex.org/W2050344640",
+        "https://openalex.org/W2056005983",
+        "https://openalex.org/W2058688535",
+        "https://openalex.org/W2061187478",
+        "https://openalex.org/W2062079142",
+        "https://openalex.org/W2062879339",
+        "https://openalex.org/W2062916989",
+        "https://openalex.org/W2065322500",
+        "https://openalex.org/W2065807335",
+        "https://openalex.org/W2067821762",
+        "https://openalex.org/W2076071300",
+        "https://openalex.org/W2078084133",
+        "https://openalex.org/W2079242764",
+        "https://openalex.org/W2091453881",
+        "https://openalex.org/W2093566442",
+        "https://openalex.org/W2095272995",
+        "https://openalex.org/W2098024737",
+        "https://openalex.org/W2098727265",
+        "https://openalex.org/W2099693159",
+        "https://openalex.org/W2099947481",
+        "https://openalex.org/W2101893401",
+        "https://openalex.org/W2108051304",
+        "https://openalex.org/W2109349187",
+        "https://openalex.org/W2110167247",
+        "https://openalex.org/W2116008028",
+        "https://openalex.org/W2116800859",
+        "https://openalex.org/W2117671500",
+        "https://openalex.org/W2133352646",
+        "https://openalex.org/W2134338262",
+        "https://openalex.org/W2135765357",
+        "https://openalex.org/W2136088547",
+        "https://openalex.org/W2138823261",
+        "https://openalex.org/W2142095560",
+        "https://openalex.org/W2143389478",
+        "https://openalex.org/W2146130674",
+        "https://openalex.org/W2146484568",
+        "https://openalex.org/W2148651450",
+        "https://openalex.org/W2149177957",
+        "https://openalex.org/W2154809068",
+        "https://openalex.org/W2157622607",
+        "https://openalex.org/W2159265173",
+        "https://openalex.org/W2162542412",
+        "https://openalex.org/W2164686685",
+        "https://openalex.org/W2166930051",
+        "https://openalex.org/W2173578770",
+        "https://openalex.org/W2179675989",
+        "https://openalex.org/W2185475930",
+        "https://openalex.org/W2238786570",
+        "https://openalex.org/W2254382434",
+        "https://openalex.org/W2265461936",
+        "https://openalex.org/W2313136738",
+        "https://openalex.org/W2316172905",
+        "https://openalex.org/W2322293067",
+        "https://openalex.org/W2324125498",
+        "https://openalex.org/W2327550906",
+        "https://openalex.org/W2331102377",
+        "https://openalex.org/W2334643912",
+        "https://openalex.org/W2334914963",
+        "https://openalex.org/W2342228817",
+        "https://openalex.org/W2376390361",
+        "https://openalex.org/W2394717295",
+        "https://openalex.org/W2401295251",
+        "https://openalex.org/W2403106935",
+        "https://openalex.org/W2408078889",
+        "https://openalex.org/W2410820057",
+        "https://openalex.org/W2413303521",
+        "https://openalex.org/W2474742694",
+        "https://openalex.org/W2496210074",
+        "https://openalex.org/W2550507245",
+        "https://openalex.org/W2612661750",
+        "https://openalex.org/W2756578555",
+        "https://openalex.org/W2805231522",
+        "https://openalex.org/W3021018066",
+        "https://openalex.org/W4223920998",
+        "https://openalex.org/W4225828184",
+        "https://openalex.org/W4229019714",
+        "https://openalex.org/W4233968854",
+        "https://openalex.org/W4236805817",
+        "https://openalex.org/W4242820255",
+        "https://openalex.org/W4311479044"
+      ],
+      "related_works": [
+        "https://openalex.org/W1558871143",
+        "https://openalex.org/W2791313199",
+        "https://openalex.org/W2127950342",
+        "https://openalex.org/W2048737222",
+        "https://openalex.org/W2139102915",
+        "https://openalex.org/W2083801748",
+        "https://openalex.org/W2336382574",
+        "https://openalex.org/W2487031048",
+        "https://openalex.org/W4390715372",
+        "https://openalex.org/W2897764790"
+      ],
+      "abstract_inverted_index": {
+        "The": [
+          0
+        ],
+        "safety": [
+          1,
+          23,
+          33
+        ],
+        "and": [
+          2,
+          52,
+          84
+        ],
+        "utility": [
+          3
+        ],
+        "of": [
+          4,
+          16,
+          24,
+          43,
+          92
+        ],
+        "endotracheal": [
+          5,
+          26
+        ],
+        "intubation": [
+          6
+        ],
+        "by": [
+          7,
+          50,
+          79
+        ],
+        "paramedics": [
+          8
+        ],
+        "in": [
+          9,
+          64,
+          89
+        ],
+        "the": [
+          10,
+          19,
+          22,
+          73,
+          77,
+          87,
+          90
+        ],
+        "United": [
+          11
+        ],
+        "Kingdom": [
+          12
+        ],
+        "is": [
+          13
+        ],
+        "a": [
+          14
+        ],
+        "matter": [
+          15
+        ],
+        "debate.": [
+          17
+        ],
+        "Considering": [
+          18
+        ],
+        "controversy": [
+          20
+        ],
+        "surrounding": [
+          21
+        ],
+        "paramedic-performed": [
+          25
+        ],
+        "intubation,": [
+          27
+        ],
+        "any": [
+          28
+        ],
+        "interventions": [
+          29
+        ],
+        "that": [
+          30
+        ],
+        "enhance": [
+          31
+        ],
+        "patient": [
+          32
+        ],
+        "should": [
+          34
+        ],
+        "be": [
+          35
+        ],
+        "evaluated": [
+          36
+        ],
+        "for": [
+          37
+        ],
+        "implementation": [
+          38
+        ],
+        "based": [
+          39
+        ],
+        "on": [
+          40
+        ],
+        "solid": [
+          41
+        ],
+        "evidence": [
+          42
+        ],
+        "their": [
+          44
+        ],
+        "effectiveness.": [
+          45
+        ],
+        "A": [
+          46
+        ],
+        "systematic": [
+          47
+        ],
+        "review": [
+          48,
+          78
+        ],
+        "performed": [
+          49
+        ],
+        "Hansel": [
+          51,
+          80
+        ],
+        "colleagues": [
+          53
+        ],
+        "(2022)": [
+          54,
+          83
+        ],
+        "sought": [
+          55
+        ],
+        "to": [
+          56,
+          70
+        ],
+        "assess": [
+          57
+        ],
+        "compare": [
+          58
+        ],
+        "video": [
+          59
+        ],
+        "laryngoscopes": [
+          60,
+          63
+        ],
+        "against": [
+          61
+        ],
+        "direct": [
+          62
+        ],
+        "clinical": [
+          65,
+          93
+        ],
+        "practice.": [
+          66,
+          94
+        ],
+        "This": [
+          67
+        ],
+        "commentary": [
+          68
+        ],
+        "aims": [
+          69
+        ],
+        "critically": [
+          71
+        ],
+        "appraise": [
+          72
+        ],
+        "methods": [
+          74
+        ],
+        "used": [
+          75
+        ],
+        "within": [
+          76
+        ],
+        "et": [
+          81
+        ],
+        "al": [
+          82
+        ],
+        "expand": [
+          85
+        ],
+        "upon": [
+          86
+        ],
+        "findings": [
+          88
+        ],
+        "context": [
+          91
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 161
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 414
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 820
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 1018
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 1083
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 913
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 993
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 822
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 768
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 693
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 603
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 538
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 430
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 379
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 249
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2016-06-24T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W2030235211",
+      "doi": "https://doi.org/10.1159/000355958",
+      "title": "Dialysis Dose and Intradialytic Hypotension: Results from the HEMO Study",
+      "display_name": "Dialysis Dose and Intradialytic Hypotension: Results from the HEMO Study",
+      "publication_year": 2013,
+      "publication_date": "2013-01-01",
+      "ids": {
+        "openalex": "https://openalex.org/W2030235211",
+        "doi": "https://doi.org/10.1159/000355958",
+        "mag": "2030235211",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/24192428"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1159/000355958",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1159/000355958",
+        "pdf_url": "https://www.karger.com/Article/Pdf/355958",
+        "source": {
+          "id": "https://openalex.org/S106979888",
+          "display_name": "American Journal of Nephrology",
+          "issn_l": "0250-8095",
+          "issn": [
+            "0250-8095",
+            "1421-9670"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310317820",
+          "host_organization_name": "Karger Publishers",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310317820"
+          ],
+          "host_organization_lineage_names": [
+            "Karger Publishers"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "American Journal of Nephrology",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "bronze",
+        "oa_url": "https://www.karger.com/Article/Pdf/355958",
+        "any_repository_has_fulltext": false
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5026748157",
+            "display_name": "Finnian R. Mc Causland",
+            "orcid": "https://orcid.org/0000-0002-0299-0533"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1283280774",
+              "display_name": "Brigham and Women's Hospital",
+              "ror": "https://ror.org/04b6nzv94",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I1283280774",
+                "https://openalex.org/I48633490"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210128217",
+              "display_name": "Metabolism and Renal Physiology",
+              "ror": "https://ror.org/0366b1491",
+              "country_code": "FR",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I1294671590",
+                "https://openalex.org/I1294671590",
+                "https://openalex.org/I154526488",
+                "https://openalex.org/I159885104",
+                "https://openalex.org/I204730241",
+                "https://openalex.org/I2746051580",
+                "https://openalex.org/I39804081",
+                "https://openalex.org/I4210096427",
+                "https://openalex.org/I4210128217"
+              ]
+            }
+          ],
+          "countries": [
+            "FR",
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Finnian R. Mc Causland",
+          "raw_affiliation_strings": [
+            "Renal Division, Brigham and Women's Hospital, Boston, Mass., USA",
+            "Renal Division and"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Renal Division, Brigham and Women's Hospital, Boston, Mass., USA",
+              "institution_ids": [
+                "https://openalex.org/I1283280774"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Renal Division and",
+              "institution_ids": [
+                "https://openalex.org/I4210128217"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5025097124",
+            "display_name": "Steven M. Brunelli",
+            "orcid": "https://orcid.org/0000-0001-8017-1069"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I136199984",
+              "display_name": "Harvard University",
+              "ror": "https://ror.org/03vek6s52",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I136199984"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210128217",
+              "display_name": "Metabolism and Renal Physiology",
+              "ror": "https://ror.org/0366b1491",
+              "country_code": "FR",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I1294671590",
+                "https://openalex.org/I1294671590",
+                "https://openalex.org/I154526488",
+                "https://openalex.org/I159885104",
+                "https://openalex.org/I204730241",
+                "https://openalex.org/I2746051580",
+                "https://openalex.org/I39804081",
+                "https://openalex.org/I4210096427",
+                "https://openalex.org/I4210128217"
+              ]
+            }
+          ],
+          "countries": [
+            "FR",
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Steven M. Brunelli",
+          "raw_affiliation_strings": [
+            "Harvard Medical School, Boston, Mass. , USA",
+            "Renal Division and"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Harvard Medical School, Boston, Mass. , USA",
+              "institution_ids": [
+                "https://openalex.org/I136199984"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Renal Division and",
+              "institution_ids": [
+                "https://openalex.org/I4210128217"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5064518665",
+            "display_name": "Sushrut S. Waikar",
+            "orcid": "https://orcid.org/0000-0003-4004-326X"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210128217",
+              "display_name": "Metabolism and Renal Physiology",
+              "ror": "https://ror.org/0366b1491",
+              "country_code": "FR",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I1294671590",
+                "https://openalex.org/I1294671590",
+                "https://openalex.org/I154526488",
+                "https://openalex.org/I159885104",
+                "https://openalex.org/I204730241",
+                "https://openalex.org/I2746051580",
+                "https://openalex.org/I39804081",
+                "https://openalex.org/I4210096427",
+                "https://openalex.org/I4210128217"
+              ]
+            }
+          ],
+          "countries": [
+            "FR"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Sushrut S. Waikar",
+          "raw_affiliation_strings": [
+            "Renal Division and"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Renal Division and",
+              "institution_ids": [
+                "https://openalex.org/I4210128217"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 2,
+      "institutions_distinct_count": 3,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": null,
+      "apc_paid": null,
+      "fwci": 100.9072,
+      "has_fulltext": true,
+      "cited_by_count": 2699,
+      "citation_normalized_percentile": {
+        "value": 0.99983754,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 97,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "38",
+        "issue": "5",
+        "first_page": "388",
+        "last_page": "396"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10291",
+        "display_name": "Dialysis and Renal Disease Management",
+        "score": 1.0,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2727",
+          "display_name": "Nephrology"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/27",
+          "display_name": "Medicine"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/4",
+          "display_name": "Health Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10291",
+          "display_name": "Dialysis and Renal Disease Management",
+          "score": 1.0,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2727",
+            "display_name": "Nephrology"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10641",
+          "display_name": "Central Venous Catheters and Hemodialysis",
+          "score": 0.9987000226974487,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3604",
+            "display_name": "Emergency Medical Services"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/36",
+            "display_name": "Health Professions"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11700",
+          "display_name": "Hemodynamic Monitoring and Therapy",
+          "score": 0.9969000220298767,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2746",
+            "display_name": "Surgery"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/medicine",
+          "display_name": "Medicine",
+          "score": 0.8955703973770142
+        },
+        {
+          "id": "https://openalex.org/keywords/hemodialysis",
+          "display_name": "Hemodialysis",
+          "score": 0.6968975067138672
+        },
+        {
+          "id": "https://openalex.org/keywords/odds-ratio",
+          "display_name": "Odds ratio",
+          "score": 0.6554469466209412
+        },
+        {
+          "id": "https://openalex.org/keywords/dialysis",
+          "display_name": "Dialysis",
+          "score": 0.6096187829971313
+        },
+        {
+          "id": "https://openalex.org/keywords/confidence-interval",
+          "display_name": "Confidence interval",
+          "score": 0.5548824667930603
+        },
+        {
+          "id": "https://openalex.org/keywords/internal-medicine",
+          "display_name": "Internal medicine",
+          "score": 0.4810333847999573
+        },
+        {
+          "id": "https://openalex.org/keywords/hemodynamics",
+          "display_name": "Hemodynamics",
+          "score": 0.429002046585083
+        },
+        {
+          "id": "https://openalex.org/keywords/anesthesia",
+          "display_name": "Anesthesia",
+          "score": 0.39334815740585327
+        },
+        {
+          "id": "https://openalex.org/keywords/cardiology",
+          "display_name": "Cardiology",
+          "score": 0.39267659187316895
+        },
+        {
+          "id": "https://openalex.org/keywords/urology",
+          "display_name": "Urology",
+          "score": 0.3750622868537903
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C71924100",
+          "wikidata": "https://www.wikidata.org/wiki/Q11190",
+          "display_name": "Medicine",
+          "level": 0,
+          "score": 0.8955703973770142
+        },
+        {
+          "id": "https://openalex.org/C2778063415",
+          "wikidata": "https://www.wikidata.org/wiki/Q391744",
+          "display_name": "Hemodialysis",
+          "level": 2,
+          "score": 0.6968975067138672
+        },
+        {
+          "id": "https://openalex.org/C156957248",
+          "wikidata": "https://www.wikidata.org/wiki/Q1862216",
+          "display_name": "Odds ratio",
+          "level": 2,
+          "score": 0.6554469466209412
+        },
+        {
+          "id": "https://openalex.org/C2779978075",
+          "wikidata": "https://www.wikidata.org/wiki/Q202301",
+          "display_name": "Dialysis",
+          "level": 2,
+          "score": 0.6096187829971313
+        },
+        {
+          "id": "https://openalex.org/C44249647",
+          "wikidata": "https://www.wikidata.org/wiki/Q208498",
+          "display_name": "Confidence interval",
+          "level": 2,
+          "score": 0.5548824667930603
+        },
+        {
+          "id": "https://openalex.org/C126322002",
+          "wikidata": "https://www.wikidata.org/wiki/Q11180",
+          "display_name": "Internal medicine",
+          "level": 1,
+          "score": 0.4810333847999573
+        },
+        {
+          "id": "https://openalex.org/C178853913",
+          "wikidata": "https://www.wikidata.org/wiki/Q1642137",
+          "display_name": "Hemodynamics",
+          "level": 2,
+          "score": 0.429002046585083
+        },
+        {
+          "id": "https://openalex.org/C42219234",
+          "wikidata": "https://www.wikidata.org/wiki/Q131130",
+          "display_name": "Anesthesia",
+          "level": 1,
+          "score": 0.39334815740585327
+        },
+        {
+          "id": "https://openalex.org/C164705383",
+          "wikidata": "https://www.wikidata.org/wiki/Q10379",
+          "display_name": "Cardiology",
+          "level": 1,
+          "score": 0.39267659187316895
+        },
+        {
+          "id": "https://openalex.org/C126894567",
+          "wikidata": "https://www.wikidata.org/wiki/Q105650",
+          "display_name": "Urology",
+          "level": 1,
+          "score": 0.3750622868537903
+        }
+      ],
+      "mesh": [
+        {
+          "descriptor_ui": "D000368",
+          "descriptor_name": "Aged",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000368",
+          "descriptor_name": "Aged",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000368",
+          "descriptor_name": "Aged",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D005260",
+          "descriptor_name": "Female",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D005260",
+          "descriptor_name": "Female",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D005260",
+          "descriptor_name": "Female",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006435",
+          "descriptor_name": "Renal Dialysis",
+          "qualifier_ui": "Q000009",
+          "qualifier_name": "adverse effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006435",
+          "descriptor_name": "Renal Dialysis",
+          "qualifier_ui": "Q000009",
+          "qualifier_name": "adverse effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006435",
+          "descriptor_name": "Renal Dialysis",
+          "qualifier_ui": "Q000009",
+          "qualifier_name": "adverse effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006439",
+          "descriptor_name": "Hemodynamics",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006439",
+          "descriptor_name": "Hemodynamics",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006439",
+          "descriptor_name": "Hemodynamics",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007022",
+          "descriptor_name": "Hypotension",
+          "qualifier_ui": "Q000209",
+          "qualifier_name": "etiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007022",
+          "descriptor_name": "Hypotension",
+          "qualifier_ui": "Q000209",
+          "qualifier_name": "etiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007022",
+          "descriptor_name": "Hypotension",
+          "qualifier_ui": "Q000209",
+          "qualifier_name": "etiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007022",
+          "descriptor_name": "Hypotension",
+          "qualifier_ui": "Q000517",
+          "qualifier_name": "prevention & control",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007022",
+          "descriptor_name": "Hypotension",
+          "qualifier_ui": "Q000517",
+          "qualifier_name": "prevention & control",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007022",
+          "descriptor_name": "Hypotension",
+          "qualifier_ui": "Q000517",
+          "qualifier_name": "prevention & control",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008297",
+          "descriptor_name": "Male",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008297",
+          "descriptor_name": "Male",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008297",
+          "descriptor_name": "Male",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008567",
+          "descriptor_name": "Membranes, Artificial",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008567",
+          "descriptor_name": "Membranes, Artificial",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008567",
+          "descriptor_name": "Membranes, Artificial",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008875",
+          "descriptor_name": "Middle Aged",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008875",
+          "descriptor_name": "Middle Aged",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008875",
+          "descriptor_name": "Middle Aged",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009994",
+          "descriptor_name": "Osmolar Concentration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009994",
+          "descriptor_name": "Osmolar Concentration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009994",
+          "descriptor_name": "Osmolar Concentration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009995",
+          "descriptor_name": "Osmosis",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009995",
+          "descriptor_name": "Osmosis",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009995",
+          "descriptor_name": "Osmosis",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011446",
+          "descriptor_name": "Prospective Studies",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011446",
+          "descriptor_name": "Prospective Studies",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011446",
+          "descriptor_name": "Prospective Studies",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D012306",
+          "descriptor_name": "Risk",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D012306",
+          "descriptor_name": "Risk",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D012306",
+          "descriptor_name": "Risk",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D014462",
+          "descriptor_name": "Ultrafiltration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D014462",
+          "descriptor_name": "Ultrafiltration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D014462",
+          "descriptor_name": "Ultrafiltration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015203",
+          "descriptor_name": "Reproducibility of Results",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015203",
+          "descriptor_name": "Reproducibility of Results",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015203",
+          "descriptor_name": "Reproducibility of Results",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015312",
+          "descriptor_name": "Hemodialysis Solutions",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015312",
+          "descriptor_name": "Hemodialysis Solutions",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015312",
+          "descriptor_name": "Hemodialysis Solutions",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015897",
+          "descriptor_name": "Comorbidity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015897",
+          "descriptor_name": "Comorbidity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015897",
+          "descriptor_name": "Comorbidity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016014",
+          "descriptor_name": "Linear Models",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016014",
+          "descriptor_name": "Linear Models",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016014",
+          "descriptor_name": "Linear Models",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016017",
+          "descriptor_name": "Odds Ratio",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016017",
+          "descriptor_name": "Odds Ratio",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016017",
+          "descriptor_name": "Odds Ratio",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D051437",
+          "descriptor_name": "Renal Insufficiency",
+          "qualifier_ui": "Q000503",
+          "qualifier_name": "physiopathology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D051437",
+          "descriptor_name": "Renal Insufficiency",
+          "qualifier_ui": "Q000503",
+          "qualifier_name": "physiopathology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D051437",
+          "descriptor_name": "Renal Insufficiency",
+          "qualifier_ui": "Q000503",
+          "qualifier_name": "physiopathology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D051437",
+          "descriptor_name": "Renal Insufficiency",
+          "qualifier_ui": "Q000628",
+          "qualifier_name": "therapy",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D051437",
+          "descriptor_name": "Renal Insufficiency",
+          "qualifier_ui": "Q000628",
+          "qualifier_name": "therapy",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D051437",
+          "descriptor_name": "Renal Insufficiency",
+          "qualifier_ui": "Q000628",
+          "qualifier_name": "therapy",
+          "is_major_topic": false
+        }
+      ],
+      "locations_count": 3,
+      "locations": [
+        {
+          "id": "doi:10.1159/000355958",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1159/000355958",
+          "pdf_url": "https://www.karger.com/Article/Pdf/355958",
+          "source": {
+            "id": "https://openalex.org/S106979888",
+            "display_name": "American Journal of Nephrology",
+            "issn_l": "0250-8095",
+            "issn": [
+              "0250-8095",
+              "1421-9670"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310317820",
+            "host_organization_name": "Karger Publishers",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310317820"
+            ],
+            "host_organization_lineage_names": [
+              "Karger Publishers"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "American Journal of Nephrology",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:24192428",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/24192428",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "American journal of nephrology",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:europepmc.org:3174942",
+          "is_oa": false,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/3904183",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400806",
+            "display_name": "Europe PMC (PubMed Central)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1303153112",
+            "host_organization_name": "European Bioinformatics Institute",
+            "host_organization_lineage": [
+              "https://openalex.org/I1303153112"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Text"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.1159/000355958",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1159/000355958",
+        "pdf_url": "https://www.karger.com/Article/Pdf/355958",
+        "source": {
+          "id": "https://openalex.org/S106979888",
+          "display_name": "American Journal of Nephrology",
+          "issn_l": "0250-8095",
+          "issn": [
+            "0250-8095",
+            "1421-9670"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310317820",
+          "host_organization_name": "Karger Publishers",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310317820"
+          ],
+          "host_organization_lineage_names": [
+            "Karger Publishers"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "American Journal of Nephrology",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [
+        {
+          "id": "https://metadata.un.org/sdg/3",
+          "display_name": "Good health and well-being",
+          "score": 0.7900000214576721
+        }
+      ],
+      "awards": [
+        {
+          "id": "https://openalex.org/G1056354480",
+          "display_name": null,
+          "funder_award_id": "U01 DK085660",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        },
+        {
+          "id": "https://openalex.org/G161527012",
+          "display_name": null,
+          "funder_award_id": "K23DK079056",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        },
+        {
+          "id": "https://openalex.org/G2494639119",
+          "display_name": null,
+          "funder_award_id": "R01 DK093574",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        },
+        {
+          "id": "https://openalex.org/G662143089",
+          "display_name": null,
+          "funder_award_id": "DK079056",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        },
+        {
+          "id": "https://openalex.org/G6717557475",
+          "display_name": null,
+          "funder_award_id": "K23DK075941",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        },
+        {
+          "id": "https://openalex.org/G795888954",
+          "display_name": null,
+          "funder_award_id": "DK093574",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        },
+        {
+          "id": "https://openalex.org/G7996487799",
+          "display_name": null,
+          "funder_award_id": "DK075941",
+          "funder_id": "https://openalex.org/F4320337357",
+          "funder_display_name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+        }
+      ],
+      "funders": [
+        {
+          "id": "https://openalex.org/F4320306605",
+          "display_name": "American Society of Nephrology",
+          "ror": "https://ror.org/014pcm848"
+        },
+        {
+          "id": "https://openalex.org/F4320337357",
+          "display_name": "National Institute of Diabetes and Digestive and Kidney Diseases",
+          "ror": "https://ror.org/00adh9b73"
+        }
+      ],
+      "has_content": {
+        "grobid_xml": true,
+        "pdf": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2030235211.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2030235211.grobid-xml"
+      },
+      "referenced_works_count": 42,
+      "referenced_works": [
+        "https://openalex.org/W1602938249",
+        "https://openalex.org/W1854187713",
+        "https://openalex.org/W1963603947",
+        "https://openalex.org/W1965312906",
+        "https://openalex.org/W1970270932",
+        "https://openalex.org/W1972976867",
+        "https://openalex.org/W1974291470",
+        "https://openalex.org/W1974983675",
+        "https://openalex.org/W1978136073",
+        "https://openalex.org/W1984282003",
+        "https://openalex.org/W1985408757",
+        "https://openalex.org/W1985843204",
+        "https://openalex.org/W1989186053",
+        "https://openalex.org/W1994413539",
+        "https://openalex.org/W1997277079",
+        "https://openalex.org/W2008102795",
+        "https://openalex.org/W2010302454",
+        "https://openalex.org/W2017651323",
+        "https://openalex.org/W2023494518",
+        "https://openalex.org/W2048927032",
+        "https://openalex.org/W2053929825",
+        "https://openalex.org/W2064838411",
+        "https://openalex.org/W2065848421",
+        "https://openalex.org/W2070309439",
+        "https://openalex.org/W2073289657",
+        "https://openalex.org/W2075536991",
+        "https://openalex.org/W2078491742",
+        "https://openalex.org/W2079018426",
+        "https://openalex.org/W2089177095",
+        "https://openalex.org/W2091981147",
+        "https://openalex.org/W2105986361",
+        "https://openalex.org/W2116905163",
+        "https://openalex.org/W2119711738",
+        "https://openalex.org/W2123301439",
+        "https://openalex.org/W2131645005",
+        "https://openalex.org/W2133533531",
+        "https://openalex.org/W2135255702",
+        "https://openalex.org/W2140912653",
+        "https://openalex.org/W2141390514",
+        "https://openalex.org/W2145066441",
+        "https://openalex.org/W2329679831",
+        "https://openalex.org/W2345629317"
+      ],
+      "related_works": [
+        "https://openalex.org/W1982619745",
+        "https://openalex.org/W2409031381",
+        "https://openalex.org/W4238363529",
+        "https://openalex.org/W2114056959",
+        "https://openalex.org/W2002325000",
+        "https://openalex.org/W2076929529",
+        "https://openalex.org/W2417545465",
+        "https://openalex.org/W1843463370",
+        "https://openalex.org/W2999586795",
+        "https://openalex.org/W4226053935"
+      ],
+      "abstract_inverted_index": {
+        "BACKGROUND:": [
+          0
+        ],
+        "Intradialytic": [
+          1,
+          126
+        ],
+        "hypotension": [
+          2
+        ],
+        "(IDH)": [
+          3
+        ],
+        "is": [
+          4,
+          7
+        ],
+        "common": [
+          5
+        ],
+        "and": [
+          6,
+          12,
+          33,
+          62,
+          93,
+          178,
+          196
+        ],
+        "associated": [
+          8,
+          184
+        ],
+        "with": [
+          9,
+          185,
+          216
+        ],
+        "increased": [
+          10,
+          218
+        ],
+        "morbidity": [
+          11
+        ],
+        "mortality": [
+          13
+        ],
+        "in": [
+          14,
+          35,
+          79,
+          132,
+          232,
+          240
+        ],
+        "chronic": [
+          15,
+          54
+        ],
+        "hemodialysis": [
+          16,
+          55
+        ],
+        "patients.": [
+          17
+        ],
+        "A": [
+          18
+        ],
+        "higher": [
+          19,
+          63
+        ],
+        "dialysis": [
+          20,
+          207
+        ],
+        "'dose'": [
+          21
+        ],
+        "may": [
+          22,
+          214,
+          235
+        ],
+        "generate": [
+          23
+        ],
+        "transient": [
+          24
+        ],
+        "intradialytic": [
+          25,
+          230
+        ],
+        "osmotic": [
+          26
+        ],
+        "gradients,": [
+          27
+        ],
+        "predisposing": [
+          28
+        ],
+        "to": [
+          29,
+          57,
+          70,
+          144,
+          157
+        ],
+        "intracellular": [
+          30
+        ],
+        "fluid": [
+          31
+        ],
+        "shifts": [
+          32
+        ],
+        "resulting": [
+          34
+        ],
+        "hypotension.": [
+          36
+        ],
+        "STUDY": [
+          37
+        ],
+        "DESIGN:": [
+          38
+        ],
+        "We": [
+          39
+        ],
+        "performed": [
+          40
+        ],
+        "a": [
+          41,
+          49,
+          148
+        ],
+        "post": [
+          42
+        ],
+        "hoc": [
+          43
+        ],
+        "analysis": [
+          44
+        ],
+        "of": [
+          45,
+          109,
+          118,
+          152,
+          180,
+          189,
+          220,
+          229
+        ],
+        "the": [
+          46,
+          107,
+          133,
+          225
+        ],
+        "HEMO": [
+          47
+        ],
+        "study,": [
+          48
+        ],
+        "multicenter": [
+          50
+        ],
+        "trial": [
+          51
+        ],
+        "that": [
+          52,
+          227
+        ],
+        "randomized": [
+          53,
+          143,
+          156
+        ],
+        "patients": [
+          56
+        ],
+        "high": [
+          58
+        ],
+        "versus": [
+          59,
+          64
+        ],
+        "standard": [
+          60,
+          158
+        ],
+        "Kt/V": [
+          61,
+          146,
+          159
+        ],
+        "lower": [
+          65,
+          171
+        ],
+        "membrane": [
+          66,
+          80
+        ],
+        "flux.": [
+          67
+        ],
+        "In": [
+          68
+        ],
+        "order": [
+          69
+        ],
+        "achieve": [
+          71
+        ],
+        "dose": [
+          72
+        ],
+        "targets,": [
+          73
+        ],
+        "per": [
+          74,
+          202
+        ],
+        "protocol,": [
+          75
+        ],
+        "adjustments": [
+          76
+        ],
+        "were": [
+          77,
+          98,
+          183
+        ],
+        "made": [
+          78
+        ],
+        "efficiency,": [
+          81
+        ],
+        "blood": [
+          82,
+          123
+        ],
+        "flow": [
+          83,
+          86
+        ],
+        "or": [
+          84,
+          121
+        ],
+        "dialysate": [
+          85
+        ],
+        "before": [
+          87
+        ],
+        "changing": [
+          88
+        ],
+        "session": [
+          89
+        ],
+        "length.": [
+          90
+        ],
+        "Detailed": [
+          91
+        ],
+        "hemodynamic": [
+          92,
+          242
+        ],
+        "urea": [
+          94,
+          177,
+          181
+        ],
+        "kinetic": [
+          95
+        ],
+        "modeling": [
+          96
+        ],
+        "data": [
+          97
+        ],
+        "abstracted": [
+          99
+        ],
+        "from": [
+          100
+        ],
+        "1,825": [
+          101
+        ],
+        "individuals.": [
+          102
+        ],
+        "The": [
+          103
+        ],
+        "primary": [
+          104
+        ],
+        "outcome": [
+          105
+        ],
+        "was": [
+          106
+        ],
+        "occurrence": [
+          108
+        ],
+        "hypotensive": [
+          110,
+          127
+        ],
+        "events": [
+          111,
+          128
+        ],
+        "necessitating": [
+          112
+        ],
+        "clinical": [
+          113
+        ],
+        "intervention": [
+          114
+        ],
+        "(saline": [
+          115
+        ],
+        "infusion,": [
+          116
+        ],
+        "lowering": [
+          117
+        ],
+        "ultrafiltration": [
+          119
+        ],
+        "rate": [
+          120,
+          179
+        ],
+        "reduced": [
+          122
+        ],
+        "flow).": [
+          124
+        ],
+        "RESULTS:": [
+          125
+        ],
+        "occurred": [
+          129
+        ],
+        "more": [
+          130
+        ],
+        "frequently": [
+          131
+        ],
+        "higher-Kt/V": [
+          134
+        ],
+        "group": [
+          135
+        ],
+        "(18.3": [
+          136
+        ],
+        "vs.": [
+          137,
+          170
+        ],
+        "16.8%;": [
+          138
+        ],
+        "p": [
+          139
+        ],
+        "<": [
+          140
+        ],
+        "0.001).": [
+          141
+        ],
+        "Participants": [
+          142
+        ],
+        "higher-target": [
+          145
+        ],
+        "had": [
+          147
+        ],
+        "greater": [
+          149,
+          186
+        ],
+        "adjusted": [
+          150,
+          187
+        ],
+        "risk": [
+          151,
+          219
+        ],
+        "IDH": [
+          153,
+          190
+        ],
+        "than": [
+          154
+        ],
+        "those": [
+          155
+        ],
+        "[odds": [
+          160
+        ],
+        "ratio": [
+          161
+        ],
+        "(OR)": [
+          162
+        ],
+        "1.12;": [
+          163
+        ],
+        "95%": [
+          164,
+          193,
+          199
+        ],
+        "confidence": [
+          165
+        ],
+        "interval": [
+          166
+        ],
+        "(CI)": [
+          167
+        ],
+        "1.01-1.25].": [
+          168
+        ],
+        "Higher": [
+          169,
+          206
+        ],
+        "dialyzer": [
+          172
+        ],
+        "mass": [
+          173
+        ],
+        "transfer-area": [
+          174
+        ],
+        "coefficient": [
+          175
+        ],
+        "for": [
+          176
+        ],
+        "removal": [
+          182
+        ],
+        "odds": [
+          188
+        ],
+        "(OR": [
+          191
+        ],
+        "1.15;": [
+          192
+        ],
+        "CI": [
+          194,
+          200
+        ],
+        "1.04-1.27": [
+          195
+        ],
+        "OR": [
+          197
+        ],
+        "1.05;": [
+          198
+        ],
+        "1.04-1.06": [
+          201
+        ],
+        "mg/dl/h,": [
+          203
+        ],
+        "respectively).": [
+          204
+        ],
+        "CONCLUSIONS:": [
+          205
+        ],
+        "dose,": [
+          208
+        ],
+        "at": [
+          209
+        ],
+        "relatively": [
+          210
+        ],
+        "constrained": [
+          211
+        ],
+        "treatment": [
+          212
+        ],
+        "times,": [
+          213
+        ],
+        "associate": [
+          215
+        ],
+        "an": [
+          217,
+          237
+        ],
+        "IDH.": [
+          221
+        ],
+        "These": [
+          222
+        ],
+        "findings": [
+          223
+        ],
+        "support": [
+          224
+        ],
+        "possibility": [
+          226
+        ],
+        "rapidity": [
+          228
+        ],
+        "reductions": [
+          231
+        ],
+        "plasma": [
+          233
+        ],
+        "osmolality": [
+          234
+        ],
+        "play": [
+          236
+        ],
+        "important": [
+          238
+        ],
+        "role": [
+          239
+        ],
+        "mediating": [
+          241
+        ],
+        "instability": [
+          243
+        ],
+        "during": [
+          244
+        ],
+        "dialysis.": [
+          245
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 2
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 46
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 126
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 176
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 193
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 166
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 120
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 162
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 190
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 223
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 235
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 233
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 92
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 51
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 59
+        }
+      ],
+      "updated_date": "2026-08-21T09:56:20.448147",
+      "created_date": "2016-06-24T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W1975071629",
+      "doi": "https://doi.org/10.1371/journal.pmed.1001362",
+      "title": "The Effectiveness of Mobile-Health Technology-Based Health Behaviour Change or Disease Management Interventions for Health Care Consumers: A Systematic Review",
+      "display_name": "The Effectiveness of Mobile-Health Technology-Based Health Behaviour Change or Disease Management Interventions for Health Care Consumers: A Systematic Review",
+      "publication_year": 2013,
+      "publication_date": "2013-01-15",
+      "ids": {
+        "openalex": "https://openalex.org/W1975071629",
+        "doi": "https://doi.org/10.1371/journal.pmed.1001362",
+        "mag": "1975071629",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/23349621"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1371/journal.pmed.1001362",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1371/journal.pmed.1001362",
+        "pdf_url": "https://journals.plos.org/plosmedicine/article/file?id=10.1371/journal.pmed.1001362&type=printable",
+        "source": {
+          "id": "https://openalex.org/S197939330",
+          "display_name": "PLoS Medicine",
+          "issn_l": "1549-1277",
+          "issn": [
+            "1549-1277",
+            "1549-1676"
+          ],
+          "is_oa": true,
+          "is_in_doaj": true,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310315706",
+          "host_organization_name": "Public Library of Science",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310315706"
+          ],
+          "host_organization_lineage_names": [
+            "Public Library of Science"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "PLoS Medicine",
+        "raw_type": "journal-article"
+      },
+      "type": "review",
+      "indexed_in": [
+        "crossref",
+        "doaj",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_url": "https://journals.plos.org/plosmedicine/article/file?id=10.1371/journal.pmed.1001362&type=printable",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5063642859",
+            "display_name": "Caroline Free",
+            "orcid": "https://orcid.org/0000-0003-1711-0006"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I124357947",
+              "display_name": "University of London",
+              "ror": "https://ror.org/04cw6st05",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210089966",
+              "display_name": "London School of Hygiene & Tropical Medicine",
+              "ror": "https://ror.org/00a0jsq62",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": true,
+          "raw_author_name": "Caroline Free",
+          "raw_affiliation_strings": [
+            "Clinical Trials Unit, London School of Hygiene & Tropical Medicine, London, UK. caroline.free@lshtm.ac.uk",
+            "Clinical Trials Unit, London School of Hygiene and Tropical Medicine, London, United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Clinical Trials Unit, London School of Hygiene & Tropical Medicine, London, UK. caroline.free@lshtm.ac.uk",
+              "institution_ids": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Clinical Trials Unit, London School of Hygiene and Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5025484699",
+            "display_name": "Gemma Phillips",
+            "orcid": "https://orcid.org/0000-0003-0947-0677"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210089966",
+              "display_name": "London School of Hygiene & Tropical Medicine",
+              "ror": "https://ror.org/00a0jsq62",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Gemma Phillips",
+          "raw_affiliation_strings": [
+            "Department of Health Services Research and Policy, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+            "Department of Health Services Research & Policy, London School of Hygiene & Tropical Medicine, London, United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Health Services Research and Policy, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Department of Health Services Research & Policy, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5103396957",
+            "display_name": "Leandro Galli",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I39555362",
+              "display_name": "University of Warwick",
+              "ror": "https://ror.org/01a77tt86",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I39555362"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Leandro Galli",
+          "raw_affiliation_strings": [
+            "Warwick University, Coventry, United Kingdom",
+            "Warwick University, Coventry, United Kingdom#TAB#"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Warwick University, Coventry, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I39555362"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Warwick University, Coventry, United Kingdom#TAB#",
+              "institution_ids": [
+                "https://openalex.org/I39555362"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5112353266",
+            "display_name": "L. Watson",
+            "orcid": "https://orcid.org/0000-0002-7405-2327"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I124357947",
+              "display_name": "University of London",
+              "ror": "https://ror.org/04cw6st05",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210089966",
+              "display_name": "London School of Hygiene & Tropical Medicine",
+              "ror": "https://ror.org/00a0jsq62",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Louise Watson",
+          "raw_affiliation_strings": [
+            "Department of Population Health, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+            "Department of Population Health; London School of Hygiene & Tropical Medicine; London United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Population Health, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Department of Population Health; London School of Hygiene & Tropical Medicine; London United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I124357947"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5030080570",
+            "display_name": "Lambert Felix",
+            "orcid": "https://orcid.org/0000-0001-6517-9089"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I47508984",
+              "display_name": "Imperial College London",
+              "ror": "https://ror.org/041kmwe10",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I47508984"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Lambert Felix",
+          "raw_affiliation_strings": [
+            "Department of Primary Care and Public Health, Imperial College, London, United Kingdom",
+            "Department of Primary Care and Public Health Imperial College London  United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Primary Care and Public Health, Imperial College, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I47508984"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Department of Primary Care and Public Health Imperial College London  United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I47508984"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5050796852",
+            "display_name": "Phil Edwards",
+            "orcid": "https://orcid.org/0000-0003-4431-8822"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210089966",
+              "display_name": "London School of Hygiene & Tropical Medicine",
+              "ror": "https://ror.org/00a0jsq62",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Phil Edwards",
+          "raw_affiliation_strings": [
+            "Clinical Trials Unit, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+            "Clinical Trials Unit, London School of Hygiene and Tropical Medicine, London, United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Clinical Trials Unit, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Clinical Trials Unit, London School of Hygiene and Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5070156674",
+            "display_name": "Vikram Patel",
+            "orcid": "https://orcid.org/0000-0003-1066-8584"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I124357947",
+              "display_name": "University of London",
+              "ror": "https://ror.org/04cw6st05",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210089966",
+              "display_name": "London School of Hygiene & Tropical Medicine",
+              "ror": "https://ror.org/00a0jsq62",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Vikram Patel",
+          "raw_affiliation_strings": [
+            "Department of Population Health, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+            "Department of Population Health; London School of Hygiene & Tropical Medicine; London United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Population Health, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Department of Population Health; London School of Hygiene & Tropical Medicine; London United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I124357947"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5080652975",
+            "display_name": "Andy Haines",
+            "orcid": "https://orcid.org/0000-0002-8053-4605"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I124357947",
+              "display_name": "University of London",
+              "ror": "https://ror.org/04cw6st05",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210089966",
+              "display_name": "London School of Hygiene & Tropical Medicine",
+              "ror": "https://ror.org/00a0jsq62",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I4210089966"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Andy Haines",
+          "raw_affiliation_strings": [
+            "Department of Population Health, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+            "Department of Population Health; London School of Hygiene & Tropical Medicine; London United Kingdom"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Population Health, London School of Hygiene & Tropical Medicine, London, United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I4210089966"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Department of Population Health; London School of Hygiene & Tropical Medicine; London United Kingdom",
+              "institution_ids": [
+                "https://openalex.org/I124357947"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 1,
+      "institutions_distinct_count": 4,
+      "corresponding_author_ids": [
+        "https://openalex.org/A5063642859"
+      ],
+      "corresponding_institution_ids": [
+        "https://openalex.org/I124357947",
+        "https://openalex.org/I4210089966"
+      ],
+      "apc_list": {
+        "value": 6460,
+        "currency": "USD",
+        "value_usd": 6460
+      },
+      "apc_paid": {
+        "value": 6460,
+        "currency": "USD",
+        "value_usd": 6460
+      },
+      "fwci": 35.14,
+      "has_fulltext": true,
+      "cited_by_count": 1865,
+      "citation_normalized_percentile": {
+        "value": 1.0,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 99,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "10",
+        "issue": "1",
+        "first_page": "e1001362",
+        "last_page": "e1001362"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T11446",
+        "display_name": "Mobile Health and mHealth Applications",
+        "score": 0.9039999842643738,
+        "subfield": {
+          "id": "https://openalex.org/subfields/3600",
+          "display_name": "General Health Professions"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/36",
+          "display_name": "Health Professions"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/4",
+          "display_name": "Health Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T11446",
+          "display_name": "Mobile Health and mHealth Applications",
+          "score": 0.9039999842643738,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3600",
+            "display_name": "General Health Professions"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/36",
+            "display_name": "Health Professions"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11542",
+          "display_name": "Behavioral Health and Interventions",
+          "score": 0.025699999183416367,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3202",
+            "display_name": "Applied Psychology"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/32",
+            "display_name": "Psychology"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11519",
+          "display_name": "Digital Mental Health Interventions",
+          "score": 0.01209999993443489,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3202",
+            "display_name": "Applied Psychology"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/32",
+            "display_name": "Psychology"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/medicine",
+          "display_name": "Medicine",
+          "score": 0.7390144467353821
+        },
+        {
+          "id": "https://openalex.org/keywords/psychological-intervention",
+          "display_name": "Psychological intervention",
+          "score": 0.6758013963699341
+        },
+        {
+          "id": "https://openalex.org/keywords/blinding",
+          "display_name": "Blinding",
+          "score": 0.5680173635482788
+        },
+        {
+          "id": "https://openalex.org/keywords/smoking-cessation",
+          "display_name": "Smoking cessation",
+          "score": 0.5617196559906006
+        },
+        {
+          "id": "https://openalex.org/keywords/health-care",
+          "display_name": "Health care",
+          "score": 0.5355356335639954
+        },
+        {
+          "id": "https://openalex.org/keywords/medline",
+          "display_name": "MEDLINE",
+          "score": 0.5191377997398376
+        },
+        {
+          "id": "https://openalex.org/keywords/cochrane-library",
+          "display_name": "Cochrane Library",
+          "score": 0.4657756984233856
+        },
+        {
+          "id": "https://openalex.org/keywords/systematic-review",
+          "display_name": "Systematic review",
+          "score": 0.455827534198761
+        },
+        {
+          "id": "https://openalex.org/keywords/disease-management",
+          "display_name": "Disease management",
+          "score": 0.44789913296699524
+        },
+        {
+          "id": "https://openalex.org/keywords/relative-risk",
+          "display_name": "Relative risk",
+          "score": 0.4474999010562897
+        },
+        {
+          "id": "https://openalex.org/keywords/meta-analysis",
+          "display_name": "Meta-analysis",
+          "score": 0.4365617632865906
+        },
+        {
+          "id": "https://openalex.org/keywords/clinical-trial",
+          "display_name": "Clinical trial",
+          "score": 0.4241054356098175
+        },
+        {
+          "id": "https://openalex.org/keywords/randomized-controlled-trial",
+          "display_name": "Randomized controlled trial",
+          "score": 0.42303013801574707
+        },
+        {
+          "id": "https://openalex.org/keywords/family-medicine",
+          "display_name": "Family medicine",
+          "score": 0.3886563181877136
+        },
+        {
+          "id": "https://openalex.org/keywords/alternative-medicine",
+          "display_name": "Alternative medicine",
+          "score": 0.21002942323684692
+        },
+        {
+          "id": "https://openalex.org/keywords/health-management-system",
+          "display_name": "Health management system",
+          "score": 0.19707897305488586
+        },
+        {
+          "id": "https://openalex.org/keywords/nursing",
+          "display_name": "Nursing",
+          "score": 0.17083847522735596
+        },
+        {
+          "id": "https://openalex.org/keywords/confidence-interval",
+          "display_name": "Confidence interval",
+          "score": 0.1620071828365326
+        },
+        {
+          "id": "https://openalex.org/keywords/internal-medicine",
+          "display_name": "Internal medicine",
+          "score": 0.1552230715751648
+        },
+        {
+          "id": "https://openalex.org/keywords/pathology",
+          "display_name": "Pathology",
+          "score": 0.08766791224479675
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C71924100",
+          "wikidata": "https://www.wikidata.org/wiki/Q11190",
+          "display_name": "Medicine",
+          "level": 0,
+          "score": 0.7390144467353821
+        },
+        {
+          "id": "https://openalex.org/C27415008",
+          "wikidata": "https://www.wikidata.org/wiki/Q7256382",
+          "display_name": "Psychological intervention",
+          "level": 2,
+          "score": 0.6758013963699341
+        },
+        {
+          "id": "https://openalex.org/C2771230",
+          "wikidata": "https://www.wikidata.org/wiki/Q4926699",
+          "display_name": "Blinding",
+          "level": 3,
+          "score": 0.5680173635482788
+        },
+        {
+          "id": "https://openalex.org/C2777843972",
+          "wikidata": "https://www.wikidata.org/wiki/Q2462253",
+          "display_name": "Smoking cessation",
+          "level": 2,
+          "score": 0.5617196559906006
+        },
+        {
+          "id": "https://openalex.org/C160735492",
+          "wikidata": "https://www.wikidata.org/wiki/Q31207",
+          "display_name": "Health care",
+          "level": 2,
+          "score": 0.5355356335639954
+        },
+        {
+          "id": "https://openalex.org/C2779473830",
+          "wikidata": "https://www.wikidata.org/wiki/Q1540899",
+          "display_name": "MEDLINE",
+          "level": 2,
+          "score": 0.5191377997398376
+        },
+        {
+          "id": "https://openalex.org/C2776478404",
+          "wikidata": "https://www.wikidata.org/wiki/Q1105187",
+          "display_name": "Cochrane Library",
+          "level": 3,
+          "score": 0.4657756984233856
+        },
+        {
+          "id": "https://openalex.org/C189708586",
+          "wikidata": "https://www.wikidata.org/wiki/Q1504425",
+          "display_name": "Systematic review",
+          "level": 3,
+          "score": 0.455827534198761
+        },
+        {
+          "id": "https://openalex.org/C2982889124",
+          "wikidata": "https://www.wikidata.org/wiki/Q107439039",
+          "display_name": "Disease management",
+          "level": 4,
+          "score": 0.44789913296699524
+        },
+        {
+          "id": "https://openalex.org/C82789193",
+          "wikidata": "https://www.wikidata.org/wiki/Q2142611",
+          "display_name": "Relative risk",
+          "level": 3,
+          "score": 0.4474999010562897
+        },
+        {
+          "id": "https://openalex.org/C95190672",
+          "wikidata": "https://www.wikidata.org/wiki/Q815382",
+          "display_name": "Meta-analysis",
+          "level": 2,
+          "score": 0.4365617632865906
+        },
+        {
+          "id": "https://openalex.org/C535046627",
+          "wikidata": "https://www.wikidata.org/wiki/Q30612",
+          "display_name": "Clinical trial",
+          "level": 2,
+          "score": 0.4241054356098175
+        },
+        {
+          "id": "https://openalex.org/C168563851",
+          "wikidata": "https://www.wikidata.org/wiki/Q1436668",
+          "display_name": "Randomized controlled trial",
+          "level": 2,
+          "score": 0.42303013801574707
+        },
+        {
+          "id": "https://openalex.org/C512399662",
+          "wikidata": "https://www.wikidata.org/wiki/Q3505712",
+          "display_name": "Family medicine",
+          "level": 1,
+          "score": 0.3886563181877136
+        },
+        {
+          "id": "https://openalex.org/C204787440",
+          "wikidata": "https://www.wikidata.org/wiki/Q188504",
+          "display_name": "Alternative medicine",
+          "level": 2,
+          "score": 0.21002942323684692
+        },
+        {
+          "id": "https://openalex.org/C171265473",
+          "wikidata": "https://www.wikidata.org/wiki/Q5691117",
+          "display_name": "Health management system",
+          "level": 3,
+          "score": 0.19707897305488586
+        },
+        {
+          "id": "https://openalex.org/C159110408",
+          "wikidata": "https://www.wikidata.org/wiki/Q121176",
+          "display_name": "Nursing",
+          "level": 1,
+          "score": 0.17083847522735596
+        },
+        {
+          "id": "https://openalex.org/C44249647",
+          "wikidata": "https://www.wikidata.org/wiki/Q208498",
+          "display_name": "Confidence interval",
+          "level": 2,
+          "score": 0.1620071828365326
+        },
+        {
+          "id": "https://openalex.org/C126322002",
+          "wikidata": "https://www.wikidata.org/wiki/Q11180",
+          "display_name": "Internal medicine",
+          "level": 1,
+          "score": 0.1552230715751648
+        },
+        {
+          "id": "https://openalex.org/C142724271",
+          "wikidata": "https://www.wikidata.org/wiki/Q7208",
+          "display_name": "Pathology",
+          "level": 1,
+          "score": 0.08766791224479675
+        },
+        {
+          "id": "https://openalex.org/C162324750",
+          "wikidata": "https://www.wikidata.org/wiki/Q8134",
+          "display_name": "Economics",
+          "level": 0,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C199539241",
+          "wikidata": "https://www.wikidata.org/wiki/Q7748",
+          "display_name": "Law",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C17744445",
+          "wikidata": "https://www.wikidata.org/wiki/Q36442",
+          "display_name": "Political science",
+          "level": 0,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C50522688",
+          "wikidata": "https://www.wikidata.org/wiki/Q189833",
+          "display_name": "Economic growth",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [
+        {
+          "descriptor_ui": "D002986",
+          "descriptor_name": "Clinical Trials as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D002986",
+          "descriptor_name": "Clinical Trials as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D002986",
+          "descriptor_name": "Clinical Trials as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D002986",
+          "descriptor_name": "Clinical Trials as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003256",
+          "descriptor_name": "Community Participation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003256",
+          "descriptor_name": "Community Participation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003256",
+          "descriptor_name": "Community Participation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003256",
+          "descriptor_name": "Community Participation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003695",
+          "descriptor_name": "Delivery of Health Care",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003695",
+          "descriptor_name": "Delivery of Health Care",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003695",
+          "descriptor_name": "Delivery of Health Care",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D003695",
+          "descriptor_name": "Delivery of Health Care",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D004032",
+          "descriptor_name": "Diet",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D004032",
+          "descriptor_name": "Diet",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D004032",
+          "descriptor_name": "Diet",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D004032",
+          "descriptor_name": "Diet",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009043",
+          "descriptor_name": "Motor Activity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009043",
+          "descriptor_name": "Motor Activity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009043",
+          "descriptor_name": "Motor Activity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009043",
+          "descriptor_name": "Motor Activity",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015438",
+          "descriptor_name": "Health Behavior",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D015438",
+          "descriptor_name": "Health Behavior",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D015438",
+          "descriptor_name": "Health Behavior",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D015438",
+          "descriptor_name": "Health Behavior",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D015982",
+          "descriptor_name": "Bias",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015982",
+          "descriptor_name": "Bias",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015982",
+          "descriptor_name": "Bias",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D015982",
+          "descriptor_name": "Bias",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016896",
+          "descriptor_name": "Treatment Outcome",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016896",
+          "descriptor_name": "Treatment Outcome",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016896",
+          "descriptor_name": "Treatment Outcome",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D016896",
+          "descriptor_name": "Treatment Outcome",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017216",
+          "descriptor_name": "Telemedicine",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017216",
+          "descriptor_name": "Telemedicine",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017216",
+          "descriptor_name": "Telemedicine",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017216",
+          "descriptor_name": "Telemedicine",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D019468",
+          "descriptor_name": "Disease Management",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D019468",
+          "descriptor_name": "Disease Management",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D019468",
+          "descriptor_name": "Disease Management",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D019468",
+          "descriptor_name": "Disease Management",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D020811",
+          "descriptor_name": "Biomedical Technology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D020811",
+          "descriptor_name": "Biomedical Technology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D020811",
+          "descriptor_name": "Biomedical Technology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D020811",
+          "descriptor_name": "Biomedical Technology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D055118",
+          "descriptor_name": "Medication Adherence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D055118",
+          "descriptor_name": "Medication Adherence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D055118",
+          "descriptor_name": "Medication Adherence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D055118",
+          "descriptor_name": "Medication Adherence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        }
+      ],
+      "locations_count": 6,
+      "locations": [
+        {
+          "id": "doi:10.1371/journal.pmed.1001362",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1371/journal.pmed.1001362",
+          "pdf_url": "https://journals.plos.org/plosmedicine/article/file?id=10.1371/journal.pmed.1001362&type=printable",
+          "source": {
+            "id": "https://openalex.org/S197939330",
+            "display_name": "PLoS Medicine",
+            "issn_l": "1549-1277",
+            "issn": [
+              "1549-1277",
+              "1549-1676"
+            ],
+            "is_oa": true,
+            "is_in_doaj": true,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310315706",
+            "host_organization_name": "Public Library of Science",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310315706"
+            ],
+            "host_organization_lineage_names": [
+              "Public Library of Science"
+            ],
+            "type": "journal"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "PLoS Medicine",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:23349621",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/23349621",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "PLoS medicine",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:researchonline.lshtm.ac.uk:611260",
+          "is_oa": false,
+          "landing_page_url": "https://researchonline.lshtm.ac.uk/view/creators/enphcfre.html>;",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306402527",
+            "display_name": "LSHTM Research Online (London School of Hygiene and Tropical Medicine)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I4210089966",
+            "host_organization_name": "London School of Hygiene & Tropical Medicine",
+            "host_organization_lineage": [
+              "https://openalex.org/I4210089966"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "acceptedVersion",
+          "is_accepted": true,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Article"
+        },
+        {
+          "id": "pmh:oai:europepmc.org:2552872",
+          "is_oa": true,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/3548655",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400806",
+            "display_name": "Europe PMC (PubMed Central)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1303153112",
+            "host_organization_name": "European Bioinformatics Institute",
+            "host_organization_lineage": [
+              "https://openalex.org/I1303153112"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Text"
+        },
+        {
+          "id": "pmh:oai:doaj.org/article:4b1fd4c3fb134a088da3c31f1a7289cb",
+          "is_oa": true,
+          "landing_page_url": "https://doaj.org/article/4b1fd4c3fb134a088da3c31f1a7289cb",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401280",
+            "display_name": "DOAJ (DOAJ: Directory of Open Access Journals)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": null,
+            "host_organization_name": null,
+            "host_organization_lineage": [],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by-sa",
+          "license_id": "https://openalex.org/licenses/cc-by-sa",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "PLoS Medicine, Vol 10, Iss 1, p e1001362 (2013)",
+          "raw_type": "article"
+        },
+        {
+          "id": "pmh:oai:figshare.com:article/114562",
+          "is_oa": true,
+          "landing_page_url": "https://figshare.com/articles/dataset/The_Effectiveness_of_Mobile_Health_Technology_Based_Health_Behaviour_Change_or_Disease_Management_Interventions_for_Health_Care_Consumers_A_Systematic_Review__/114562",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4377196282",
+            "display_name": "Figshare",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I4210132348",
+            "host_organization_name": "Figshare (United Kingdom)",
+            "host_organization_lineage": [
+              "https://openalex.org/I4210132348"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "",
+          "raw_type": "Dataset"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.1371/journal.pmed.1001362",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1371/journal.pmed.1001362",
+        "pdf_url": "https://journals.plos.org/plosmedicine/article/file?id=10.1371/journal.pmed.1001362&type=printable",
+        "source": {
+          "id": "https://openalex.org/S197939330",
+          "display_name": "PLoS Medicine",
+          "issn_l": "1549-1277",
+          "issn": [
+            "1549-1277",
+            "1549-1676"
+          ],
+          "is_oa": true,
+          "is_in_doaj": true,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310315706",
+          "host_organization_name": "Public Library of Science",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310315706"
+          ],
+          "host_organization_lineage_names": [
+            "Public Library of Science"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "PLoS Medicine",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [],
+      "awards": [
+        {
+          "id": "https://openalex.org/G702270361",
+          "display_name": "PREMIUM: A program for effective mental health interventions in under-resourced health systems",
+          "funder_award_id": "091834",
+          "funder_id": "https://openalex.org/F4320311904",
+          "funder_display_name": "Wellcome Trust"
+        }
+      ],
+      "funders": [
+        {
+          "id": "https://openalex.org/F4320311904",
+          "display_name": "Wellcome Trust",
+          "ror": "https://ror.org/029chgv08"
+        },
+        {
+          "id": "https://openalex.org/F4320319990",
+          "display_name": "National Institute for Health and Care Research",
+          "ror": "https://ror.org/0187kwz08"
+        }
+      ],
+      "has_content": {
+        "grobid_xml": true,
+        "pdf": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W1975071629.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W1975071629.grobid-xml"
+      },
+      "referenced_works_count": 167,
+      "referenced_works": [
+        "https://openalex.org/W153344883",
+        "https://openalex.org/W160509993",
+        "https://openalex.org/W162908134",
+        "https://openalex.org/W166512678",
+        "https://openalex.org/W177384672",
+        "https://openalex.org/W192153364",
+        "https://openalex.org/W200018444",
+        "https://openalex.org/W1480729244",
+        "https://openalex.org/W1492367679",
+        "https://openalex.org/W1539546175",
+        "https://openalex.org/W1556618881",
+        "https://openalex.org/W1573323275",
+        "https://openalex.org/W1594567624",
+        "https://openalex.org/W1598602811",
+        "https://openalex.org/W1608442163",
+        "https://openalex.org/W1651579527",
+        "https://openalex.org/W1716807197",
+        "https://openalex.org/W1742959305",
+        "https://openalex.org/W1752928256",
+        "https://openalex.org/W1868255088",
+        "https://openalex.org/W1901026176",
+        "https://openalex.org/W1931696915",
+        "https://openalex.org/W1935977695",
+        "https://openalex.org/W1963506337",
+        "https://openalex.org/W1963880451",
+        "https://openalex.org/W1964118658",
+        "https://openalex.org/W1967388420",
+        "https://openalex.org/W1973114032",
+        "https://openalex.org/W1974664783",
+        "https://openalex.org/W1977504677",
+        "https://openalex.org/W1977977041",
+        "https://openalex.org/W1978323054",
+        "https://openalex.org/W1982109306",
+        "https://openalex.org/W1982680448",
+        "https://openalex.org/W1983076916",
+        "https://openalex.org/W1984322736",
+        "https://openalex.org/W1986678099",
+        "https://openalex.org/W1986979602",
+        "https://openalex.org/W1990863296",
+        "https://openalex.org/W1991167523",
+        "https://openalex.org/W1993773603",
+        "https://openalex.org/W1997649213",
+        "https://openalex.org/W1998472993",
+        "https://openalex.org/W2002013359",
+        "https://openalex.org/W2011690722",
+        "https://openalex.org/W2014972351",
+        "https://openalex.org/W2015742196",
+        "https://openalex.org/W2020368079",
+        "https://openalex.org/W2024352468",
+        "https://openalex.org/W2028040829",
+        "https://openalex.org/W2028685546",
+        "https://openalex.org/W2029228998",
+        "https://openalex.org/W2029424382",
+        "https://openalex.org/W2029550498",
+        "https://openalex.org/W2031724143",
+        "https://openalex.org/W2032172087",
+        "https://openalex.org/W2033890227",
+        "https://openalex.org/W2034244019",
+        "https://openalex.org/W2034816401",
+        "https://openalex.org/W2038268586",
+        "https://openalex.org/W2048598291",
+        "https://openalex.org/W2048799165",
+        "https://openalex.org/W2051425744",
+        "https://openalex.org/W2051844710",
+        "https://openalex.org/W2056330906",
+        "https://openalex.org/W2057109596",
+        "https://openalex.org/W2057181385",
+        "https://openalex.org/W2058436463",
+        "https://openalex.org/W2058661878",
+        "https://openalex.org/W2058832719",
+        "https://openalex.org/W2059049215",
+        "https://openalex.org/W2059271012",
+        "https://openalex.org/W2063819049",
+        "https://openalex.org/W2065142464",
+        "https://openalex.org/W2065253112",
+        "https://openalex.org/W2066746073",
+        "https://openalex.org/W2067438111",
+        "https://openalex.org/W2068502384",
+        "https://openalex.org/W2070183833",
+        "https://openalex.org/W2070369485",
+        "https://openalex.org/W2070568974",
+        "https://openalex.org/W2071978638",
+        "https://openalex.org/W2073212102",
+        "https://openalex.org/W2074803978",
+        "https://openalex.org/W2077794001",
+        "https://openalex.org/W2078078890",
+        "https://openalex.org/W2078339190",
+        "https://openalex.org/W2080925448",
+        "https://openalex.org/W2081384957",
+        "https://openalex.org/W2083713577",
+        "https://openalex.org/W2084161315",
+        "https://openalex.org/W2087533214",
+        "https://openalex.org/W2088001628",
+        "https://openalex.org/W2088085312",
+        "https://openalex.org/W2088085398",
+        "https://openalex.org/W2088115305",
+        "https://openalex.org/W2090619306",
+        "https://openalex.org/W2091355650",
+        "https://openalex.org/W2094377001",
+        "https://openalex.org/W2096778268",
+        "https://openalex.org/W2100346673",
+        "https://openalex.org/W2100745559",
+        "https://openalex.org/W2102316523",
+        "https://openalex.org/W2106444270",
+        "https://openalex.org/W2108381984",
+        "https://openalex.org/W2108664775",
+        "https://openalex.org/W2109009642",
+        "https://openalex.org/W2110179594",
+        "https://openalex.org/W2110405972",
+        "https://openalex.org/W2111885443",
+        "https://openalex.org/W2113216509",
+        "https://openalex.org/W2114104256",
+        "https://openalex.org/W2114199224",
+        "https://openalex.org/W2114753586",
+        "https://openalex.org/W2116383336",
+        "https://openalex.org/W2117236480",
+        "https://openalex.org/W2117308351",
+        "https://openalex.org/W2117718926",
+        "https://openalex.org/W2118679144",
+        "https://openalex.org/W2119085330",
+        "https://openalex.org/W2119159644",
+        "https://openalex.org/W2120255231",
+        "https://openalex.org/W2121895216",
+        "https://openalex.org/W2123622898",
+        "https://openalex.org/W2125305063",
+        "https://openalex.org/W2126635496",
+        "https://openalex.org/W2130321587",
+        "https://openalex.org/W2131635926",
+        "https://openalex.org/W2139450198",
+        "https://openalex.org/W2139900098",
+        "https://openalex.org/W2140790583",
+        "https://openalex.org/W2143246041",
+        "https://openalex.org/W2143805931",
+        "https://openalex.org/W2144978394",
+        "https://openalex.org/W2145042450",
+        "https://openalex.org/W2146266464",
+        "https://openalex.org/W2146396518",
+        "https://openalex.org/W2146937845",
+        "https://openalex.org/W2147030552",
+        "https://openalex.org/W2148118394",
+        "https://openalex.org/W2148958761",
+        "https://openalex.org/W2153360349",
+        "https://openalex.org/W2154177209",
+        "https://openalex.org/W2156569052",
+        "https://openalex.org/W2157082600",
+        "https://openalex.org/W2157366410",
+        "https://openalex.org/W2157806282",
+        "https://openalex.org/W2158036860",
+        "https://openalex.org/W2160431973",
+        "https://openalex.org/W2161598082",
+        "https://openalex.org/W2162268796",
+        "https://openalex.org/W2169011692",
+        "https://openalex.org/W2200956915",
+        "https://openalex.org/W2244324403",
+        "https://openalex.org/W2247997571",
+        "https://openalex.org/W2252561198",
+        "https://openalex.org/W2262736290",
+        "https://openalex.org/W2414315703",
+        "https://openalex.org/W2598936606",
+        "https://openalex.org/W2618163621",
+        "https://openalex.org/W3147351840",
+        "https://openalex.org/W4211122169",
+        "https://openalex.org/W4242852532",
+        "https://openalex.org/W4243947997",
+        "https://openalex.org/W4285719527",
+        "https://openalex.org/W6603783656",
+        "https://openalex.org/W6633150316"
+      ],
+      "related_works": [
+        "https://openalex.org/W4385587359",
+        "https://openalex.org/W1996966348",
+        "https://openalex.org/W2071654623",
+        "https://openalex.org/W2081859324",
+        "https://openalex.org/W2799289174",
+        "https://openalex.org/W3175462489",
+        "https://openalex.org/W2078668847",
+        "https://openalex.org/W4253335619",
+        "https://openalex.org/W3193329047",
+        "https://openalex.org/W2027494816"
+      ],
+      "abstract_inverted_index": {
+        "BACKGROUND:": [
+          0
+        ],
+        "Mobile": [
+          1
+        ],
+        "technologies": [
+          2,
+          108
+        ],
+        "could": [
+          3
+        ],
+        "be": [
+          4,
+          301
+        ],
+        "a": [
+          5,
+          19,
+          134,
+          165,
+          187,
+          189
+        ],
+        "powerful": [
+          6
+        ],
+        "media": [
+          7
+        ],
+        "for": [
+          8,
+          40,
+          195,
+          236,
+          267,
+          303
+        ],
+        "providing": [
+          9
+        ],
+        "individual": [
+          10
+        ],
+        "level": [
+          11
+        ],
+        "support": [
+          12,
+          223
+        ],
+        "to": [
+          13,
+          22,
+          31,
+          50,
+          109,
+          119,
+          294,
+          328
+        ],
+        "health": [
+          14,
+          32,
+          47,
+          51,
+          121,
+          207,
+          272
+        ],
+        "care": [
+          15,
+          33,
+          52,
+          198
+        ],
+        "consumers.": [
+          16,
+          34
+        ],
+        "We": [
+          17,
+          38,
+          88,
+          97
+        ],
+        "conducted": [
+          18,
+          127
+        ],
+        "systematic": [
+          20
+        ],
+        "review": [
+          21
+        ],
+        "assess": [
+          23
+        ],
+        "the": [
+          24,
+          104,
+          246,
+          264,
+          276,
+          279
+        ],
+        "effectiveness": [
+          25
+        ],
+        "of": [
+          26,
+          44,
+          61,
+          82,
+          86,
+          106,
+          137,
+          141,
+          147,
+          155,
+          169,
+          206,
+          213,
+          218,
+          253,
+          263,
+          278,
+          312,
+          323
+        ],
+        "mobile": [
+          27,
+          45,
+          107
+        ],
+        "technology": [
+          28
+        ],
+        "interventions": [
+          29,
+          48,
+          291,
+          325
+        ],
+        "delivered": [
+          30,
+          49
+        ],
+        "METHODS": [
+          35
+        ],
+        "AND": [
+          36
+        ],
+        "FINDINGS:": [
+          37
+        ],
+        "searched": [
+          39
+        ],
+        "all": [
+          41,
+          124
+        ],
+        "controlled": [
+          42
+        ],
+        "trials": [
+          43,
+          102,
+          115,
+          125,
+          132,
+          140,
+          205,
+          322
+        ],
+        "technology-based": [
+          46
+        ],
+        "consumers": [
+          53
+        ],
+        "using": [
+          54
+        ],
+        "MEDLINE,": [
+          55
+        ],
+        "EMBASE,": [
+          56
+        ],
+        "PsycINFO,": [
+          57
+        ],
+        "Global": [
+          58
+        ],
+        "Health,": [
+          59
+        ],
+        "Web": [
+          60
+        ],
+        "Science,": [
+          62
+        ],
+        "Cochrane": [
+          63
+        ],
+        "Library,": [
+          64
+        ],
+        "UK": [
+          65
+        ],
+        "NHS": [
+          66
+        ],
+        "HTA": [
+          67
+        ],
+        "(Jan": [
+          68
+        ],
+        "1990-Sept": [
+          69
+        ],
+        "2010).": [
+          70
+        ],
+        "Two": [
+          71,
+          139,
+          204
+        ],
+        "authors": [
+          72
+        ],
+        "extracted": [
+          73
+        ],
+        "data": [
+          74
+        ],
+        "on": [
+          75,
+          179,
+          224,
+          258,
+          331
+        ],
+        "allocation": [
+          76,
+          78
+        ],
+        "concealment,": [
+          77
+        ],
+        "sequence,": [
+          79
+        ],
+        "blinding,": [
+          80
+        ],
+        "completeness": [
+          81
+        ],
+        "follow-up,": [
+          83
+        ],
+        "and": [
+          84,
+          92,
+          113,
+          296,
+          299
+        ],
+        "measures": [
+          85
+        ],
+        "effect.": [
+          87
+        ],
+        "calculated": [
+          89
+        ],
+        "effect": [
+          90,
+          217
+        ],
+        "estimates": [
+          91
+        ],
+        "used": [
+          93
+        ],
+        "random": [
+          94
+        ],
+        "effects": [
+          95,
+          330
+        ],
+        "meta-analysis.": [
+          96
+        ],
+        "identified": [
+          98
+        ],
+        "75": [
+          99
+        ],
+        "trials.": [
+          100
+        ],
+        "Fifty-nine": [
+          101
+        ],
+        "investigated": [
+          103,
+          116
+        ],
+        "use": [
+          105,
+          118,
+          154
+        ],
+        "improve": [
+          110
+        ],
+        "disease": [
+          111,
+          142,
+          269
+        ],
+        "management": [
+          112,
+          143,
+          209,
+          270
+        ],
+        "26": [
+          114
+        ],
+        "their": [
+          117
+        ],
+        "change": [
+          120
+        ],
+        "behaviours.": [
+          122,
+          273
+        ],
+        "Nearly": [
+          123
+        ],
+        "were": [
+          126,
+          248
+        ],
+        "in": [
+          128,
+          149,
+          200,
+          242,
+          305,
+          314
+        ],
+        "high-income": [
+          129
+        ],
+        "countries.": [
+          130
+        ],
+        "Four": [
+          131
+        ],
+        "had": [
+          133,
+          144,
+          210
+        ],
+        "low": [
+          135,
+          145,
+          211
+        ],
+        "risk": [
+          136,
+          146,
+          167,
+          212
+        ],
+        "bias.": [
+          138,
+          214
+        ],
+        "bias;": [
+          148
+        ],
+        "one,": [
+          150
+        ],
+        "antiretroviral": [
+          151
+        ],
+        "(ART)": [
+          152
+        ],
+        "adherence,": [
+          153
+        ],
+        "text": [
+          156,
+          219
+        ],
+        "messages": [
+          157
+        ],
+        "reduced": [
+          158
+        ],
+        "high": [
+          159,
+          318
+        ],
+        "viral": [
+          160
+        ],
+        "load": [
+          161
+        ],
+        "(>400": [
+          162
+        ],
+        "copies),": [
+          163
+        ],
+        "with": [
+          164
+        ],
+        "relative": [
+          166
+        ],
+        "(RR)": [
+          168
+        ],
+        "0.85": [
+          170
+        ],
+        "(95%": [
+          171
+        ],
+        "CI": [
+          172,
+          184,
+          233
+        ],
+        "0.72-0.99),": [
+          173
+        ],
+        "but": [
+          174,
+          245
+        ],
+        "no": [
+          175
+        ],
+        "statistically": [
+          176
+        ],
+        "significant": [
+          177
+        ],
+        "benefit": [
+          178,
+          313
+        ],
+        "mortality": [
+          180
+        ],
+        "(RR": [
+          181,
+          230
+        ],
+        "0.79": [
+          182
+        ],
+        "[95%": [
+          183,
+          232
+        ],
+        "0.47-1.32]).": [
+          185
+        ],
+        "In": [
+          186
+        ],
+        "second,": [
+          188
+        ],
+        "PDA": [
+          190
+        ],
+        "based": [
+          191
+        ],
+        "intervention": [
+          192
+        ],
+        "increased": [
+          193,
+          292
+        ],
+        "scores": [
+          194
+        ],
+        "perceived": [
+          196
+        ],
+        "self": [
+          197
+        ],
+        "agency": [
+          199
+        ],
+        "lung": [
+          201
+        ],
+        "transplant": [
+          202
+        ],
+        "patients.": [
+          203
+        ],
+        "behaviour": [
+          208
+        ],
+        "The": [
+          215
+        ],
+        "pooled": [
+          216
+        ],
+        "messaging": [
+          220,
+          290
+        ],
+        "smoking": [
+          221,
+          227,
+          297
+        ],
+        "cessation": [
+          222,
+          228,
+          298
+        ],
+        "biochemically": [
+          225
+        ],
+        "verified": [
+          226
+        ],
+        "was": [
+          229,
+          256
+        ],
+        "2.16": [
+          231
+        ],
+        "1.77-2.62]).": [
+          234
+        ],
+        "Interventions": [
+          235
+        ],
+        "other": [
+          237,
+          316
+        ],
+        "conditions": [
+          238
+        ],
+        "showed": [
+          239
+        ],
+        "suggestive": [
+          240,
+          310
+        ],
+        "benefits": [
+          241
+        ],
+        "some": [
+          243,
+          315
+        ],
+        "cases,": [
+          244
+        ],
+        "results": [
+          247
+        ],
+        "not": [
+          249
+        ],
+        "consistent.": [
+          250
+        ],
+        "No": [
+          251
+        ],
+        "evidence": [
+          252,
+          311
+        ],
+        "publication": [
+          254
+        ],
+        "bias": [
+          255
+        ],
+        "demonstrated": [
+          257
+        ],
+        "visual": [
+          259
+        ],
+        "or": [
+          260,
+          271
+        ],
+        "statistical": [
+          261
+        ],
+        "examination": [
+          262
+        ],
+        "funnel": [
+          265
+        ],
+        "plots": [
+          266
+        ],
+        "either": [
+          268
+        ],
+        "To": [
+          274
+        ],
+        "address": [
+          275
+        ],
+        "limitation": [
+          277
+        ],
+        "older": [
+          280
+        ],
+        "search,": [
+          281
+        ],
+        "we": [
+          282
+        ],
+        "also": [
+          283
+        ],
+        "reviewed": [
+          284
+        ],
+        "more": [
+          285
+        ],
+        "recent": [
+          286
+        ],
+        "literature.": [
+          287
+        ],
+        "CONCLUSIONS:": [
+          288
+        ],
+        "Text": [
+          289
+        ],
+        "adherence": [
+          293
+        ],
+        "ART": [
+          295
+        ],
+        "should": [
+          300
+        ],
+        "considered": [
+          302
+        ],
+        "inclusion": [
+          304
+        ],
+        "services.": [
+          306
+        ],
+        "Although": [
+          307
+        ],
+        "there": [
+          308
+        ],
+        "is": [
+          309
+        ],
+        "areas,": [
+          317
+        ],
+        "quality": [
+          319
+        ],
+        "adequately": [
+          320
+        ],
+        "powered": [
+          321
+        ],
+        "optimised": [
+          324
+        ],
+        "are": [
+          326
+        ],
+        "required": [
+          327
+        ],
+        "evaluate": [
+          329
+        ],
+        "objective": [
+          332
+        ],
+        "outcomes.": [
+          333
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 46
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 93
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 84
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 100
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 114
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 150
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 187
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 192
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 206
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 213
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 171
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 155
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 108
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 43
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2025-10-10T00:00:00"
+    }
+  ],
+  "group_by": []
+}

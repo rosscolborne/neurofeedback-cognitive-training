@@ -1,0 +1,5140 @@
+{
+  "meta": {
+    "count": 3561,
+    "db_response_time_ms": 31,
+    "page": 1,
+    "per_page": 3,
+    "groups_count": null,
+    "x_query": {
+      "oql": "works where full text has (spatial audio biofeedback)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "column_id": "fulltext.search",
+            "value": "spatial audio biofeedback",
+            "operator": "has"
+          }
+        ]
+      },
+      "url": "/works?filter=fulltext.search:spatial audio biofeedback&per_page=3&page=1"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W2127480863",
+      "doi": "https://doi.org/10.1118/1.2349696",
+      "title": "The management of respiratory motion in radiation oncology report of AAPM Task Group 76a)",
+      "display_name": "The management of respiratory motion in radiation oncology report of AAPM Task Group 76a)",
+      "publication_year": 2006,
+      "publication_date": "2006-09-26",
+      "ids": {
+        "openalex": "https://openalex.org/W2127480863",
+        "doi": "https://doi.org/10.1118/1.2349696",
+        "mag": "2127480863",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/17089851"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1118/1.2349696",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1118/1.2349696",
+        "pdf_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1118/1.2349696",
+        "source": {
+          "id": "https://openalex.org/S95522064",
+          "display_name": "Medical Physics",
+          "issn_l": "0094-2405",
+          "issn": [
+            "0094-2405",
+            "1522-8541",
+            "2473-4209"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320595",
+          "host_organization_name": "Wiley",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320595"
+          ],
+          "host_organization_lineage_names": [
+            "Wiley"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Medical Physics",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "hybrid",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1118/1.2349696",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5012356605",
+            "display_name": "Paul Keall",
+            "orcid": "https://orcid.org/0000-0003-4803-6507"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I184840846",
+              "display_name": "Virginia Commonwealth University",
+              "ror": "https://ror.org/02nkdxk79",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I184840846"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I97018004",
+              "display_name": "Stanford University",
+              "ror": "https://ror.org/00f54p054",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I97018004"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Paul J. Keall",
+          "raw_affiliation_strings": [
+            "Virginia Commonwealth University, USA. Paul.Keall@stanford.edu",
+            "Stanford University",
+            "Virginia Commonwealth University"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Virginia Commonwealth University, USA. Paul.Keall@stanford.edu",
+              "institution_ids": [
+                "https://openalex.org/I184840846"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Stanford University",
+              "institution_ids": [
+                "https://openalex.org/I97018004"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Virginia Commonwealth University",
+              "institution_ids": [
+                "https://openalex.org/I184840846"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5071803159",
+            "display_name": "G Mageras",
+            "orcid": "https://orcid.org/0000-0001-9851-4306"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1334819555",
+              "display_name": "Memorial Sloan Kettering Cancer Center",
+              "ror": "https://ror.org/02yrq0923",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I1334819555"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Gig S. Mageras",
+          "raw_affiliation_strings": [
+            "Memorial Sloan-Kettering Cancer Center (Co-Chair)",
+            "Memorial Sloan- Kettering Cancer Center"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Memorial Sloan-Kettering Cancer Center (Co-Chair)",
+              "institution_ids": [
+                "https://openalex.org/I1334819555"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Memorial Sloan- Kettering Cancer Center",
+              "institution_ids": [
+                "https://openalex.org/I1334819555"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5032245802",
+            "display_name": "James M. Balter",
+            "orcid": "https://orcid.org/0000-0003-1513-4936"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I27837315",
+              "display_name": "University of Michigan",
+              "ror": "https://ror.org/00jmfr291",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I27837315"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "James M. Balter",
+          "raw_affiliation_strings": [
+            "University of Michigan",
+            "(University of Michigan)"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "University of Michigan",
+              "institution_ids": [
+                "https://openalex.org/I27837315"
+              ]
+            },
+            {
+              "raw_affiliation_string": "(University of Michigan)",
+              "institution_ids": [
+                "https://openalex.org/I27837315"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5062099390",
+            "display_name": "Richard Emery",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210091615",
+              "display_name": "Saint Vincent's Catholic Medical Center",
+              "ror": "https://ror.org/00cwrhn79",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210091615"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Richard S. Emery",
+          "raw_affiliation_strings": [
+            "Saint Vincent's Cancer Center"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Saint Vincent's Cancer Center",
+              "institution_ids": [
+                "https://openalex.org/I4210091615"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5046674993",
+            "display_name": "Kenneth Forster",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210096815",
+              "display_name": "Southwestern Medical Center",
+              "ror": "https://ror.org/00t9vx427",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210096815"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4388891891",
+              "display_name": "Southwestern Medical Center",
+              "ror": "https://ror.org/05d80e146",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4388891891"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I867280407",
+              "display_name": "The University of Texas Southwestern Medical Center",
+              "ror": "https://ror.org/05byvp690",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I867280407"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Kenneth M. Forster",
+          "raw_affiliation_strings": [
+            "UT Southwestern Medical Center",
+            "University of Texas, Southwestern Medical Center"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "UT Southwestern Medical Center",
+              "institution_ids": [
+                "https://openalex.org/I4210096815",
+                "https://openalex.org/I4388891891",
+                "https://openalex.org/I867280407"
+              ]
+            },
+            {
+              "raw_affiliation_string": "University of Texas, Southwestern Medical Center",
+              "institution_ids": [
+                "https://openalex.org/I867280407"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5018120191",
+            "display_name": "Steve Jiang",
+            "orcid": "https://orcid.org/0000-0002-3083-6752"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I2801851002",
+              "display_name": "Harvard University Press",
+              "ror": "https://ror.org/006v7bf86",
+              "country_code": "US",
+              "type": "other",
+              "lineage": [
+                "https://openalex.org/I136199984",
+                "https://openalex.org/I2801851002"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210087915",
+              "display_name": "Massachusetts General Hospital",
+              "ror": "https://ror.org/002pd6e78",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210087915",
+                "https://openalex.org/I48633490"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Steve B. Jiang",
+          "raw_affiliation_strings": [
+            "Massachusetts General Hospital",
+            "Harvard University"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Massachusetts General Hospital",
+              "institution_ids": [
+                "https://openalex.org/I4210087915"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Harvard University",
+              "institution_ids": [
+                "https://openalex.org/I2801851002"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5112588063",
+            "display_name": "J M Kapatoes",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I2905213637",
+              "display_name": "TomTom (Netherlands)",
+              "ror": "https://ror.org/04as6y835",
+              "country_code": "NL",
+              "type": "company",
+              "lineage": [
+                "https://openalex.org/I2905213637"
+              ]
+            }
+          ],
+          "countries": [
+            "NL"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Jeffrey M. Kapatoes",
+          "raw_affiliation_strings": [
+            "TomoTherapy, Inc"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "TomoTherapy, Inc",
+              "institution_ids": [
+                "https://openalex.org/I2905213637"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5091674984",
+            "display_name": "Daniel A. Low",
+            "orcid": "https://orcid.org/0000-0002-6425-9228"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I201448701",
+              "display_name": "University of Washington",
+              "ror": "https://ror.org/00cvxb145",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I201448701"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Daniel A. Low",
+          "raw_affiliation_strings": [
+            "Washington University",
+            "University of Washington"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Washington University",
+              "institution_ids": []
+            },
+            {
+              "raw_affiliation_string": "University of Washington",
+              "institution_ids": [
+                "https://openalex.org/I201448701"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5044115824",
+            "display_name": "Martin J. Murphy",
+            "orcid": "https://orcid.org/0000-0003-1108-3967"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I184840846",
+              "display_name": "Virginia Commonwealth University",
+              "ror": "https://ror.org/02nkdxk79",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I184840846"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Martin J. Murphy",
+          "raw_affiliation_strings": [
+            "Virginia Commonwealth University"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Virginia Commonwealth University",
+              "institution_ids": [
+                "https://openalex.org/I184840846"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5113111628",
+            "display_name": "Brad Murray",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I2801345345",
+              "display_name": "Cancer Institute (WIA)",
+              "ror": "https://ror.org/01tc10z29",
+              "country_code": "IN",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I2801345345"
+              ]
+            }
+          ],
+          "countries": [
+            "IN"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Brad R. Murray",
+          "raw_affiliation_strings": [
+            "Cross Cancer Institute"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Cross Cancer Institute",
+              "institution_ids": [
+                "https://openalex.org/I2801345345"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5109230369",
+            "display_name": "Chester R. Ramsey",
+            "orcid": "https://orcid.org/0009-0009-1102-3519"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210119499",
+              "display_name": "Thompson Cancer Survival Center",
+              "ror": "https://ror.org/02zhjb475",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210119499"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Chester R. Ramsey",
+          "raw_affiliation_strings": [
+            "Thompson Cancer Survival Center"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Thompson Cancer Survival Center",
+              "institution_ids": [
+                "https://openalex.org/I4210119499"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5009101796",
+            "display_name": "Marcel van Herk",
+            "orcid": "https://orcid.org/0000-0001-6448-898X"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I2898336195",
+              "display_name": "The Netherlands Cancer Institute",
+              "ror": "https://ror.org/03xqtf034",
+              "country_code": "NL",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I2898336195"
+              ]
+            }
+          ],
+          "countries": [
+            "NL"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Marcel B. Van Herk",
+          "raw_affiliation_strings": [
+            "Netherlands Cancer Institute"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Netherlands Cancer Institute",
+              "institution_ids": [
+                "https://openalex.org/I2898336195"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5051391435",
+            "display_name": "Sastry Vedam",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1343551460",
+              "display_name": "The University of Texas MD Anderson Cancer Center",
+              "ror": "https://ror.org/04twxam07",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I1343551460"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "S. Sastry Vedam",
+          "raw_affiliation_strings": [
+            "UT MD Anderson Cancer Center",
+            "UT MD Anderson Cancer  Center;"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "UT MD Anderson Cancer Center",
+              "institution_ids": []
+            },
+            {
+              "raw_affiliation_string": "UT MD Anderson Cancer  Center;",
+              "institution_ids": [
+                "https://openalex.org/I1343551460"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5101477989",
+            "display_name": "John Wong",
+            "orcid": "https://orcid.org/0000-0002-6317-2067"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I145311948",
+              "display_name": "Johns Hopkins University",
+              "ror": "https://ror.org/00za53h95",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I145311948"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "John W. Wong",
+          "raw_affiliation_strings": [
+            "Johns Hopkins University",
+            "Johns Hopkins University ("
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Johns Hopkins University",
+              "institution_ids": [
+                "https://openalex.org/I145311948"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Johns Hopkins University (",
+              "institution_ids": [
+                "https://openalex.org/I145311948"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5103081517",
+            "display_name": "Ellen Yorke",
+            "orcid": "https://orcid.org/0000-0003-2604-3140"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1334819555",
+              "display_name": "Memorial Sloan Kettering Cancer Center",
+              "ror": "https://ror.org/02yrq0923",
+              "country_code": "US",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I1334819555"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Ellen Yorke",
+          "raw_affiliation_strings": [
+            "Memorial Sloan-Kettering Cancer Center",
+            "Memorial Sloan- Kettering Cancer Center"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Memorial Sloan-Kettering Cancer Center",
+              "institution_ids": [
+                "https://openalex.org/I1334819555"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Memorial Sloan- Kettering Cancer Center",
+              "institution_ids": [
+                "https://openalex.org/I1334819555"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 3,
+      "institutions_distinct_count": 17,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": {
+        "value": 3360,
+        "currency": "USD",
+        "value_usd": 3360
+      },
+      "apc_paid": {
+        "value": 3360,
+        "currency": "USD",
+        "value_usd": 3360
+      },
+      "fwci": 77.6742,
+      "has_fulltext": true,
+      "cited_by_count": 2285,
+      "citation_normalized_percentile": {
+        "value": 1.0,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 99,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "33",
+        "issue": "10",
+        "first_page": "3874",
+        "last_page": "3900"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10358",
+        "display_name": "Advanced Radiotherapy Techniques",
+        "score": 1.0,
+        "subfield": {
+          "id": "https://openalex.org/subfields/3108",
+          "display_name": "Radiation"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/31",
+          "display_name": "Physics and Astronomy"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/3",
+          "display_name": "Physical Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10358",
+          "display_name": "Advanced Radiotherapy Techniques",
+          "score": 1.0,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3108",
+            "display_name": "Radiation"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/31",
+            "display_name": "Physics and Astronomy"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11176",
+          "display_name": "Radiation Therapy and Dosimetry",
+          "score": 0.9987999796867371,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2740",
+            "display_name": "Pulmonary and Respiratory Medicine"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10202",
+          "display_name": "Lung Cancer Diagnosis and Treatment",
+          "score": 0.9962999820709229,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2740",
+            "display_name": "Pulmonary and Respiratory Medicine"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/27",
+            "display_name": "Medicine"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/radiation-therapy",
+          "display_name": "Radiation therapy",
+          "score": 0.5934569239616394
+        },
+        {
+          "id": "https://openalex.org/keywords/medicine",
+          "display_name": "Medicine",
+          "score": 0.5770953297615051
+        },
+        {
+          "id": "https://openalex.org/keywords/quality-assurance",
+          "display_name": "Quality assurance",
+          "score": 0.5128653049468994
+        },
+        {
+          "id": "https://openalex.org/keywords/respiratory-system",
+          "display_name": "Respiratory system",
+          "score": 0.48555514216423035
+        },
+        {
+          "id": "https://openalex.org/keywords/medical-physics",
+          "display_name": "Medical physics",
+          "score": 0.4517107605934143
+        },
+        {
+          "id": "https://openalex.org/keywords/respiratory-monitoring",
+          "display_name": "Respiratory monitoring",
+          "score": 0.440775066614151
+        },
+        {
+          "id": "https://openalex.org/keywords/motion",
+          "display_name": "Motion (physics)",
+          "score": 0.43628358840942383
+        },
+        {
+          "id": "https://openalex.org/keywords/radiology",
+          "display_name": "Radiology",
+          "score": 0.34699928760528564
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.3464743494987488
+        },
+        {
+          "id": "https://openalex.org/keywords/internal-medicine",
+          "display_name": "Internal medicine",
+          "score": 0.1771024465560913
+        },
+        {
+          "id": "https://openalex.org/keywords/artificial-intelligence",
+          "display_name": "Artificial intelligence",
+          "score": 0.10576269030570984
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C509974204",
+          "wikidata": "https://www.wikidata.org/wiki/Q180507",
+          "display_name": "Radiation therapy",
+          "level": 2,
+          "score": 0.5934569239616394
+        },
+        {
+          "id": "https://openalex.org/C71924100",
+          "wikidata": "https://www.wikidata.org/wiki/Q11190",
+          "display_name": "Medicine",
+          "level": 0,
+          "score": 0.5770953297615051
+        },
+        {
+          "id": "https://openalex.org/C106436119",
+          "wikidata": "https://www.wikidata.org/wiki/Q836575",
+          "display_name": "Quality assurance",
+          "level": 3,
+          "score": 0.5128653049468994
+        },
+        {
+          "id": "https://openalex.org/C534529494",
+          "wikidata": "https://www.wikidata.org/wiki/Q7891",
+          "display_name": "Respiratory system",
+          "level": 2,
+          "score": 0.48555514216423035
+        },
+        {
+          "id": "https://openalex.org/C19527891",
+          "wikidata": "https://www.wikidata.org/wiki/Q1120908",
+          "display_name": "Medical physics",
+          "level": 1,
+          "score": 0.4517107605934143
+        },
+        {
+          "id": "https://openalex.org/C2779358675",
+          "wikidata": "https://www.wikidata.org/wiki/Q3766250",
+          "display_name": "Respiratory monitoring",
+          "level": 3,
+          "score": 0.440775066614151
+        },
+        {
+          "id": "https://openalex.org/C104114177",
+          "wikidata": "https://www.wikidata.org/wiki/Q79782",
+          "display_name": "Motion (physics)",
+          "level": 2,
+          "score": 0.43628358840942383
+        },
+        {
+          "id": "https://openalex.org/C126838900",
+          "wikidata": "https://www.wikidata.org/wiki/Q77604",
+          "display_name": "Radiology",
+          "level": 1,
+          "score": 0.34699928760528564
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.3464743494987488
+        },
+        {
+          "id": "https://openalex.org/C126322002",
+          "wikidata": "https://www.wikidata.org/wiki/Q11180",
+          "display_name": "Internal medicine",
+          "level": 1,
+          "score": 0.1771024465560913
+        },
+        {
+          "id": "https://openalex.org/C154945302",
+          "wikidata": "https://www.wikidata.org/wiki/Q11660",
+          "display_name": "Artificial intelligence",
+          "level": 1,
+          "score": 0.10576269030570984
+        },
+        {
+          "id": "https://openalex.org/C142724271",
+          "wikidata": "https://www.wikidata.org/wiki/Q7208",
+          "display_name": "Pathology",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C2778618615",
+          "wikidata": "https://www.wikidata.org/wiki/Q4008393",
+          "display_name": "External quality assessment",
+          "level": 2,
+          "score": 0.0
+        }
+      ],
+      "mesh": [
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009038",
+          "descriptor_name": "Motion",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009038",
+          "descriptor_name": "Motion",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009038",
+          "descriptor_name": "Motion",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009369",
+          "descriptor_name": "Neoplasms",
+          "qualifier_ui": "Q000473",
+          "qualifier_name": "pathology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009369",
+          "descriptor_name": "Neoplasms",
+          "qualifier_ui": "Q000473",
+          "qualifier_name": "pathology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009369",
+          "descriptor_name": "Neoplasms",
+          "qualifier_ui": "Q000473",
+          "qualifier_name": "pathology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009369",
+          "descriptor_name": "Neoplasms",
+          "qualifier_ui": "Q000532",
+          "qualifier_name": "radiotherapy",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009369",
+          "descriptor_name": "Neoplasms",
+          "qualifier_ui": "Q000532",
+          "qualifier_name": "radiotherapy",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D009369",
+          "descriptor_name": "Neoplasms",
+          "qualifier_ui": "Q000532",
+          "qualifier_name": "radiotherapy",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011786",
+          "descriptor_name": "Quality Control",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011786",
+          "descriptor_name": "Quality Control",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011786",
+          "descriptor_name": "Quality Control",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011874",
+          "descriptor_name": "Radiometry",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011874",
+          "descriptor_name": "Radiometry",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011874",
+          "descriptor_name": "Radiometry",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011879",
+          "descriptor_name": "Radiotherapy Dosage",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011879",
+          "descriptor_name": "Radiotherapy Dosage",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011879",
+          "descriptor_name": "Radiotherapy Dosage",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011880",
+          "descriptor_name": "Radiotherapy Planning, Computer-Assisted",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011880",
+          "descriptor_name": "Radiotherapy Planning, Computer-Assisted",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011880",
+          "descriptor_name": "Radiotherapy Planning, Computer-Assisted",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011881",
+          "descriptor_name": "Radiotherapy, Computer-Assisted",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011881",
+          "descriptor_name": "Radiotherapy, Computer-Assisted",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D011881",
+          "descriptor_name": "Radiotherapy, Computer-Assisted",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D012119",
+          "descriptor_name": "Respiration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D012119",
+          "descriptor_name": "Respiration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D012119",
+          "descriptor_name": "Respiration",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D013997",
+          "descriptor_name": "Time Factors",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D013997",
+          "descriptor_name": "Time Factors",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D013997",
+          "descriptor_name": "Time Factors",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D014057",
+          "descriptor_name": "Tomography, X-Ray Computed",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D014057",
+          "descriptor_name": "Tomography, X-Ray Computed",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D014057",
+          "descriptor_name": "Tomography, X-Ray Computed",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017408",
+          "descriptor_name": "Guidelines as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017408",
+          "descriptor_name": "Guidelines as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D017408",
+          "descriptor_name": "Guidelines as Topic",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D018787",
+          "descriptor_name": "Radiation Oncology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D018787",
+          "descriptor_name": "Radiation Oncology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D018787",
+          "descriptor_name": "Radiation Oncology",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D050397",
+          "descriptor_name": "Radiotherapy, Intensity-Modulated",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D050397",
+          "descriptor_name": "Radiotherapy, Intensity-Modulated",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D050397",
+          "descriptor_name": "Radiotherapy, Intensity-Modulated",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        }
+      ],
+      "locations_count": 5,
+      "locations": [
+        {
+          "id": "doi:10.1118/1.2349696",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1118/1.2349696",
+          "pdf_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1118/1.2349696",
+          "source": {
+            "id": "https://openalex.org/S95522064",
+            "display_name": "Medical Physics",
+            "issn_l": "0094-2405",
+            "issn": [
+              "0094-2405",
+              "1522-8541",
+              "2473-4209"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310320595",
+            "host_organization_name": "Wiley",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310320595"
+            ],
+            "host_organization_lineage_names": [
+              "Wiley"
+            ],
+            "type": "journal"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Medical Physics",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:17089851",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/17089851",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Medical physics",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:pure.amsterdamumc.nl:openaire_cris_publications/129f4bad-5957-4fd7-a448-8bd87155f656",
+          "is_oa": false,
+          "landing_page_url": "https://pure.amsterdamumc.nl/en/publications/129f4bad-5957-4fd7-a448-8bd87155f656",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S7407055222",
+            "display_name": "Pure Amsterdam UMC",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": null,
+            "host_organization_name": null,
+            "host_organization_lineage": [],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Keall, P J, Mageras, G S, Balter, J M, Emery, R S, Forster, K M, Jiang, S B, Kapatoes, J M, Low, D A, Murphy, M J, Murray, B R, Ramsey, C R, van Herk, M B, Vedam, S S, Wong, J W & Yorke, E 2006, 'The management of respiratory motion in radiation oncology report of AAPM Task Group 76', Medical physics, vol. 33, no. 10, pp. 3874-3900. https://doi.org/10.1118/1.2349696",
+          "raw_type": "info:eu-repo/semantics/review"
+        },
+        {
+          "id": "pmh:oai:deepblue.lib.umich.edu:2027.42/134989",
+          "is_oa": true,
+          "landing_page_url": "https://hdl.handle.net/2027.42/134989",
+          "pdf_url": "https://hdl.handle.net/2027.42/134989",
+          "source": {
+            "id": "https://openalex.org/S4306400393",
+            "display_name": "Deep Blue (University of Michigan)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I27837315",
+            "host_organization_name": "University of Michigan",
+            "host_organization_lineage": [
+              "https://openalex.org/I27837315"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "Article"
+        },
+        {
+          "id": "pmh:amcpub:oai:pure.amc.nl:publications/1211c9ee-68f5-46dd-a5f6-f30e756250b2",
+          "is_oa": false,
+          "landing_page_url": "https://pure.amc.nl/en/publications/the-management-of-respiratory-motion-in-radiation-oncology-report-of-aapm-task-group-76(1211c9ee-68f5-46dd-a5f6-f30e756250b2).html",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401843",
+            "display_name": "Data Archiving and Networked Services (DANS)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1322597698",
+            "host_organization_name": "Royal Netherlands Academy of Arts and Sciences",
+            "host_organization_lineage": [
+              "https://openalex.org/I1322597698"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Medical physics, 33(10), 3874 - 3900. AAPM - American Association of Physicists in Medicine",
+          "raw_type": "info:eu-repo/semantics/other"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.1118/1.2349696",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1118/1.2349696",
+        "pdf_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1118/1.2349696",
+        "source": {
+          "id": "https://openalex.org/S95522064",
+          "display_name": "Medical Physics",
+          "issn_l": "0094-2405",
+          "issn": [
+            "0094-2405",
+            "1522-8541",
+            "2473-4209"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320595",
+          "host_organization_name": "Wiley",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320595"
+          ],
+          "host_organization_lineage_names": [
+            "Wiley"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Medical Physics",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [
+        {
+          "id": "https://metadata.un.org/sdg/3",
+          "score": 0.44999998807907104,
+          "display_name": "Good health and well-being"
+        }
+      ],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "grobid_xml": true,
+        "pdf": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2127480863.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2127480863.grobid-xml"
+      },
+      "referenced_works_count": 211,
+      "referenced_works": [
+        "https://openalex.org/W116434526",
+        "https://openalex.org/W974430464",
+        "https://openalex.org/W1840534470",
+        "https://openalex.org/W1921727265",
+        "https://openalex.org/W1925962934",
+        "https://openalex.org/W1963752153",
+        "https://openalex.org/W1963882488",
+        "https://openalex.org/W1965745955",
+        "https://openalex.org/W1965749846",
+        "https://openalex.org/W1966709141",
+        "https://openalex.org/W1967364730",
+        "https://openalex.org/W1968180137",
+        "https://openalex.org/W1969102615",
+        "https://openalex.org/W1969981688",
+        "https://openalex.org/W1971173715",
+        "https://openalex.org/W1972072864",
+        "https://openalex.org/W1972981182",
+        "https://openalex.org/W1973277978",
+        "https://openalex.org/W1974441098",
+        "https://openalex.org/W1974492960",
+        "https://openalex.org/W1975007507",
+        "https://openalex.org/W1975143516",
+        "https://openalex.org/W1976167830",
+        "https://openalex.org/W1976376781",
+        "https://openalex.org/W1977331594",
+        "https://openalex.org/W1977797379",
+        "https://openalex.org/W1978105021",
+        "https://openalex.org/W1978450300",
+        "https://openalex.org/W1981598225",
+        "https://openalex.org/W1981712893",
+        "https://openalex.org/W1981715935",
+        "https://openalex.org/W1981797191",
+        "https://openalex.org/W1982265085",
+        "https://openalex.org/W1983427194",
+        "https://openalex.org/W1983553805",
+        "https://openalex.org/W1984107964",
+        "https://openalex.org/W1984249139",
+        "https://openalex.org/W1984649402",
+        "https://openalex.org/W1986019734",
+        "https://openalex.org/W1986223870",
+        "https://openalex.org/W1987800279",
+        "https://openalex.org/W1988804916",
+        "https://openalex.org/W1989292443",
+        "https://openalex.org/W1991432796",
+        "https://openalex.org/W1993690060",
+        "https://openalex.org/W1993920023",
+        "https://openalex.org/W1994583520",
+        "https://openalex.org/W1996042811",
+        "https://openalex.org/W1996488247",
+        "https://openalex.org/W1996728714",
+        "https://openalex.org/W1998077923",
+        "https://openalex.org/W1998225682",
+        "https://openalex.org/W1998759803",
+        "https://openalex.org/W2002708307",
+        "https://openalex.org/W2003420376",
+        "https://openalex.org/W2004110874",
+        "https://openalex.org/W2005287757",
+        "https://openalex.org/W2005341722",
+        "https://openalex.org/W2007741588",
+        "https://openalex.org/W2008336601",
+        "https://openalex.org/W2008633691",
+        "https://openalex.org/W2008726211",
+        "https://openalex.org/W2009316899",
+        "https://openalex.org/W2010109601",
+        "https://openalex.org/W2015687286",
+        "https://openalex.org/W2016475739",
+        "https://openalex.org/W2017472326",
+        "https://openalex.org/W2017695843",
+        "https://openalex.org/W2019241680",
+        "https://openalex.org/W2019570186",
+        "https://openalex.org/W2019767095",
+        "https://openalex.org/W2020141781",
+        "https://openalex.org/W2020806357",
+        "https://openalex.org/W2021787989",
+        "https://openalex.org/W2023670264",
+        "https://openalex.org/W2024878110",
+        "https://openalex.org/W2026620958",
+        "https://openalex.org/W2027226834",
+        "https://openalex.org/W2028581306",
+        "https://openalex.org/W2030058767",
+        "https://openalex.org/W2031512758",
+        "https://openalex.org/W2032100009",
+        "https://openalex.org/W2032774604",
+        "https://openalex.org/W2032828665",
+        "https://openalex.org/W2034511245",
+        "https://openalex.org/W2035371603",
+        "https://openalex.org/W2036018628",
+        "https://openalex.org/W2036397731",
+        "https://openalex.org/W2036924749",
+        "https://openalex.org/W2037189699",
+        "https://openalex.org/W2037570465",
+        "https://openalex.org/W2038137317",
+        "https://openalex.org/W2039133525",
+        "https://openalex.org/W2040242897",
+        "https://openalex.org/W2040399379",
+        "https://openalex.org/W2040753979",
+        "https://openalex.org/W2041332468",
+        "https://openalex.org/W2041430895",
+        "https://openalex.org/W2042825666",
+        "https://openalex.org/W2043107207",
+        "https://openalex.org/W2045260373",
+        "https://openalex.org/W2045313863",
+        "https://openalex.org/W2045645592",
+        "https://openalex.org/W2045870717",
+        "https://openalex.org/W2046048470",
+        "https://openalex.org/W2049736486",
+        "https://openalex.org/W2050953382",
+        "https://openalex.org/W2051010978",
+        "https://openalex.org/W2051671429",
+        "https://openalex.org/W2051767374",
+        "https://openalex.org/W2052643382",
+        "https://openalex.org/W2054475080",
+        "https://openalex.org/W2059987247",
+        "https://openalex.org/W2060484971",
+        "https://openalex.org/W2060863733",
+        "https://openalex.org/W2062032494",
+        "https://openalex.org/W2062462385",
+        "https://openalex.org/W2064199082",
+        "https://openalex.org/W2065385932",
+        "https://openalex.org/W2065585898",
+        "https://openalex.org/W2066557915",
+        "https://openalex.org/W2066914778",
+        "https://openalex.org/W2068179902",
+        "https://openalex.org/W2068688115",
+        "https://openalex.org/W2070616815",
+        "https://openalex.org/W2072294335",
+        "https://openalex.org/W2072718406",
+        "https://openalex.org/W2073017384",
+        "https://openalex.org/W2073480919",
+        "https://openalex.org/W2073964794",
+        "https://openalex.org/W2075859882",
+        "https://openalex.org/W2076204793",
+        "https://openalex.org/W2077046253",
+        "https://openalex.org/W2077865327",
+        "https://openalex.org/W2079935011",
+        "https://openalex.org/W2080298337",
+        "https://openalex.org/W2083256347",
+        "https://openalex.org/W2084091979",
+        "https://openalex.org/W2085495268",
+        "https://openalex.org/W2087896006",
+        "https://openalex.org/W2090688261",
+        "https://openalex.org/W2090761578",
+        "https://openalex.org/W2090905466",
+        "https://openalex.org/W2092892497",
+        "https://openalex.org/W2093374013",
+        "https://openalex.org/W2094229486",
+        "https://openalex.org/W2095695135",
+        "https://openalex.org/W2097860252",
+        "https://openalex.org/W2098341584",
+        "https://openalex.org/W2100605124",
+        "https://openalex.org/W2100687969",
+        "https://openalex.org/W2100699934",
+        "https://openalex.org/W2102184716",
+        "https://openalex.org/W2106074752",
+        "https://openalex.org/W2108522670",
+        "https://openalex.org/W2109454478",
+        "https://openalex.org/W2110128011",
+        "https://openalex.org/W2113385378",
+        "https://openalex.org/W2115570519",
+        "https://openalex.org/W2116321448",
+        "https://openalex.org/W2116723621",
+        "https://openalex.org/W2117032294",
+        "https://openalex.org/W2117974541",
+        "https://openalex.org/W2119298887",
+        "https://openalex.org/W2120236431",
+        "https://openalex.org/W2120431409",
+        "https://openalex.org/W2121562131",
+        "https://openalex.org/W2126680055",
+        "https://openalex.org/W2133025770",
+        "https://openalex.org/W2134993767",
+        "https://openalex.org/W2135727359",
+        "https://openalex.org/W2145122414",
+        "https://openalex.org/W2145320292",
+        "https://openalex.org/W2149112380",
+        "https://openalex.org/W2149146010",
+        "https://openalex.org/W2150279374",
+        "https://openalex.org/W2151598430",
+        "https://openalex.org/W2152642890",
+        "https://openalex.org/W2152683426",
+        "https://openalex.org/W2153409462",
+        "https://openalex.org/W2153920907",
+        "https://openalex.org/W2154632257",
+        "https://openalex.org/W2157209915",
+        "https://openalex.org/W2157751183",
+        "https://openalex.org/W2157837968",
+        "https://openalex.org/W2159437808",
+        "https://openalex.org/W2159751006",
+        "https://openalex.org/W2160591714",
+        "https://openalex.org/W2162084438",
+        "https://openalex.org/W2163399589",
+        "https://openalex.org/W2163619252",
+        "https://openalex.org/W2163827108",
+        "https://openalex.org/W2164883161",
+        "https://openalex.org/W2165032049",
+        "https://openalex.org/W2166064220",
+        "https://openalex.org/W2167767036",
+        "https://openalex.org/W2168072083",
+        "https://openalex.org/W2171173011",
+        "https://openalex.org/W2171646832",
+        "https://openalex.org/W2184709404",
+        "https://openalex.org/W2259744102",
+        "https://openalex.org/W2328314895",
+        "https://openalex.org/W2346397638",
+        "https://openalex.org/W2405038102",
+        "https://openalex.org/W2414780016",
+        "https://openalex.org/W2415088582",
+        "https://openalex.org/W2462326755",
+        "https://openalex.org/W3027148339",
+        "https://openalex.org/W4205716123",
+        "https://openalex.org/W4248389354",
+        "https://openalex.org/W6686567110"
+      ],
+      "related_works": [
+        "https://openalex.org/W2094935227",
+        "https://openalex.org/W2789695786",
+        "https://openalex.org/W2142799187",
+        "https://openalex.org/W2381589928",
+        "https://openalex.org/W2118324905",
+        "https://openalex.org/W2418215596",
+        "https://openalex.org/W2400559907",
+        "https://openalex.org/W2333083769",
+        "https://openalex.org/W2318552585",
+        "https://openalex.org/W2023890578"
+      ],
+      "abstract_inverted_index": {
+        "This": [
+          0,
+          39
+        ],
+        "document": [
+          1
+        ],
+        "is": [
+          2,
+          119,
+          132,
+          150,
+          156,
+          167,
+          181,
+          186
+        ],
+        "the": [
+          3,
+          10,
+          23,
+          42,
+          68,
+          133,
+          171,
+          175,
+          190,
+          205
+        ],
+        "report": [
+          4,
+          40,
+          98,
+          118
+        ],
+        "of": [
+          5,
+          9,
+          27,
+          44,
+          70,
+          116,
+          163,
+          207
+        ],
+        "a": [
+          6,
+          120,
+          151,
+          161
+        ],
+        "task": [
+          7
+        ],
+        "group": [
+          8
+        ],
+        "AAPM": [
+          11
+        ],
+        "and": [
+          12,
+          32,
+          64,
+          84,
+          89,
+          110,
+          169,
+          204,
+          208
+        ],
+        "has": [
+          13
+        ],
+        "been": [
+          14
+        ],
+        "prepared": [
+          15
+        ],
+        "primarily": [
+          16
+        ],
+        "to": [
+          17,
+          210
+        ],
+        "advise": [
+          18
+        ],
+        "medical": [
+          19
+        ],
+        "physicists": [
+          20
+        ],
+        "involved": [
+          21
+        ],
+        "in": [
+          22,
+          67,
+          129
+        ],
+        "external-beam": [
+          24
+        ],
+        "radiation": [
+          25
+        ],
+        "therapy": [
+          26
+        ],
+        "patients": [
+          28
+        ],
+        "with": [
+          29,
+          87
+        ],
+        "thoracic,": [
+          30
+        ],
+        "abdominal,": [
+          31
+        ],
+        "pelvic": [
+          33
+        ],
+        "tumors": [
+          34
+        ],
+        "affected": [
+          35
+        ],
+        "by": [
+          36,
+          52,
+          96
+        ],
+        "respiratory": [
+          37,
+          45,
+          53,
+          60,
+          102,
+          126,
+          148,
+          164,
+          177
+        ],
+        "motion.": [
+          38,
+          127
+        ],
+        "describes": [
+          41
+        ],
+        "magnitude": [
+          43
+        ],
+        "motion,": [
+          46,
+          54
+        ],
+        "discusses": [
+          47
+        ],
+        "radiotherapy": [
+          48,
+          63
+        ],
+        "specific": [
+          49
+        ],
+        "problems": [
+          50
+        ],
+        "caused": [
+          51
+        ],
+        "explains": [
+          55
+        ],
+        "techniques": [
+          56,
+          72
+        ],
+        "that": [
+          57,
+          135
+        ],
+        "explicitly": [
+          58
+        ],
+        "manage": [
+          59
+        ],
+        "motion": [
+          61,
+          137,
+          149,
+          155,
+          165,
+          178,
+          184,
+          198
+        ],
+        "during": [
+          62
+        ],
+        "gives": [
+          65
+        ],
+        "recommendations": [
+          66
+        ],
+        "application": [
+          69
+        ],
+        "these": [
+          71,
+          82
+        ],
+        "for": [
+          73,
+          81,
+          124,
+          143,
+          146
+        ],
+        "patient": [
+          74,
+          145,
+          172
+        ],
+        "care,": [
+          75
+        ],
+        "including": [
+          76
+        ],
+        "quality": [
+          77
+        ],
+        "assurance": [
+          78
+        ],
+        "(QA)": [
+          79
+        ],
+        "guidelines": [
+          80
+        ],
+        "devices": [
+          83
+        ],
+        "their": [
+          85
+        ],
+        "use": [
+          86
+        ],
+        "conformal": [
+          88
+        ],
+        "intensity": [
+          90
+        ],
+        "modulated": [
+          91
+        ],
+        "radiotherapy.": [
+          92
+        ],
+        "The": [
+          93,
+          113
+        ],
+        "technologies": [
+          94
+        ],
+        "covered": [
+          95
+        ],
+        "this": [
+          97,
+          117,
+          130
+        ],
+        "are": [
+          99
+        ],
+        "motion-encompassing": [
+          100
+        ],
+        "methods,": [
+          101,
+          109
+        ],
+        "gated": [
+          103
+        ],
+        "techniques,": [
+          104,
+          106
+        ],
+        "breath-hold": [
+          105
+        ],
+        "forced": [
+          107
+        ],
+        "shallow-breathing": [
+          108
+        ],
+        "respiration-synchronized": [
+          111
+        ],
+        "techniques.": [
+          112
+        ],
+        "main": [
+          114
+        ],
+        "outcome": [
+          115
+        ],
+        "clinical": [
+          121
+        ],
+        "process": [
+          122
+        ],
+        "guide": [
+          123,
+          131
+        ],
+        "managing": [
+          125
+        ],
+        "Included": [
+          128
+        ],
+        "recommendation": [
+          134
+        ],
+        "tumor": [
+          136
+        ],
+        "should": [
+          138
+        ],
+        "be": [
+          139
+        ],
+        "measured": [
+          140
+        ],
+        "(when": [
+          141
+        ],
+        "possible)": [
+          142
+        ],
+        "each": [
+          144
+        ],
+        "whom": [
+          147
+        ],
+        "concern.": [
+          152
+        ],
+        "If": [
+          153
+        ],
+        "target": [
+          154
+        ],
+        "greater": [
+          157
+        ],
+        "than": [
+          158
+        ],
+        "5": [
+          159
+        ],
+        "mm,": [
+          160
+        ],
+        "method": [
+          162
+        ],
+        "management": [
+          166,
+          179,
+          185,
+          199
+        ],
+        "available,": [
+          168
+        ],
+        "if": [
+          170
+        ],
+        "can": [
+          173
+        ],
+        "tolerate": [
+          174
+        ],
+        "procedure,": [
+          176
+        ],
+        "technology": [
+          180
+        ],
+        "appropriate.": [
+          182
+        ],
+        "Respiratory": [
+          183,
+          197
+        ],
+        "also": [
+          187
+        ],
+        "appropriate": [
+          188
+        ],
+        "when": [
+          189
+        ],
+        "procedure": [
+          191
+        ],
+        "will": [
+          192
+        ],
+        "increase": [
+          193
+        ],
+        "normal": [
+          194
+        ],
+        "tissue": [
+          195
+        ],
+        "sparing.": [
+          196
+        ],
+        "involves": [
+          200
+        ],
+        "further": [
+          201
+        ],
+        "resources,": [
+          202
+        ],
+        "education": [
+          203
+        ],
+        "development": [
+          206
+        ],
+        "adherence": [
+          209
+        ],
+        "QA": [
+          211
+        ],
+        "procedures.": [
+          212
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 74
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 137
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 124
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 113
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 138
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 120
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 132
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 121
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 139
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 148
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 128
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 145
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 150
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 123
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 110
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2016-06-24T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W2058543238",
+      "doi": "https://doi.org/10.3758/s13423-012-0333-8",
+      "title": "Augmented visual, auditory, haptic, and multimodal feedback in motor learning: A review",
+      "display_name": "Augmented visual, auditory, haptic, and multimodal feedback in motor learning: A review",
+      "publication_year": 2012,
+      "publication_date": "2012-11-06",
+      "ids": {
+        "openalex": "https://openalex.org/W2058543238",
+        "doi": "https://doi.org/10.3758/s13423-012-0333-8",
+        "mag": "2058543238",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/23132605"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.3758/s13423-012-0333-8",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.3758/s13423-012-0333-8",
+        "pdf_url": "https://link.springer.com/content/pdf/10.3758%2Fs13423-012-0333-8.pdf",
+        "source": {
+          "id": "https://openalex.org/S138679565",
+          "display_name": "Psychonomic Bulletin & Review",
+          "issn_l": "1069-9384",
+          "issn": [
+            "1069-9384",
+            "1531-5320"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310319900",
+          "host_organization_name": "Springer Science+Business Media",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310319900",
+            "https://openalex.org/P4310319965"
+          ],
+          "host_organization_lineage_names": [
+            "Springer Science+Business Media",
+            "Springer Nature"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Psychonomic Bulletin &amp; Review",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "datacite",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "bronze",
+        "oa_url": "https://link.springer.com/content/pdf/10.3758%2Fs13423-012-0333-8.pdf",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5077647705",
+            "display_name": "Roland Sigrist",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I35440088",
+              "display_name": "ETH Zurich",
+              "ror": "https://ror.org/05a28rw58",
+              "country_code": "CH",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I2799323385",
+                "https://openalex.org/I35440088"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210124057",
+              "display_name": "Universit\u00e4tsklinik Balgrist",
+              "ror": "https://ror.org/02yzaka98",
+              "country_code": "CH",
+              "type": "healthcare",
+              "lineage": [
+                "https://openalex.org/I4210124057"
+              ]
+            }
+          ],
+          "countries": [
+            "CH"
+          ],
+          "is_corresponding": true,
+          "raw_author_name": "Roland Sigrist",
+          "raw_affiliation_strings": [
+            "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland. roland.sigrist@hest.ethz.ch",
+            "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland. roland.sigrist@hest.ethz.ch",
+              "institution_ids": [
+                "https://openalex.org/I4210124057"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland",
+              "institution_ids": [
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5046591192",
+            "display_name": "Georg Rauter",
+            "orcid": "https://orcid.org/0000-0001-9089-8181"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I35440088",
+              "display_name": "ETH Zurich",
+              "ror": "https://ror.org/05a28rw58",
+              "country_code": "CH",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I2799323385",
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ],
+          "countries": [
+            "CH"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Georg Rauter",
+          "raw_affiliation_strings": [
+            "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland",
+              "institution_ids": [
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5053676944",
+            "display_name": "Robert Riener",
+            "orcid": "https://orcid.org/0000-0002-1726-2950"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I35440088",
+              "display_name": "ETH Zurich",
+              "ror": "https://ror.org/05a28rw58",
+              "country_code": "CH",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I2799323385",
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ],
+          "countries": [
+            "CH"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Robert Riener",
+          "raw_affiliation_strings": [
+            "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland",
+              "institution_ids": [
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5046518573",
+            "display_name": "Peter Wolf",
+            "orcid": "https://orcid.org/0000-0003-3616-9038"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I35440088",
+              "display_name": "ETH Zurich",
+              "ror": "https://ror.org/05a28rw58",
+              "country_code": "CH",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I2799323385",
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ],
+          "countries": [
+            "CH"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Peter Wolf",
+          "raw_affiliation_strings": [
+            "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Sensory-Motor Systems Lab, ETH Zurich & Spinal Cord Injury Center, University Hospital Balgrist, Zurich, Switzerland",
+              "institution_ids": [
+                "https://openalex.org/I35440088"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 1,
+      "institutions_distinct_count": 2,
+      "corresponding_author_ids": [
+        "https://openalex.org/A5077647705"
+      ],
+      "corresponding_institution_ids": [
+        "https://openalex.org/I35440088",
+        "https://openalex.org/I4210124057"
+      ],
+      "apc_list": {
+        "value": 3790,
+        "currency": "USD",
+        "value_usd": 3790
+      },
+      "apc_paid": null,
+      "fwci": 15.3577,
+      "has_fulltext": true,
+      "cited_by_count": 1390,
+      "citation_normalized_percentile": {
+        "value": 0.99581252,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 99,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "20",
+        "issue": "1",
+        "first_page": "21",
+        "last_page": "53"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10914",
+        "display_name": "Tactile and Sensory Interactions",
+        "score": 0.9997000098228455,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2805",
+          "display_name": "Cognitive Neuroscience"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/28",
+          "display_name": "Neuroscience"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/1",
+          "display_name": "Life Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10914",
+          "display_name": "Tactile and Sensory Interactions",
+          "score": 0.9997000098228455,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2805",
+            "display_name": "Cognitive Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10982",
+          "display_name": "Motor Control and Adaptation",
+          "score": 0.9986000061035156,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2805",
+            "display_name": "Cognitive Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11431",
+          "display_name": "Action Observation and Synchronization",
+          "score": 0.9926000237464905,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3207",
+            "display_name": "Social Psychology"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/32",
+            "display_name": "Psychology"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/haptic-technology",
+          "display_name": "Haptic technology",
+          "score": 0.892805278301239
+        },
+        {
+          "id": "https://openalex.org/keywords/modalities",
+          "display_name": "Modalities",
+          "score": 0.8231096863746643
+        },
+        {
+          "id": "https://openalex.org/keywords/auditory-feedback",
+          "display_name": "Auditory feedback",
+          "score": 0.7019690871238708
+        },
+        {
+          "id": "https://openalex.org/keywords/motor-learning",
+          "display_name": "Motor learning",
+          "score": 0.5588135123252869
+        },
+        {
+          "id": "https://openalex.org/keywords/human\u2013computer-interaction",
+          "display_name": "Human\u2013computer interaction",
+          "score": 0.4835062325000763
+        },
+        {
+          "id": "https://openalex.org/keywords/stimulus-modality",
+          "display_name": "Stimulus modality",
+          "score": 0.4509510397911072
+        },
+        {
+          "id": "https://openalex.org/keywords/psychology",
+          "display_name": "Psychology",
+          "score": 0.43691059947013855
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.4358954429626465
+        },
+        {
+          "id": "https://openalex.org/keywords/augmented-reality",
+          "display_name": "Augmented reality",
+          "score": 0.4255203604698181
+        },
+        {
+          "id": "https://openalex.org/keywords/modality",
+          "display_name": "Modality (human\u2013computer interaction)",
+          "score": 0.4228057861328125
+        },
+        {
+          "id": "https://openalex.org/keywords/visual-feedback",
+          "display_name": "Visual feedback",
+          "score": 0.41722720861434937
+        },
+        {
+          "id": "https://openalex.org/keywords/cognitive-psychology",
+          "display_name": "Cognitive psychology",
+          "score": 0.25239914655685425
+        },
+        {
+          "id": "https://openalex.org/keywords/artificial-intelligence",
+          "display_name": "Artificial intelligence",
+          "score": 0.23288384079933167
+        },
+        {
+          "id": "https://openalex.org/keywords/sensory-system",
+          "display_name": "Sensory system",
+          "score": 0.14051538705825806
+        },
+        {
+          "id": "https://openalex.org/keywords/neuroscience",
+          "display_name": "Neuroscience",
+          "score": 0.08111101388931274
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C152086174",
+          "wikidata": "https://www.wikidata.org/wiki/Q3030571",
+          "display_name": "Haptic technology",
+          "level": 2,
+          "score": 0.892805278301239
+        },
+        {
+          "id": "https://openalex.org/C2779903281",
+          "wikidata": "https://www.wikidata.org/wiki/Q6888026",
+          "display_name": "Modalities",
+          "level": 2,
+          "score": 0.8231096863746643
+        },
+        {
+          "id": "https://openalex.org/C2779864741",
+          "wikidata": "https://www.wikidata.org/wiki/Q4820027",
+          "display_name": "Auditory feedback",
+          "level": 2,
+          "score": 0.7019690871238708
+        },
+        {
+          "id": "https://openalex.org/C107690735",
+          "wikidata": "https://www.wikidata.org/wiki/Q852461",
+          "display_name": "Motor learning",
+          "level": 2,
+          "score": 0.5588135123252869
+        },
+        {
+          "id": "https://openalex.org/C107457646",
+          "wikidata": "https://www.wikidata.org/wiki/Q207434",
+          "display_name": "Human\u2013computer interaction",
+          "level": 1,
+          "score": 0.4835062325000763
+        },
+        {
+          "id": "https://openalex.org/C26486553",
+          "wikidata": "https://www.wikidata.org/wiki/Q371870",
+          "display_name": "Stimulus modality",
+          "level": 3,
+          "score": 0.4509510397911072
+        },
+        {
+          "id": "https://openalex.org/C15744967",
+          "wikidata": "https://www.wikidata.org/wiki/Q9418",
+          "display_name": "Psychology",
+          "level": 0,
+          "score": 0.43691059947013855
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.4358954429626465
+        },
+        {
+          "id": "https://openalex.org/C153715457",
+          "wikidata": "https://www.wikidata.org/wiki/Q254183",
+          "display_name": "Augmented reality",
+          "level": 2,
+          "score": 0.4255203604698181
+        },
+        {
+          "id": "https://openalex.org/C2780226545",
+          "wikidata": "https://www.wikidata.org/wiki/Q6888030",
+          "display_name": "Modality (human\u2013computer interaction)",
+          "level": 2,
+          "score": 0.4228057861328125
+        },
+        {
+          "id": "https://openalex.org/C3020716817",
+          "wikidata": "https://www.wikidata.org/wiki/Q4132092",
+          "display_name": "Visual feedback",
+          "level": 2,
+          "score": 0.41722720861434937
+        },
+        {
+          "id": "https://openalex.org/C180747234",
+          "wikidata": "https://www.wikidata.org/wiki/Q23373",
+          "display_name": "Cognitive psychology",
+          "level": 1,
+          "score": 0.25239914655685425
+        },
+        {
+          "id": "https://openalex.org/C154945302",
+          "wikidata": "https://www.wikidata.org/wiki/Q11660",
+          "display_name": "Artificial intelligence",
+          "level": 1,
+          "score": 0.23288384079933167
+        },
+        {
+          "id": "https://openalex.org/C94487597",
+          "wikidata": "https://www.wikidata.org/wiki/Q11101",
+          "display_name": "Sensory system",
+          "level": 2,
+          "score": 0.14051538705825806
+        },
+        {
+          "id": "https://openalex.org/C169760540",
+          "wikidata": "https://www.wikidata.org/wiki/Q207011",
+          "display_name": "Neuroscience",
+          "level": 1,
+          "score": 0.08111101388931274
+        },
+        {
+          "id": "https://openalex.org/C144024400",
+          "wikidata": "https://www.wikidata.org/wiki/Q21201",
+          "display_name": "Sociology",
+          "level": 0,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C36289849",
+          "wikidata": "https://www.wikidata.org/wiki/Q34749",
+          "display_name": "Social science",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [
+        {
+          "descriptor_ui": "D000161",
+          "descriptor_name": "Acoustic Stimulation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000161",
+          "descriptor_name": "Acoustic Stimulation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000161",
+          "descriptor_name": "Acoustic Stimulation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D007858",
+          "descriptor_name": "Learning",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D007858",
+          "descriptor_name": "Learning",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D007858",
+          "descriptor_name": "Learning",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D009048",
+          "descriptor_name": "Motor Skills",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D009048",
+          "descriptor_name": "Motor Skills",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D009048",
+          "descriptor_name": "Motor Skills",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D010775",
+          "descriptor_name": "Photic Stimulation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D010775",
+          "descriptor_name": "Photic Stimulation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D010775",
+          "descriptor_name": "Photic Stimulation",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D030141",
+          "descriptor_name": "Feedback, Psychological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D030141",
+          "descriptor_name": "Feedback, Psychological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D030141",
+          "descriptor_name": "Feedback, Psychological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D056228",
+          "descriptor_name": "Feedback, Sensory",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D056228",
+          "descriptor_name": "Feedback, Sensory",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D056228",
+          "descriptor_name": "Feedback, Sensory",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        }
+      ],
+      "locations_count": 7,
+      "locations": [
+        {
+          "id": "doi:10.3758/s13423-012-0333-8",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.3758/s13423-012-0333-8",
+          "pdf_url": "https://link.springer.com/content/pdf/10.3758%2Fs13423-012-0333-8.pdf",
+          "source": {
+            "id": "https://openalex.org/S138679565",
+            "display_name": "Psychonomic Bulletin & Review",
+            "issn_l": "1069-9384",
+            "issn": [
+              "1069-9384",
+              "1531-5320"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310319900",
+            "host_organization_name": "Springer Science+Business Media",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310319900",
+              "https://openalex.org/P4310319965"
+            ],
+            "host_organization_lineage_names": [
+              "Springer Science+Business Media",
+              "Springer Nature"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Psychonomic Bulletin &amp; Review",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:23132605",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/23132605",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Psychonomic bulletin & review",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:www.zora.uzh.ch:68939",
+          "is_oa": true,
+          "landing_page_url": "https://www.zora.uzh.ch/id/eprint/68939/1/ZORA_NL_68939.pdf",
+          "pdf_url": "https://www.zora.uzh.ch/id/eprint/68939/1/ZORA_NL_68939.pdf",
+          "source": {
+            "id": "https://openalex.org/S4306401281",
+            "display_name": "Zurich Open Repository and Archive (University of Zurich)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I202697423",
+            "host_organization_name": "University of Zurich",
+            "host_organization_lineage": [
+              "https://openalex.org/I202697423"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "other-oa",
+          "license_id": "https://openalex.org/licenses/other-oa",
+          "version": "acceptedVersion",
+          "is_accepted": true,
+          "is_published": false,
+          "raw_source_name": "Sigrist, Roland; Rauter, Georg; Riener, Robert; Wolf, Peter (2013). Augmented visual, auditory, haptic, and multimodal feedback in motor learning: A review. Psychonomic Bulletin & Review, 20(1):21-53.",
+          "raw_type": "info:eu-repo/semantics/article"
+        },
+        {
+          "id": "pmh:oai:doc.rero.ch:315649",
+          "is_oa": false,
+          "landing_page_url": "http://doc.rero.ch/record/315649/files/13423_2012_Article_333.pdf",
+          "pdf_url": "http://doc.rero.ch/record/315649/files/13423_2012_Article_333.pdf",
+          "source": {
+            "id": "https://openalex.org/S4306400148",
+            "display_name": "reroDoc Digital Library",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I67311998",
+            "host_organization_name": "European Organization for Nuclear Research",
+            "host_organization_lineage": [
+              "https://openalex.org/I67311998"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "",
+          "raw_type": null
+        },
+        {
+          "id": "pmh:oai:www.research-collection.ethz.ch:20.500.11850/57564",
+          "is_oa": true,
+          "landing_page_url": "http://hdl.handle.net/20.500.11850/57564",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306402302",
+            "display_name": "Repository for Publications and Research Data (ETH Zurich)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I35440088",
+            "host_organization_name": "ETH Zurich",
+            "host_organization_lineage": [
+              "https://openalex.org/I35440088"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "other-oa",
+          "license_id": "https://openalex.org/licenses/other-oa",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Psychonomic Bulletin & Review, 20 (1)",
+          "raw_type": "info:eu-repo/semantics/article"
+        },
+        {
+          "id": "doi:10.3929/ethz-b-000057564",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.3929/ethz-b-000057564",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S7407051236",
+            "display_name": "ETH Z\u00fcrich Research Collection",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": null,
+            "host_organization_name": null,
+            "host_organization_lineage": [],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": null,
+          "is_accepted": false,
+          "is_published": null,
+          "raw_source_name": null,
+          "raw_type": "Other"
+        },
+        {
+          "id": "doi:10.5167/uzh-68939",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.5167/uzh-68939",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401281",
+            "display_name": "Zurich Open Repository and Archive (University of Zurich)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I202697423",
+            "host_organization_name": "University of Zurich",
+            "host_organization_lineage": [
+              "https://openalex.org/I202697423"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": null,
+          "is_accepted": false,
+          "is_published": null,
+          "raw_source_name": null,
+          "raw_type": "JournalArticle"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.3758/s13423-012-0333-8",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.3758/s13423-012-0333-8",
+        "pdf_url": "https://link.springer.com/content/pdf/10.3758%2Fs13423-012-0333-8.pdf",
+        "source": {
+          "id": "https://openalex.org/S138679565",
+          "display_name": "Psychonomic Bulletin & Review",
+          "issn_l": "1069-9384",
+          "issn": [
+            "1069-9384",
+            "1531-5320"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310319900",
+          "host_organization_name": "Springer Science+Business Media",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310319900",
+            "https://openalex.org/P4310319965"
+          ],
+          "host_organization_lineage_names": [
+            "Springer Science+Business Media",
+            "Springer Nature"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Psychonomic Bulletin &amp; Review",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "grobid_xml": true,
+        "pdf": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2058543238.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2058543238.grobid-xml"
+      },
+      "referenced_works_count": 337,
+      "referenced_works": [
+        "https://openalex.org/W1805207",
+        "https://openalex.org/W12144851",
+        "https://openalex.org/W58133226",
+        "https://openalex.org/W69473232",
+        "https://openalex.org/W137776473",
+        "https://openalex.org/W159936315",
+        "https://openalex.org/W188522607",
+        "https://openalex.org/W191270987",
+        "https://openalex.org/W195694787",
+        "https://openalex.org/W198723738",
+        "https://openalex.org/W419667270",
+        "https://openalex.org/W599938767",
+        "https://openalex.org/W625091182",
+        "https://openalex.org/W631975293",
+        "https://openalex.org/W634460904",
+        "https://openalex.org/W800349764",
+        "https://openalex.org/W1479349115",
+        "https://openalex.org/W1500192854",
+        "https://openalex.org/W1517677814",
+        "https://openalex.org/W1532161854",
+        "https://openalex.org/W1533067513",
+        "https://openalex.org/W1550060073",
+        "https://openalex.org/W1551337636",
+        "https://openalex.org/W1575829986",
+        "https://openalex.org/W1586624296",
+        "https://openalex.org/W1605361129",
+        "https://openalex.org/W1614856460",
+        "https://openalex.org/W1622298231",
+        "https://openalex.org/W1654752245",
+        "https://openalex.org/W1686728959",
+        "https://openalex.org/W1856925845",
+        "https://openalex.org/W1858475798",
+        "https://openalex.org/W1862665565",
+        "https://openalex.org/W1875476075",
+        "https://openalex.org/W1885639605",
+        "https://openalex.org/W1922715780",
+        "https://openalex.org/W1923948168",
+        "https://openalex.org/W1957096125",
+        "https://openalex.org/W1961535409",
+        "https://openalex.org/W1964198515",
+        "https://openalex.org/W1964204760",
+        "https://openalex.org/W1964219341",
+        "https://openalex.org/W1965806846",
+        "https://openalex.org/W1965849383",
+        "https://openalex.org/W1966544963",
+        "https://openalex.org/W1966714841",
+        "https://openalex.org/W1967161469",
+        "https://openalex.org/W1967323061",
+        "https://openalex.org/W1967515873",
+        "https://openalex.org/W1968878051",
+        "https://openalex.org/W1969001795",
+        "https://openalex.org/W1969090956",
+        "https://openalex.org/W1970890515",
+        "https://openalex.org/W1971183189",
+        "https://openalex.org/W1971264587",
+        "https://openalex.org/W1971553072",
+        "https://openalex.org/W1972446943",
+        "https://openalex.org/W1976912497",
+        "https://openalex.org/W1976961998",
+        "https://openalex.org/W1977475875",
+        "https://openalex.org/W1977835252",
+        "https://openalex.org/W1978023077",
+        "https://openalex.org/W1979318584",
+        "https://openalex.org/W1979343663",
+        "https://openalex.org/W1980440818",
+        "https://openalex.org/W1981686634",
+        "https://openalex.org/W1982221577",
+        "https://openalex.org/W1982295364",
+        "https://openalex.org/W1982734415",
+        "https://openalex.org/W1983394866",
+        "https://openalex.org/W1983992580",
+        "https://openalex.org/W1984067383",
+        "https://openalex.org/W1984632272",
+        "https://openalex.org/W1984928215",
+        "https://openalex.org/W1985231929",
+        "https://openalex.org/W1986386945",
+        "https://openalex.org/W1986650997",
+        "https://openalex.org/W1987474762",
+        "https://openalex.org/W1987861249",
+        "https://openalex.org/W1989833402",
+        "https://openalex.org/W1991849198",
+        "https://openalex.org/W1993615828",
+        "https://openalex.org/W1994446426",
+        "https://openalex.org/W1995770978",
+        "https://openalex.org/W1995984954",
+        "https://openalex.org/W1996406666",
+        "https://openalex.org/W1998651249",
+        "https://openalex.org/W1998681803",
+        "https://openalex.org/W2000075291",
+        "https://openalex.org/W2000788476",
+        "https://openalex.org/W2000798439",
+        "https://openalex.org/W2001461756",
+        "https://openalex.org/W2001936706",
+        "https://openalex.org/W2003696225",
+        "https://openalex.org/W2003775018",
+        "https://openalex.org/W2006408272",
+        "https://openalex.org/W2009221248",
+        "https://openalex.org/W2009734471",
+        "https://openalex.org/W2010258059",
+        "https://openalex.org/W2010431579",
+        "https://openalex.org/W2010854022",
+        "https://openalex.org/W2012286573",
+        "https://openalex.org/W2014979832",
+        "https://openalex.org/W2016044945",
+        "https://openalex.org/W2016074712",
+        "https://openalex.org/W2016253352",
+        "https://openalex.org/W2019526129",
+        "https://openalex.org/W2021636028",
+        "https://openalex.org/W2021644454",
+        "https://openalex.org/W2022131884",
+        "https://openalex.org/W2026627282",
+        "https://openalex.org/W2027076691",
+        "https://openalex.org/W2027523423",
+        "https://openalex.org/W2029120442",
+        "https://openalex.org/W2029776687",
+        "https://openalex.org/W2030474329",
+        "https://openalex.org/W2031046646",
+        "https://openalex.org/W2031465808",
+        "https://openalex.org/W2032421275",
+        "https://openalex.org/W2032635843",
+        "https://openalex.org/W2032671062",
+        "https://openalex.org/W2032903771",
+        "https://openalex.org/W2032949631",
+        "https://openalex.org/W2033849809",
+        "https://openalex.org/W2036226229",
+        "https://openalex.org/W2036666631",
+        "https://openalex.org/W2037001540",
+        "https://openalex.org/W2037143610",
+        "https://openalex.org/W2038043168",
+        "https://openalex.org/W2038312778",
+        "https://openalex.org/W2039271743",
+        "https://openalex.org/W2039975805",
+        "https://openalex.org/W2040216023",
+        "https://openalex.org/W2040344946",
+        "https://openalex.org/W2040510368",
+        "https://openalex.org/W2040646018",
+        "https://openalex.org/W2041938135",
+        "https://openalex.org/W2042807121",
+        "https://openalex.org/W2043143027",
+        "https://openalex.org/W2044923308",
+        "https://openalex.org/W2045094646",
+        "https://openalex.org/W2047076453",
+        "https://openalex.org/W2047260161",
+        "https://openalex.org/W2050579567",
+        "https://openalex.org/W2050865626",
+        "https://openalex.org/W2051739041",
+        "https://openalex.org/W2051875692",
+        "https://openalex.org/W2052698845",
+        "https://openalex.org/W2052792775",
+        "https://openalex.org/W2056771075",
+        "https://openalex.org/W2059254035",
+        "https://openalex.org/W2061271044",
+        "https://openalex.org/W2061698928",
+        "https://openalex.org/W2061861873",
+        "https://openalex.org/W2062630941",
+        "https://openalex.org/W2063440895",
+        "https://openalex.org/W2063865263",
+        "https://openalex.org/W2064013094",
+        "https://openalex.org/W2066153866",
+        "https://openalex.org/W2066428542",
+        "https://openalex.org/W2066461332",
+        "https://openalex.org/W2069211502",
+        "https://openalex.org/W2071511860",
+        "https://openalex.org/W2072020524",
+        "https://openalex.org/W2072464426",
+        "https://openalex.org/W2073162033",
+        "https://openalex.org/W2074301105",
+        "https://openalex.org/W2074431770",
+        "https://openalex.org/W2076162380",
+        "https://openalex.org/W2076192454",
+        "https://openalex.org/W2076195568",
+        "https://openalex.org/W2076731248",
+        "https://openalex.org/W2077366304",
+        "https://openalex.org/W2078594447",
+        "https://openalex.org/W2079836588",
+        "https://openalex.org/W2080234458",
+        "https://openalex.org/W2082566952",
+        "https://openalex.org/W2083133776",
+        "https://openalex.org/W2083802878",
+        "https://openalex.org/W2087128411",
+        "https://openalex.org/W2087552066",
+        "https://openalex.org/W2088412987",
+        "https://openalex.org/W2089403006",
+        "https://openalex.org/W2089421806",
+        "https://openalex.org/W2089612224",
+        "https://openalex.org/W2091296848",
+        "https://openalex.org/W2091354492",
+        "https://openalex.org/W2091927416",
+        "https://openalex.org/W2092547185",
+        "https://openalex.org/W2095467291",
+        "https://openalex.org/W2095715312",
+        "https://openalex.org/W2095802353",
+        "https://openalex.org/W2096920598",
+        "https://openalex.org/W2097121325",
+        "https://openalex.org/W2097815751",
+        "https://openalex.org/W2098315017",
+        "https://openalex.org/W2098395732",
+        "https://openalex.org/W2098619666",
+        "https://openalex.org/W2098889246",
+        "https://openalex.org/W2099803587",
+        "https://openalex.org/W2100251102",
+        "https://openalex.org/W2101725632",
+        "https://openalex.org/W2103120971",
+        "https://openalex.org/W2103221375",
+        "https://openalex.org/W2105162422",
+        "https://openalex.org/W2105710863",
+        "https://openalex.org/W2106459977",
+        "https://openalex.org/W2106936397",
+        "https://openalex.org/W2107071826",
+        "https://openalex.org/W2107412359",
+        "https://openalex.org/W2108364694",
+        "https://openalex.org/W2108866014",
+        "https://openalex.org/W2109034827",
+        "https://openalex.org/W2111473917",
+        "https://openalex.org/W2112433864",
+        "https://openalex.org/W2112959581",
+        "https://openalex.org/W2114610133",
+        "https://openalex.org/W2114763815",
+        "https://openalex.org/W2114893947",
+        "https://openalex.org/W2115018843",
+        "https://openalex.org/W2115225291",
+        "https://openalex.org/W2115482830",
+        "https://openalex.org/W2116534743",
+        "https://openalex.org/W2117916152",
+        "https://openalex.org/W2117974171",
+        "https://openalex.org/W2118489710",
+        "https://openalex.org/W2119024047",
+        "https://openalex.org/W2119930762",
+        "https://openalex.org/W2119985669",
+        "https://openalex.org/W2121966572",
+        "https://openalex.org/W2122034366",
+        "https://openalex.org/W2122191995",
+        "https://openalex.org/W2122739305",
+        "https://openalex.org/W2124490600",
+        "https://openalex.org/W2125609085",
+        "https://openalex.org/W2125859867",
+        "https://openalex.org/W2126207406",
+        "https://openalex.org/W2126906108",
+        "https://openalex.org/W2127072151",
+        "https://openalex.org/W2127577568",
+        "https://openalex.org/W2127927857",
+        "https://openalex.org/W2128018947",
+        "https://openalex.org/W2128835613",
+        "https://openalex.org/W2129442430",
+        "https://openalex.org/W2131563149",
+        "https://openalex.org/W2134898678",
+        "https://openalex.org/W2135260107",
+        "https://openalex.org/W2135571808",
+        "https://openalex.org/W2135896612",
+        "https://openalex.org/W2136891618",
+        "https://openalex.org/W2136956122",
+        "https://openalex.org/W2137957893",
+        "https://openalex.org/W2138408085",
+        "https://openalex.org/W2139699415",
+        "https://openalex.org/W2141024349",
+        "https://openalex.org/W2141817033",
+        "https://openalex.org/W2142053013",
+        "https://openalex.org/W2142503672",
+        "https://openalex.org/W2142784426",
+        "https://openalex.org/W2142976320",
+        "https://openalex.org/W2143108325",
+        "https://openalex.org/W2143991825",
+        "https://openalex.org/W2145829663",
+        "https://openalex.org/W2145862810",
+        "https://openalex.org/W2147582248",
+        "https://openalex.org/W2147811585",
+        "https://openalex.org/W2148356299",
+        "https://openalex.org/W2148794849",
+        "https://openalex.org/W2149131326",
+        "https://openalex.org/W2149533243",
+        "https://openalex.org/W2151847042",
+        "https://openalex.org/W2151852732",
+        "https://openalex.org/W2151991313",
+        "https://openalex.org/W2152358508",
+        "https://openalex.org/W2152870685",
+        "https://openalex.org/W2152873765",
+        "https://openalex.org/W2153545025",
+        "https://openalex.org/W2156162813",
+        "https://openalex.org/W2157681819",
+        "https://openalex.org/W2158430974",
+        "https://openalex.org/W2163189132",
+        "https://openalex.org/W2164263004",
+        "https://openalex.org/W2164553222",
+        "https://openalex.org/W2166096679",
+        "https://openalex.org/W2166630190",
+        "https://openalex.org/W2166694553",
+        "https://openalex.org/W2166732736",
+        "https://openalex.org/W2167017206",
+        "https://openalex.org/W2167449101",
+        "https://openalex.org/W2167752831",
+        "https://openalex.org/W2167880628",
+        "https://openalex.org/W2168120373",
+        "https://openalex.org/W2168383416",
+        "https://openalex.org/W2169983797",
+        "https://openalex.org/W2170143681",
+        "https://openalex.org/W2170299887",
+        "https://openalex.org/W2170410208",
+        "https://openalex.org/W2170743670",
+        "https://openalex.org/W2170789952",
+        "https://openalex.org/W2171063000",
+        "https://openalex.org/W2171383895",
+        "https://openalex.org/W2188989027",
+        "https://openalex.org/W2203903748",
+        "https://openalex.org/W2208145366",
+        "https://openalex.org/W2266111988",
+        "https://openalex.org/W2285644164",
+        "https://openalex.org/W2292300730",
+        "https://openalex.org/W2294846656",
+        "https://openalex.org/W2320624216",
+        "https://openalex.org/W2335560095",
+        "https://openalex.org/W2338290034",
+        "https://openalex.org/W2426855072",
+        "https://openalex.org/W2540124077",
+        "https://openalex.org/W2540149843",
+        "https://openalex.org/W2605113665",
+        "https://openalex.org/W2771677576",
+        "https://openalex.org/W2912596165",
+        "https://openalex.org/W2914637228",
+        "https://openalex.org/W4213346165",
+        "https://openalex.org/W4233087053",
+        "https://openalex.org/W4235158018",
+        "https://openalex.org/W4235478466",
+        "https://openalex.org/W4243195308",
+        "https://openalex.org/W4249771488",
+        "https://openalex.org/W4252184622",
+        "https://openalex.org/W4252881058",
+        "https://openalex.org/W4253077363",
+        "https://openalex.org/W4253372616",
+        "https://openalex.org/W4285719527",
+        "https://openalex.org/W4301692545",
+        "https://openalex.org/W6600506015",
+        "https://openalex.org/W6608034888",
+        "https://openalex.org/W6620634206",
+        "https://openalex.org/W6684647151",
+        "https://openalex.org/W6685111560",
+        "https://openalex.org/W6729348663",
+        "https://openalex.org/W6824224059"
+      ],
+      "related_works": [
+        "https://openalex.org/W2003077720",
+        "https://openalex.org/W2284053332",
+        "https://openalex.org/W4283013744",
+        "https://openalex.org/W603544797",
+        "https://openalex.org/W2024921842",
+        "https://openalex.org/W3045186179",
+        "https://openalex.org/W2739358888",
+        "https://openalex.org/W2065232347",
+        "https://openalex.org/W2727515034",
+        "https://openalex.org/W2009221248"
+      ],
+      "abstract_inverted_index": null,
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 126
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 141
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 127
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 111
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 121
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 126
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 117
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 123
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 112
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 89
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 77
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 54
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 37
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 25
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2025-10-10T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W3156614709",
+      "doi": "https://doi.org/10.1155/2021/8812542",
+      "title": "A Review of Artificial Intelligence (AI) in Education from 2010 to 2020",
+      "display_name": "A Review of Artificial Intelligence (AI) in Education from 2010 to 2020",
+      "publication_year": 2021,
+      "publication_date": "2021-01-01",
+      "ids": {
+        "openalex": "https://openalex.org/W3156614709",
+        "doi": "https://doi.org/10.1155/2021/8812542",
+        "mag": "3156614709"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1155/2021/8812542",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1155/2021/8812542",
+        "pdf_url": "https://downloads.hindawi.com/journals/complexity/2021/8812542.pdf",
+        "source": {
+          "id": "https://openalex.org/S207319443",
+          "display_name": "Complexity",
+          "issn_l": "1076-2787",
+          "issn": [
+            "1076-2787",
+            "1099-0526"
+          ],
+          "is_oa": true,
+          "is_in_doaj": true,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310319869",
+          "host_organization_name": "Hindawi Publishing Corporation",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310319869",
+            "https://openalex.org/P4310320595"
+          ],
+          "host_organization_lineage_names": [
+            "Hindawi Publishing Corporation",
+            "Wiley"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Complexity",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "doaj"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_url": "https://downloads.hindawi.com/journals/complexity/2021/8812542.pdf",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5077087618",
+            "display_name": "Xuesong Zhai",
+            "orcid": "https://orcid.org/0000-0002-4179-7859"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I76130692",
+              "display_name": "Zhejiang University",
+              "ror": "https://ror.org/00a2xv884",
+              "country_code": "CN",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I76130692"
+              ]
+            }
+          ],
+          "countries": [
+            "CN"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Xuesong Zhai",
+          "raw_affiliation_strings": [
+            "Zhejiang University, Hangzhou 310058, China",
+            "Zhejiang University, Hangzhou 310058"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-4179-7859",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Zhejiang University, Hangzhou 310058, China",
+              "institution_ids": [
+                "https://openalex.org/I76130692"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Zhejiang University, Hangzhou 310058",
+              "institution_ids": [
+                "https://openalex.org/I76130692"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5068082407",
+            "display_name": "Xiaoyan Chu",
+            "orcid": "https://orcid.org/0000-0001-9974-4066"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I76130692",
+              "display_name": "Zhejiang University",
+              "ror": "https://ror.org/00a2xv884",
+              "country_code": "CN",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I76130692"
+              ]
+            }
+          ],
+          "countries": [
+            "CN"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Xiaoyan Chu",
+          "raw_affiliation_strings": [
+            "Zhejiang University, Hangzhou 310058, China",
+            "Zhejiang University, Hangzhou 310058"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0001-9974-4066",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Zhejiang University, Hangzhou 310058, China",
+              "institution_ids": [
+                "https://openalex.org/I76130692"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Zhejiang University, Hangzhou 310058",
+              "institution_ids": [
+                "https://openalex.org/I76130692"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5035167001",
+            "display_name": "Ching Sing Chai",
+            "orcid": "https://orcid.org/0000-0002-6298-4813"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I177725633",
+              "display_name": "Chinese University of Hong Kong",
+              "ror": "https://ror.org/00t33hh48",
+              "country_code": "HK",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I177725633"
+              ]
+            }
+          ],
+          "countries": [
+            "HK"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Ching Sing Chai",
+          "raw_affiliation_strings": [
+            "Chinese University of Hong Kong, Hong Kong 999077, Hong Kong",
+            "Chinese University of Hong Kong, Hong Kong 999077"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-6298-4813",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Chinese University of Hong Kong, Hong Kong 999077, Hong Kong",
+              "institution_ids": [
+                "https://openalex.org/I177725633"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Chinese University of Hong Kong, Hong Kong 999077",
+              "institution_ids": [
+                "https://openalex.org/I177725633"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5052907090",
+            "display_name": "Morris Siu\u2013Yung Jong",
+            "orcid": "https://orcid.org/0000-0001-9186-0484"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I177725633",
+              "display_name": "Chinese University of Hong Kong",
+              "ror": "https://ror.org/00t33hh48",
+              "country_code": "HK",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I177725633"
+              ]
+            }
+          ],
+          "countries": [
+            "HK"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Morris Siu Yung Jong",
+          "raw_affiliation_strings": [
+            "Chinese University of Hong Kong, Hong Kong 999077"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0001-9186-0484",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Chinese University of Hong Kong, Hong Kong 999077",
+              "institution_ids": [
+                "https://openalex.org/I177725633"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5002666373",
+            "display_name": "Andreja Isteni\u010d Star\u010di\u010d",
+            "orcid": "https://orcid.org/0000-0003-0513-5054"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I118905719",
+              "display_name": "University of Primorska",
+              "ror": "https://ror.org/05xefg082",
+              "country_code": "SI",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I118905719"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I153976015",
+              "display_name": "University of Ljubljana",
+              "ror": "https://ror.org/05njb9z20",
+              "country_code": "SI",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I153976015"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I21203515",
+              "display_name": "Kazan Federal University",
+              "ror": "https://ror.org/05256ym39",
+              "country_code": "RU",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I21203515"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210091918",
+              "display_name": "Geodetic Institute of Slovenia",
+              "ror": "https://ror.org/00fq5tf47",
+              "country_code": "SI",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I4210091918"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I4210144394",
+              "display_name": "Czech Academy of Sciences, Institute of Psychology",
+              "ror": "https://ror.org/03aba6h29",
+              "country_code": "CZ",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I202391551",
+                "https://openalex.org/I4210144394"
+              ]
+            }
+          ],
+          "countries": [
+            "CZ",
+            "RU",
+            "SI"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Andreja Istenic",
+          "raw_affiliation_strings": [
+            "Federal University of Kazan, Institute of Psychology and Education, Kazan 420008",
+            "University of Ljubljana, Faculty of Civil and Geodetic Engineering, Ljubljana 1000",
+            "University of Primorska, Faculty of Education, Koper 6000"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0003-0513-5054",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Federal University of Kazan, Institute of Psychology and Education, Kazan 420008",
+              "institution_ids": [
+                "https://openalex.org/I21203515",
+                "https://openalex.org/I4210144394"
+              ]
+            },
+            {
+              "raw_affiliation_string": "University of Ljubljana, Faculty of Civil and Geodetic Engineering, Ljubljana 1000",
+              "institution_ids": [
+                "https://openalex.org/I153976015",
+                "https://openalex.org/I4210091918"
+              ]
+            },
+            {
+              "raw_affiliation_string": "University of Primorska, Faculty of Education, Koper 6000",
+              "institution_ids": [
+                "https://openalex.org/I118905719"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5022345679",
+            "display_name": "Michael Spector",
+            "orcid": "https://orcid.org/0000-0003-2876-6027"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I123534392",
+              "display_name": "University of North Texas",
+              "ror": "https://ror.org/00v97ad02",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I123534392"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Michael Spector",
+          "raw_affiliation_strings": [
+            "University of North Texas, Denton 76207, USA",
+            "University of North Texas, Denton 76207"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0003-2876-6027",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "University of North Texas, Denton 76207, USA",
+              "institution_ids": [
+                "https://openalex.org/I123534392"
+              ]
+            },
+            {
+              "raw_affiliation_string": "University of North Texas, Denton 76207",
+              "institution_ids": [
+                "https://openalex.org/I123534392"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5076981458",
+            "display_name": "Jia\u2010Bao Liu",
+            "orcid": "https://orcid.org/0000-0002-9620-7692"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I118987531",
+              "display_name": "Anhui Jianzhu University",
+              "ror": "https://ror.org/0108wjw08",
+              "country_code": "CN",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I118987531"
+              ]
+            }
+          ],
+          "countries": [
+            "CN"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Jia-Bao Liu",
+          "raw_affiliation_strings": [
+            "Anhui Jianzhu University, Hefei 230601, China",
+            "Anhui Jianzhu University, Hefei 230601"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-9620-7692",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Anhui Jianzhu University, Hefei 230601, China",
+              "institution_ids": [
+                "https://openalex.org/I118987531"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Anhui Jianzhu University, Hefei 230601",
+              "institution_ids": [
+                "https://openalex.org/I118987531"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5079934631",
+            "display_name": "Yuan Jing",
+            "orcid": "https://orcid.org/0000-0002-7590-0092"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I4210156464",
+              "display_name": "Anhui Xinhua University",
+              "ror": "https://ror.org/053d7x641",
+              "country_code": "CN",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I4210156464"
+              ]
+            }
+          ],
+          "countries": [
+            "CN"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Jing Yuan",
+          "raw_affiliation_strings": [
+            "Anhui Xinhua University, Hefei 230088, China",
+            "Anhui Xinhua University, Hefei 230088"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Anhui Xinhua University, Hefei 230088, China",
+              "institution_ids": [
+                "https://openalex.org/I4210156464"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Anhui Xinhua University, Hefei 230088",
+              "institution_ids": [
+                "https://openalex.org/I4210156464"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5042356208",
+            "display_name": "Yan Li",
+            "orcid": "https://orcid.org/0000-0002-0640-1783"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I76130692",
+              "display_name": "Zhejiang University",
+              "ror": "https://ror.org/00a2xv884",
+              "country_code": "CN",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I76130692"
+              ]
+            }
+          ],
+          "countries": [
+            "CN"
+          ],
+          "is_corresponding": true,
+          "raw_author_name": "Yan Li",
+          "raw_affiliation_strings": [
+            "Zhejiang University, Hangzhou 310058, China",
+            "Zhejiang University, Hangzhou 310058"
+          ],
+          "raw_orcid": "https://orcid.org/0000-0002-0640-1783",
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Zhejiang University, Hangzhou 310058, China",
+              "institution_ids": [
+                "https://openalex.org/I76130692"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Zhejiang University, Hangzhou 310058",
+              "institution_ids": [
+                "https://openalex.org/I76130692"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 6,
+      "institutions_distinct_count": 10,
+      "corresponding_author_ids": [
+        "https://openalex.org/A5042356208"
+      ],
+      "corresponding_institution_ids": [
+        "https://openalex.org/I76130692"
+      ],
+      "apc_list": {
+        "value": 2760,
+        "currency": "USD",
+        "value_usd": 2760
+      },
+      "apc_paid": {
+        "value": 2760,
+        "currency": "USD",
+        "value_usd": 2760
+      },
+      "fwci": 134.3065,
+      "has_fulltext": true,
+      "cited_by_count": 1212,
+      "citation_normalized_percentile": {
+        "value": 1.0,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 88,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "2021",
+        "issue": "1",
+        "first_page": null,
+        "last_page": null
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T11122",
+        "display_name": "Online Learning and Analytics",
+        "score": 0.9354000091552734,
+        "subfield": {
+          "id": "https://openalex.org/subfields/1706",
+          "display_name": "Computer Science Applications"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/17",
+          "display_name": "Computer Science"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/3",
+          "display_name": "Physical Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T11122",
+          "display_name": "Online Learning and Analytics",
+          "score": 0.9354000091552734,
+          "subfield": {
+            "id": "https://openalex.org/subfields/1706",
+            "display_name": "Computer Science Applications"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/17",
+            "display_name": "Computer Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/artificial-intelligence",
+          "display_name": "Artificial intelligence",
+          "score": 0.6274615526199341
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.5452748537063599
+        },
+        {
+          "id": "https://openalex.org/keywords/applications-of-artificial-intelligence",
+          "display_name": "Applications of artificial intelligence",
+          "score": 0.4464183449745178
+        },
+        {
+          "id": "https://openalex.org/keywords/machine-learning",
+          "display_name": "Machine learning",
+          "score": 0.3413277566432953
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C154945302",
+          "wikidata": "https://www.wikidata.org/wiki/Q11660",
+          "display_name": "Artificial intelligence",
+          "level": 1,
+          "score": 0.6274615526199341
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.5452748537063599
+        },
+        {
+          "id": "https://openalex.org/C157170001",
+          "wikidata": "https://www.wikidata.org/wiki/Q4781507",
+          "display_name": "Applications of artificial intelligence",
+          "level": 2,
+          "score": 0.4464183449745178
+        },
+        {
+          "id": "https://openalex.org/C119857082",
+          "wikidata": "https://www.wikidata.org/wiki/Q2539",
+          "display_name": "Machine learning",
+          "level": 1,
+          "score": 0.3413277566432953
+        }
+      ],
+      "mesh": [],
+      "locations_count": 4,
+      "locations": [
+        {
+          "id": "doi:10.1155/2021/8812542",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1155/2021/8812542",
+          "pdf_url": "https://downloads.hindawi.com/journals/complexity/2021/8812542.pdf",
+          "source": {
+            "id": "https://openalex.org/S207319443",
+            "display_name": "Complexity",
+            "issn_l": "1076-2787",
+            "issn": [
+              "1076-2787",
+              "1099-0526"
+            ],
+            "is_oa": true,
+            "is_in_doaj": true,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310319869",
+            "host_organization_name": "Hindawi Publishing Corporation",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310319869",
+              "https://openalex.org/P4310320595"
+            ],
+            "host_organization_lineage_names": [
+              "Hindawi Publishing Corporation",
+              "Wiley"
+            ],
+            "type": "journal"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Complexity",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmh:info:ark/67531/metadc1852148",
+          "is_oa": false,
+          "landing_page_url": "https://digital.library.unt.edu/ark:/67531/metadc1852148/",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400792",
+            "display_name": "University of North Texas Digital Library (University of North Texas)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I123534392",
+            "host_organization_name": "University of North Texas",
+            "host_organization_lineage": [
+              "https://openalex.org/I123534392"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Complexity, 2021(8812542), Hindawi, April 20, 2021, pp. 1-18",
+          "raw_type": "Article"
+        },
+        {
+          "id": "pmh:oai:RePEc:hin:complx:8812542",
+          "is_oa": false,
+          "landing_page_url": "http://downloads.hindawi.com/journals/complexity/2021/8812542.xml",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401271",
+            "display_name": "RePEc: Research Papers in Economics",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I77793887",
+            "host_organization_name": "Federal Reserve Bank of St. Louis",
+            "host_organization_lineage": [
+              "https://openalex.org/I77793887"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "article"
+        },
+        {
+          "id": "pmh:oai:doaj.org/article:35db88c5fe6c467c9b8688f927b793ec",
+          "is_oa": true,
+          "landing_page_url": "https://doaj.org/article/35db88c5fe6c467c9b8688f927b793ec",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401280",
+            "display_name": "DOAJ (DOAJ: Directory of Open Access Journals)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": null,
+            "host_organization_name": null,
+            "host_organization_lineage": [],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by-sa",
+          "license_id": "https://openalex.org/licenses/cc-by-sa",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Complexity, Vol 2021 (2021)",
+          "raw_type": "article"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.1155/2021/8812542",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1155/2021/8812542",
+        "pdf_url": "https://downloads.hindawi.com/journals/complexity/2021/8812542.pdf",
+        "source": {
+          "id": "https://openalex.org/S207319443",
+          "display_name": "Complexity",
+          "issn_l": "1076-2787",
+          "issn": [
+            "1076-2787",
+            "1099-0526"
+          ],
+          "is_oa": true,
+          "is_in_doaj": true,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310319869",
+          "host_organization_name": "Hindawi Publishing Corporation",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310319869",
+            "https://openalex.org/P4310320595"
+          ],
+          "host_organization_lineage_names": [
+            "Hindawi Publishing Corporation",
+            "Wiley"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Complexity",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [
+        {
+          "id": "https://metadata.un.org/sdg/4",
+          "score": 0.6299999952316284,
+          "display_name": "Quality Education"
+        }
+      ],
+      "awards": [
+        {
+          "id": "https://openalex.org/G1033493091",
+          "display_name": null,
+          "funder_award_id": "61977057",
+          "funder_id": "https://openalex.org/F4320321001",
+          "funder_display_name": "National Natural Science Foundation of China"
+        },
+        {
+          "id": "https://openalex.org/G7670469189",
+          "display_name": null,
+          "funder_award_id": "20YJC880118",
+          "funder_id": "https://openalex.org/F4320321106",
+          "funder_display_name": "Ministry of Education of the People's Republic of China"
+        }
+      ],
+      "funders": [
+        {
+          "id": "https://openalex.org/F4320321001",
+          "display_name": "National Natural Science Foundation of China",
+          "ror": "https://ror.org/01h0zpd94"
+        },
+        {
+          "id": "https://openalex.org/F4320321106",
+          "display_name": "Ministry of Education of the People's Republic of China",
+          "ror": "https://ror.org/01mv9t934"
+        }
+      ],
+      "has_content": {
+        "grobid_xml": true,
+        "pdf": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W3156614709.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W3156614709.grobid-xml"
+      },
+      "referenced_works_count": 121,
+      "referenced_works": [
+        "https://openalex.org/W616052765",
+        "https://openalex.org/W1485627804",
+        "https://openalex.org/W1580488490",
+        "https://openalex.org/W1586347303",
+        "https://openalex.org/W1690960318",
+        "https://openalex.org/W1921480682",
+        "https://openalex.org/W1929610448",
+        "https://openalex.org/W1976496764",
+        "https://openalex.org/W2003766237",
+        "https://openalex.org/W2011514261",
+        "https://openalex.org/W2013016061",
+        "https://openalex.org/W2026938909",
+        "https://openalex.org/W2035832923",
+        "https://openalex.org/W2037609558",
+        "https://openalex.org/W2047867333",
+        "https://openalex.org/W2053118218",
+        "https://openalex.org/W2053976921",
+        "https://openalex.org/W2065360617",
+        "https://openalex.org/W2070818305",
+        "https://openalex.org/W2086341847",
+        "https://openalex.org/W2091742802",
+        "https://openalex.org/W2093782067",
+        "https://openalex.org/W2098992993",
+        "https://openalex.org/W2117885088",
+        "https://openalex.org/W2128113592",
+        "https://openalex.org/W2129194012",
+        "https://openalex.org/W2130294957",
+        "https://openalex.org/W2138049378",
+        "https://openalex.org/W2142094635",
+        "https://openalex.org/W2145778770",
+        "https://openalex.org/W2150463884",
+        "https://openalex.org/W2150852966",
+        "https://openalex.org/W2153695592",
+        "https://openalex.org/W2163937430",
+        "https://openalex.org/W2165917571",
+        "https://openalex.org/W2166341593",
+        "https://openalex.org/W2168130919",
+        "https://openalex.org/W2297989531",
+        "https://openalex.org/W2340751665",
+        "https://openalex.org/W2376694580",
+        "https://openalex.org/W2402444196",
+        "https://openalex.org/W2473764339",
+        "https://openalex.org/W2518907001",
+        "https://openalex.org/W2549906944",
+        "https://openalex.org/W2550022464",
+        "https://openalex.org/W2665286161",
+        "https://openalex.org/W2696104644",
+        "https://openalex.org/W2725956666",
+        "https://openalex.org/W2727870302",
+        "https://openalex.org/W2746677022",
+        "https://openalex.org/W2748686483",
+        "https://openalex.org/W2766026265",
+        "https://openalex.org/W2786465123",
+        "https://openalex.org/W2786756474",
+        "https://openalex.org/W2791694051",
+        "https://openalex.org/W2793729889",
+        "https://openalex.org/W2794201797",
+        "https://openalex.org/W2799823977",
+        "https://openalex.org/W2802899762",
+        "https://openalex.org/W2804697677",
+        "https://openalex.org/W2809787282",
+        "https://openalex.org/W2890637277",
+        "https://openalex.org/W2891609635",
+        "https://openalex.org/W2891965507",
+        "https://openalex.org/W2906675203",
+        "https://openalex.org/W2914792884",
+        "https://openalex.org/W2914991565",
+        "https://openalex.org/W2943320522",
+        "https://openalex.org/W2949840189",
+        "https://openalex.org/W2958075928",
+        "https://openalex.org/W2960651334",
+        "https://openalex.org/W2962798420",
+        "https://openalex.org/W2963403519",
+        "https://openalex.org/W2965435177",
+        "https://openalex.org/W2968914873",
+        "https://openalex.org/W2973690551",
+        "https://openalex.org/W2980801934",
+        "https://openalex.org/W2988772061",
+        "https://openalex.org/W2989525184",
+        "https://openalex.org/W2990028269",
+        "https://openalex.org/W2994473784",
+        "https://openalex.org/W2998405810",
+        "https://openalex.org/W3000298379",
+        "https://openalex.org/W3003679516",
+        "https://openalex.org/W3004567692",
+        "https://openalex.org/W3005864768",
+        "https://openalex.org/W3006837908",
+        "https://openalex.org/W3009335665",
+        "https://openalex.org/W3010689236",
+        "https://openalex.org/W3014421158",
+        "https://openalex.org/W3017108608",
+        "https://openalex.org/W3017157646",
+        "https://openalex.org/W3020234239",
+        "https://openalex.org/W3020875770",
+        "https://openalex.org/W3023016681",
+        "https://openalex.org/W3023508490",
+        "https://openalex.org/W3027479025",
+        "https://openalex.org/W3028852563",
+        "https://openalex.org/W3029251081",
+        "https://openalex.org/W3036166555",
+        "https://openalex.org/W3037036545",
+        "https://openalex.org/W3037967964",
+        "https://openalex.org/W3038706338",
+        "https://openalex.org/W3039143701",
+        "https://openalex.org/W3043092346",
+        "https://openalex.org/W3043122700",
+        "https://openalex.org/W3043976934",
+        "https://openalex.org/W3045675805",
+        "https://openalex.org/W3046553925",
+        "https://openalex.org/W3047762280",
+        "https://openalex.org/W3049508719",
+        "https://openalex.org/W3081895631",
+        "https://openalex.org/W3083548488",
+        "https://openalex.org/W3092450009",
+        "https://openalex.org/W3097948114",
+        "https://openalex.org/W3099880746",
+        "https://openalex.org/W3101804645",
+        "https://openalex.org/W3103420222",
+        "https://openalex.org/W4240011450",
+        "https://openalex.org/W4251537962",
+        "https://openalex.org/W6640209506"
+      ],
+      "related_works": [
+        "https://openalex.org/W2961085424",
+        "https://openalex.org/W4306674287",
+        "https://openalex.org/W4387369504",
+        "https://openalex.org/W3046775127",
+        "https://openalex.org/W4394896187",
+        "https://openalex.org/W3170094116",
+        "https://openalex.org/W4386462264",
+        "https://openalex.org/W3107602296",
+        "https://openalex.org/W4364306694",
+        "https://openalex.org/W4312192474"
+      ],
+      "abstract_inverted_index": {
+        "This": [
+          0
+        ],
+        "study": [
+          1
+        ],
+        "provided": [
+          2
+        ],
+        "a": [
+          3,
+          194
+        ],
+        "content": [
+          4,
+          69
+        ],
+        "analysis": [
+          5,
+          70
+        ],
+        "of": [
+          6,
+          30,
+          36,
+          58,
+          111,
+          124,
+          151,
+          156,
+          174,
+          188
+        ],
+        "studies": [
+          7
+        ],
+        "aiming": [
+          8
+        ],
+        "to": [
+          9,
+          18,
+          66,
+          148,
+          183,
+          202
+        ],
+        "disclose": [
+          10
+        ],
+        "how": [
+          11
+        ],
+        "artificial": [
+          12
+        ],
+        "intelligence": [
+          13
+        ],
+        "(AI)": [
+          14
+        ],
+        "has": [
+          15
+        ],
+        "been": [
+          16
+        ],
+        "applied": [
+          17
+        ],
+        "the": [
+          19,
+          24,
+          52,
+          73,
+          137,
+          175,
+          185
+        ],
+        "education": [
+          20,
+          53,
+          140,
+          179,
+          191
+        ],
+        "sector": [
+          21
+        ],
+        "and": [
+          22,
+          28,
+          45,
+          54,
+          85,
+          92,
+          95,
+          103,
+          117,
+          158,
+          164,
+          192,
+          199
+        ],
+        "explore": [
+          23
+        ],
+        "potential": [
+          25
+        ],
+        "research": [
+          26,
+          56,
+          74,
+          107
+        ],
+        "trends": [
+          27
+        ],
+        "challenges": [
+          29,
+          138
+        ],
+        "AI": [
+          31,
+          125,
+          145,
+          152,
+          176,
+          189,
+          200
+        ],
+        "in": [
+          32,
+          126,
+          139,
+          190
+        ],
+        "education.": [
+          33
+        ],
+        "A": [
+          34
+        ],
+        "total": [
+          35
+        ],
+        "100": [
+          37
+        ],
+        "papers": [
+          38,
+          42,
+          48
+        ],
+        "including": [
+          39,
+          109
+        ],
+        "63": [
+          40
+        ],
+        "empirical": [
+          41
+        ],
+        "(74": [
+          43
+        ],
+        "studies)": [
+          44
+        ],
+        "37": [
+          46
+        ],
+        "analytic": [
+          47
+        ],
+        "were": [
+          49,
+          128
+        ],
+        "selected": [
+          50
+        ],
+        "from": [
+          51,
+          64
+        ],
+        "educational": [
+          55
+        ],
+        "category": [
+          57
+        ],
+        "Social": [
+          59
+        ],
+        "Sciences": [
+          60
+        ],
+        "Citation": [
+          61
+        ],
+        "Index": [
+          62
+        ],
+        "database": [
+          63
+        ],
+        "2010": [
+          65
+        ],
+        "2020.": [
+          67
+        ],
+        "The": [
+          68,
+          167
+        ],
+        "showed": [
+          71
+        ],
+        "that": [
+          72
+        ],
+        "questions": [
+          75
+        ],
+        "could": [
+          76
+        ],
+        "be": [
+          77,
+          142
+        ],
+        "classified": [
+          78
+        ],
+        "into": [
+          79,
+          171
+        ],
+        "development": [
+          80
+        ],
+        "layer": [
+          81,
+          89,
+          97
+        ],
+        "(classification,": [
+          82
+        ],
+        "matching,": [
+          83
+        ],
+        "recommendation,": [
+          84
+        ],
+        "deep": [
+          86,
+          115
+        ],
+        "learning),": [
+          87,
+          94
+        ],
+        "application": [
+          88
+        ],
+        "(feedback,": [
+          90
+        ],
+        "reasoning,": [
+          91
+        ],
+        "adaptive": [
+          93
+        ],
+        "integration": [
+          96
+        ],
+        "(affection": [
+          98
+        ],
+        "computing,": [
+          99
+        ],
+        "role\u2010playing,": [
+          100
+        ],
+        "immersive": [
+          101
+        ],
+        "learning,": [
+          102,
+          116
+        ],
+        "gamification).": [
+          104
+        ],
+        "Moreover,": [
+          105
+        ],
+        "four": [
+          106
+        ],
+        "trends,": [
+          108
+        ],
+        "Internet": [
+          110
+        ],
+        "Things,": [
+          112
+        ],
+        "swarm": [
+          113
+        ],
+        "intelligence,": [
+          114
+        ],
+        "neuroscience,": [
+          118
+        ],
+        "as": [
+          119,
+          121,
+          160,
+          162
+        ],
+        "well": [
+          120,
+          161
+        ],
+        "an": [
+          122,
+          172
+        ],
+        "assessment": [
+          123
+        ],
+        "education,": [
+          127
+        ],
+        "suggested": [
+          129
+        ],
+        "for": [
+          130,
+          178,
+          197
+        ],
+        "further": [
+          131,
+          205
+        ],
+        "investigation.": [
+          132
+        ],
+        "However,": [
+          133
+        ],
+        "we": [
+          134
+        ],
+        "also": [
+          135
+        ],
+        "proposed": [
+          136
+        ],
+        "may": [
+          141
+        ],
+        "caused": [
+          143
+        ],
+        "by": [
+          144
+        ],
+        "with": [
+          146
+        ],
+        "regard": [
+          147
+        ],
+        "inappropriate": [
+          149
+        ],
+        "use": [
+          150
+        ],
+        "techniques,": [
+          153
+        ],
+        "changing": [
+          154
+        ],
+        "roles": [
+          155
+        ],
+        "teachers": [
+          157
+        ],
+        "students,": [
+          159
+        ],
+        "social": [
+          163
+        ],
+        "ethical": [
+          165
+        ],
+        "issues.": [
+          166
+        ],
+        "results": [
+          168
+        ],
+        "provide": [
+          169
+        ],
+        "insights": [
+          170
+        ],
+        "overview": [
+          173
+        ],
+        "used": [
+          177
+        ],
+        "domain,": [
+          180
+        ],
+        "which": [
+          181
+        ],
+        "helps": [
+          182
+        ],
+        "strengthen": [
+          184
+        ],
+        "theoretical": [
+          186
+        ],
+        "foundation": [
+          187
+        ],
+        "provides": [
+          193
+        ],
+        "promising": [
+          195
+        ],
+        "channel": [
+          196
+        ],
+        "educators": [
+          198
+        ],
+        "engineers": [
+          201
+        ],
+        "carry": [
+          203
+        ],
+        "out": [
+          204
+        ],
+        "collaborative": [
+          206
+        ],
+        "research.": [
+          207
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 236
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 452
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 361
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 127
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 35
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 1
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2025-10-10T00:00:00"
+    }
+  ],
+  "group_by": []
+}

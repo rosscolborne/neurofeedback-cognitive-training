@@ -1,0 +1,4826 @@
+{
+  "meta": {
+    "count": 5285,
+    "db_response_time_ms": 111,
+    "page": 1,
+    "per_page": 3,
+    "groups_count": null,
+    "x_query": {
+      "oql": "works where full text has (neurofeedback in virtual reality)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "column_id": "fulltext.search",
+            "value": "neurofeedback in virtual reality",
+            "operator": "has"
+          }
+        ]
+      },
+      "url": "/works?filter=fulltext.search:neurofeedback in virtual reality&per_page=3&page=1"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W2949457836",
+      "doi": "https://doi.org/10.1124/pr.118.017160",
+      "title": "REBUS and the Anarchic Brain: Toward a Unified Model of the Brain Action of Psychedelics",
+      "display_name": "REBUS and the Anarchic Brain: Toward a Unified Model of the Brain Action of Psychedelics",
+      "publication_year": 2019,
+      "publication_date": "2019-06-20",
+      "ids": {
+        "openalex": "https://openalex.org/W2949457836",
+        "doi": "https://doi.org/10.1124/pr.118.017160",
+        "mag": "2949457836",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/31221820"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1124/pr.118.017160",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1124/pr.118.017160",
+        "pdf_url": "https://pharmrev.aspetjournals.org/content/pharmrev/71/3/316.full.pdf",
+        "source": {
+          "id": "https://openalex.org/S161680845",
+          "display_name": "Pharmacological Reviews",
+          "issn_l": "0031-6997",
+          "issn": [
+            "0031-6997",
+            "1521-0081"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310316283",
+          "host_organization_name": "American Society for Pharmacology and Experimental Therapeutics",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310316283"
+          ],
+          "host_organization_lineage_names": [
+            "American Society for Pharmacology and Experimental Therapeutics"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Pharmacological Reviews",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "hybrid",
+        "oa_url": "https://pharmrev.aspetjournals.org/content/pharmrev/71/3/316.full.pdf",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5038609897",
+            "display_name": "Robin Carhart\u2010Harris",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I165524941",
+              "display_name": "Wellcome Centre for Human Neuroimaging",
+              "ror": "https://ror.org/02704qw51",
+              "country_code": "GB",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I165524941",
+                "https://openalex.org/I45129253",
+                "https://openalex.org/I87048295"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I45129253",
+              "display_name": "University College London",
+              "ror": "https://ror.org/02jx3x895",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I45129253"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I47508984",
+              "display_name": "Imperial College London",
+              "ror": "https://ror.org/041kmwe10",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I47508984"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "R.L. Carhart-Harris",
+          "raw_affiliation_strings": [
+            "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.); and Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.) r.carhart-harris@imperial.ac.uk",
+            "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.)",
+            "Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.)"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.); and Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.) r.carhart-harris@imperial.ac.uk",
+              "institution_ids": [
+                "https://openalex.org/I165524941",
+                "https://openalex.org/I45129253"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.)",
+              "institution_ids": [
+                "https://openalex.org/I47508984"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.)",
+              "institution_ids": [
+                "https://openalex.org/I165524941",
+                "https://openalex.org/I45129253"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5086852785",
+            "display_name": "Karl Friston",
+            "orcid": "https://orcid.org/0000-0001-7984-8909"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I165524941",
+              "display_name": "Wellcome Centre for Human Neuroimaging",
+              "ror": "https://ror.org/02704qw51",
+              "country_code": "GB",
+              "type": "facility",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I165524941",
+                "https://openalex.org/I45129253",
+                "https://openalex.org/I87048295"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I45129253",
+              "display_name": "University College London",
+              "ror": "https://ror.org/02jx3x895",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I124357947",
+                "https://openalex.org/I45129253"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I47508984",
+              "display_name": "Imperial College London",
+              "ror": "https://ror.org/041kmwe10",
+              "country_code": "GB",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I47508984"
+              ]
+            }
+          ],
+          "countries": [
+            "GB"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "K.J. Friston",
+          "raw_affiliation_strings": [
+            "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.); and Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.)",
+            "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.)",
+            "Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.)"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.); and Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.)",
+              "institution_ids": [
+                "https://openalex.org/I165524941",
+                "https://openalex.org/I45129253"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Centre for Psychedelic Research, Division of Brain Sciences, Imperial College London, London, United Kingdom (R.L.C.-H.)",
+              "institution_ids": [
+                "https://openalex.org/I47508984"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Institute of Neurology, Wellcome Trust Centre for Neuroimaging, University College London, London, United Kingdom (K.J.F.)",
+              "institution_ids": [
+                "https://openalex.org/I165524941",
+                "https://openalex.org/I45129253"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 1,
+      "institutions_distinct_count": 3,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": {
+        "value": 4500,
+        "currency": "USD",
+        "value_usd": 4500
+      },
+      "apc_paid": {
+        "value": 2580,
+        "currency": "EUR",
+        "value_usd": 2782
+      },
+      "fwci": 88.4197,
+      "has_fulltext": true,
+      "cited_by_count": 1206,
+      "citation_normalized_percentile": {
+        "value": 0.99986493,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 97,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "71",
+        "issue": "3",
+        "first_page": "316",
+        "last_page": "344"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T12553",
+        "display_name": "Psychedelics and Drug Studies",
+        "score": 1.0,
+        "subfield": {
+          "id": "https://openalex.org/subfields/3203",
+          "display_name": "Clinical Psychology"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/32",
+          "display_name": "Psychology"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/2",
+          "display_name": "Social Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T12553",
+          "display_name": "Psychedelics and Drug Studies",
+          "score": 1.0,
+          "subfield": {
+            "id": "https://openalex.org/subfields/3203",
+            "display_name": "Clinical Psychology"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/32",
+            "display_name": "Psychology"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/2",
+            "display_name": "Social Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10056",
+          "display_name": "Neurotransmitter Receptor Influence on Behavior",
+          "score": 0.9510999917984009,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2804",
+            "display_name": "Cellular and Molecular Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11584",
+          "display_name": "Biochemical Analysis and Sensing Techniques",
+          "score": 0.9445000290870667,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2916",
+            "display_name": "Nutrition and Dietetics"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/29",
+            "display_name": "Nursing"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/4",
+            "display_name": "Health Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/prior-probability",
+          "display_name": "Prior probability",
+          "score": 0.6850095987319946
+        },
+        {
+          "id": "https://openalex.org/keywords/action",
+          "display_name": "Action (physics)",
+          "score": 0.6464443206787109
+        },
+        {
+          "id": "https://openalex.org/keywords/psychology",
+          "display_name": "Psychology",
+          "score": 0.5789982676506042
+        },
+        {
+          "id": "https://openalex.org/keywords/consciousness",
+          "display_name": "Consciousness",
+          "score": 0.5303322076797485
+        },
+        {
+          "id": "https://openalex.org/keywords/psilocybin",
+          "display_name": "Psilocybin",
+          "score": 0.45260918140411377
+        },
+        {
+          "id": "https://openalex.org/keywords/epistemology",
+          "display_name": "Epistemology",
+          "score": 0.36238816380500793
+        },
+        {
+          "id": "https://openalex.org/keywords/cognitive-psychology",
+          "display_name": "Cognitive psychology",
+          "score": 0.3576468527317047
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.30092930793762207
+        },
+        {
+          "id": "https://openalex.org/keywords/neuroscience",
+          "display_name": "Neuroscience",
+          "score": 0.29404231905937195
+        },
+        {
+          "id": "https://openalex.org/keywords/artificial-intelligence",
+          "display_name": "Artificial intelligence",
+          "score": 0.17071351408958435
+        },
+        {
+          "id": "https://openalex.org/keywords/hallucinogen",
+          "display_name": "Hallucinogen",
+          "score": 0.15086376667022705
+        },
+        {
+          "id": "https://openalex.org/keywords/philosophy",
+          "display_name": "Philosophy",
+          "score": 0.10993263125419617
+        },
+        {
+          "id": "https://openalex.org/keywords/bayesian-probability",
+          "display_name": "Bayesian probability",
+          "score": 0.08515486121177673
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C177769412",
+          "wikidata": "https://www.wikidata.org/wiki/Q278090",
+          "display_name": "Prior probability",
+          "level": 3,
+          "score": 0.6850095987319946
+        },
+        {
+          "id": "https://openalex.org/C2780791683",
+          "wikidata": "https://www.wikidata.org/wiki/Q846785",
+          "display_name": "Action (physics)",
+          "level": 2,
+          "score": 0.6464443206787109
+        },
+        {
+          "id": "https://openalex.org/C15744967",
+          "wikidata": "https://www.wikidata.org/wiki/Q9418",
+          "display_name": "Psychology",
+          "level": 0,
+          "score": 0.5789982676506042
+        },
+        {
+          "id": "https://openalex.org/C186720457",
+          "wikidata": "https://www.wikidata.org/wiki/Q7087",
+          "display_name": "Consciousness",
+          "level": 2,
+          "score": 0.5303322076797485
+        },
+        {
+          "id": "https://openalex.org/C2776502132",
+          "wikidata": "https://www.wikidata.org/wiki/Q208118",
+          "display_name": "Psilocybin",
+          "level": 3,
+          "score": 0.45260918140411377
+        },
+        {
+          "id": "https://openalex.org/C111472728",
+          "wikidata": "https://www.wikidata.org/wiki/Q9471",
+          "display_name": "Epistemology",
+          "level": 1,
+          "score": 0.36238816380500793
+        },
+        {
+          "id": "https://openalex.org/C180747234",
+          "wikidata": "https://www.wikidata.org/wiki/Q23373",
+          "display_name": "Cognitive psychology",
+          "level": 1,
+          "score": 0.3576468527317047
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.30092930793762207
+        },
+        {
+          "id": "https://openalex.org/C169760540",
+          "wikidata": "https://www.wikidata.org/wiki/Q207011",
+          "display_name": "Neuroscience",
+          "level": 1,
+          "score": 0.29404231905937195
+        },
+        {
+          "id": "https://openalex.org/C154945302",
+          "wikidata": "https://www.wikidata.org/wiki/Q11660",
+          "display_name": "Artificial intelligence",
+          "level": 1,
+          "score": 0.17071351408958435
+        },
+        {
+          "id": "https://openalex.org/C124315065",
+          "wikidata": "https://www.wikidata.org/wiki/Q194270",
+          "display_name": "Hallucinogen",
+          "level": 2,
+          "score": 0.15086376667022705
+        },
+        {
+          "id": "https://openalex.org/C138885662",
+          "wikidata": "https://www.wikidata.org/wiki/Q5891",
+          "display_name": "Philosophy",
+          "level": 0,
+          "score": 0.10993263125419617
+        },
+        {
+          "id": "https://openalex.org/C107673813",
+          "wikidata": "https://www.wikidata.org/wiki/Q812534",
+          "display_name": "Bayesian probability",
+          "level": 2,
+          "score": 0.08515486121177673
+        },
+        {
+          "id": "https://openalex.org/C118552586",
+          "wikidata": "https://www.wikidata.org/wiki/Q7867",
+          "display_name": "Psychiatry",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C121332964",
+          "wikidata": "https://www.wikidata.org/wiki/Q413",
+          "display_name": "Physics",
+          "level": 0,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C62520636",
+          "wikidata": "https://www.wikidata.org/wiki/Q944",
+          "display_name": "Quantum mechanics",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [
+        {
+          "descriptor_ui": "D000818",
+          "descriptor_name": "Animals",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000818",
+          "descriptor_name": "Animals",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000818",
+          "descriptor_name": "Animals",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000818",
+          "descriptor_name": "Animals",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D000818",
+          "descriptor_name": "Animals",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000187",
+          "qualifier_name": "drug effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000187",
+          "qualifier_name": "drug effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000187",
+          "qualifier_name": "drug effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000187",
+          "qualifier_name": "drug effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000187",
+          "qualifier_name": "drug effects",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003469",
+          "descriptor_name": "Culture",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003469",
+          "descriptor_name": "Culture",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003469",
+          "descriptor_name": "Culture",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003469",
+          "descriptor_name": "Culture",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003469",
+          "descriptor_name": "Culture",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006213",
+          "descriptor_name": "Hallucinogens",
+          "qualifier_ui": "Q000494",
+          "qualifier_name": "pharmacology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006213",
+          "descriptor_name": "Hallucinogens",
+          "qualifier_ui": "Q000494",
+          "qualifier_name": "pharmacology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006213",
+          "descriptor_name": "Hallucinogens",
+          "qualifier_ui": "Q000494",
+          "qualifier_name": "pharmacology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006213",
+          "descriptor_name": "Hallucinogens",
+          "qualifier_ui": "Q000494",
+          "qualifier_name": "pharmacology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006213",
+          "descriptor_name": "Hallucinogens",
+          "qualifier_ui": "Q000494",
+          "qualifier_name": "pharmacology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D006801",
+          "descriptor_name": "Humans",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008959",
+          "descriptor_name": "Models, Neurological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008959",
+          "descriptor_name": "Models, Neurological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008959",
+          "descriptor_name": "Models, Neurological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008959",
+          "descriptor_name": "Models, Neurological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D008959",
+          "descriptor_name": "Models, Neurological",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        }
+      ],
+      "locations_count": 6,
+      "locations": [
+        {
+          "id": "doi:10.1124/pr.118.017160",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1124/pr.118.017160",
+          "pdf_url": "https://pharmrev.aspetjournals.org/content/pharmrev/71/3/316.full.pdf",
+          "source": {
+            "id": "https://openalex.org/S161680845",
+            "display_name": "Pharmacological Reviews",
+            "issn_l": "0031-6997",
+            "issn": [
+              "0031-6997",
+              "1521-0081"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310316283",
+            "host_organization_name": "American Society for Pharmacology and Experimental Therapeutics",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310316283"
+            ],
+            "host_organization_lineage_names": [
+              "American Society for Pharmacology and Experimental Therapeutics"
+            ],
+            "type": "journal"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Pharmacological Reviews",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:31221820",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/31221820",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Pharmacological reviews",
+          "raw_type": "Journal Article"
+        },
+        {
+          "id": "pmh:oai:pubmedcentral.nih.gov:6588209",
+          "is_oa": true,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/6588209",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S2764455111",
+            "display_name": "PubMed Central",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": true,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Pharmacol Rev",
+          "raw_type": "Text"
+        },
+        {
+          "id": "pmh:ark:/13030/qt5g6443js",
+          "is_oa": false,
+          "landing_page_url": null,
+          "pdf_url": null,
+          "source": null,
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": null
+        },
+        {
+          "id": "pmh:oai:eprints.ucl.ac.uk.OAI2:10077110",
+          "is_oa": false,
+          "landing_page_url": "https://discovery.ucl.ac.uk/id/eprint/10077110/",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400024",
+            "display_name": "UCL Discovery (University College London)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I45129253",
+            "host_organization_name": "University College London",
+            "host_organization_lineage": [
+              "https://openalex.org/I45129253"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Pharmacological Reviews , 71 (3) pp. 316-344. (2019)",
+          "raw_type": "Article"
+        },
+        {
+          "id": "pmh:oai:escholarship.org:ark:/13030/qt5g6443js",
+          "is_oa": true,
+          "landing_page_url": "https://escholarship.org/uc/item/5g6443js",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306400115",
+            "display_name": "eScholarship (California Digital Library)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I2801248553",
+            "host_organization_name": "California Digital Library",
+            "host_organization_lineage": [
+              "https://openalex.org/I2801248553"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by",
+          "license_id": "https://openalex.org/licenses/cc-by",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": "Pharmacological Reviews, vol 71, iss 3",
+          "raw_type": "article"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.1124/pr.118.017160",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1124/pr.118.017160",
+        "pdf_url": "https://pharmrev.aspetjournals.org/content/pharmrev/71/3/316.full.pdf",
+        "source": {
+          "id": "https://openalex.org/S161680845",
+          "display_name": "Pharmacological Reviews",
+          "issn_l": "0031-6997",
+          "issn": [
+            "0031-6997",
+            "1521-0081"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310316283",
+          "host_organization_name": "American Society for Pharmacology and Experimental Therapeutics",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310316283"
+          ],
+          "host_organization_lineage_names": [
+            "American Society for Pharmacology and Experimental Therapeutics"
+          ],
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "license_id": "https://openalex.org/licenses/cc-by",
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Pharmacological Reviews",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [
+        {
+          "display_name": "Climate action",
+          "id": "https://metadata.un.org/sdg/13",
+          "score": 0.7400000095367432
+        }
+      ],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "pdf": true,
+        "grobid_xml": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2949457836.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2949457836.grobid-xml"
+      },
+      "referenced_works_count": 292,
+      "referenced_works": [
+        "https://openalex.org/W124170093",
+        "https://openalex.org/W567804944",
+        "https://openalex.org/W568723422",
+        "https://openalex.org/W1144621943",
+        "https://openalex.org/W1191653087",
+        "https://openalex.org/W1483493329",
+        "https://openalex.org/W1487419431",
+        "https://openalex.org/W1503049217",
+        "https://openalex.org/W1511730593",
+        "https://openalex.org/W1523635924",
+        "https://openalex.org/W1533770214",
+        "https://openalex.org/W1535165638",
+        "https://openalex.org/W1538325750",
+        "https://openalex.org/W1543613846",
+        "https://openalex.org/W1547388225",
+        "https://openalex.org/W1579395641",
+        "https://openalex.org/W1584704559",
+        "https://openalex.org/W1597217152",
+        "https://openalex.org/W1603145302",
+        "https://openalex.org/W1605080685",
+        "https://openalex.org/W1606462011",
+        "https://openalex.org/W1654137364",
+        "https://openalex.org/W1810864195",
+        "https://openalex.org/W1900980019",
+        "https://openalex.org/W1902335101",
+        "https://openalex.org/W1938816422",
+        "https://openalex.org/W1959119377",
+        "https://openalex.org/W1963722081",
+        "https://openalex.org/W1971459727",
+        "https://openalex.org/W1971528267",
+        "https://openalex.org/W1972616052",
+        "https://openalex.org/W1973613743",
+        "https://openalex.org/W1973845142",
+        "https://openalex.org/W1974074998",
+        "https://openalex.org/W1979466162",
+        "https://openalex.org/W1980117368",
+        "https://openalex.org/W1980919083",
+        "https://openalex.org/W1982170313",
+        "https://openalex.org/W1982748320",
+        "https://openalex.org/W1983192672",
+        "https://openalex.org/W1991853119",
+        "https://openalex.org/W1995045083",
+        "https://openalex.org/W1996745079",
+        "https://openalex.org/W1997058647",
+        "https://openalex.org/W1997161439",
+        "https://openalex.org/W2000514530",
+        "https://openalex.org/W2004172377",
+        "https://openalex.org/W2005209054",
+        "https://openalex.org/W2009150907",
+        "https://openalex.org/W2014204688",
+        "https://openalex.org/W2014761647",
+        "https://openalex.org/W2015011531",
+        "https://openalex.org/W2017360110",
+        "https://openalex.org/W2019656624",
+        "https://openalex.org/W2020102348",
+        "https://openalex.org/W2024490100",
+        "https://openalex.org/W2026832357",
+        "https://openalex.org/W2027941157",
+        "https://openalex.org/W2030472555",
+        "https://openalex.org/W2032558547",
+        "https://openalex.org/W2033034887",
+        "https://openalex.org/W2033047816",
+        "https://openalex.org/W2033134445",
+        "https://openalex.org/W2034806191",
+        "https://openalex.org/W2035391615",
+        "https://openalex.org/W2035497144",
+        "https://openalex.org/W2037317432",
+        "https://openalex.org/W2038166296",
+        "https://openalex.org/W2038593489",
+        "https://openalex.org/W2038954797",
+        "https://openalex.org/W2041177833",
+        "https://openalex.org/W2043197532",
+        "https://openalex.org/W2044852143",
+        "https://openalex.org/W2049775606",
+        "https://openalex.org/W2049842274",
+        "https://openalex.org/W2051423370",
+        "https://openalex.org/W2055277208",
+        "https://openalex.org/W2056769976",
+        "https://openalex.org/W2059512699",
+        "https://openalex.org/W2061746706",
+        "https://openalex.org/W2063294564",
+        "https://openalex.org/W2063393199",
+        "https://openalex.org/W2064452374",
+        "https://openalex.org/W2065911304",
+        "https://openalex.org/W2066835186",
+        "https://openalex.org/W2069432145",
+        "https://openalex.org/W2070461647",
+        "https://openalex.org/W2075238613",
+        "https://openalex.org/W2077235252",
+        "https://openalex.org/W2078821747",
+        "https://openalex.org/W2085754318",
+        "https://openalex.org/W2088422454",
+        "https://openalex.org/W2090654400",
+        "https://openalex.org/W2091405003",
+        "https://openalex.org/W2093203605",
+        "https://openalex.org/W2095487159",
+        "https://openalex.org/W2096375888",
+        "https://openalex.org/W2096610047",
+        "https://openalex.org/W2098182568",
+        "https://openalex.org/W2098533845",
+        "https://openalex.org/W2100182643",
+        "https://openalex.org/W2100532211",
+        "https://openalex.org/W2102409316",
+        "https://openalex.org/W2104049715",
+        "https://openalex.org/W2104493382",
+        "https://openalex.org/W2106872048",
+        "https://openalex.org/W2107376791",
+        "https://openalex.org/W2107557962",
+        "https://openalex.org/W2109543774",
+        "https://openalex.org/W2109884356",
+        "https://openalex.org/W2110198065",
+        "https://openalex.org/W2111920357",
+        "https://openalex.org/W2117208984",
+        "https://openalex.org/W2118364230",
+        "https://openalex.org/W2118739111",
+        "https://openalex.org/W2119134849",
+        "https://openalex.org/W2119600275",
+        "https://openalex.org/W2119885245",
+        "https://openalex.org/W2120079537",
+        "https://openalex.org/W2121441663",
+        "https://openalex.org/W2121654107",
+        "https://openalex.org/W2122335802",
+        "https://openalex.org/W2124858522",
+        "https://openalex.org/W2126940530",
+        "https://openalex.org/W2127531110",
+        "https://openalex.org/W2127825881",
+        "https://openalex.org/W2128667819",
+        "https://openalex.org/W2131536379",
+        "https://openalex.org/W2133166069",
+        "https://openalex.org/W2134831221",
+        "https://openalex.org/W2135100787",
+        "https://openalex.org/W2137983723",
+        "https://openalex.org/W2140018908",
+        "https://openalex.org/W2141139370",
+        "https://openalex.org/W2142605797",
+        "https://openalex.org/W2144455058",
+        "https://openalex.org/W2144811422",
+        "https://openalex.org/W2147546041",
+        "https://openalex.org/W2148242024",
+        "https://openalex.org/W2148764920",
+        "https://openalex.org/W2151582777",
+        "https://openalex.org/W2153394220",
+        "https://openalex.org/W2154562678",
+        "https://openalex.org/W2154640601",
+        "https://openalex.org/W2155051738",
+        "https://openalex.org/W2155757287",
+        "https://openalex.org/W2159275967",
+        "https://openalex.org/W2159929956",
+        "https://openalex.org/W2160695817",
+        "https://openalex.org/W2161119575",
+        "https://openalex.org/W2161555895",
+        "https://openalex.org/W2165646521",
+        "https://openalex.org/W2170596036",
+        "https://openalex.org/W2170915041",
+        "https://openalex.org/W2171031617",
+        "https://openalex.org/W2171192043",
+        "https://openalex.org/W2179182088",
+        "https://openalex.org/W2191898742",
+        "https://openalex.org/W2266766602",
+        "https://openalex.org/W2280429408",
+        "https://openalex.org/W2286353276",
+        "https://openalex.org/W2289360150",
+        "https://openalex.org/W2291527088",
+        "https://openalex.org/W2297557715",
+        "https://openalex.org/W2308863365",
+        "https://openalex.org/W2322527340",
+        "https://openalex.org/W2336389811",
+        "https://openalex.org/W2336591896",
+        "https://openalex.org/W2337770855",
+        "https://openalex.org/W2337964085",
+        "https://openalex.org/W2341558148",
+        "https://openalex.org/W2346262441",
+        "https://openalex.org/W2396675581",
+        "https://openalex.org/W2417999625",
+        "https://openalex.org/W2434010258",
+        "https://openalex.org/W2439685582",
+        "https://openalex.org/W2443953439",
+        "https://openalex.org/W2471523186",
+        "https://openalex.org/W2486533162",
+        "https://openalex.org/W2492489237",
+        "https://openalex.org/W2502147470",
+        "https://openalex.org/W2517088698",
+        "https://openalex.org/W2518093283",
+        "https://openalex.org/W2519696552",
+        "https://openalex.org/W2524912940",
+        "https://openalex.org/W2530226740",
+        "https://openalex.org/W2536956629",
+        "https://openalex.org/W2551626080",
+        "https://openalex.org/W2552761136",
+        "https://openalex.org/W2553251493",
+        "https://openalex.org/W2558412547",
+        "https://openalex.org/W2559739670",
+        "https://openalex.org/W2582359469",
+        "https://openalex.org/W2582692487",
+        "https://openalex.org/W2586074239",
+        "https://openalex.org/W2590821743",
+        "https://openalex.org/W2605399484",
+        "https://openalex.org/W2606488938",
+        "https://openalex.org/W2606742314",
+        "https://openalex.org/W2606882373",
+        "https://openalex.org/W2608583841",
+        "https://openalex.org/W2610144880",
+        "https://openalex.org/W2616273018",
+        "https://openalex.org/W2618517468",
+        "https://openalex.org/W2618615166",
+        "https://openalex.org/W2623598950",
+        "https://openalex.org/W2624901555",
+        "https://openalex.org/W2644260506",
+        "https://openalex.org/W2657342869",
+        "https://openalex.org/W2726287250",
+        "https://openalex.org/W2736660860",
+        "https://openalex.org/W2737001932",
+        "https://openalex.org/W2738159159",
+        "https://openalex.org/W2743911451",
+        "https://openalex.org/W2744535290",
+        "https://openalex.org/W2744933359",
+        "https://openalex.org/W2749408017",
+        "https://openalex.org/W2751818418",
+        "https://openalex.org/W2753654430",
+        "https://openalex.org/W2753989225",
+        "https://openalex.org/W2756069429",
+        "https://openalex.org/W2757390367",
+        "https://openalex.org/W2760291954",
+        "https://openalex.org/W2762525449",
+        "https://openalex.org/W2762746674",
+        "https://openalex.org/W2764423798",
+        "https://openalex.org/W2767530231",
+        "https://openalex.org/W2767725891",
+        "https://openalex.org/W2770636944",
+        "https://openalex.org/W2781316183",
+        "https://openalex.org/W2781340150",
+        "https://openalex.org/W2782094652",
+        "https://openalex.org/W2784860341",
+        "https://openalex.org/W2788854095",
+        "https://openalex.org/W2789154098",
+        "https://openalex.org/W2790362928",
+        "https://openalex.org/W2792444257",
+        "https://openalex.org/W2792825152",
+        "https://openalex.org/W2793484468",
+        "https://openalex.org/W2798411170",
+        "https://openalex.org/W2802036381",
+        "https://openalex.org/W2803735852",
+        "https://openalex.org/W2806446644",
+        "https://openalex.org/W2806513910",
+        "https://openalex.org/W2807534705",
+        "https://openalex.org/W2808301300",
+        "https://openalex.org/W2808867953",
+        "https://openalex.org/W2809850625",
+        "https://openalex.org/W2810218692",
+        "https://openalex.org/W2810991298",
+        "https://openalex.org/W2883189204",
+        "https://openalex.org/W2887016029",
+        "https://openalex.org/W2889504249",
+        "https://openalex.org/W2889770130",
+        "https://openalex.org/W2889886504",
+        "https://openalex.org/W2889959197",
+        "https://openalex.org/W2891343109",
+        "https://openalex.org/W2892061340",
+        "https://openalex.org/W2894846833",
+        "https://openalex.org/W2896204661",
+        "https://openalex.org/W2898717395",
+        "https://openalex.org/W2904128666",
+        "https://openalex.org/W2910919428",
+        "https://openalex.org/W2911514809",
+        "https://openalex.org/W2912811302",
+        "https://openalex.org/W2914255920",
+        "https://openalex.org/W2923100148",
+        "https://openalex.org/W2949283084",
+        "https://openalex.org/W2950187958",
+        "https://openalex.org/W2952169207",
+        "https://openalex.org/W3039116382",
+        "https://openalex.org/W3105012889",
+        "https://openalex.org/W3134109999",
+        "https://openalex.org/W3149672847",
+        "https://openalex.org/W3190996274",
+        "https://openalex.org/W3201689285",
+        "https://openalex.org/W4211150788",
+        "https://openalex.org/W4211211437",
+        "https://openalex.org/W4237945346",
+        "https://openalex.org/W4240789427",
+        "https://openalex.org/W4241976975",
+        "https://openalex.org/W4254935071",
+        "https://openalex.org/W6675401909",
+        "https://openalex.org/W6696957846",
+        "https://openalex.org/W6698471306",
+        "https://openalex.org/W6718444987",
+        "https://openalex.org/W6737095242",
+        "https://openalex.org/W6747509769",
+        "https://openalex.org/W6749605187",
+        "https://openalex.org/W6752912790",
+        "https://openalex.org/W6758276405",
+        "https://openalex.org/W6758932831"
+      ],
+      "related_works": [
+        "https://openalex.org/W4312534256",
+        "https://openalex.org/W2072670605",
+        "https://openalex.org/W108080335",
+        "https://openalex.org/W2154105276",
+        "https://openalex.org/W4384835068",
+        "https://openalex.org/W4285605468",
+        "https://openalex.org/W3161556967",
+        "https://openalex.org/W2810710828",
+        "https://openalex.org/W4230626221",
+        "https://openalex.org/W3157861361"
+      ],
+      "abstract_inverted_index": {
+        "This": [
+          0
+        ],
+        "paper": [
+          1
+        ],
+        "formulates": [
+          2
+        ],
+        "the": [
+          3,
+          9,
+          26,
+          31,
+          44,
+          62,
+          84,
+          101,
+          139,
+          154,
+          163,
+          213,
+          264,
+          269,
+          293,
+          305
+        ],
+        "action": [
+          4,
+          266
+        ],
+        "of": [
+          5,
+          46,
+          80,
+          104,
+          111,
+          123,
+          144,
+          153,
+          165,
+          215,
+          218,
+          229,
+          252,
+          263,
+          267,
+          307
+        ],
+        "psychedelics": [
+          6,
+          23,
+          97,
+          159,
+          231,
+          278
+        ],
+        "by": [
+          7,
+          149,
+          212
+        ],
+        "integrating": [
+          8
+        ],
+        "free-energy": [
+          10
+        ],
+        "principle": [
+          11,
+          32
+        ],
+        "and": [
+          12,
+          25,
+          71,
+          133,
+          142,
+          205,
+          298,
+          303
+        ],
+        "entropic": [
+          13,
+          35,
+          270
+        ],
+        "brain": [
+          14,
+          233,
+          254,
+          271
+        ],
+        "hypothesis.": [
+          15,
+          272
+        ],
+        "We": [
+          16,
+          65,
+          114,
+          147
+        ],
+        "call": [
+          17
+        ],
+        "this": [
+          18,
+          69,
+          117,
+          135,
+          223,
+          242
+        ],
+        "formulation": [
+          19
+        ],
+        "relaxed": [
+          20
+        ],
+        "beliefs": [
+          21
+        ],
+        "under": [
+          22
+        ],
+        "(REBUS)": [
+          24
+        ],
+        "anarchic": [
+          27
+        ],
+        "brain,": [
+          28
+        ],
+        "founded": [
+          29
+        ],
+        "on": [
+          30,
+          37
+        ],
+        "that\u2014via": [
+          33
+        ],
+        "their": [
+          34,
+          90
+        ],
+        "effect": [
+          36
+        ],
+        "spontaneous": [
+          38
+        ],
+        "cortical": [
+          39
+        ],
+        "activity\u2014psychedelics": [
+          40
+        ],
+        "work": [
+          41,
+          98,
+          279
+        ],
+        "to": [
+          42,
+          89,
+          99,
+          126,
+          174,
+          198,
+          202,
+          235,
+          247,
+          280,
+          286
+        ],
+        "relax": [
+          43,
+          100,
+          281
+        ],
+        "precision": [
+          45,
+          102
+        ],
+        "high-level": [
+          47,
+          124,
+          169,
+          282
+        ],
+        "priors": [
+          48,
+          107,
+          125
+        ],
+        "or": [
+          49
+        ],
+        "beliefs,": [
+          50
+        ],
+        "thereby": [
+          51
+        ],
+        "liberating": [
+          52
+        ],
+        "bottom-up": [
+          53,
+          127,
+          288
+        ],
+        "information": [
+          54,
+          289
+        ],
+        "flow,": [
+          55,
+          290
+        ],
+        "particularly": [
+          56
+        ],
+        "via": [
+          57
+        ],
+        "intrinsic": [
+          58,
+          131
+        ],
+        "sources": [
+          59
+        ],
+        "such": [
+          60,
+          156,
+          177
+        ],
+        "as": [
+          61,
+          157,
+          178
+        ],
+        "limbic": [
+          63
+        ],
+        "system.": [
+          64
+        ],
+        "assemble": [
+          66
+        ],
+        "evidence": [
+          67
+        ],
+        "for": [
+          68
+        ],
+        "model": [
+          70,
+          228,
+          251,
+          262
+        ],
+        "show": [
+          72
+        ],
+        "how": [
+          73,
+          230
+        ],
+        "it": [
+          74
+        ],
+        "can": [
+          75,
+          160,
+          300
+        ],
+        "explain": [
+          76
+        ],
+        "a": [
+          77,
+          209,
+          216,
+          225,
+          249
+        ],
+        "broad": [
+          78
+        ],
+        "range": [
+          79
+        ],
+        "phenomena": [
+          81
+        ],
+        "associated": [
+          82
+        ],
+        "with": [
+          83,
+          195,
+          259,
+          292
+        ],
+        "psychedelic": [
+          85
+        ],
+        "experience.": [
+          86
+        ],
+        "With": [
+          87
+        ],
+        "regard": [
+          88
+        ],
+        "potential": [
+          91,
+          140
+        ],
+        "therapeutic": [
+          92
+        ],
+        "use,": [
+          93
+        ],
+        "we": [
+          94,
+          244
+        ],
+        "propose": [
+          95,
+          115
+        ],
+        "that": [
+          96,
+          116,
+          134,
+          158,
+          277
+        ],
+        "weighting": [
+          103
+        ],
+        "pathologically": [
+          105
+        ],
+        "overweighted": [
+          106,
+          145
+        ],
+        "underpinning": [
+          108
+        ],
+        "various": [
+          109
+        ],
+        "expressions": [
+          110
+        ],
+        "mental": [
+          112,
+          175
+        ],
+        "illness.": [
+          113
+        ],
+        "process": [
+          118
+        ],
+        "entails": [
+          119
+        ],
+        "an": [
+          120,
+          260
+        ],
+        "increased": [
+          121
+        ],
+        "sensitization": [
+          122
+        ],
+        "signaling": [
+          128
+        ],
+        "(stemming": [
+          129
+        ],
+        "from": [
+          130
+        ],
+        "sources),": [
+          132
+        ],
+        "heightened": [
+          136
+        ],
+        "sensitivity": [
+          137
+        ],
+        "enables": [
+          138
+        ],
+        "revision": [
+          141,
+          164,
+          306
+        ],
+        "deweighting": [
+          143
+        ],
+        "priors.": [
+          146,
+          310
+        ],
+        "end": [
+          148
+        ],
+        "discussing": [
+          150
+        ],
+        "further": [
+          151
+        ],
+        "implications": [
+          152
+        ],
+        "model,": [
+          155
+        ],
+        "bring": [
+          161,
+          199
+        ],
+        "about": [
+          162
+        ],
+        "other": [
+          166
+        ],
+        "heavily": [
+          167
+        ],
+        "weighted": [
+          168
+        ],
+        "priors,": [
+          170,
+          283
+        ],
+        "not": [
+          171
+        ],
+        "directly": [
+          172
+        ],
+        "related": [
+          173
+        ],
+        "health,": [
+          176
+        ],
+        "those": [
+          179
+        ],
+        "underlying": [
+          180
+        ],
+        "partisan": [
+          181
+        ],
+        "and/or": [
+          182,
+          186
+        ],
+        "overly-confident": [
+          183
+        ],
+        "political,": [
+          184
+        ],
+        "religious,": [
+          185
+        ],
+        "philosophical": [
+          187
+        ],
+        "perspectives.": [
+          188
+        ],
+        "Significance": [
+          189
+        ],
+        "Statement": [
+          190
+        ],
+        "Psychedelics": [
+          191
+        ],
+        "are": [
+          192
+        ],
+        "capturing": [
+          193
+        ],
+        "interest,": [
+          194
+        ],
+        "efforts": [
+          196
+        ],
+        "underway": [
+          197
+        ],
+        "psilocybin": [
+          200
+        ],
+        "therapy": [
+          201
+        ],
+        "marketing": [
+          203
+        ],
+        "authorisation": [
+          204
+        ],
+        "legal": [
+          206
+        ],
+        "access": [
+          207
+        ],
+        "within": [
+          208
+        ],
+        "decade,": [
+          210
+        ],
+        "spearheaded": [
+          211
+        ],
+        "findings": [
+          214
+        ],
+        "series": [
+          217
+        ],
+        "phase": [
+          219
+        ],
+        "2": [
+          220
+        ],
+        "trials.": [
+          221
+        ],
+        "In": [
+          222
+        ],
+        "climate,": [
+          224
+        ],
+        "compelling": [
+          226
+        ],
+        "unified": [
+          227
+        ],
+        "alter": [
+          232,
+          236
+        ],
+        "function": [
+          234
+        ],
+        "consciousness": [
+          237
+        ],
+        "would": [
+          238
+        ],
+        "have": [
+          239,
+          245
+        ],
+        "appeal.": [
+          240
+        ],
+        "Towards": [
+          241
+        ],
+        "end,": [
+          243
+        ],
+        "sought": [
+          246
+        ],
+        "integrate": [
+          248
+        ],
+        "leading": [
+          250
+        ],
+        "global": [
+          253
+        ],
+        "function,": [
+          255
+        ],
+        "hierarchical": [
+          256
+        ],
+        "predictive": [
+          257
+        ],
+        "coding,": [
+          258
+        ],
+        "often-cited": [
+          261
+        ],
+        "acute": [
+          265
+        ],
+        "psychedelics,": [
+          268
+        ],
+        "The": [
+          273
+        ],
+        "resulting": [
+          274
+        ],
+        "synthesis": [
+          275
+        ],
+        "states": [
+          276
+        ],
+        "sensitising": [
+          284
+        ],
+        "them": [
+          285
+        ],
+        "liberated": [
+          287
+        ],
+        "which,": [
+          291
+        ],
+        "right": [
+          294
+        ],
+        "intention,": [
+          295
+        ],
+        "care": [
+          296
+        ],
+        "provision": [
+          297
+        ],
+        "context,": [
+          299
+        ],
+        "help": [
+          301
+        ],
+        "guide": [
+          302
+        ],
+        "cultivate": [
+          304
+        ],
+        "entrenched": [
+          308
+        ],
+        "pathological": [
+          309
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 200
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 254
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 220
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 200
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 149
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 102
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 64
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 12
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 4
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2025-10-10T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W1904504745",
+      "doi": "https://doi.org/10.1109/tsipn.2015.2448520",
+      "title": "Joint Optimization of Radio and Computational Resources for Multicell Mobile-Edge Computing",
+      "display_name": "Joint Optimization of Radio and Computational Resources for Multicell Mobile-Edge Computing",
+      "publication_year": 2015,
+      "publication_date": "2015-06-01",
+      "ids": {
+        "openalex": "https://openalex.org/W1904504745",
+        "doi": "https://doi.org/10.1109/tsipn.2015.2448520",
+        "mag": "1904504745"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1109/tsipn.2015.2448520",
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.1109/tsipn.2015.2448520",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4306422866",
+          "display_name": "IEEE Transactions on Signal and Information Processing over Networks",
+          "issn_l": "2373-776X",
+          "issn": [
+            "2373-776X",
+            "2373-7778"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310319808",
+          "host_organization_name": "Institute of Electrical and Electronics Engineers",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310319808"
+          ],
+          "host_organization_lineage_names": [
+            "Institute of Electrical and Electronics Engineers"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "IEEE Transactions on Signal and Information Processing over Networks",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "arxiv",
+        "crossref"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "green",
+        "oa_url": "https://arxiv.org/pdf/1412.8416",
+        "any_repository_has_fulltext": true
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5043691564",
+            "display_name": "Stefania Sardellitti",
+            "orcid": "https://orcid.org/0000-0002-4749-2933"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I861853513",
+              "display_name": "Sapienza University of Rome",
+              "ror": "https://ror.org/02be6w209",
+              "country_code": "IT",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I861853513"
+              ]
+            }
+          ],
+          "countries": [
+            "IT"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Stefania Sardellitti",
+          "raw_affiliation_strings": [
+            "[Department of Information Engineering, Electronics and Telecommunications, Sapienza University of Rome, Rome, Italy]"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "[Department of Information Engineering, Electronics and Telecommunications, Sapienza University of Rome, Rome, Italy]",
+              "institution_ids": [
+                "https://openalex.org/I861853513"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5041765559",
+            "display_name": "Gesualdo Scutari",
+            "orcid": "https://orcid.org/0000-0002-6453-6870"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I219193219",
+              "display_name": "Purdue University West Lafayette",
+              "ror": "https://ror.org/02dqehb95",
+              "country_code": "US",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I219193219"
+              ]
+            }
+          ],
+          "countries": [
+            "US"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Gesualdo Scutari",
+          "raw_affiliation_strings": [
+            "Department of Industrial Engineering, Purdue University, West Lafayette, IN, USA"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Industrial Engineering, Purdue University, West Lafayette, IN, USA",
+              "institution_ids": [
+                "https://openalex.org/I219193219"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5084159640",
+            "display_name": "Sergio Barbarossa",
+            "orcid": "https://orcid.org/0000-0001-9846-8741"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I861853513",
+              "display_name": "Sapienza University of Rome",
+              "ror": "https://ror.org/02be6w209",
+              "country_code": "IT",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I861853513"
+              ]
+            }
+          ],
+          "countries": [
+            "IT"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Sergio Barbarossa",
+          "raw_affiliation_strings": [
+            "[Department of Information Engineering, Electronics and Telecommunications, Sapienza University of Rome, Rome, Italy]"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "[Department of Information Engineering, Electronics and Telecommunications, Sapienza University of Rome, Rome, Italy]",
+              "institution_ids": [
+                "https://openalex.org/I861853513"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 2,
+      "institutions_distinct_count": 2,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": {
+        "value": 2645,
+        "currency": "USD",
+        "value_usd": 2645
+      },
+      "apc_paid": null,
+      "fwci": 94.2197,
+      "has_fulltext": true,
+      "cited_by_count": 924,
+      "citation_normalized_percentile": {
+        "value": 0.9997438,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 89,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "1",
+        "issue": "2",
+        "first_page": "89",
+        "last_page": "103"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10273",
+        "display_name": "IoT and Edge/Fog Computing",
+        "score": 0.9998000264167786,
+        "subfield": {
+          "id": "https://openalex.org/subfields/1705",
+          "display_name": "Computer Networks and Communications"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/17",
+          "display_name": "Computer Science"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/3",
+          "display_name": "Physical Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10273",
+          "display_name": "IoT and Edge/Fog Computing",
+          "score": 0.9998000264167786,
+          "subfield": {
+            "id": "https://openalex.org/subfields/1705",
+            "display_name": "Computer Networks and Communications"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/17",
+            "display_name": "Computer Science"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T12079",
+          "display_name": "IoT Networks and Protocols",
+          "score": 0.996999979019165,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2208",
+            "display_name": "Electrical and Electronic Engineering"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/22",
+            "display_name": "Engineering"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11458",
+          "display_name": "Advanced Wireless Communication Technologies",
+          "score": 0.994700014591217,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2208",
+            "display_name": "Electrical and Electronic Engineering"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/22",
+            "display_name": "Engineering"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/3",
+            "display_name": "Physical Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.8060930967330933
+        },
+        {
+          "id": "https://openalex.org/keywords/cloud-computing",
+          "display_name": "Cloud computing",
+          "score": 0.6599115133285522
+        },
+        {
+          "id": "https://openalex.org/keywords/mobile-edge-computing",
+          "display_name": "Mobile edge computing",
+          "score": 0.6195095181465149
+        },
+        {
+          "id": "https://openalex.org/keywords/optimization-problem",
+          "display_name": "Optimization problem",
+          "score": 0.6083239316940308
+        },
+        {
+          "id": "https://openalex.org/keywords/server",
+          "display_name": "Server",
+          "score": 0.5369939804077148
+        },
+        {
+          "id": "https://openalex.org/keywords/distributed-computing",
+          "display_name": "Distributed computing",
+          "score": 0.5263380408287048
+        },
+        {
+          "id": "https://openalex.org/keywords/mathematical-optimization",
+          "display_name": "Mathematical optimization",
+          "score": 0.5016250610351562
+        },
+        {
+          "id": "https://openalex.org/keywords/radio-access-network",
+          "display_name": "Radio access network",
+          "score": 0.5011153221130371
+        },
+        {
+          "id": "https://openalex.org/keywords/computation-offloading",
+          "display_name": "Computation offloading",
+          "score": 0.49419286847114563
+        },
+        {
+          "id": "https://openalex.org/keywords/computational-complexity-theory",
+          "display_name": "Computational complexity theory",
+          "score": 0.48307254910469055
+        },
+        {
+          "id": "https://openalex.org/keywords/energy-consumption",
+          "display_name": "Energy consumption",
+          "score": 0.4141334593296051
+        },
+        {
+          "id": "https://openalex.org/keywords/edge-computing",
+          "display_name": "Edge computing",
+          "score": 0.3731048107147217
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-network",
+          "display_name": "Computer network",
+          "score": 0.26691097021102905
+        },
+        {
+          "id": "https://openalex.org/keywords/algorithm",
+          "display_name": "Algorithm",
+          "score": 0.2661704123020172
+        },
+        {
+          "id": "https://openalex.org/keywords/base-station",
+          "display_name": "Base station",
+          "score": 0.1820937693119049
+        },
+        {
+          "id": "https://openalex.org/keywords/mobile-station",
+          "display_name": "Mobile station",
+          "score": 0.15119147300720215
+        },
+        {
+          "id": "https://openalex.org/keywords/mathematics",
+          "display_name": "Mathematics",
+          "score": 0.10094842314720154
+        },
+        {
+          "id": "https://openalex.org/keywords/engineering",
+          "display_name": "Engineering",
+          "score": 0.08699372410774231
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.8060930967330933
+        },
+        {
+          "id": "https://openalex.org/C79974875",
+          "wikidata": "https://www.wikidata.org/wiki/Q483639",
+          "display_name": "Cloud computing",
+          "level": 2,
+          "score": 0.6599115133285522
+        },
+        {
+          "id": "https://openalex.org/C2776061582",
+          "wikidata": "https://www.wikidata.org/wiki/Q25325231",
+          "display_name": "Mobile edge computing",
+          "level": 3,
+          "score": 0.6195095181465149
+        },
+        {
+          "id": "https://openalex.org/C137836250",
+          "wikidata": "https://www.wikidata.org/wiki/Q984063",
+          "display_name": "Optimization problem",
+          "level": 2,
+          "score": 0.6083239316940308
+        },
+        {
+          "id": "https://openalex.org/C93996380",
+          "wikidata": "https://www.wikidata.org/wiki/Q44127",
+          "display_name": "Server",
+          "level": 2,
+          "score": 0.5369939804077148
+        },
+        {
+          "id": "https://openalex.org/C120314980",
+          "wikidata": "https://www.wikidata.org/wiki/Q180634",
+          "display_name": "Distributed computing",
+          "level": 1,
+          "score": 0.5263380408287048
+        },
+        {
+          "id": "https://openalex.org/C126255220",
+          "wikidata": "https://www.wikidata.org/wiki/Q141495",
+          "display_name": "Mathematical optimization",
+          "level": 1,
+          "score": 0.5016250610351562
+        },
+        {
+          "id": "https://openalex.org/C106365562",
+          "wikidata": "https://www.wikidata.org/wiki/Q3078360",
+          "display_name": "Radio access network",
+          "level": 4,
+          "score": 0.5011153221130371
+        },
+        {
+          "id": "https://openalex.org/C2781041963",
+          "wikidata": "https://www.wikidata.org/wiki/Q18348618",
+          "display_name": "Computation offloading",
+          "level": 4,
+          "score": 0.49419286847114563
+        },
+        {
+          "id": "https://openalex.org/C179799912",
+          "wikidata": "https://www.wikidata.org/wiki/Q205084",
+          "display_name": "Computational complexity theory",
+          "level": 2,
+          "score": 0.48307254910469055
+        },
+        {
+          "id": "https://openalex.org/C2780165032",
+          "wikidata": "https://www.wikidata.org/wiki/Q16869822",
+          "display_name": "Energy consumption",
+          "level": 2,
+          "score": 0.4141334593296051
+        },
+        {
+          "id": "https://openalex.org/C2778456923",
+          "wikidata": "https://www.wikidata.org/wiki/Q5337692",
+          "display_name": "Edge computing",
+          "level": 3,
+          "score": 0.3731048107147217
+        },
+        {
+          "id": "https://openalex.org/C31258907",
+          "wikidata": "https://www.wikidata.org/wiki/Q1301371",
+          "display_name": "Computer network",
+          "level": 1,
+          "score": 0.26691097021102905
+        },
+        {
+          "id": "https://openalex.org/C11413529",
+          "wikidata": "https://www.wikidata.org/wiki/Q8366",
+          "display_name": "Algorithm",
+          "level": 1,
+          "score": 0.2661704123020172
+        },
+        {
+          "id": "https://openalex.org/C68649174",
+          "wikidata": "https://www.wikidata.org/wiki/Q1379116",
+          "display_name": "Base station",
+          "level": 2,
+          "score": 0.1820937693119049
+        },
+        {
+          "id": "https://openalex.org/C207029474",
+          "wikidata": "https://www.wikidata.org/wiki/Q384018",
+          "display_name": "Mobile station",
+          "level": 3,
+          "score": 0.15119147300720215
+        },
+        {
+          "id": "https://openalex.org/C33923547",
+          "wikidata": "https://www.wikidata.org/wiki/Q395",
+          "display_name": "Mathematics",
+          "level": 0,
+          "score": 0.10094842314720154
+        },
+        {
+          "id": "https://openalex.org/C127413603",
+          "wikidata": "https://www.wikidata.org/wiki/Q11023",
+          "display_name": "Engineering",
+          "level": 0,
+          "score": 0.08699372410774231
+        },
+        {
+          "id": "https://openalex.org/C111919701",
+          "wikidata": "https://www.wikidata.org/wiki/Q9135",
+          "display_name": "Operating system",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C119599485",
+          "wikidata": "https://www.wikidata.org/wiki/Q43035",
+          "display_name": "Electrical engineering",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [],
+      "locations_count": 3,
+      "locations": [
+        {
+          "id": "doi:10.1109/tsipn.2015.2448520",
+          "is_oa": false,
+          "landing_page_url": "https://doi.org/10.1109/tsipn.2015.2448520",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306422866",
+            "display_name": "IEEE Transactions on Signal and Information Processing over Networks",
+            "issn_l": "2373-776X",
+            "issn": [
+              "2373-776X",
+              "2373-7778"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310319808",
+            "host_organization_name": "Institute of Electrical and Electronics Engineers",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310319808"
+            ],
+            "host_organization_lineage_names": [
+              "Institute of Electrical and Electronics Engineers"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "IEEE Transactions on Signal and Information Processing over Networks",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmh:oai:arXiv.org:1412.8416",
+          "is_oa": true,
+          "landing_page_url": "http://arxiv.org/abs/1412.8416",
+          "pdf_url": "https://arxiv.org/pdf/1412.8416",
+          "source": {
+            "id": "https://openalex.org/S4306400194",
+            "display_name": "arXiv (Cornell University)",
+            "issn_l": "2331-8422",
+            "issn": [
+              "2331-8422"
+            ],
+            "is_oa": true,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I205783295",
+            "host_organization_name": "Cornell University",
+            "host_organization_lineage": [
+              "https://openalex.org/I205783295"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "text"
+        },
+        {
+          "id": "pmh:oai:iris.uniroma1.it:11573/958474",
+          "is_oa": true,
+          "landing_page_url": "http://hdl.handle.net/11573/958474",
+          "pdf_url": "https://www.ieee.org/membership-catalog/productdetail/showProductDetailPage.html?product=PER290-ELE",
+          "source": {
+            "id": "https://openalex.org/S4377196107",
+            "display_name": "IRIS Research product catalog (Sapienza University of Rome)",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": null,
+            "host_organization_name": null,
+            "host_organization_lineage": [],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": "cc-by-nc-nd",
+          "license_id": "https://openalex.org/licenses/cc-by-nc-nd",
+          "version": "submittedVersion",
+          "is_accepted": false,
+          "is_published": false,
+          "raw_source_name": null,
+          "raw_type": "info:eu-repo/semantics/article"
+        }
+      ],
+      "best_oa_location": {
+        "id": "pmh:oai:arXiv.org:1412.8416",
+        "is_oa": true,
+        "landing_page_url": "http://arxiv.org/abs/1412.8416",
+        "pdf_url": "https://arxiv.org/pdf/1412.8416",
+        "source": {
+          "id": "https://openalex.org/S4306400194",
+          "display_name": "arXiv (Cornell University)",
+          "issn_l": "2331-8422",
+          "issn": [
+            "2331-8422"
+          ],
+          "is_oa": true,
+          "is_in_doaj": false,
+          "is_core": false,
+          "host_organization": "https://openalex.org/I205783295",
+          "host_organization_name": "Cornell University",
+          "host_organization_lineage": [
+            "https://openalex.org/I205783295"
+          ],
+          "host_organization_lineage_names": [],
+          "type": "repository"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "submittedVersion",
+        "is_accepted": false,
+        "is_published": false,
+        "raw_source_name": null,
+        "raw_type": "text"
+      },
+      "sustainable_development_goals": [
+        {
+          "display_name": "Affordable and clean energy",
+          "id": "https://metadata.un.org/sdg/7",
+          "score": 0.8299999833106995
+        }
+      ],
+      "awards": [
+        {
+          "id": "https://openalex.org/G1521750913",
+          "display_name": null,
+          "funder_award_id": "318784",
+          "funder_id": "https://openalex.org/F4320334960",
+          "funder_display_name": "Seventh Framework Programme"
+        },
+        {
+          "id": "https://openalex.org/G4607918015",
+          "display_name": null,
+          "funder_award_id": "CMS 1218717",
+          "funder_id": "https://openalex.org/F4320307381",
+          "funder_display_name": "National Sleep Foundation"
+        },
+        {
+          "id": "https://openalex.org/G7484611799",
+          "display_name": null,
+          "funder_award_id": "1254739",
+          "funder_id": "https://openalex.org/F4320307381",
+          "funder_display_name": "National Sleep Foundation"
+        }
+      ],
+      "funders": [
+        {
+          "id": "https://openalex.org/F4320307381",
+          "display_name": "National Sleep Foundation",
+          "ror": "https://ror.org/00zc1hf95"
+        },
+        {
+          "id": "https://openalex.org/F4320334960",
+          "display_name": "Seventh Framework Programme",
+          "ror": "https://ror.org/00k4n6c32"
+        }
+      ],
+      "has_content": {
+        "pdf": false,
+        "grobid_xml": false
+      },
+      "content_urls": null,
+      "referenced_works_count": 46,
+      "referenced_works": [
+        "https://openalex.org/W182605591",
+        "https://openalex.org/W1484024531",
+        "https://openalex.org/W1543439990",
+        "https://openalex.org/W1901145513",
+        "https://openalex.org/W1974661392",
+        "https://openalex.org/W1989480108",
+        "https://openalex.org/W1990494141",
+        "https://openalex.org/W1997413930",
+        "https://openalex.org/W2001027366",
+        "https://openalex.org/W2004488800",
+        "https://openalex.org/W2012423440",
+        "https://openalex.org/W2019116263",
+        "https://openalex.org/W2027982384",
+        "https://openalex.org/W2032552610",
+        "https://openalex.org/W2033784617",
+        "https://openalex.org/W2037073200",
+        "https://openalex.org/W2050968963",
+        "https://openalex.org/W2055929537",
+        "https://openalex.org/W2058361915",
+        "https://openalex.org/W2080346852",
+        "https://openalex.org/W2085315287",
+        "https://openalex.org/W2086574394",
+        "https://openalex.org/W2088692353",
+        "https://openalex.org/W2089841518",
+        "https://openalex.org/W2091333543",
+        "https://openalex.org/W2101788345",
+        "https://openalex.org/W2105555541",
+        "https://openalex.org/W2116175219",
+        "https://openalex.org/W2117503282",
+        "https://openalex.org/W2123405170",
+        "https://openalex.org/W2126462381",
+        "https://openalex.org/W2129021586",
+        "https://openalex.org/W2135099885",
+        "https://openalex.org/W2143345392",
+        "https://openalex.org/W2144554277",
+        "https://openalex.org/W2149414429",
+        "https://openalex.org/W2155840492",
+        "https://openalex.org/W2160886020",
+        "https://openalex.org/W2674120478",
+        "https://openalex.org/W3101495100",
+        "https://openalex.org/W3122087971",
+        "https://openalex.org/W4241229021",
+        "https://openalex.org/W4254211330",
+        "https://openalex.org/W6607432528",
+        "https://openalex.org/W6639880351",
+        "https://openalex.org/W6673023653"
+      ],
+      "related_works": [
+        "https://openalex.org/W4200420173",
+        "https://openalex.org/W4225987626",
+        "https://openalex.org/W3120617837",
+        "https://openalex.org/W3127808443",
+        "https://openalex.org/W2916011811",
+        "https://openalex.org/W3034137700",
+        "https://openalex.org/W4362496467",
+        "https://openalex.org/W2896883851",
+        "https://openalex.org/W2917127270",
+        "https://openalex.org/W3185499500"
+      ],
+      "abstract_inverted_index": {
+        "Migrating": [
+          0
+        ],
+        "computational": [
+          1,
+          19,
+          72
+        ],
+        "intensive": [
+          2
+        ],
+        "tasks": [
+          3
+        ],
+        "from": [
+          4
+        ],
+        "mobile": [
+          5,
+          22,
+          40
+        ],
+        "devices": [
+          6,
+          23
+        ],
+        "to": [
+          7,
+          16,
+          47,
+          80,
+          84,
+          115,
+          144,
+          164
+        ],
+        "more": [
+          8,
+          126
+        ],
+        "resourceful": [
+          9
+        ],
+        "cloud": [
+          10,
+          50,
+          79
+        ],
+        "servers": [
+          11
+        ],
+        "is": [
+          12,
+          99
+        ],
+        "a": [
+          13,
+          48,
+          137,
+          145,
+          165,
+          177
+        ],
+        "promising": [
+          14
+        ],
+        "technique": [
+          15
+        ],
+        "increase": [
+          17
+        ],
+        "the": [
+          18,
+          54,
+          58,
+          62,
+          69,
+          71,
+          78,
+          86,
+          102,
+          109,
+          117,
+          125,
+          150,
+          158,
+          171,
+          181,
+          187
+        ],
+        "capacity": [
+          20
+        ],
+        "of": [
+          21,
+          61,
+          68,
+          149
+        ],
+        "while": [
+          24,
+          91
+        ],
+        "saving": [
+          25
+        ],
+        "their": [
+          26
+        ],
+        "battery": [
+          27
+        ],
+        "energy.": [
+          28
+        ],
+        "In": [
+          29,
+          124
+        ],
+        "this": [
+          30
+        ],
+        "paper,": [
+          31
+        ],
+        "we": [
+          32,
+          112,
+          130
+        ],
+        "consider": [
+          33
+        ],
+        "an": [
+          34,
+          132
+        ],
+        "MIMO": [
+          35
+        ],
+        "multicell": [
+          36
+        ],
+        "system": [
+          37
+        ],
+        "where": [
+          38
+        ],
+        "multiple": [
+          39
+        ],
+        "users": [
+          41
+        ],
+        "(MUs)": [
+          42
+        ],
+        "ask": [
+          43
+        ],
+        "for": [
+          44
+        ],
+        "computation": [
+          45
+        ],
+        "offloading": [
+          46,
+          55
+        ],
+        "common": [
+          49
+        ],
+        "server.": [
+          51
+        ],
+        "We": [
+          52,
+          154
+        ],
+        "formulate": [
+          53
+        ],
+        "problem": [
+          56,
+          98
+        ],
+        "as": [
+          57
+        ],
+        "joint": [
+          59
+        ],
+        "optimization": [
+          60,
+          97,
+          192
+        ],
+        "radio": [
+          63,
+          172
+        ],
+        "resources-the": [
+          64,
+          73
+        ],
+        "transmit": [
+          65
+        ],
+        "precoding": [
+          66
+        ],
+        "matrices": [
+          67
+        ],
+        "MUs-and": [
+          70
+        ],
+        "CPU": [
+          74
+        ],
+        "cycles/second": [
+          75
+        ],
+        "assigned": [
+          76
+        ],
+        "by": [
+          77
+        ],
+        "each": [
+          81
+        ],
+        "MU-in": [
+          82
+        ],
+        "order": [
+          83
+        ],
+        "minimize": [
+          85
+        ],
+        "overall": [
+          87
+        ],
+        "users'": [
+          88
+        ],
+        "energy": [
+          89
+        ],
+        "consumption,": [
+          90
+        ],
+        "meeting": [
+          92
+        ],
+        "latency": [
+          93
+        ],
+        "constraints.": [
+          94
+        ],
+        "The": [
+          95
+        ],
+        "resulting": [
+          96
+        ],
+        "nonconvex": [
+          100,
+          152
+        ],
+        "(in": [
+          101
+        ],
+        "objective": [
+          103
+        ],
+        "function": [
+          104
+        ],
+        "and": [
+          105,
+          167
+        ],
+        "constraints).": [
+          106
+        ],
+        "Nevertheless,": [
+          107
+        ],
+        "in": [
+          108,
+          121
+        ],
+        "single-user": [
+          110
+        ],
+        "case,": [
+          111
+        ],
+        "are": [
+          113
+        ],
+        "able": [
+          114
+        ],
+        "compute": [
+          116
+        ],
+        "global": [
+          118
+        ],
+        "optimal": [
+          119,
+          147
+        ],
+        "solution": [
+          120,
+          148
+        ],
+        "closed": [
+          122
+        ],
+        "form.": [
+          123
+        ],
+        "challenging": [
+          127
+        ],
+        "multiuser": [
+          128
+        ],
+        "scenario,": [
+          129
+        ],
+        "propose": [
+          131
+        ],
+        "iterative": [
+          133
+        ],
+        "algorithm,": [
+          134
+        ],
+        "based": [
+          135
+        ],
+        "on": [
+          136
+        ],
+        "novel": [
+          138
+        ],
+        "successive": [
+          139
+        ],
+        "convex": [
+          140
+        ],
+        "approximation": [
+          141
+        ],
+        "technique,": [
+          142
+        ],
+        "converging": [
+          143
+        ],
+        "local": [
+          146
+        ],
+        "original": [
+          151
+        ],
+        "problem.": [
+          153
+        ],
+        "then": [
+          155
+        ],
+        "show": [
+          156,
+          185
+        ],
+        "that": [
+          157,
+          186
+        ],
+        "proposed": [
+          159,
+          188
+        ],
+        "algorithmic": [
+          160
+        ],
+        "framework": [
+          161
+        ],
+        "naturally": [
+          162
+        ],
+        "leads": [
+          163
+        ],
+        "distributed": [
+          166
+        ],
+        "parallel": [
+          168
+        ],
+        "implementation": [
+          169
+        ],
+        "across": [
+          170
+        ],
+        "access": [
+          173
+        ],
+        "points,": [
+          174
+        ],
+        "requiring": [
+          175
+        ],
+        "only": [
+          176
+        ],
+        "limited": [
+          178
+        ],
+        "coordination/signaling": [
+          179
+        ],
+        "with": [
+          180
+        ],
+        "cloud.": [
+          182
+        ],
+        "Numerical": [
+          183
+        ],
+        "results": [
+          184
+        ],
+        "schemes": [
+          189
+        ],
+        "outperform": [
+          190
+        ],
+        "disjoint": [
+          191
+        ],
+        "algorithms.": [
+          193
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 13
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 26
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 41
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 65
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 88
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 106
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 151
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 170
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 149
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 76
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 38
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 1
+        }
+      ],
+      "updated_date": "2026-08-26T07:47:46.906454",
+      "created_date": "2025-10-10T00:00:00"
+    },
+    {
+      "id": "https://openalex.org/W2145947508",
+      "doi": "https://doi.org/10.1088/1741-2560/4/2/r03",
+      "title": "A survey of signal processing algorithms in brain\u2013computer interfaces based on electrical brain signals",
+      "display_name": "A survey of signal processing algorithms in brain\u2013computer interfaces based on electrical brain signals",
+      "publication_year": 2007,
+      "publication_date": "2007-03-27",
+      "ids": {
+        "openalex": "https://openalex.org/W2145947508",
+        "doi": "https://doi.org/10.1088/1741-2560/4/2/r03",
+        "mag": "2145947508",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/17409474"
+      },
+      "language": "en",
+      "primary_location": {
+        "id": "doi:10.1088/1741-2560/4/2/r03",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1088/1741-2560/4/2/r03",
+        "pdf_url": "https://iopscience.iop.org/article/10.1088/1741-2560/4/2/R03/pdf",
+        "source": {
+          "id": "https://openalex.org/S32898093",
+          "display_name": "Journal of Neural Engineering",
+          "issn_l": "1741-2552",
+          "issn": [
+            "1741-2552",
+            "1741-2560"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320083",
+          "host_organization_name": "IOP Publishing",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320083",
+            "https://openalex.org/P4310311669"
+          ],
+          "host_organization_lineage_names": [
+            "IOP Publishing",
+            "Institute of Physics"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Journal of Neural Engineering",
+        "raw_type": "journal-article"
+      },
+      "type": "article",
+      "indexed_in": [
+        "crossref",
+        "pubmed"
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "bronze",
+        "oa_url": "https://iopscience.iop.org/article/10.1088/1741-2560/4/2/R03/pdf",
+        "any_repository_has_fulltext": false
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5081990226",
+            "display_name": "Ali Bashashati",
+            "orcid": "https://orcid.org/0000-0002-4212-7224"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I141945490",
+              "display_name": "University of British Columbia",
+              "ror": "https://ror.org/03rmrcq20",
+              "country_code": "CA",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I141945490"
+              ]
+            }
+          ],
+          "countries": [
+            "CA"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Ali Bashashati",
+          "raw_affiliation_strings": [
+            "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada. alibs@ece.ubc.ac",
+            "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada. alibs@ece.ubc.ac",
+              "institution_ids": [
+                "https://openalex.org/I141945490"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada",
+              "institution_ids": [
+                "https://openalex.org/I141945490"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5017950784",
+            "display_name": "Mehrdad Fatourechi",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I141945490",
+              "display_name": "University of British Columbia",
+              "ror": "https://ror.org/03rmrcq20",
+              "country_code": "CA",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I141945490"
+              ]
+            }
+          ],
+          "countries": [
+            "CA"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Mehrdad Fatourechi",
+          "raw_affiliation_strings": [
+            "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada",
+              "institution_ids": [
+                "https://openalex.org/I141945490"
+              ]
+            }
+          ]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5028143781",
+            "display_name": "Rabab Ward",
+            "orcid": "https://orcid.org/0000-0002-2471-1902"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I141945490",
+              "display_name": "University of British Columbia",
+              "ror": "https://ror.org/03rmrcq20",
+              "country_code": "CA",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I141945490"
+              ]
+            }
+          ],
+          "countries": [
+            "CA"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Rabab K Ward",
+          "raw_affiliation_strings": [
+            "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada",
+            "Institute for Computing, Information and Cognitive Systems, 289-2366 Main Mall, Vancouver, BC V6T 1Z4, Canada"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada",
+              "institution_ids": [
+                "https://openalex.org/I141945490"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Institute for Computing, Information and Cognitive Systems, 289-2366 Main Mall, Vancouver, BC V6T 1Z4, Canada",
+              "institution_ids": []
+            }
+          ]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5108549949",
+            "display_name": "Gary E. Birch",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I141945490",
+              "display_name": "University of British Columbia",
+              "ror": "https://ror.org/03rmrcq20",
+              "country_code": "CA",
+              "type": "education",
+              "lineage": [
+                "https://openalex.org/I141945490"
+              ]
+            },
+            {
+              "id": "https://openalex.org/I188246651",
+              "display_name": "Neil Squire Society",
+              "ror": "https://ror.org/04r74gg67",
+              "country_code": "CA",
+              "type": "nonprofit",
+              "lineage": [
+                "https://openalex.org/I188246651"
+              ]
+            }
+          ],
+          "countries": [
+            "CA"
+          ],
+          "is_corresponding": false,
+          "raw_author_name": "Gary E Birch",
+          "raw_affiliation_strings": [
+            "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada",
+            "Institute for Computing, Information and Cognitive Systems, 289-2366 Main Mall, Vancouver, BC V6T 1Z4, Canada",
+            "Neil Squire Society, 220-2250 Boundary Rd, Burnaby, BC, V5M 4L9, Canada"
+          ],
+          "raw_orcid": null,
+          "affiliations": [
+            {
+              "raw_affiliation_string": "Department of Electrical and Computer Engineering, The University of British Columbia, 2356 Main Mall, Vancouver, V6T 1Z4, Canada",
+              "institution_ids": [
+                "https://openalex.org/I141945490"
+              ]
+            },
+            {
+              "raw_affiliation_string": "Institute for Computing, Information and Cognitive Systems, 289-2366 Main Mall, Vancouver, BC V6T 1Z4, Canada",
+              "institution_ids": []
+            },
+            {
+              "raw_affiliation_string": "Neil Squire Society, 220-2250 Boundary Rd, Burnaby, BC, V5M 4L9, Canada",
+              "institution_ids": [
+                "https://openalex.org/I188246651"
+              ]
+            }
+          ]
+        }
+      ],
+      "institutions": [],
+      "countries_distinct_count": 1,
+      "institutions_distinct_count": 2,
+      "corresponding_author_ids": [],
+      "corresponding_institution_ids": [],
+      "apc_list": {
+        "value": 3325,
+        "currency": "USD",
+        "value_usd": 3325
+      },
+      "apc_paid": null,
+      "fwci": 12.0731,
+      "has_fulltext": true,
+      "cited_by_count": 904,
+      "citation_normalized_percentile": {
+        "value": 0.99258982,
+        "is_in_top_1_percent": true,
+        "is_in_top_10_percent": true
+      },
+      "cited_by_percentile_year": {
+        "min": 99,
+        "max": 100
+      },
+      "biblio": {
+        "volume": "4",
+        "issue": "2",
+        "first_page": "R32",
+        "last_page": "R57"
+      },
+      "is_retracted": false,
+      "is_paratext": false,
+      "is_xpac": false,
+      "primary_topic": {
+        "id": "https://openalex.org/T10429",
+        "display_name": "EEG and Brain-Computer Interfaces",
+        "score": 1.0,
+        "subfield": {
+          "id": "https://openalex.org/subfields/2805",
+          "display_name": "Cognitive Neuroscience"
+        },
+        "field": {
+          "id": "https://openalex.org/fields/28",
+          "display_name": "Neuroscience"
+        },
+        "domain": {
+          "id": "https://openalex.org/domains/1",
+          "display_name": "Life Sciences"
+        }
+      },
+      "topics": [
+        {
+          "id": "https://openalex.org/T10429",
+          "display_name": "EEG and Brain-Computer Interfaces",
+          "score": 1.0,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2805",
+            "display_name": "Cognitive Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T10581",
+          "display_name": "Neural dynamics and brain function",
+          "score": 0.9976999759674072,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2805",
+            "display_name": "Cognitive Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        },
+        {
+          "id": "https://openalex.org/T11601",
+          "display_name": "Neuroscience and Neural Engineering",
+          "score": 0.9972000122070312,
+          "subfield": {
+            "id": "https://openalex.org/subfields/2804",
+            "display_name": "Cellular and Molecular Neuroscience"
+          },
+          "field": {
+            "id": "https://openalex.org/fields/28",
+            "display_name": "Neuroscience"
+          },
+          "domain": {
+            "id": "https://openalex.org/domains/1",
+            "display_name": "Life Sciences"
+          }
+        }
+      ],
+      "keywords": [
+        {
+          "id": "https://openalex.org/keywords/brain\u2013computer-interface",
+          "display_name": "Brain\u2013computer interface",
+          "score": 0.8683963418006897
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-science",
+          "display_name": "Computer science",
+          "score": 0.7422650456428528
+        },
+        {
+          "id": "https://openalex.org/keywords/signal-processing",
+          "display_name": "Signal processing",
+          "score": 0.6837734580039978
+        },
+        {
+          "id": "https://openalex.org/keywords/signal",
+          "display_name": "SIGNAL (programming language)",
+          "score": 0.6043740510940552
+        },
+        {
+          "id": "https://openalex.org/keywords/electroencephalography",
+          "display_name": "Electroencephalography",
+          "score": 0.5045424699783325
+        },
+        {
+          "id": "https://openalex.org/keywords/key",
+          "display_name": "Key (lock)",
+          "score": 0.4755908250808716
+        },
+        {
+          "id": "https://openalex.org/keywords/process",
+          "display_name": "Process (computing)",
+          "score": 0.42260679602622986
+        },
+        {
+          "id": "https://openalex.org/keywords/human\u2013computer-interaction",
+          "display_name": "Human\u2013computer interaction",
+          "score": 0.3271132707595825
+        },
+        {
+          "id": "https://openalex.org/keywords/digital-signal-processing",
+          "display_name": "Digital signal processing",
+          "score": 0.2364855706691742
+        },
+        {
+          "id": "https://openalex.org/keywords/neuroscience",
+          "display_name": "Neuroscience",
+          "score": 0.15567559003829956
+        },
+        {
+          "id": "https://openalex.org/keywords/computer-hardware",
+          "display_name": "Computer hardware",
+          "score": 0.14820554852485657
+        },
+        {
+          "id": "https://openalex.org/keywords/psychology",
+          "display_name": "Psychology",
+          "score": 0.12290576100349426
+        }
+      ],
+      "concepts": [
+        {
+          "id": "https://openalex.org/C173201364",
+          "wikidata": "https://www.wikidata.org/wiki/Q897410",
+          "display_name": "Brain\u2013computer interface",
+          "level": 3,
+          "score": 0.8683963418006897
+        },
+        {
+          "id": "https://openalex.org/C41008148",
+          "wikidata": "https://www.wikidata.org/wiki/Q21198",
+          "display_name": "Computer science",
+          "level": 0,
+          "score": 0.7422650456428528
+        },
+        {
+          "id": "https://openalex.org/C104267543",
+          "wikidata": "https://www.wikidata.org/wiki/Q208163",
+          "display_name": "Signal processing",
+          "level": 3,
+          "score": 0.6837734580039978
+        },
+        {
+          "id": "https://openalex.org/C2779843651",
+          "wikidata": "https://www.wikidata.org/wiki/Q7390335",
+          "display_name": "SIGNAL (programming language)",
+          "level": 2,
+          "score": 0.6043740510940552
+        },
+        {
+          "id": "https://openalex.org/C522805319",
+          "wikidata": "https://www.wikidata.org/wiki/Q179965",
+          "display_name": "Electroencephalography",
+          "level": 2,
+          "score": 0.5045424699783325
+        },
+        {
+          "id": "https://openalex.org/C26517878",
+          "wikidata": "https://www.wikidata.org/wiki/Q228039",
+          "display_name": "Key (lock)",
+          "level": 2,
+          "score": 0.4755908250808716
+        },
+        {
+          "id": "https://openalex.org/C98045186",
+          "wikidata": "https://www.wikidata.org/wiki/Q205663",
+          "display_name": "Process (computing)",
+          "level": 2,
+          "score": 0.42260679602622986
+        },
+        {
+          "id": "https://openalex.org/C107457646",
+          "wikidata": "https://www.wikidata.org/wiki/Q207434",
+          "display_name": "Human\u2013computer interaction",
+          "level": 1,
+          "score": 0.3271132707595825
+        },
+        {
+          "id": "https://openalex.org/C84462506",
+          "wikidata": "https://www.wikidata.org/wiki/Q173142",
+          "display_name": "Digital signal processing",
+          "level": 2,
+          "score": 0.2364855706691742
+        },
+        {
+          "id": "https://openalex.org/C169760540",
+          "wikidata": "https://www.wikidata.org/wiki/Q207011",
+          "display_name": "Neuroscience",
+          "level": 1,
+          "score": 0.15567559003829956
+        },
+        {
+          "id": "https://openalex.org/C9390403",
+          "wikidata": "https://www.wikidata.org/wiki/Q3966",
+          "display_name": "Computer hardware",
+          "level": 1,
+          "score": 0.14820554852485657
+        },
+        {
+          "id": "https://openalex.org/C15744967",
+          "wikidata": "https://www.wikidata.org/wiki/Q9418",
+          "display_name": "Psychology",
+          "level": 0,
+          "score": 0.12290576100349426
+        },
+        {
+          "id": "https://openalex.org/C111919701",
+          "wikidata": "https://www.wikidata.org/wiki/Q9135",
+          "display_name": "Operating system",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C38652104",
+          "wikidata": "https://www.wikidata.org/wiki/Q3510521",
+          "display_name": "Computer security",
+          "level": 1,
+          "score": 0.0
+        },
+        {
+          "id": "https://openalex.org/C199360897",
+          "wikidata": "https://www.wikidata.org/wiki/Q9143",
+          "display_name": "Programming language",
+          "level": 1,
+          "score": 0.0
+        }
+      ],
+      "mesh": [
+        {
+          "descriptor_ui": "D000465",
+          "descriptor_name": "Algorithms",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D000465",
+          "descriptor_name": "Algorithms",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D000465",
+          "descriptor_name": "Algorithms",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D001185",
+          "descriptor_name": "Artificial Intelligence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D001185",
+          "descriptor_name": "Artificial Intelligence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D001185",
+          "descriptor_name": "Artificial Intelligence",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D001921",
+          "descriptor_name": "Brain",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003143",
+          "descriptor_name": "Communication Devices for People with Disabilities",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003143",
+          "descriptor_name": "Communication Devices for People with Disabilities",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D003143",
+          "descriptor_name": "Communication Aids for Disabled",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D004569",
+          "descriptor_name": "Electroencephalography",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D004569",
+          "descriptor_name": "Electroencephalography",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D004569",
+          "descriptor_name": "Electroencephalography",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D005071",
+          "descriptor_name": "Evoked Potentials",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D005071",
+          "descriptor_name": "Evoked Potentials",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D005071",
+          "descriptor_name": "Evoked Potentials",
+          "qualifier_ui": "Q000502",
+          "qualifier_name": "physiology",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D010363",
+          "descriptor_name": "Pattern Recognition, Automated",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D010363",
+          "descriptor_name": "Pattern Recognition, Automated",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D010363",
+          "descriptor_name": "Pattern Recognition, Automated",
+          "qualifier_ui": "Q000379",
+          "qualifier_name": "methods",
+          "is_major_topic": false
+        },
+        {
+          "descriptor_ui": "D012815",
+          "descriptor_name": "Signal Processing, Computer-Assisted",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D012815",
+          "descriptor_name": "Signal Processing, Computer-Assisted",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D012815",
+          "descriptor_name": "Signal Processing, Computer-Assisted",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D014584",
+          "descriptor_name": "User-Computer Interface",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D014584",
+          "descriptor_name": "User-Computer Interface",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        },
+        {
+          "descriptor_ui": "D014584",
+          "descriptor_name": "User-Computer Interface",
+          "qualifier_ui": null,
+          "qualifier_name": null,
+          "is_major_topic": true
+        }
+      ],
+      "locations_count": 2,
+      "locations": [
+        {
+          "id": "doi:10.1088/1741-2560/4/2/r03",
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1088/1741-2560/4/2/r03",
+          "pdf_url": "https://iopscience.iop.org/article/10.1088/1741-2560/4/2/R03/pdf",
+          "source": {
+            "id": "https://openalex.org/S32898093",
+            "display_name": "Journal of Neural Engineering",
+            "issn_l": "1741-2552",
+            "issn": [
+              "1741-2552",
+              "1741-2560"
+            ],
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": true,
+            "host_organization": "https://openalex.org/P4310320083",
+            "host_organization_name": "IOP Publishing",
+            "host_organization_lineage": [
+              "https://openalex.org/P4310320083",
+              "https://openalex.org/P4310311669"
+            ],
+            "host_organization_lineage_names": [
+              "IOP Publishing",
+              "Institute of Physics"
+            ],
+            "type": "journal"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Journal of Neural Engineering",
+          "raw_type": "journal-article"
+        },
+        {
+          "id": "pmid:17409474",
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/17409474",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "issn_l": null,
+            "issn": null,
+            "is_oa": false,
+            "is_in_doaj": false,
+            "is_core": false,
+            "host_organization": "https://openalex.org/I1299303238",
+            "host_organization_name": "National Institutes of Health",
+            "host_organization_lineage": [
+              "https://openalex.org/I1299303238"
+            ],
+            "host_organization_lineage_names": [],
+            "type": "repository"
+          },
+          "license": null,
+          "license_id": null,
+          "version": "publishedVersion",
+          "is_accepted": true,
+          "is_published": true,
+          "raw_source_name": "Journal of neural engineering",
+          "raw_type": "Journal Article"
+        }
+      ],
+      "best_oa_location": {
+        "id": "doi:10.1088/1741-2560/4/2/r03",
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1088/1741-2560/4/2/r03",
+        "pdf_url": "https://iopscience.iop.org/article/10.1088/1741-2560/4/2/R03/pdf",
+        "source": {
+          "id": "https://openalex.org/S32898093",
+          "display_name": "Journal of Neural Engineering",
+          "issn_l": "1741-2552",
+          "issn": [
+            "1741-2552",
+            "1741-2560"
+          ],
+          "is_oa": false,
+          "is_in_doaj": false,
+          "is_core": true,
+          "host_organization": "https://openalex.org/P4310320083",
+          "host_organization_name": "IOP Publishing",
+          "host_organization_lineage": [
+            "https://openalex.org/P4310320083",
+            "https://openalex.org/P4310311669"
+          ],
+          "host_organization_lineage_names": [
+            "IOP Publishing",
+            "Institute of Physics"
+          ],
+          "type": "journal"
+        },
+        "license": null,
+        "license_id": null,
+        "version": "publishedVersion",
+        "is_accepted": true,
+        "is_published": true,
+        "raw_source_name": "Journal of Neural Engineering",
+        "raw_type": "journal-article"
+      },
+      "sustainable_development_goals": [],
+      "awards": [],
+      "funders": [],
+      "has_content": {
+        "pdf": true,
+        "grobid_xml": true
+      },
+      "content_urls": {
+        "pdf": "https://content.openalex.org/works/W2145947508.pdf",
+        "grobid_xml": "https://content.openalex.org/works/W2145947508.grobid-xml"
+      },
+      "referenced_works_count": 315,
+      "referenced_works": [
+        "https://openalex.org/W104721195",
+        "https://openalex.org/W141116573",
+        "https://openalex.org/W162680006",
+        "https://openalex.org/W183504173",
+        "https://openalex.org/W190437827",
+        "https://openalex.org/W401930899",
+        "https://openalex.org/W579298932",
+        "https://openalex.org/W1483156930",
+        "https://openalex.org/W1486632165",
+        "https://openalex.org/W1487653274",
+        "https://openalex.org/W1498494124",
+        "https://openalex.org/W1500103696",
+        "https://openalex.org/W1502496639",
+        "https://openalex.org/W1507611906",
+        "https://openalex.org/W1512092696",
+        "https://openalex.org/W1516845916",
+        "https://openalex.org/W1527457848",
+        "https://openalex.org/W1531896794",
+        "https://openalex.org/W1543237449",
+        "https://openalex.org/W1554886734",
+        "https://openalex.org/W1564392083",
+        "https://openalex.org/W1603678519",
+        "https://openalex.org/W1653391263",
+        "https://openalex.org/W1661769282",
+        "https://openalex.org/W1740622014",
+        "https://openalex.org/W1773983584",
+        "https://openalex.org/W1877129687",
+        "https://openalex.org/W1893820105",
+        "https://openalex.org/W1914290054",
+        "https://openalex.org/W1914877200",
+        "https://openalex.org/W1928693110",
+        "https://openalex.org/W1943730788",
+        "https://openalex.org/W1949139842",
+        "https://openalex.org/W1961313157",
+        "https://openalex.org/W1964006659",
+        "https://openalex.org/W1965551348",
+        "https://openalex.org/W1969355283",
+        "https://openalex.org/W1970915961",
+        "https://openalex.org/W1972190010",
+        "https://openalex.org/W1975151804",
+        "https://openalex.org/W1978990249",
+        "https://openalex.org/W1981180290",
+        "https://openalex.org/W1981266357",
+        "https://openalex.org/W1981950129",
+        "https://openalex.org/W1983218966",
+        "https://openalex.org/W1987206804",
+        "https://openalex.org/W1988181650",
+        "https://openalex.org/W1988242405",
+        "https://openalex.org/W1990182783",
+        "https://openalex.org/W1990306572",
+        "https://openalex.org/W1991849198",
+        "https://openalex.org/W1993716436",
+        "https://openalex.org/W1997273973",
+        "https://openalex.org/W1998302573",
+        "https://openalex.org/W2004618880",
+        "https://openalex.org/W2007517634",
+        "https://openalex.org/W2010112159",
+        "https://openalex.org/W2010625877",
+        "https://openalex.org/W2014320934",
+        "https://openalex.org/W2017365838",
+        "https://openalex.org/W2018281395",
+        "https://openalex.org/W2020600751",
+        "https://openalex.org/W2023295798",
+        "https://openalex.org/W2024140440",
+        "https://openalex.org/W2030435502",
+        "https://openalex.org/W2033840893",
+        "https://openalex.org/W2033909995",
+        "https://openalex.org/W2035552967",
+        "https://openalex.org/W2035868320",
+        "https://openalex.org/W2039274997",
+        "https://openalex.org/W2039340285",
+        "https://openalex.org/W2041200908",
+        "https://openalex.org/W2041248708",
+        "https://openalex.org/W2041637246",
+        "https://openalex.org/W2044455804",
+        "https://openalex.org/W2049166497",
+        "https://openalex.org/W2050116264",
+        "https://openalex.org/W2051097876",
+        "https://openalex.org/W2051799084",
+        "https://openalex.org/W2053011627",
+        "https://openalex.org/W2054752348",
+        "https://openalex.org/W2054922983",
+        "https://openalex.org/W2057584021",
+        "https://openalex.org/W2059915684",
+        "https://openalex.org/W2060474513",
+        "https://openalex.org/W2063261057",
+        "https://openalex.org/W2064264510",
+        "https://openalex.org/W2065833894",
+        "https://openalex.org/W2067862204",
+        "https://openalex.org/W2072151998",
+        "https://openalex.org/W2073098807",
+        "https://openalex.org/W2075403208",
+        "https://openalex.org/W2077315274",
+        "https://openalex.org/W2077567262",
+        "https://openalex.org/W2078480419",
+        "https://openalex.org/W2080900890",
+        "https://openalex.org/W2081346538",
+        "https://openalex.org/W2083303138",
+        "https://openalex.org/W2083742331",
+        "https://openalex.org/W2084680213",
+        "https://openalex.org/W2085965317",
+        "https://openalex.org/W2086758640",
+        "https://openalex.org/W2087170571",
+        "https://openalex.org/W2087733543",
+        "https://openalex.org/W2088809939",
+        "https://openalex.org/W2089765193",
+        "https://openalex.org/W2091435129",
+        "https://openalex.org/W2092926313",
+        "https://openalex.org/W2093534731",
+        "https://openalex.org/W2096587747",
+        "https://openalex.org/W2096590200",
+        "https://openalex.org/W2096721210",
+        "https://openalex.org/W2096793003",
+        "https://openalex.org/W2097326220",
+        "https://openalex.org/W2097689689",
+        "https://openalex.org/W2097826706",
+        "https://openalex.org/W2098100592",
+        "https://openalex.org/W2098373948",
+        "https://openalex.org/W2098382295",
+        "https://openalex.org/W2098590735",
+        "https://openalex.org/W2098655120",
+        "https://openalex.org/W2098844365",
+        "https://openalex.org/W2099121865",
+        "https://openalex.org/W2099209154",
+        "https://openalex.org/W2099398894",
+        "https://openalex.org/W2100435143",
+        "https://openalex.org/W2100470503",
+        "https://openalex.org/W2100561672",
+        "https://openalex.org/W2101345011",
+        "https://openalex.org/W2101591109",
+        "https://openalex.org/W2101629643",
+        "https://openalex.org/W2102176429",
+        "https://openalex.org/W2102837100",
+        "https://openalex.org/W2103028253",
+        "https://openalex.org/W2103105120",
+        "https://openalex.org/W2103494817",
+        "https://openalex.org/W2103554020",
+        "https://openalex.org/W2104051680",
+        "https://openalex.org/W2104168641",
+        "https://openalex.org/W2105044329",
+        "https://openalex.org/W2105262312",
+        "https://openalex.org/W2105315435",
+        "https://openalex.org/W2105526144",
+        "https://openalex.org/W2105710559",
+        "https://openalex.org/W2105845984",
+        "https://openalex.org/W2105847279",
+        "https://openalex.org/W2105884083",
+        "https://openalex.org/W2106006415",
+        "https://openalex.org/W2106219502",
+        "https://openalex.org/W2107865144",
+        "https://openalex.org/W2109077067",
+        "https://openalex.org/W2109414107",
+        "https://openalex.org/W2109814436",
+        "https://openalex.org/W2109858853",
+        "https://openalex.org/W2110399130",
+        "https://openalex.org/W2110513315",
+        "https://openalex.org/W2110562154",
+        "https://openalex.org/W2110698016",
+        "https://openalex.org/W2111556804",
+        "https://openalex.org/W2111685939",
+        "https://openalex.org/W2111841470",
+        "https://openalex.org/W2112090229",
+        "https://openalex.org/W2112354775",
+        "https://openalex.org/W2112563323",
+        "https://openalex.org/W2113019943",
+        "https://openalex.org/W2113321226",
+        "https://openalex.org/W2113359842",
+        "https://openalex.org/W2114029543",
+        "https://openalex.org/W2114865067",
+        "https://openalex.org/W2115622682",
+        "https://openalex.org/W2115854344",
+        "https://openalex.org/W2116308679",
+        "https://openalex.org/W2116689503",
+        "https://openalex.org/W2117988264",
+        "https://openalex.org/W2118494197",
+        "https://openalex.org/W2119834947",
+        "https://openalex.org/W2120519232",
+        "https://openalex.org/W2120535393",
+        "https://openalex.org/W2121564857",
+        "https://openalex.org/W2122149860",
+        "https://openalex.org/W2122832496",
+        "https://openalex.org/W2124249625",
+        "https://openalex.org/W2124350235",
+        "https://openalex.org/W2125486629",
+        "https://openalex.org/W2125675750",
+        "https://openalex.org/W2125992711",
+        "https://openalex.org/W2127260043",
+        "https://openalex.org/W2127756775",
+        "https://openalex.org/W2127769318",
+        "https://openalex.org/W2128379882",
+        "https://openalex.org/W2129106694",
+        "https://openalex.org/W2129723449",
+        "https://openalex.org/W2129763705",
+        "https://openalex.org/W2130564763",
+        "https://openalex.org/W2130924765",
+        "https://openalex.org/W2131321253",
+        "https://openalex.org/W2131854908",
+        "https://openalex.org/W2133022542",
+        "https://openalex.org/W2133651939",
+        "https://openalex.org/W2133988362",
+        "https://openalex.org/W2134305125",
+        "https://openalex.org/W2135454142",
+        "https://openalex.org/W2135552098",
+        "https://openalex.org/W2136376588",
+        "https://openalex.org/W2136897104",
+        "https://openalex.org/W2137228318",
+        "https://openalex.org/W2137455257",
+        "https://openalex.org/W2138102363",
+        "https://openalex.org/W2138398874",
+        "https://openalex.org/W2140413964",
+        "https://openalex.org/W2140870987",
+        "https://openalex.org/W2142197234",
+        "https://openalex.org/W2142209168",
+        "https://openalex.org/W2142280324",
+        "https://openalex.org/W2142394129",
+        "https://openalex.org/W2142459233",
+        "https://openalex.org/W2143585512",
+        "https://openalex.org/W2143913294",
+        "https://openalex.org/W2144622899",
+        "https://openalex.org/W2144719327",
+        "https://openalex.org/W2144899091",
+        "https://openalex.org/W2145149200",
+        "https://openalex.org/W2145305894",
+        "https://openalex.org/W2145673887",
+        "https://openalex.org/W2145803986",
+        "https://openalex.org/W2146723866",
+        "https://openalex.org/W2146744682",
+        "https://openalex.org/W2147946355",
+        "https://openalex.org/W2148068496",
+        "https://openalex.org/W2149090293",
+        "https://openalex.org/W2149094129",
+        "https://openalex.org/W2149690083",
+        "https://openalex.org/W2149797735",
+        "https://openalex.org/W2149873734",
+        "https://openalex.org/W2150281486",
+        "https://openalex.org/W2150611035",
+        "https://openalex.org/W2150764079",
+        "https://openalex.org/W2151171831",
+        "https://openalex.org/W2151172218",
+        "https://openalex.org/W2151781490",
+        "https://openalex.org/W2151790668",
+        "https://openalex.org/W2152465745",
+        "https://openalex.org/W2152949490",
+        "https://openalex.org/W2153134014",
+        "https://openalex.org/W2153912116",
+        "https://openalex.org/W2154075423",
+        "https://openalex.org/W2154421185",
+        "https://openalex.org/W2154481633",
+        "https://openalex.org/W2155758585",
+        "https://openalex.org/W2156474069",
+        "https://openalex.org/W2156832349",
+        "https://openalex.org/W2156849207",
+        "https://openalex.org/W2159318219",
+        "https://openalex.org/W2159390564",
+        "https://openalex.org/W2159848056",
+        "https://openalex.org/W2160634130",
+        "https://openalex.org/W2160722169",
+        "https://openalex.org/W2161419535",
+        "https://openalex.org/W2161457168",
+        "https://openalex.org/W2161892963",
+        "https://openalex.org/W2161893827",
+        "https://openalex.org/W2161918244",
+        "https://openalex.org/W2163756472",
+        "https://openalex.org/W2163981425",
+        "https://openalex.org/W2164096208",
+        "https://openalex.org/W2164462712",
+        "https://openalex.org/W2164462774",
+        "https://openalex.org/W2164988731",
+        "https://openalex.org/W2165217282",
+        "https://openalex.org/W2165294408",
+        "https://openalex.org/W2165810317",
+        "https://openalex.org/W2166050893",
+        "https://openalex.org/W2166330320",
+        "https://openalex.org/W2167068610",
+        "https://openalex.org/W2167584826",
+        "https://openalex.org/W2167624874",
+        "https://openalex.org/W2168094319",
+        "https://openalex.org/W2168116598",
+        "https://openalex.org/W2168572392",
+        "https://openalex.org/W2168689324",
+        "https://openalex.org/W2168701077",
+        "https://openalex.org/W2169234301",
+        "https://openalex.org/W2169258869",
+        "https://openalex.org/W2169674009",
+        "https://openalex.org/W2169795352",
+        "https://openalex.org/W2170778407",
+        "https://openalex.org/W2171601838",
+        "https://openalex.org/W2172038751",
+        "https://openalex.org/W2172123257",
+        "https://openalex.org/W2396629128",
+        "https://openalex.org/W2413587420",
+        "https://openalex.org/W2492794003",
+        "https://openalex.org/W2533090342",
+        "https://openalex.org/W2533828857",
+        "https://openalex.org/W2535020677",
+        "https://openalex.org/W2537466665",
+        "https://openalex.org/W2538615557",
+        "https://openalex.org/W2539212089",
+        "https://openalex.org/W2540180951",
+        "https://openalex.org/W2540274724",
+        "https://openalex.org/W2540789403",
+        "https://openalex.org/W2542335251",
+        "https://openalex.org/W2542949156",
+        "https://openalex.org/W2543563831",
+        "https://openalex.org/W2543810387",
+        "https://openalex.org/W2544487422",
+        "https://openalex.org/W2545747245",
+        "https://openalex.org/W2547482297",
+        "https://openalex.org/W2613433911",
+        "https://openalex.org/W2999905431",
+        "https://openalex.org/W3140273842",
+        "https://openalex.org/W3141143474",
+        "https://openalex.org/W4237805535",
+        "https://openalex.org/W4253453051",
+        "https://openalex.org/W4285719527"
+      ],
+      "related_works": [
+        "https://openalex.org/W3202969339",
+        "https://openalex.org/W4237513258",
+        "https://openalex.org/W1994410349",
+        "https://openalex.org/W3177028067",
+        "https://openalex.org/W1913385466",
+        "https://openalex.org/W2889342546",
+        "https://openalex.org/W2015048155",
+        "https://openalex.org/W1969223073",
+        "https://openalex.org/W1616854372",
+        "https://openalex.org/W3202408121"
+      ],
+      "abstract_inverted_index": {
+        "Brain-computer": [
+          0
+        ],
+        "interfaces": [
+          1
+        ],
+        "(BCIs)": [
+          2
+        ],
+        "aim": [
+          3
+        ],
+        "at": [
+          4
+        ],
+        "providing": [
+          5
+        ],
+        "a": [
+          6,
+          109
+        ],
+        "non-muscular": [
+          7
+        ],
+        "channel": [
+          8
+        ],
+        "for": [
+          9
+        ],
+        "sending": [
+          10
+        ],
+        "commands": [
+          11
+        ],
+        "to": [
+          12,
+          42,
+          81
+        ],
+        "the": [
+          13,
+          17,
+          25,
+          32,
+          39,
+          44,
+          48,
+          58,
+          66,
+          103
+        ],
+        "external": [
+          14
+        ],
+        "world": [
+          15
+        ],
+        "using": [
+          16,
+          75
+        ],
+        "electroencephalographic": [
+          18
+        ],
+        "activity": [
+          19
+        ],
+        "or": [
+          20
+        ],
+        "other": [
+          21
+        ],
+        "electrophysiological": [
+          22
+        ],
+        "measures": [
+          23
+        ],
+        "of": [
+          24,
+          35,
+          57,
+          71,
+          108
+        ],
+        "brain": [
+          26,
+          45
+        ],
+        "function.": [
+          27
+        ],
+        "An": [
+          28
+        ],
+        "essential": [
+          29
+        ],
+        "factor": [
+          30
+        ],
+        "in": [
+          31,
+          119
+        ],
+        "successful": [
+          33
+        ],
+        "operation": [
+          34
+        ],
+        "BCI": [
+          36,
+          49,
+          73
+        ],
+        "systems": [
+          37
+        ],
+        "is": [
+          38,
+          53
+        ],
+        "methods": [
+          40
+        ],
+        "used": [
+          41,
+          118
+        ],
+        "process": [
+          43
+        ],
+        "signals.": [
+          46
+        ],
+        "In": [
+          47
+        ],
+        "literature,": [
+          50
+        ],
+        "however,": [
+          51
+        ],
+        "there": [
+          52
+        ],
+        "no": [
+          54
+        ],
+        "comprehensive": [
+          55,
+          69
+        ],
+        "review": [
+          56
+        ],
+        "signal": [
+          59,
+          77,
+          105,
+          113,
+          124
+        ],
+        "processing": [
+          60,
+          106,
+          114,
+          125
+        ],
+        "techniques": [
+          61,
+          126
+        ],
+        "used.": [
+          62
+        ],
+        "This": [
+          63
+        ],
+        "work": [
+          64
+        ],
+        "presents": [
+          65
+        ],
+        "first": [
+          67
+        ],
+        "such": [
+          68
+        ],
+        "survey": [
+          70,
+          88
+        ],
+        "all": [
+          72
+        ],
+        "designs": [
+          74
+        ],
+        "electrical": [
+          76
+        ],
+        "recordings": [
+          78
+        ],
+        "published": [
+          79
+        ],
+        "prior": [
+          80
+        ],
+        "January": [
+          82
+        ],
+        "2006.": [
+          83
+        ],
+        "Detailed": [
+          84
+        ],
+        "results": [
+          85
+        ],
+        "from": [
+          86
+        ],
+        "this": [
+          87
+        ],
+        "are": [
+          89,
+          98,
+          102
+        ],
+        "presented": [
+          90
+        ],
+        "and": [
+          91,
+          121
+        ],
+        "discussed.": [
+          92
+        ],
+        "The": [
+          93
+        ],
+        "following": [
+          94
+        ],
+        "key": [
+          95,
+          104
+        ],
+        "research": [
+          96
+        ],
+        "questions": [
+          97
+        ],
+        "addressed:": [
+          99
+        ],
+        "(1)": [
+          100
+        ],
+        "what": [
+          101,
+          112
+        ],
+        "components": [
+          107
+        ],
+        "BCI,": [
+          110
+        ],
+        "(2)": [
+          111
+        ],
+        "algorithms": [
+          115
+        ],
+        "have": [
+          116,
+          127
+        ],
+        "been": [
+          117
+        ],
+        "BCIs": [
+          120
+        ],
+        "(3)": [
+          122
+        ],
+        "which": [
+          123
+        ],
+        "received": [
+          128
+        ],
+        "more": [
+          129
+        ],
+        "attention?": [
+          130
+        ]
+      },
+      "counts_by_year": [
+        {
+          "year": 2026,
+          "cited_by_count": 12
+        },
+        {
+          "year": 2025,
+          "cited_by_count": 31
+        },
+        {
+          "year": 2024,
+          "cited_by_count": 26
+        },
+        {
+          "year": 2023,
+          "cited_by_count": 35
+        },
+        {
+          "year": 2022,
+          "cited_by_count": 33
+        },
+        {
+          "year": 2021,
+          "cited_by_count": 50
+        },
+        {
+          "year": 2020,
+          "cited_by_count": 44
+        },
+        {
+          "year": 2019,
+          "cited_by_count": 49
+        },
+        {
+          "year": 2018,
+          "cited_by_count": 66
+        },
+        {
+          "year": 2017,
+          "cited_by_count": 63
+        },
+        {
+          "year": 2016,
+          "cited_by_count": 59
+        },
+        {
+          "year": 2015,
+          "cited_by_count": 58
+        },
+        {
+          "year": 2014,
+          "cited_by_count": 76
+        },
+        {
+          "year": 2013,
+          "cited_by_count": 87
+        },
+        {
+          "year": 2012,
+          "cited_by_count": 56
+        }
+      ],
+      "updated_date": "2026-08-27T14:10:00.468798",
+      "created_date": "2025-10-10T00:00:00"
+    }
+  ],
+  "group_by": []
+}
