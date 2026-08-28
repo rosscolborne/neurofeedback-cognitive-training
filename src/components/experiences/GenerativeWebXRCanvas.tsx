@@ -1,55 +1,100 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { EEGDataPoint } from '../../types';
-import { Sparkles, Camera, RotateCcw, Palette, Wind } from 'lucide-react';
+import { Sparkles, Camera, RotateCcw, Palette } from 'lucide-react';
 
 interface GenerativeArtProps {
   eegData: EEGDataPoint | null;
 }
 
-interface SilkWave {
-  angle: number;
-  radius: number;
-  speed: number;
-  color: string;
-  opacity: number;
-  thickness: number;
-}
-
-interface SoftParticle {
+interface WatercolorDrop {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  size: number;
+  radius: number;
+  maxRadius: number;
   color: string;
   alpha: number;
-  life: number;
+  spreadRate: number;
 }
 
-const PALETTES = [
-  { id: 'dawn-gold', name: 'Dawn Gold & Terracotta', primary: '#E8967A', secondary: '#FFD700', bg: '#0A0A12', glow: 'rgba(232, 150, 122, 0.4)' },
-  { id: 'aurora-emerald', name: 'Celestial Aurora', primary: '#68D391', secondary: '#4FD1C5', bg: '#081014', glow: 'rgba(104, 211, 145, 0.4)' },
-  { id: 'ocean-sapphire', name: 'Oceanic Serenity', primary: '#4A90D9', secondary: '#81E6D9', bg: '#060B14', glow: 'rgba(74, 144, 217, 0.4)' },
-  { id: 'twilight-amethyst', name: 'Twilight Amethyst', primary: '#9F7AEA', secondary: '#F687B3', bg: '#0C0814', glow: 'rgba(159, 122, 234, 0.4)' },
+interface SoftDriftingMote {
+  x: number;
+  y: number;
+  radius: number;
+  vx: number;
+  vy: number;
+  opacity: number;
+  phase: number;
+}
+
+const THERAPEUTIC_PALETTES = [
+  {
+    id: 'warm-terracotta',
+    name: 'Warm Sunset & Earth',
+    bg: '#0F0E13',
+    primary: 'rgba(232, 150, 122, 0.28)', // Soft Terracotta
+    secondary: 'rgba(245, 198, 165, 0.22)', // Warm Sand
+    accent: 'rgba(255, 235, 180, 0.45)', // Soft Amber
+    dotColor: '#E8967A',
+  },
+  {
+    id: 'sage-tranquility',
+    name: 'Sage Garden & Rain',
+    bg: '#0C110F',
+    primary: 'rgba(104, 211, 145, 0.24)', // Soft Sage
+    secondary: 'rgba(79, 209, 197, 0.20)', // Pale Eucalyptus
+    accent: 'rgba(230, 255, 250, 0.40)', // Dew
+    dotColor: '#68D391',
+  },
+  {
+    id: 'lavender-twilight',
+    name: 'Lavender Dusk & Mist',
+    bg: '#100D14',
+    primary: 'rgba(159, 122, 234, 0.24)', // Soft Lavender
+    secondary: 'rgba(183, 148, 244, 0.18)', // Pale Violet
+    accent: 'rgba(254, 215, 226, 0.38)', // Rose Mist
+    dotColor: '#9F7AEA',
+  },
+  {
+    id: 'ocean-whisper',
+    name: 'Quiet Ocean Caustics',
+    bg: '#090E14',
+    primary: 'rgba(74, 144, 217, 0.24)', // Soft Slate Blue
+    secondary: 'rgba(129, 230, 217, 0.18)', // Seafoam
+    accent: 'rgba(226, 232, 240, 0.42)', // Soft Pearl
+    dotColor: '#4A90D9',
+  },
 ];
 
 export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [activePalette, setActivePalette] = useState(PALETTES[0]);
+  const [activePalette, setActivePalette] = useState(THERAPEUTIC_PALETTES[0]);
   const [snapshotSaved, setSnapshotSaved] = useState(false);
 
-  const touchRipplesRef = useRef<Array<{ x: number; y: number; radius: number; maxRadius: number; alpha: number }>>([]);
-  const particlesRef = useRef<SoftParticle[]>([]);
-  const timeRef = useRef(0);
-  const isTouchingRef = useRef(false);
+  // Smoothly interpolated values to prevent ANY abrupt visual jumps or flashing
+  const smoothZoneScoreRef = useRef(0.5);
+  const smoothAlphaRef = useRef(10.0);
+  const dropsRef = useRef<WatercolorDrop[]>([]);
+  const motesRef = useRef<SoftDriftingMote[]>([]);
+  const breathingCycleRef = useRef(0);
 
   const inZone = eegData?.inZone ?? true;
-  const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
-  const alphaPower = eegData?.bands.alpha ?? 10.0;
-  const coherence = eegData?.coherence ?? 75;
-  const smrPower = eegData?.bands.smr ?? 7.0;
+  const rawZoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
+  const rawAlpha = eegData?.bands.alpha ?? 10.0;
 
-  // Touch / Drag Interaction
+  // Initialize a few gentle drifting motes (like soft sakura petals or dust in sunlight)
+  useEffect(() => {
+    motesRef.current = Array.from({ length: 9 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      radius: 1.5 + Math.random() * 2.0,
+      vx: (Math.random() - 0.5) * 6,
+      vy: -3 - Math.random() * 5, // Slow upward float
+      opacity: 0.15 + Math.random() * 0.25,
+      phase: Math.random() * Math.PI * 2,
+    }));
+  }, []);
+
+  // Gentle Touch: drops a soft watercolor bloom
   const handleTouch = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -65,16 +110,18 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
       y = e.clientY - rect.top;
     }
 
-    touchRipplesRef.current.push({
+    dropsRef.current.push({
       x,
       y,
-      radius: 5,
-      maxRadius: 80 + (alphaPower / 25) * 60,
-      alpha: 0.7,
+      radius: 10,
+      maxRadius: 100 + smoothAlphaRef.current * 4,
+      color: Math.random() > 0.5 ? activePalette.primary : activePalette.secondary,
+      alpha: 0.45,
+      spreadRate: 14 + Math.random() * 8,
     });
 
-    if (touchRipplesRef.current.length > 12) {
-      touchRipplesRef.current.shift();
+    if (dropsRef.current.length > 8) {
+      dropsRef.current.shift();
     }
   };
 
@@ -86,14 +133,13 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
 
     const imageUri = canvas.toDataURL('image/png');
     const link = document.createElement('a');
-    link.download = `neural-artwork-${Date.now()}.png`;
+    link.download = `calm-neural-art-${Date.now()}.png`;
     link.href = imageUri;
     link.click();
   };
 
   const handleReset = () => {
-    touchRipplesRef.current = [];
-    particlesRef.current = [];
+    dropsRef.current = [];
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -104,7 +150,7 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
     }
   };
 
-  // 60 FPS Organic Generative Silk & Aura Engine
+  // Ultra-Smooth, Slow-Paced Meditative Rendering Engine
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -126,131 +172,115 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
     window.addEventListener('resize', resize);
 
     const render = (now: number) => {
-      const dt = Math.min(0.08, (now - lastTime) / 1000);
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
-      timeRef.current += dt * (0.6 + zoneScore * 0.4);
-      const time = timeRef.current;
+
+      // Heavy damping to ensure zero sudden jumps or visual jarring
+      smoothZoneScoreRef.current += (rawZoneScore - smoothZoneScoreRef.current) * (dt * 0.8);
+      smoothAlphaRef.current += (rawAlpha - smoothAlphaRef.current) * (dt * 0.8);
+
+      const zoneScore = smoothZoneScoreRef.current;
+      const alpha = smoothAlphaRef.current;
+
+      // Slow 8-second breathing oscillation (0.125 Hz resonant breathing)
+      breathingCycleRef.current += dt * (0.45 + 0.15 * zoneScore);
+      const breathPhase = Math.sin(breathingCycleRef.current);
+      const breathScale = 1.0 + breathPhase * 0.08;
 
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;
       const centerX = width * 0.5;
       const centerY = height * 0.5;
 
-      // 1. Gentle darkroom fade trail (slow dissipation of light)
-      ctx.fillStyle = activePalette.bg === '#0A0A12' ? 'rgba(10, 10, 18, 0.05)' : 'rgba(8, 16, 20, 0.05)';
+      // 1. Soft diffusion wash (simulates absorbent watercolor rice paper)
+      ctx.fillStyle = activePalette.bg;
+      ctx.globalAlpha = 0.035; // Ultra-slow, seamless fading
       ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1.0;
 
-      // 2. Central Breathing Neural Core
-      const corePulse = Math.sin(time * 1.5) * 0.15 + 0.85;
-      const baseRadius = Math.min(width, height) * (0.15 + (alphaPower / 30) * 0.12 * corePulse);
-      
-      const coreGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, baseRadius * 1.8);
-      coreGrad.addColorStop(0, '#FFFFFF');
-      coreGrad.addColorStop(0.3, activePalette.primary);
-      coreGrad.addColorStop(0.7, `${activePalette.secondary}44`);
-      coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      // 2. Central Blooming Watercolor Cloud (Soft, warm, non-flashing)
+      const baseBloomRadius = Math.min(width, height) * (0.24 + (alpha / 30) * 0.14) * breathScale;
 
-      ctx.fillStyle = coreGrad;
-      ctx.globalAlpha = 0.4 + 0.5 * zoneScore;
+      // Layer 1: Outermost ethereal mist
+      const outerGrad = ctx.createRadialGradient(
+        centerX,
+        centerY,
+        baseBloomRadius * 0.2,
+        centerX,
+        centerY,
+        baseBloomRadius * 1.6
+      );
+      outerGrad.addColorStop(0, activePalette.secondary);
+      outerGrad.addColorStop(0.6, activePalette.primary);
+      outerGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.fillStyle = outerGrad;
+      ctx.globalAlpha = 0.35 + 0.35 * zoneScore;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, baseRadius * 1.8, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, baseBloomRadius * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Layer 2: Inner warm glow
+      const innerGrad = ctx.createRadialGradient(
+        centerX,
+        centerY,
+        2,
+        centerX,
+        centerY,
+        baseBloomRadius * 0.75
+      );
+      innerGrad.addColorStop(0, activePalette.accent);
+      innerGrad.addColorStop(0.5, activePalette.primary);
+      innerGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.fillStyle = innerGrad;
+      ctx.globalAlpha = 0.45 + 0.3 * zoneScore;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, baseBloomRadius * 0.75, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1.0;
 
-      // 3. Ethereal Silk Ribbons (Flowing Lissajous Curves evolving with Coherence & SMR)
-      const numPetals = inZone && coherence > 60 ? 8 : 5;
-      const growthFactor = 0.4 + zoneScore * 0.6;
+      // 3. User Watercolor Drops (Diffuse softly like ink in clear water)
+      dropsRef.current.forEach((drop) => {
+        drop.radius += dt * drop.spreadRate;
+        drop.alpha -= dt * 0.08;
 
-      ctx.lineWidth = 1.6 + zoneScore * 1.2;
-      for (let p = 0; p < numPetals; p++) {
-        const baseAngle = (p * Math.PI * 2) / numPetals;
-        const petalOffset = Math.sin(time * 0.8 + p) * 0.4;
+        if (drop.alpha > 0 && drop.radius < drop.maxRadius) {
+          const dropGrad = ctx.createRadialGradient(drop.x, drop.y, 0, drop.x, drop.y, drop.radius);
+          dropGrad.addColorStop(0, drop.color);
+          dropGrad.addColorStop(0.8, drop.color);
+          dropGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
-        ctx.beginPath();
-        for (let t = 0; t <= Math.PI * 2; t += 0.08) {
-          const r = baseRadius * (1 + Math.sin(t * 3 + time * 1.2 + p) * (0.35 * growthFactor) + Math.cos(t * 2 - time * 0.8) * 0.2);
-          const x = centerX + Math.cos(t + baseAngle + petalOffset) * r;
-          const y = centerY + Math.sin(t + baseAngle + petalOffset) * (r * 0.85);
-
-          if (t === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
-        }
-        ctx.closePath();
-
-        ctx.strokeStyle = p % 2 === 0 ? activePalette.primary : activePalette.secondary;
-        ctx.globalAlpha = (0.25 + 0.45 * zoneScore) * (1 - p * 0.05);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-      }
-
-      // 4. Harmonic Sacred Circles (Appear subtly as SMR & Coherence rise)
-      if (inZone && smrPower > 6.0) {
-        const ringCount = Math.min(4, Math.floor(coherence / 25) + 1);
-        for (let rIdx = 1; rIdx <= ringCount; rIdx++) {
-          const ringR = baseRadius * (0.8 + rIdx * 0.45) + Math.sin(time * 0.6 + rIdx) * 10;
+          ctx.fillStyle = dropGrad;
+          ctx.globalAlpha = drop.alpha;
           ctx.beginPath();
-          ctx.arc(centerX, centerY, ringR, 0, Math.PI * 2);
-          ctx.strokeStyle = activePalette.secondary;
-          ctx.lineWidth = 1.0;
-          ctx.globalAlpha = 0.2 * zoneScore;
-          ctx.setLineDash([6, 12]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.globalAlpha = 1.0;
-        }
-      }
-
-      // 5. Gentle Floating Starlight Motes
-      if (particlesRef.current.length < 25 && Math.random() < 0.2) {
-        const spawnAngle = Math.random() * Math.PI * 2;
-        const spawnR = baseRadius * (0.5 + Math.random() * 0.8);
-        particlesRef.current.push({
-          x: centerX + Math.cos(spawnAngle) * spawnR,
-          y: centerY + Math.sin(spawnAngle) * spawnR,
-          vx: (Math.random() - 0.5) * 12,
-          vy: (Math.random() - 0.5) * 12 - 6,
-          size: 1.5 + Math.random() * 2.5,
-          color: Math.random() > 0.5 ? activePalette.primary : activePalette.secondary,
-          alpha: 0.8,
-          life: 1.0,
-        });
-      }
-
-      particlesRef.current.forEach((pt) => {
-        pt.x += pt.vx * dt;
-        pt.y += pt.vy * dt;
-        pt.life -= dt * 0.25;
-
-        if (pt.life > 0) {
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, pt.size * pt.life, 0, Math.PI * 2);
-          ctx.fillStyle = pt.color;
-          ctx.globalAlpha = pt.alpha * pt.life * (0.4 + 0.6 * zoneScore);
+          ctx.arc(drop.x, drop.y, drop.radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.globalAlpha = 1.0;
         }
       });
-      particlesRef.current = particlesRef.current.filter((pt) => pt.life > 0);
+      dropsRef.current = dropsRef.current.filter((d) => d.alpha > 0 && d.radius < d.maxRadius);
 
-      // 6. User Touch Ripples (Soft, organic watercolor dispersion)
-      touchRipplesRef.current.forEach((rip) => {
-        rip.radius += dt * 45;
-        rip.alpha -= dt * 0.55;
+      // 4. Subtle, Slow Floating Light Motes (No fast motion or spinning)
+      motesRef.current.forEach((mote) => {
+        mote.x += mote.vx * dt;
+        mote.y += mote.vy * dt;
+        mote.phase += dt * 0.5;
 
-        if (rip.alpha > 0) {
-          ctx.beginPath();
-          ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
-          ctx.strokeStyle = activePalette.primary;
-          ctx.lineWidth = 2.0;
-          ctx.globalAlpha = rip.alpha;
-          ctx.stroke();
-          ctx.globalAlpha = 1.0;
-        }
+        // Wrap around smoothly
+        if (mote.y < -20) mote.y = height + 20;
+        if (mote.x < -20) mote.x = width + 20;
+        if (mote.x > width + 20) mote.x = -20;
+
+        const pulseOpacity = mote.opacity * (0.7 + 0.3 * Math.sin(mote.phase)) * (0.6 + 0.4 * zoneScore);
+
+        ctx.fillStyle = activePalette.accent;
+        ctx.globalAlpha = pulseOpacity;
+        ctx.beginPath();
+        ctx.arc(mote.x, mote.y, mote.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
       });
-      touchRipplesRef.current = touchRipplesRef.current.filter((rip) => rip.alpha > 0);
 
       animationId = requestAnimationFrame(render);
     };
@@ -260,7 +290,7 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, [activePalette, inZone, zoneScore, alphaPower, coherence, smrPower]);
+  }, [activePalette, rawZoneScore, rawAlpha]);
 
   return (
     <div
@@ -292,9 +322,9 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
       >
         <div
           style={{
-            background: 'rgba(15, 17, 26, 0.75)',
+            background: 'rgba(15, 17, 26, 0.65)',
             backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             padding: '5px 12px',
             borderRadius: 'var(--radius-full)',
             display: 'flex',
@@ -304,10 +334,12 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
             pointerEvents: 'auto',
           }}
         >
-          <Sparkles size={14} color="var(--brand-primary)" />
-          <span style={{ fontSize: '12px', fontWeight: 600 }}>Living Neural Aura</span>
+          <Sparkles size={13} color="var(--brand-primary)" />
+          <span style={{ fontSize: '12px', fontWeight: 500, color: '#F0EBE1' }}>
+            Tranquil Watercolor Garden
+          </span>
           <span style={{ fontSize: '10px', color: inZone ? '#68D391' : '#CBD5E0' }}>
-            {inZone ? '• Blooming' : '• Resting'}
+            {inZone ? '• Deep Rest' : '• Resting'}
           </span>
         </div>
 
@@ -315,13 +347,13 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
           <button
             onClick={handleCaptureSnapshot}
             style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: 'var(--radius-sm)',
               padding: '6px 12px',
               color: '#FFFFFF',
               fontSize: '11px',
-              fontWeight: 600,
+              fontWeight: 500,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -336,8 +368,8 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
           <button
             onClick={handleReset}
             style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: 'var(--radius-sm)',
               padding: '6px 10px',
               color: '#CBD5E0',
@@ -353,7 +385,7 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
         </div>
       </div>
 
-      {/* Main Interactive Canvas (Touch to add gentle ripples) */}
+      {/* Main Meditative Canvas (Tap gently anywhere to create soft watercolor ripples) */}
       <canvas
         ref={canvasRef}
         onClick={handleTouch}
@@ -367,16 +399,16 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
         }}
       />
 
-      {/* Bottom Palette Dots */}
+      {/* Gentle Bottom Prompt & Palette Dots */}
       <div
         style={{
           position: 'absolute',
           bottom: 14,
           left: '50%',
           transform: 'translateX(-50%)',
-          background: 'rgba(15, 17, 26, 0.75)',
+          background: 'rgba(15, 17, 26, 0.65)',
           backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: 'var(--radius-full)',
           padding: '6px 14px',
           display: 'flex',
@@ -385,20 +417,20 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
           zIndex: 10,
         }}
       >
-        <Palette size={13} color="#CBD5E0" />
-        {PALETTES.map((pal) => (
+        <Palette size={12} color="#CBD5E0" />
+        {THERAPEUTIC_PALETTES.map((pal) => (
           <div
             key={pal.id}
             onClick={() => setActivePalette(pal)}
             style={{
-              width: '16px',
-              height: '16px',
+              width: '15px',
+              height: '15px',
               borderRadius: '50%',
-              background: `linear-gradient(135deg, ${pal.primary} 0%, ${pal.secondary} 100%)`,
+              backgroundColor: pal.dotColor,
               cursor: 'pointer',
               border: activePalette.id === pal.id ? '2px solid #FFFFFF' : '1px solid rgba(255,255,255,0.2)',
               transform: activePalette.id === pal.id ? 'scale(1.2)' : 'scale(1)',
-              transition: 'all 0.15s ease',
+              transition: 'all 0.2s ease',
             }}
             title={pal.name}
           />
