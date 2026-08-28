@@ -317,33 +317,33 @@ html, body {
    CLINICIAN SUITE RESPONSIVE DESIGN UTILITIES
    iPhone (<768px), iPad (768px-1024px), MacBook / Desktop (>1024px)
    ========================================================================== */
-
+/* Clinician Suite Responsive Layout Engine */
 .clinician-shell-container {
   display: flex;
   min-height: 100vh;
   width: 100%;
   background-color: var(--surface-clinician-base);
+  overflow-x: hidden;
 }
 
 .clinician-sidebar {
-  width: 240px;
-  background-color: var(--surface-clinician-sidebar);
+  width: 260px;
+  background-color: var(--surface-clinician-card);
   border-right: 1px solid var(--border-default);
+  padding: 24px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 24px 16px;
+  justifyContent: space-between;
   flex-shrink: 0;
 }
 
 .clinician-mobile-header {
   display: none;
-  width: 100%;
-  background-color: var(--surface-clinician-sidebar);
+  background-color: var(--surface-clinician-card);
   border-bottom: 1px solid var(--border-default);
-  padding: 12px 16px;
-  align-items: center;
+  padding: max(12px, env(safe-area-inset-top, 12px)) 16px 12px 16px;
   justify-content: space-between;
+  align-items: center;
   position: sticky;
   top: 0;
   z-index: 40;
@@ -357,19 +357,20 @@ html, body {
   right: 0;
   background-color: var(--surface-clinician-card);
   border-top: 1px solid var(--border-default);
-  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 8px)) 12px;
+  padding: 8px 8px max(8px, env(safe-area-inset-bottom, 8px)) 8px;
   z-index: 50;
   justify-content: space-around;
   align-items: center;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .clinician-main-content {
   flex: 1;
-  padding: 32px;
+  padding: 28px 32px;
   max-width: 1320px;
   overflow-y: auto;
   min-width: 0;
+  width: 100%;
 }
 
 .clinician-table-desktop {
@@ -386,7 +387,7 @@ html, body {
 
 .clinician-tabs-scroll {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   border-bottom: 1px solid var(--border-default);
   padding-bottom: 2px;
   overflow-x: auto;
@@ -397,9 +398,27 @@ html, body {
   display: none;
 }
 
+/* Touch-optimized Chart and Grid Wrappers */
+.chart-touch-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  position: relative;
+}
+
+.clinician-grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
 @media (max-width: 767px) {
   .clinician-shell-container {
     flex-direction: column;
+    min-height: 100vh;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 16px));
   }
 
   .clinician-sidebar {
@@ -415,7 +434,8 @@ html, body {
   }
 
   .clinician-main-content {
-    padding: 16px 12px calc(84px + env(safe-area-inset-bottom, 16px)) 12px !important;
+    padding: 14px 12px 24px 12px !important;
+    width: 100%;
   }
 
   .clinician-table-desktop {
@@ -425,5 +445,14 @@ html, body {
   .clinician-roster-mobile {
     display: flex !important;
   }
-}
 
+  .clinician-grid-responsive {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .btn {
+    min-height: 42px;
+    touch-action: manipulation;
+  }
+}

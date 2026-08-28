@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { EEGDataPoint } from '../../types';
+import { Waves } from 'lucide-react';
 
 interface TidalGardenProps {
   eegData: EEGDataPoint | null;
@@ -19,24 +20,25 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const planktonRef = useRef<Array<{ x: number; y: number; speed: number; radius: number; hue: number }>>([]);
   const kelpRef = useRef<Array<{ x: number; height: number; segments: number; baseSpeed: number; width: number }>>([]);
+  const creatureRef = useRef({ x: -100, y: 150, speed: 45, visible: false, wingPhase: 0 });
 
   useEffect(() => {
     // Generate kelp forest stalks
-    kelpRef.current = Array.from({ length: 14 }, () => ({
+    kelpRef.current = Array.from({ length: 16 }, () => ({
       x: Math.random() * 800,
-      height: Math.random() * 220 + 120,
+      height: Math.random() * 240 + 130,
       segments: Math.floor(Math.random() * 4) + 6,
       baseSpeed: Math.random() * 0.8 + 0.6,
       width: Math.random() * 12 + 8,
     }));
 
     // Generate bioluminescent plankton
-    planktonRef.current = Array.from({ length: 50 }, () => ({
+    planktonRef.current = Array.from({ length: 55 }, () => ({
       x: Math.random() * 800,
       y: Math.random() * 600,
-      speed: Math.random() * 18 + 8,
+      speed: Math.random() * 20 + 10,
       radius: Math.random() * 2.8 + 1.2,
-      hue: Math.random() * 40 + 15, // Coral/Amber hue range
+      hue: Math.random() * 40 + 15,
     }));
   }, []);
 
@@ -69,29 +71,23 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;
 
-      // Alpha wave dominance drives garden bioluminescence & bloom
-      const alphaVal = eegData?.bands.alpha || 8.5;
-      const alphaRatio = Math.max(0.2, Math.min(1.0, (alphaVal - 5) / 12));
+      // Alpha wave dominance drives garden bioluminescence & blooms
+      const alphaVal = eegData?.bands.alpha || 9.5;
+      const alphaRatio = Math.max(0.2, Math.min(1.0, (alphaVal - 5) / 13));
       const inZone = eegData?.inZone ?? true;
       const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 
-      // Deep tranquil warm sea background gradient (interpolated)
-      const interpolateColor = (c1: number[], c2: number[], t: number) => {
-        const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
-        const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
-        const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
-        return `rgb(${r},${g},${b})`;
-      };
+      // Deep tranquil warm sea background gradient
       const seaGrad = ctx.createLinearGradient(0, 0, 0, height);
-      seaGrad.addColorStop(0, interpolateColor([222, 214, 203], [232, 222, 209], zoneScore));
-      seaGrad.addColorStop(0.5, interpolateColor([237, 230, 220], [245, 237, 228], zoneScore));
-      seaGrad.addColorStop(1, interpolateColor([242, 236, 228], [248, 245, 240], zoneScore));
+      seaGrad.addColorStop(0, inZone ? '#E2DCD2' : '#D0CAC0');
+      seaGrad.addColorStop(0.5, inZone ? '#EDE5DB' : '#DFD9CF');
+      seaGrad.addColorStop(1, inZone ? '#F8F4EE' : '#ECE7DE');
       
       ctx.fillStyle = seaGrad;
       ctx.fillRect(0, 0, width, height);
 
       // Procedural Seabed Dunes
-      ctx.fillStyle = '#E8DDD0';
+      ctx.fillStyle = '#E4DACD';
       ctx.beginPath();
       ctx.moveTo(0, height);
       for (let x = 0; x <= width; x += 10) {
@@ -108,7 +104,7 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
         ctx.beginPath();
         ctx.moveTo(xPos, baseY);
 
-        const sway = Math.sin(timeElapsed * k.baseSpeed + k.x) * (20 * alphaRatio);
+        const sway = Math.sin(timeElapsed * k.baseSpeed + k.x) * (24 * alphaRatio);
         const cp1x = xPos + sway * 0.5;
         const cp1y = baseY - k.height * 0.5;
         const topX = xPos + sway;
@@ -116,38 +112,68 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
 
         ctx.quadraticCurveTo(cp1x, cp1y, topX, topY);
         
-        const kr = 150 + (125 - 150) * zoneScore;
-        const kg = 170 + (166 - 170) * zoneScore;
-        const kb = 140 + (104 - 140) * zoneScore;
-        const ka = 0.4 + (0.65 - 0.4) * zoneScore;
-        ctx.strokeStyle = `rgba(${kr}, ${kg}, ${kb}, ${ka})`;
+        ctx.strokeStyle = inZone ? 'rgba(92, 140, 70, 0.55)' : 'rgba(140, 150, 135, 0.35)';
         ctx.lineWidth = k.width;
         ctx.lineCap = 'round';
         ctx.stroke();
 
-        // Little leaf fronds
+        // Leaf fronds
         for (let seg = 1; seg <= k.segments; seg++) {
           const t = seg / (k.segments + 1);
           const leafY = baseY - k.height * t;
           const leafX = xPos + sway * t;
           const leafDir = seg % 2 === 0 ? 1 : -1;
           ctx.beginPath();
-          ctx.ellipse(leafX + leafDir * 14, leafY, 14, 6, (leafDir * Math.PI) / 6, 0, Math.PI * 2);
-          
-          const lr = 180 + (168 - 180) * zoneScore;
-          const lg = 195 + (196 - 195) * zoneScore;
-          const lb = 175 + (148 - 175) * zoneScore;
-          const la = 0.5 + (0.7 - 0.5) * zoneScore;
-          ctx.fillStyle = `rgba(${lr}, ${lg}, ${lb}, ${la})`;
+          ctx.ellipse(leafX + leafDir * 14, leafY, 15, 7, (leafDir * Math.PI) / 6, 0, Math.PI * 2);
+          ctx.fillStyle = inZone ? 'rgba(110, 160, 85, 0.6)' : 'rgba(160, 165, 155, 0.3)';
           ctx.fill();
         }
       });
 
+      // Swimming Manta Ray Creature (surges across screen when Alpha > 10.0 and inZone)
+      const cr = creatureRef.current;
+      if (inZone && alphaVal > 9.0) {
+        cr.visible = true;
+      }
+      if (cr.visible && !isPaused) {
+        cr.x += dt * (cr.speed + alphaRatio * 30);
+        cr.wingPhase += dt * 3.5;
+        cr.y = height * 0.35 + Math.sin(cr.x * 0.005) * 40;
+
+        if (cr.x > width + 100) {
+          cr.x = -120;
+          cr.visible = false;
+        }
+
+        // Draw Manta Ray
+        ctx.save();
+        ctx.translate(cr.x, cr.y);
+        ctx.beginPath();
+        const wingSpan = 38;
+        const flap = Math.sin(cr.wingPhase) * 12;
+        ctx.moveTo(35, 0); // Head
+        ctx.quadraticCurveTo(10, -wingSpan - flap, -20, -wingSpan - flap); // Left wing
+        ctx.lineTo(-10, 0); // Tail base
+        ctx.lineTo(-40, 0); // Tail
+        ctx.lineTo(-10, 0);
+        ctx.quadraticCurveTo(10, wingSpan + flap, -20, wingSpan + flap); // Right wing
+        ctx.closePath();
+
+        const mantaGrad = ctx.createLinearGradient(-20, 0, 35, 0);
+        mantaGrad.addColorStop(0, '#5C8C46');
+        mantaGrad.addColorStop(1, '#E8967A');
+        ctx.fillStyle = mantaGrad;
+        ctx.globalAlpha = 0.85;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        ctx.restore();
+      }
+
       // Coral Formations at base (Stage-dependent density)
       const corals = [
-        { x: width * 0.25, r: 42, color: '#E8967A' },
-        { x: width * 0.48, r: 56, color: '#E4B87C' },
-        { x: width * 0.75, r: 48, color: '#D4805E' },
+        { x: width * 0.22, r: 44, color: '#E8967A' },
+        { x: width * 0.48, r: 58, color: '#E4B87C' },
+        { x: width * 0.76, r: 50, color: '#D4805E' },
       ];
 
       const bloomMultiplier = 1 + (inZonePercent / 100) * 0.5;
@@ -157,7 +183,6 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
         ctx.save();
         ctx.translate(coral.x, coralY);
 
-        // Multi-layered rounded coral domes
         for (let branch = 0; branch < 5; branch++) {
           const angle = -Math.PI / 2 + (branch - 2) * 0.35;
           const len = coral.r * bloomMultiplier * (0.8 + Math.sin(timeElapsed * 0.8 + branch) * 0.06 * alphaRatio);
@@ -173,9 +198,9 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
           ctx.stroke();
 
           // Bioluminescent tip glow
-          const glowRadius = 8 + 6 * alphaRatio;
+          const glowRadius = 8 + 8 * alphaRatio;
           const glowGrad = ctx.createRadialGradient(bx, by, 1, bx, by, glowRadius);
-          glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+          glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
           glowGrad.addColorStop(0.5, coral.color);
           glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
@@ -201,13 +226,7 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
 
         ctx.beginPath();
         ctx.arc(pX, p.y, pRadius, 0, Math.PI * 2);
-        
-        const pr = 200 + (232 - 200) * zoneScore;
-        const pg = 180 + (150 - 180) * zoneScore;
-        const pb = 160 + (122 - 160) * zoneScore;
-        const pa = 0.25 + ((0.4 + alphaRatio * 0.45) - 0.25) * zoneScore;
-        ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${pa})`;
-        
+        ctx.fillStyle = inZone ? 'rgba(232, 150, 122, 0.65)' : 'rgba(180, 175, 165, 0.3)';
         ctx.fill();
       });
 
@@ -219,7 +238,7 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, [eegData, stage, growthPoints, isPaused]);
+  }, [eegData, stage, growthPoints, inZonePercent, isPaused]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'var(--radius-lg)' }}>
@@ -230,16 +249,20 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
           top: 14,
           left: 14,
           background: 'rgba(255, 255, 255, 0.88)',
-          backdropFilter: 'blur(4px)',
-          padding: '4px 12px',
+          backdropFilter: 'blur(6px)',
+          padding: '5px 12px',
           borderRadius: 'var(--radius-sm)',
           fontSize: '12px',
-          fontWeight: 600,
+          fontWeight: 700,
           color: 'var(--text-primary)',
           border: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
         }}
       >
-        Tidal Garden: Stage {stage} ({growthPoints} XP)
+        <Waves size={14} color="var(--brand-primary)" />
+        <span>Tidal Garden: Stage {stage} ({growthPoints} XP)</span>
       </div>
     </div>
   );

@@ -42,53 +42,91 @@ export const MandalaBreathing: React.FC<MandalaProps> = ({ eegData, isPaused = f
 
       const inZone = eegData?.inZone ?? true;
       const coherence = (eegData?.coherence || 75) / 100;
+      const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 
-      // Clear background
-      ctx.fillStyle = '#FFFFFF';
+      // Background Canvas
+      const bgGrad = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, Math.max(width, height) * 0.7);
+      bgGrad.addColorStop(0, '#FFFFFF');
+      bgGrad.addColorStop(0.5, '#FAF8F5');
+      bgGrad.addColorStop(1, '#EDE7DF');
+      ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Outer breathing envelope (4s cycle)
-      const breatheCycle = (Math.sin(timeElapsed * 1.5) + 1) * 0.5; // 0 to 1
+      // Breathing envelope cycle (5.5s cycle = 0.1Hz HRV resonance)
+      const breatheCycle = (Math.sin(timeElapsed * 1.14) + 1) * 0.5; // 0 to 1
       const baseRadius = Math.min(width, height) * 0.22;
 
-      // Multi-layer concentric glowing rings
-      const rings = [
-        { r: baseRadius * 1.6 + breatheCycle * 14, color: 'rgba(232, 150, 122, 0.2)', width: 3 },
-        { r: baseRadius * 1.35 + breatheCycle * 18, color: 'rgba(228, 184, 124, 0.4)', width: 8 },
-        { r: baseRadius * 1.1 + breatheCycle * 22, color: 'rgba(232, 150, 122, 0.65)', width: 14 },
-        { r: baseRadius * 0.75 + breatheCycle * 12, color: 'rgba(228, 184, 124, 0.85)', width: 10 },
-        { r: baseRadius * 0.45 + breatheCycle * 6, color: '#FFFFFF', width: 4 },
-      ];
+      // Outer sacred geometry mandala petals (12-fold symmetry)
+      const petals = 12;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(timeElapsed * 0.12);
 
-      rings.forEach(ring => {
+      for (let p = 0; p < petals; p++) {
+        const angle = (p * Math.PI * 2) / petals;
+        ctx.save();
+        ctx.rotate(angle);
+
+        const petalLen = baseRadius * (1.1 + 0.35 * breatheCycle + 0.3 * zoneScore);
+        const petalWidth = 24 * (0.8 + 0.4 * coherence);
+
         ctx.beginPath();
-        ctx.arc(centerX, centerY, ring.r, 0, Math.PI * 2);
-        ctx.strokeStyle = ring.color;
-        ctx.lineWidth = ring.width;
-        ctx.stroke();
-      });
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(petalWidth, petalLen * 0.5, 0, petalLen);
+        ctx.quadraticCurveTo(-petalWidth, petalLen * 0.5, 0, 0);
 
-      // Organic sinusoidal orbiting filaments
-      const filamentCount = inZone ? 5 : 2;
-      for (let f = 0; f < filamentCount; f++) {
-        ctx.beginPath();
-        const fAngleOffset = (f * Math.PI * 2) / filamentCount;
-        const fRadius = baseRadius * (1.1 + f * 0.12);
+        ctx.fillStyle = p % 2 === 0
+          ? `rgba(232, 150, 122, ${0.25 + 0.35 * zoneScore})`
+          : `rgba(228, 184, 124, ${0.25 + 0.35 * zoneScore})`;
+        ctx.fill();
 
-        for (let a = 0; a <= Math.PI * 2; a += 0.08) {
-          const wave = Math.sin(a * 4 + timeElapsed * 2 + fAngleOffset) * (8 * coherence);
-          const r = fRadius + wave;
-          const x = centerX + Math.cos(a) * r;
-          const y = centerY + Math.sin(a) * r;
-
-          if (a === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = f % 2 === 0 ? 'rgba(232, 150, 122, 0.5)' : 'rgba(228, 184, 124, 0.45)';
+        ctx.strokeStyle = `rgba(232, 150, 122, ${0.6 + 0.3 * zoneScore})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        ctx.restore();
       }
+      ctx.restore();
+
+      // Inner 8-fold Lotus Ring
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(-timeElapsed * 0.18);
+
+      for (let p = 0; p < 8; p++) {
+        const angle = (p * Math.PI * 2) / 8;
+        ctx.save();
+        ctx.rotate(angle);
+
+        const innerLen = baseRadius * (0.65 + 0.2 * breatheCycle);
+        const innerW = 16 * (0.8 + 0.3 * coherence);
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(innerW, innerLen * 0.5, 0, innerLen);
+        ctx.quadraticCurveTo(-innerW, innerLen * 0.5, 0, 0);
+
+        ctx.fillStyle = `rgba(245, 212, 199, ${0.45 + 0.4 * zoneScore})`;
+        ctx.fill();
+        ctx.strokeStyle = '#E8967A';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+      ctx.restore();
+
+      // Central Harmonic Crystal
+      const centerR = 18 + 6 * breatheCycle + 8 * coherence;
+      const centerGrad = ctx.createRadialGradient(centerX, centerY, 2, centerX, centerY, centerR);
+      centerGrad.addColorStop(0, '#FFFFFF');
+      centerGrad.addColorStop(0.6, '#E8967A');
+      centerGrad.addColorStop(1, 'rgba(232, 150, 122, 0)');
+
+      ctx.fillStyle = centerGrad;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, centerR, 0, Math.PI * 2);
+      ctx.fill();
 
       animationId = requestAnimationFrame(render);
     };

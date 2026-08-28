@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CalendarAppointment,
   ClientProfile,
@@ -31,6 +31,7 @@ interface ClinicalCalendarViewProps {
   onDeleteAppointment: (id: string) => void;
   onSelectClient?: (client: ClientProfile) => void;
   onOpenMessages?: (clientId: string) => void;
+  preSelectedClientId?: string;
 }
 
 export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
@@ -40,13 +41,25 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
   onDeleteAppointment,
   onSelectClient,
   onOpenMessages,
+  preSelectedClientId,
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'agenda'>('month');
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const [viewMode, setViewMode] = useState<'month' | 'agenda'>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'agenda' : 'month');
   const [typeFilter, setTypeFilter] = useState<'all' | AppointmentType>('all');
-  const [selectedPatientId, setSelectedPatientId] = useState<string>('all');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(preSelectedClientId || 'all');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingAppt, setEditingAppt] = useState<CalendarAppointment | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) setViewMode('agenda');
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Modal Form State
   const [formClientId, setFormClientId] = useState(clients[0]?.id || '');

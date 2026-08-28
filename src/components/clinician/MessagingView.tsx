@@ -21,21 +21,30 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
   selectedClientId,
   onSendMessage,
 }) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [activeClientId, setActiveClientId] = useState<string | null>(
-    selectedClientId || (threads.length > 0 ? threads[0].clientId : null)
+    selectedClientId || (threads.length > 0 && typeof window !== 'undefined' && window.innerWidth >= 768 ? threads[0].clientId : null)
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Synchronize when selectedClientId prop changes (e.g. from ClientDetailView "Message" button)
   useEffect(() => {
     if (selectedClientId) {
       setActiveClientId(selectedClientId);
-    } else if (!activeClientId && threads.length > 0 && window.innerWidth >= 768) {
+    } else if (!activeClientId && threads.length > 0 && !isMobile) {
       setActiveClientId(threads[0].clientId);
     }
-  }, [selectedClientId, threads]);
+  }, [selectedClientId, threads, isMobile]);
 
   const activeThread = threads.find((t) => t.clientId === activeClientId);
 
@@ -77,8 +86,8 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
       {/* Left Conversation List */}
       <div
         style={{
-          width: activeClientId ? (window.innerWidth < 768 ? '0' : '320px') : '100%',
-          display: activeClientId && window.innerWidth < 768 ? 'none' : 'flex',
+          width: activeClientId ? (isMobile ? '0' : '320px') : '100%',
+          display: activeClientId && isMobile ? 'none' : 'flex',
           flexDirection: 'column',
           borderRight: '1px solid var(--border-default)',
           backgroundColor: 'var(--surface-clinician-card)',

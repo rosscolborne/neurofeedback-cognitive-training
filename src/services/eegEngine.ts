@@ -63,9 +63,12 @@ export class EEGEngine {
   private gattServer: any = null;
   private activeCharacteristics: any[] = [];
 
-  // Demo Mode Toggle (explicit only)
+  // Demo Mode State & Fast Simulator Cycle (<10 seconds loop)
   public isDemoMode = false;
   public demoTimeElapsed = 0;
+  public demoCycleTime = 0;
+  public demoState: 'auto' | 'focus' | 'calm' | 'drift' | 'recovery' = 'auto';
+  public currentSimulatedStateName = 'Auto 10s Cycle';
 
   // Web Worker for FFT / Baseline
   private eegWorker: Worker | null = null;
@@ -76,6 +79,44 @@ export class EEGEngine {
     if (typeof Worker !== 'undefined') {
       this.eegWorker = new Worker(new URL('./eegWorker.ts', import.meta.url), { type: 'module' });
       this.eegWorker.onmessage = (e) => this.handleWorkerMessage(e);
+    }
+  }
+
+  public setSimulatedState(state: 'auto' | 'focus' | 'calm' | 'drift' | 'recovery') {
+    this.demoState = state;
+    if (state !== 'auto') {
+      switch (state) {
+        case 'focus':
+          this.userFocus = 92;
+          this.userCalm = 65;
+          this.eyeClosed = false;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'High Focus & SMR Activation';
+          break;
+        case 'calm':
+          this.userFocus = 70;
+          this.userCalm = 96;
+          this.eyeClosed = true;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Deep Calm & Alpha Burst';
+          break;
+        case 'drift':
+          this.userFocus = 25;
+          this.userCalm = 30;
+          this.eyeClosed = false;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Cognitive Drift / Distraction';
+          break;
+        case 'recovery':
+          this.userFocus = 96;
+          this.userCalm = 88;
+          this.eyeClosed = false;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Operant Recovery & Peak Flow';
+          break;
+      }
+    } else {
+      this.currentSimulatedStateName = 'Auto 10s Multi-State Cycle';
     }
   }
 
@@ -673,62 +714,120 @@ export class EEGEngine {
       const af7 = this.rawBuffers.af7;
       rawSignal = af7.length > 0 ? af7[af7.length - 1] : 0;
     } else if (this.isDemoMode) {
-      // SIMULATE VALUES ONLY WHEN DEMO MODE IS EXPLICITLY ENABLED
-      if (this.isCalibrating) {
-        // Just return empty point while calibrating
-        return {
-          timestamp: Date.now(),
-          rawSignal: 0,
-          bands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
-          thetaBetaRatio: 0,
-          coherence: 0,
-          inZone: false,
-          zoneScore: 0,
-          signalQuality: 'good',
-          channelQuality: this.channelQuality,
-          batteryLevel: this.batteryLevel,
-          artifacts: { blink: false, clench: false },
-          isCalibrating: true
-        };
-      }
+      // Fast Simulator Multi-State Neural Cycle (<10s loop) or Manual Override
       this.phaseAngle += dt * 2 * Math.PI;
       this.noiseSeed += dt * 0.5;
       this.demoTimeElapsed += dt;
 
-      // Ornstein-Uhlenbeck process for smoothed random walk
-      // dx = theta * (mu - x) * dt + sigma * dW
-      const thetaVal = 0.2; // Mean reversion speed
-      const mu = 65;        // Mean target state
-      const sigma = 18;     // Volatility
+      // Channel quality is optimal in simulator mode
+      this.channelQuality = {
+        tp9: 'good',
+        af7: 'good',
+        af8: 'good',
+        tp10: 'good',
+      };
 
-      const dW1 = (Math.random() - 0.5) * 2 * Math.sqrt(dt);
-      const dW2 = (Math.random() - 0.5) * 2 * Math.sqrt(dt);
-      
-      this.userFocus += thetaVal * (mu - this.userFocus) * dt + sigma * dW1;
-      this.userCalm += thetaVal * (mu - this.userCalm) * dt + sigma * dW2;
-      
-      // Keep within bounds
-      this.userFocus = Math.max(10, Math.min(90, this.userFocus));
-      this.userCalm = Math.max(10, Math.min(90, this.userCalm));
+      if (this.demoState === 'auto') {
+        this.demoCycleTime = (this.demoCycleTime + dt) % 9.6;
+        const cycle = this.demoCycleTime;
+
+        if (cycle < 2.4) {
+          // PHASE 1: High Focus & SMR Activation (0.0s - 2.4s)
+          this.userFocus = 92;
+          this.userCalm = 65;
+          this.eyeClosed = false;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Focus & SMR Peak (Active Attention)';
+
+          this.latestBrainFlowScores = {
+            focusScore: 92,
+            relaxScore: 68,
+            mindfulnessScore: 78,
+            restfulnessScore: 65,
+            valence: 0.52,
+            arousal: 0.65,
+            emotionLabel: 'focused engagement',
+            method: 'brainflow_welch_psd',
+          };
+          this.latestTrainingMetric = { score: 94, baselineReady: true };
+        } else if (cycle < 4.8) {
+          // PHASE 2: Deep Calm & Alpha Burst (2.4s - 4.8s)
+          this.userFocus = 68;
+          this.userCalm = 96;
+          this.eyeClosed = true;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Deep Calm & Alpha Burst (Meditation)';
+
+          this.latestBrainFlowScores = {
+            focusScore: 72,
+            relaxScore: 96,
+            mindfulnessScore: 95,
+            restfulnessScore: 94,
+            valence: 0.82,
+            arousal: 0.22,
+            emotionLabel: 'deep calm flow',
+            method: 'brainflow_welch_psd',
+          };
+          this.latestTrainingMetric = { score: 96, baselineReady: true };
+        } else if (cycle < 7.2) {
+          // PHASE 3: Cognitive Drift / Distraction (4.8s - 7.2s)
+          this.userFocus = 22;
+          this.userCalm = 28;
+          this.eyeClosed = false;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Cognitive Drift & Distraction (Mind-Wandering)';
+
+          this.latestBrainFlowScores = {
+            focusScore: 24,
+            relaxScore: 32,
+            mindfulnessScore: 28,
+            restfulnessScore: 30,
+            valence: -0.38,
+            arousal: 0.58,
+            emotionLabel: 'distracted / tense',
+            method: 'brainflow_welch_psd',
+          };
+          this.latestTrainingMetric = { score: 32, baselineReady: true };
+        } else {
+          // PHASE 4: Operant Recovery & Flow Mastery (7.2s - 9.6s)
+          this.userFocus = 96;
+          this.userCalm = 90;
+          this.eyeClosed = false;
+          this.jawClenched = false;
+          this.currentSimulatedStateName = 'Operant Recovery & Flow Mastery';
+
+          this.latestBrainFlowScores = {
+            focusScore: 98,
+            relaxScore: 92,
+            mindfulnessScore: 96,
+            restfulnessScore: 90,
+            valence: 0.92,
+            arousal: 0.44,
+            emotionLabel: 'peak neuro-flow',
+            method: 'brainflow_welch_psd',
+          };
+          this.latestTrainingMetric = { score: 99, baselineReady: true };
+        }
+      }
 
       const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
       const calmNorm = Math.max(0, Math.min(100, this.userCalm)) / 100;
-      const slowDrift = Math.sin(this.phaseAngle * 0.3 + this.noiseSeed) * 2.0;
+      const slowDrift = Math.sin(this.phaseAngle * 0.3 + this.noiseSeed) * 1.5;
 
-      const delta = 14.0 + Math.sin(this.phaseAngle * 1.5) * 3.0 + (1 - focusNorm) * 5.0;
-      const thetaBase = 9.0 + (1 - focusNorm) * 7.5 + Math.sin(this.phaseAngle * 5.2) * 2.2;
+      const delta = 12.0 + Math.sin(this.phaseAngle * 1.5) * 2.0 + (1 - focusNorm) * 4.0;
+      const thetaBase = 5.0 + (1 - focusNorm) * 12.0 + Math.sin(this.phaseAngle * 4.2) * 1.5;
       const theta = Math.max(2.0, thetaBase);
 
-      let alphaBase = 7.0 + calmNorm * 8.5 + (this.eyeClosed ? 8.0 : 0);
-      const spindle = Math.pow(Math.sin(this.phaseAngle * 1.1), 4) * 3.5;
+      const alphaBase = 6.0 + calmNorm * 13.0 + (this.eyeClosed ? 6.0 : 0);
+      const spindle = Math.pow(Math.sin(this.phaseAngle * 1.1), 4) * 2.5;
       const alpha = Math.max(3.0, alphaBase + spindle);
 
-      const smrBase = 4.5 + focusNorm * 4.0 + calmNorm * 2.5 + Math.sin(this.phaseAngle * 13.5) * 1.2;
+      const smrBase = 3.5 + focusNorm * 8.5 + calmNorm * 2.0 + Math.sin(this.phaseAngle * 13.5) * 1.2;
       const smr = Math.max(1.5, smrBase);
 
-      const betaBase = 6.0 + focusNorm * 8.0 + (this.jawClenched ? 12.0 : 0) + Math.cos(this.phaseAngle * 20.0) * 1.8;
+      const betaBase = 5.0 + focusNorm * 10.5 + (this.jawClenched ? 12.0 : 0) + Math.cos(this.phaseAngle * 20.0) * 1.5;
       const beta = Math.max(2.5, betaBase);
-      const gamma = 3.0 + focusNorm * 3.5 + Math.sin(this.phaseAngle * 38.0) * 1.0;
+      const gamma = 3.0 + focusNorm * 4.0 + Math.sin(this.phaseAngle * 38.0) * 1.0;
 
       bands = {
         delta: Math.round(delta * 10) / 10,
@@ -746,7 +845,7 @@ export class EEGEngine {
         Math.sin(this.phaseAngle * 10) * (alpha * 0.7) +
         Math.sin(this.phaseAngle * 14) * (smr * 0.6) +
         Math.sin(this.phaseAngle * 22) * (beta * 0.5) +
-        (Math.random() - 0.5) * 1.5;
+        (Math.random() - 0.5) * 1.2;
     } else {
       // DISCONNECTED & DEMO INACTIVE -> ZERO TELEMETRY (FLATLINE)
       bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
@@ -794,11 +893,13 @@ export class EEGEngine {
     const rawCoherence = 45 + (bands.alpha / 20) * 30 + (bands.beta / 20) * 20;
     const coherence = Math.max(10, Math.min(99, Math.round(rawCoherence)));
 
-    // Signal quality derived from server fit state
+    // Signal quality derived from server fit state or demo mode
     const qualities = Object.values(this.channelQuality);
     let overallQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected' = 'excellent';
     if (!this.isHardwareConnected && !this.isDemoMode) {
       overallQuality = 'disconnected';
+    } else if (this.isDemoMode) {
+      overallQuality = 'good';
     } else if (this.serverFitState) {
       // Use server's overall assessment
       if (this.serverFitState.state === 'good' && this.serverFitState.ready) {
@@ -832,7 +933,7 @@ export class EEGEngine {
       channelQuality: this.channelQuality,
       batteryLevel: this.batteryLevel,
       artifacts: {
-        blink: this.isHardwareConnected ? (this.rawBuffers.af7.slice(-10).some(v => Math.abs(v) > 120)) : (Math.random() < 0.02),
+        blink: this.isHardwareConnected ? (this.rawBuffers.af7.slice(-10).some(v => Math.abs(v) > 120)) : (Math.random() < 0.01),
         clench: this.jawClenched || (this.isHardwareConnected && (this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200))),
       },
       brainflowScores: this.latestBrainFlowScores || undefined,

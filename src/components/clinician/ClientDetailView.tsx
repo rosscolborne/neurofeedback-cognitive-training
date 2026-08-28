@@ -13,9 +13,6 @@ import {
   Upload,
   Brain,
   FileText,
-  Cpu,
-  CheckCircle2,
-  AlertCircle,
   Play,
   Pause,
 } from 'lucide-react';
@@ -41,7 +38,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
   // Live telemetry interactive simulator state
   const [isStreaming, setIsStreaming] = useState(true);
-  const [simulatedBand, setSimulatedBand] = useState<'alpha' | 'theta' | 'beta' | 'smr'>('alpha');
 
   const sessions = storageEngine.getSessions().filter((s) => s.patientId === client.id);
 
@@ -246,8 +242,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             </div>
 
             {/* Dynamic Grouped Bar Chart */}
-            <div style={{ width: '100%', height: '220px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <svg viewBox="0 0 700 240" style={{ width: '100%', minWidth: '460px', height: '100%' }}>
+            <div className="chart-touch-container" style={{ width: '100%', height: '220px' }}>
+              <svg viewBox="0 0 700 240" style={{ width: '100%', minWidth: '420px', height: '100%' }}>
                 {[0, 20, 40, 60, 80].map((val) => {
                   const y = 200 - val * 2.2;
                   return (
@@ -291,8 +287,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 </div>
               </div>
               
-              <div style={{ width: '100%', height: '160px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <svg viewBox="0 0 700 160" style={{ width: '100%', minWidth: '460px', height: '100%' }}>
+              <div className="chart-touch-container" style={{ width: '100%', height: '160px' }}>
+                <svg viewBox="0 0 700 160" style={{ width: '100%', minWidth: '420px', height: '100%' }}>
                   {[0, 25, 50, 75, 100].map((val) => {
                     const y = 140 - val * 1.2;
                     return (
