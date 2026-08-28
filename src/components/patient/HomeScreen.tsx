@@ -19,8 +19,8 @@ const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ 
   'soundscape-mode': { name: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural & nature soundscapes for eyes-closed training', tag: 'Audio' },
   'mandala': { name: 'Mandala Breathing', icon: Sparkles, desc: 'Calm concentric breathing mandala with live µV telemetry', tag: 'Calm' },
   'immersive-3d': { name: 'Generative XR', icon: Sparkles, desc: 'Subtle atmospheric WebXR experience', tag: 'VR' },
-  'spatial-audio': { name: 'Spatial Audio', icon: Headphones, desc: 'Layered drone and nature soundscapes', tag: 'Audio' },
-  'narrative-story': { name: 'Graphic Novel', icon: BookOpen, desc: 'Biometric driven narrative therapy', tag: 'Narrative' },
+  'spatial-audio': { name: 'Neuro-Music Therapy', icon: Music, desc: 'Classical & custom music modulated in real-time by your brainwaves', tag: 'Music' },
+  'narrative-story': { name: 'Contemplative Reading', icon: BookOpen, desc: 'Calm mindfulness reflections guided by neurofeedback therapy', tag: 'Reading' },
 };
 
 function getGreeting(): string {

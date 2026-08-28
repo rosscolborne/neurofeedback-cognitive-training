@@ -108,7 +108,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
-  const [simState, setSimState] = useState<'auto' | 'focus' | 'calm' | 'drift' | 'recovery'>('auto');
 
   // Timers (in seconds)
   // Standard duration: 25 mins total (60s calib, 120s warmup, 1140s training, 120s cooldown, 60s debrief)
@@ -301,11 +300,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const next = !muted;
     setMuted(next);
     audioEngine.setMuted(next);
-  };
-
-  const handleSimStateSelect = (st: 'auto' | 'focus' | 'calm' | 'drift' | 'recovery') => {
-    setSimState(st);
-    eegEngine.setSimulatedState(st);
   };
 
   const formatTime = (secs: number) => {
