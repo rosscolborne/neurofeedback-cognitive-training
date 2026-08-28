@@ -591,84 +591,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         </div>
       </header>
 
-      {/* Simulator Mode Control HUD Bar */}
-      {eegEngine.isDemoMode && (
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #2D3748 0%, #1A202C 100%)',
-            padding: '8px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '8px',
-            color: '#FFFFFF',
-            flexWrap: 'wrap',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-            zIndex: 20,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#E2E8F0', fontWeight: 700 }}>
-              ⚡ SIMULATOR:
-            </span>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: eegData?.inZone ? '#68D391' : '#F6AD55',
-                background: 'rgba(255, 255, 255, 0.1)',
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-sm)',
-              }}
-            >
-              {eegEngine.currentSimulatedStateName}
-            </span>
-            {simState === 'auto' && (
-              <span style={{ fontSize: '10px', color: '#CBD5E0', fontFamily: 'var(--font-mono)' }}>
-                ({(eegEngine.demoCycleTime).toFixed(1)}s / 9.6s)
-              </span>
-            )}
-          </div>
-
-          {/* Quick Simulated State Triggers */}
-          <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-            {[
-              { id: 'auto' as const, label: '⚡ Auto 10s' },
-              { id: 'focus' as const, label: '🎯 Focus SMR' },
-              { id: 'calm' as const, label: '🧘 Alpha Calm' },
-              { id: 'drift' as const, label: '🌫️ Drift' },
-              { id: 'recovery' as const, label: '✨ Flow' },
-            ].map(item => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSimStateSelect(item.id)}
-                style={{
-                  background: simState === item.id ? 'var(--brand-primary)' : 'rgba(255, 255, 255, 0.12)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '3px 8px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Adaptive Threshold Notification Banner */}
       {adjustmentNotice && (
         <div
           style={{
             position: 'absolute',
-            top: eegEngine.isDemoMode ? 104 : 60,
+            top: 60,
             left: 16,
             right: 16,
             zIndex: 30,
