@@ -728,86 +728,57 @@ export class EEGEngine {
       };
 
       if (this.demoState === 'auto') {
-        this.demoCycleTime = (this.demoCycleTime + dt) % 9.6;
+        this.demoCycleTime = (this.demoCycleTime + dt) % 12.0;
         const cycle = this.demoCycleTime;
 
-        if (cycle < 2.4) {
-          // PHASE 1: High Focus & SMR Activation (0.0s - 2.4s)
-          this.userFocus = 92;
-          this.userCalm = 65;
+        let targetFocus = 70;
+        let targetCalm = 70;
+
+        if (cycle < 3.0) {
+          // PHASE 1: High Focus & SMR Activation (0.0s - 3.0s)
+          targetFocus = 92;
+          targetCalm = 68;
           this.eyeClosed = false;
           this.jawClenched = false;
           this.currentSimulatedStateName = 'Focus & SMR Peak (Active Attention)';
-
-          this.latestBrainFlowScores = {
-            focusScore: 92,
-            relaxScore: 68,
-            mindfulnessScore: 78,
-            restfulnessScore: 65,
-            valence: 0.52,
-            arousal: 0.65,
-            emotionLabel: 'focused engagement',
-            method: 'brainflow_welch_psd',
-          };
-          this.latestTrainingMetric = { score: 94, baselineReady: true };
-        } else if (cycle < 4.8) {
-          // PHASE 2: Deep Calm & Alpha Burst (2.4s - 4.8s)
-          this.userFocus = 68;
-          this.userCalm = 96;
+        } else if (cycle < 6.0) {
+          // PHASE 2: Deep Calm & Alpha Burst (3.0s - 6.0s)
+          targetFocus = 65;
+          targetCalm = 95;
           this.eyeClosed = true;
           this.jawClenched = false;
           this.currentSimulatedStateName = 'Deep Calm & Alpha Burst (Meditation)';
-
-          this.latestBrainFlowScores = {
-            focusScore: 72,
-            relaxScore: 96,
-            mindfulnessScore: 95,
-            restfulnessScore: 94,
-            valence: 0.82,
-            arousal: 0.22,
-            emotionLabel: 'deep calm flow',
-            method: 'brainflow_welch_psd',
-          };
-          this.latestTrainingMetric = { score: 96, baselineReady: true };
-        } else if (cycle < 7.2) {
-          // PHASE 3: Cognitive Drift / Distraction (4.8s - 7.2s)
-          this.userFocus = 22;
-          this.userCalm = 28;
+        } else if (cycle < 9.0) {
+          // PHASE 3: Cognitive Drift / Distraction (6.0s - 9.0s)
+          targetFocus = 30;
+          targetCalm = 35;
           this.eyeClosed = false;
           this.jawClenched = false;
-          this.currentSimulatedStateName = 'Cognitive Drift & Distraction (Mind-Wandering)';
-
-          this.latestBrainFlowScores = {
-            focusScore: 24,
-            relaxScore: 32,
-            mindfulnessScore: 28,
-            restfulnessScore: 30,
-            valence: -0.38,
-            arousal: 0.58,
-            emotionLabel: 'distracted / tense',
-            method: 'brainflow_welch_psd',
-          };
-          this.latestTrainingMetric = { score: 32, baselineReady: true };
+          this.currentSimulatedStateName = 'Cognitive Drift & Distraction';
         } else {
-          // PHASE 4: Operant Recovery & Flow Mastery (7.2s - 9.6s)
-          this.userFocus = 96;
-          this.userCalm = 90;
+          // PHASE 4: Operant Recovery & Flow Mastery (9.0s - 12.0s)
+          targetFocus = 95;
+          targetCalm = 90;
           this.eyeClosed = false;
           this.jawClenched = false;
           this.currentSimulatedStateName = 'Operant Recovery & Flow Mastery';
-
-          this.latestBrainFlowScores = {
-            focusScore: 98,
-            relaxScore: 92,
-            mindfulnessScore: 96,
-            restfulnessScore: 90,
-            valence: 0.92,
-            arousal: 0.44,
-            emotionLabel: 'peak neuro-flow',
-            method: 'brainflow_welch_psd',
-          };
-          this.latestTrainingMetric = { score: 99, baselineReady: true };
         }
+
+        // Smooth physiological interpolation
+        this.userFocus += (targetFocus - this.userFocus) * (dt * 1.8);
+        this.userCalm += (targetCalm - this.userCalm) * (dt * 1.8);
+
+        this.latestBrainFlowScores = {
+          focusScore: Math.round(this.userFocus),
+          relaxScore: Math.round(this.userCalm),
+          mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
+          restfulnessScore: Math.round(this.userCalm),
+          valence: (this.userCalm - 50) / 50,
+          arousal: (this.userFocus - 50) / 50,
+          emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
+          method: 'brainflow_welch_psd',
+        };
+        this.latestTrainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
       }
 
       const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
