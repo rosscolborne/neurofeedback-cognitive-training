@@ -271,45 +271,25 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
           </span>
         </div>
 
-        {/* Top-Left Mode & Source Toggle */}
+        {/* Top-Left Category Badge */}
         <div
           style={{
             position: 'absolute',
             top: 14,
             left: 14,
+            backgroundColor: 'rgba(10, 10, 15, 0.75)',
+            backdropFilter: 'blur(8px)',
+            padding: '6px 12px',
+            borderRadius: 'var(--radius-md)',
             display: 'flex',
+            alignItems: 'center',
             gap: '6px',
+            color: '#FFF',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
           }}
         >
-          <button
-            onClick={() => setPlaybackSource(playbackSource === 'local' ? 'youtube' : 'local')}
-            style={{
-              backgroundColor: 'rgba(10, 10, 15, 0.85)',
-              backdropFilter: 'blur(8px)',
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-md)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: '#FFF',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {playbackSource === 'youtube' ? (
-              <>
-                <Tv size={14} color="#FF0000" />
-                <span>YouTube Live</span>
-              </>
-            ) : (
-              <>
-                <Video size={14} color="var(--brand-primary)" />
-                <span>Fast Offline Video</span>
-              </>
-            )}
-          </button>
+          <Video size={13} color="var(--brand-primary)" />
+          <span style={{ fontSize: '11px', fontWeight: 600 }}>{activeChannel.category}</span>
         </div>
       </div>
 
@@ -343,6 +323,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
                 onClick={() => {
                   setCustomVideoUrl(null);
                   setCustomYoutubeId(null);
+                  setPlaybackSource('local');
                   setActiveChannel(channel);
                 }}
                 style={{
