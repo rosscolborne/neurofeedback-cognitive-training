@@ -17,20 +17,20 @@ interface StoryPage {
 
 interface ReadingJourney {
   id: string;
+  journeyNumber: number;
   title: string;
   subtitle: string;
   targetFocus: string;
-  icon: string;
   pages: StoryPage[];
 }
 
 const READING_JOURNEYS: ReadingJourney[] = [
   {
     id: 'journey-1',
+    journeyNumber: 1,
     title: 'Waters of Stillness',
     subtitle: 'Alpha Calm & Emotional Grounding',
     targetFocus: 'Alpha Wave Synchronization',
-    icon: '🌊',
     pages: [
       {
         id: 'j1-p1',
@@ -71,10 +71,10 @@ const READING_JOURNEYS: ReadingJourney[] = [
   },
   {
     id: 'journey-2',
+    journeyNumber: 2,
     title: 'The Forest of Focus',
     subtitle: 'SMR Stillness & ADHD Resilience',
     targetFocus: 'Sensorimotor Rhythm Elevation',
-    icon: '🌲',
     pages: [
       {
         id: 'j2-p1',
@@ -115,10 +115,10 @@ const READING_JOURNEYS: ReadingJourney[] = [
   },
   {
     id: 'journey-3',
+    journeyNumber: 3,
     title: 'Mountain Equilibrium',
     subtitle: 'Theta-Beta Harmony & Perspective',
     targetFocus: 'Frontal Cortex Balance',
-    icon: '⛰️',
     pages: [
       {
         id: 'j3-p1',
@@ -159,10 +159,10 @@ const READING_JOURNEYS: ReadingJourney[] = [
   },
   {
     id: 'journey-4',
+    journeyNumber: 4,
     title: 'The Twilight Horizon',
     subtitle: 'Deep Relaxation & Vagal Tone',
     targetFocus: 'Parasympathetic Recovery',
-    icon: '🌙',
     pages: [
       {
         id: 'j4-p1',
@@ -203,10 +203,10 @@ const READING_JOURNEYS: ReadingJourney[] = [
   },
   {
     id: 'journey-5',
+    journeyNumber: 5,
     title: 'Zen Koans & Parables',
     subtitle: 'Cognitive Flexibility & Insight',
     targetFocus: 'Inter-Hemispheric Coherence',
-    icon: '🌸',
     pages: [
       {
         id: 'j5-p1',
@@ -376,8 +376,8 @@ export const NarrativeTherapyMode: React.FC<NarrativeTherapyProps> = ({ eegData 
           }}
         >
           <BookOpen size={13} color="var(--brand-primary)" />
-          <span>{journey.icon} {journey.title}</span>
-          <span style={{ fontSize: '10px', color: '#D4AF37', marginLeft: '4px' }}>• Library ▾</span>
+          <span>Journey {journey.journeyNumber}: {journey.title}</span>
+          <span style={{ fontSize: '10px', color: 'var(--brand-primary)', marginLeft: '4px' }}>• Library ▾</span>
         </button>
 
         {/* Soft Calm Presence Indicator */}
@@ -725,7 +725,22 @@ export const NarrativeTherapyMode: React.FC<NarrativeTherapyProps> = ({ eegData 
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '24px' }}>{j.icon}</span>
+                    <div
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: isCurrent ? 'var(--brand-primary)' : 'rgba(255, 255, 255, 0.1)',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                      }}
+                    >
+                      {j.journeyNumber}
+                    </div>
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>
                         {j.title}
@@ -733,8 +748,8 @@ export const NarrativeTherapyMode: React.FC<NarrativeTherapyProps> = ({ eegData 
                       <div style={{ fontSize: '12px', color: '#CBD5E0', marginTop: '2px' }}>
                         {j.subtitle}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#D4AF37', marginTop: '3px' }}>
-                        🎯 {j.targetFocus} • 5 Chapters
+                      <div style={{ fontSize: '11px', color: 'var(--brand-primary)', marginTop: '3px' }}>
+                        Target: {j.targetFocus} • 5 Chapters
                       </div>
                     </div>
                   </div>

@@ -458,8 +458,8 @@ export const SpatialAudioMode: React.FC<SpatialAudioProps> = ({ eegData }) => {
                     <div style={{ fontSize: '11px', color: '#CBD5E0', marginTop: '2px' }}>
                       {track.composer} • {track.key}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#D4AF37', marginTop: '3px' }}>
-                      🎯 {track.indication}
+                    <div style={{ fontSize: '10px', color: 'var(--brand-primary)', marginTop: '3px' }}>
+                      Focus: {track.indication}
                     </div>
                   </div>
 

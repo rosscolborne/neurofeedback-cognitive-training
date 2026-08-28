@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { audioEngine } from '../../services/audioEngine';
-import { BookOpen, Activity, Sparkles, Brain, CheckCircle, HelpCircle, Volume2, ShieldCheck, ChevronRight, Zap, Heart, Eye, Lightbulb, Check, X } from 'lucide-react';
+import { BookOpen, Activity, Sparkles, Brain, CheckCircle, HelpCircle, Volume2, ShieldCheck, ChevronRight, Zap, Heart, Eye, Lightbulb, Check, X, Target, Moon } from 'lucide-react';
 
 // Quiz question data
 const QUIZ_QUESTIONS = [
@@ -26,12 +26,12 @@ const QUIZ_QUESTIONS = [
 
 // Relatable analogy cards for each brainwave band
 const ANALOGIES = [
-  { band: 'Delta', emoji: '🌙', analogy: 'Like being in deep, dreamless sleep — your body heals and resets', color: 'var(--chart-delta)' },
-  { band: 'Theta', emoji: '💭', analogy: 'Like daydreaming out a car window — creative, drifty, spacious', color: 'var(--chart-theta)' },
-  { band: 'Alpha', emoji: '🧘', analogy: 'Like the calm after a hot shower — relaxed but aware', color: 'var(--chart-alpha)' },
-  { band: 'SMR', emoji: '🎯', analogy: 'Like a cat watching a mouse — body still, mind laser-focused', color: 'var(--chart-smr)' },
-  { band: 'Beta', emoji: '💡', analogy: 'Like working on a crossword puzzle — active, engaged thinking', color: 'var(--chart-beta)' },
-  { band: 'Gamma', emoji: '⚡', analogy: 'Like an "aha!" moment — everything clicks at once', color: 'var(--chart-gamma)' },
+  { band: 'Delta', icon: Moon, analogy: 'Like being in deep, dreamless sleep — your body heals and resets', color: 'var(--chart-delta)' },
+  { band: 'Theta', icon: Eye, analogy: 'Like daydreaming out a car window — creative, drifty, spacious', color: 'var(--chart-theta)' },
+  { band: 'Alpha', icon: Heart, analogy: 'Like the calm after a warm shower — relaxed but aware', color: 'var(--chart-alpha)' },
+  { band: 'SMR', icon: Target, analogy: 'Like focused physical poise — body still, mind sharp', color: 'var(--chart-smr)' },
+  { band: 'Beta', icon: Lightbulb, analogy: 'Like engaging in active work — focused, structured thinking', color: 'var(--chart-beta)' },
+  { band: 'Gamma', icon: Zap, analogy: 'Like a moment of insight — cognitive synthesis across regions', color: 'var(--chart-gamma)' },
 ];
 
 export const EducationHub: React.FC = () => {
@@ -184,7 +184,20 @@ export const EducationHub: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px' }}>{a.emoji}</span>
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '6px',
+                    backgroundColor: `${a.color}20`,
+                    color: a.color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <a.icon size={14} />
+                </div>
                 <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{a.band}</span>
               </div>
               {expandedAnalogy === idx && (

@@ -544,9 +544,13 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
                         )}
                         {getStatusBadge(appt.status)}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span>📅 {appt.date}</span>
-                        <span>⏰ {appt.time} ({appt.durationMinutes} min)</span>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CalendarIcon size={12} /> {appt.date}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={12} /> {appt.time} ({appt.durationMinutes} min)
+                        </span>
                         <span>• Protocol: <strong>{appt.protocol.replace(/-/g, ' ')}</strong></span>
                       </div>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>

@@ -365,7 +365,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
             </div>
             {quality.tp9 !== 'good' && (
               <div style={{ fontSize: '10px', color: '#B45309', marginTop: '4px', lineHeight: 1.2 }}>
-                ⚠️ Tuck hair away from skin behind left ear.
+                Tip: Tuck hair away from skin behind left ear.
               </div>
             )}
           </div>
@@ -388,7 +388,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
             </div>
             {quality.tp10 !== 'good' && (
               <div style={{ fontSize: '10px', color: '#B45309', marginTop: '4px', lineHeight: 1.2 }}>
-                ⚠️ Tuck hair away from skin behind right ear.
+                Tip: Tuck hair away from skin behind right ear.
               </div>
             )}
           </div>

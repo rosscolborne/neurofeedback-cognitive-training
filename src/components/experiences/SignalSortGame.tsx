@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { EEGDataPoint } from '../../types';
 import { audioEngine } from '../../services/audioEngine';
-import { Zap, Sparkles, Target } from 'lucide-react';
+import { Target, CheckCircle2, Shield } from 'lucide-react';
 
 interface SignalSortProps {
   eegData: EEGDataPoint | null;
   isPaused?: boolean;
 }
 
-interface Orb {
+interface SignalOrb {
   id: number;
   x: number;
   y: number;
@@ -20,23 +20,26 @@ interface Orb {
   collected: boolean;
 }
 
-interface Particle {
+interface RippleParticle {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
+  radius: number;
+  alpha: number;
   color: string;
-  life: number;
 }
 
 export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = false }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(0);
-  const orbsRef = useRef<Orb[]>([]);
-  const particlesRef = useRef<Particle[]>([]);
+  const [streak, setStreak] = useState(0);
+  const orbsRef = useRef<SignalOrb[]>([]);
+  const ripplesRef = useRef<RippleParticle[]>([]);
   const nextSpawnRef = useRef(0);
   const orbIdRef = useRef(0);
+
+  const smr = eegData?.bands.smr ?? 6.5;
+  const inZone = eegData?.inZone ?? true;
+  const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -59,107 +62,111 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
     window.addEventListener('resize', resize);
 
     const render = (time: number) => {
-      const dt = Math.min(0.1, (time - lastTime) / 1000);
+      const dt = Math.min(0.08, (time - lastTime) / 1000);
       lastTime = time;
 
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;
 
-      const smr = eegData?.bands.smr || 6.5;
-      const inZone = eegData?.inZone ?? false;
-      const zoneScore = eegData?.zoneScore ?? (inZone ? 1 : 0);
       const smrRatio = Math.max(0.2, Math.min(1.0, (smr - 4) / 8));
 
-      // Background Canvas Gradient
+      // 1. Soothing Minimalist Matte Ivory Background
       const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
       bgGrad.addColorStop(0, '#FAF8F5');
-      bgGrad.addColorStop(1, '#EDE7DF');
+      bgGrad.addColorStop(1, '#F3EFEA');
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Spawn orbs periodically
+      // 2. Subtle Grid Alignment Guide Lines
+      ctx.strokeStyle = 'rgba(215, 205, 195, 0.4)';
+      ctx.lineWidth = 1;
+      const colWidth = width / 4;
+      for (let c = 1; c < 4; c++) {
+        ctx.beginPath();
+        ctx.moveTo(c * colWidth, 0);
+        ctx.lineTo(c * colWidth, height);
+        ctx.stroke();
+      }
+
+      // 3. Spawn subtle signal orbs
       if (!isPaused && time > nextSpawnRef.current) {
-        nextSpawnRef.current = time + Math.max(500, 1300 - smrRatio * 500);
-        const isTarget = Math.random() > 0.45;
+        nextSpawnRef.current = time + Math.max(700, 1600 - smrRatio * 600);
+        const isTarget = Math.random() > 0.4;
         orbsRef.current.push({
           id: ++orbIdRef.current,
-          x: Math.random() * (width - 100) + 50,
+          x: Math.random() * (width - 120) + 60,
           y: -20,
-          targetX: isTarget ? width * 0.28 : width * 0.72,
-          targetY: height - 55,
-          radius: isTarget ? 17 : 13,
-          color: isTarget ? '#E8967A' : '#7B68AE',
+          targetX: isTarget ? width * 0.3 : width * 0.7,
+          targetY: height - 60,
+          radius: isTarget ? 14 : 11,
+          color: isTarget ? '#D97757' : '#7A6B8E', // Terracotta Target & Slate Violet Distractor
           isTarget,
           collected: false,
         });
       }
 
-      // Draw Gate Baskets at bottom with Magnetic Forcefields
-      const basketY = height - 60;
-      
-      // Target basket (Left: Coral Focus)
-      const leftBasketX = width * 0.16;
-      const basketW = width * 0.28;
-      ctx.fillStyle = inZone ? 'rgba(232, 150, 122, 0.25)' : 'rgba(232, 150, 122, 0.12)';
-      ctx.strokeStyle = '#E8967A';
-      ctx.lineWidth = inZone ? 2.5 : 1.5;
+      // 4. Draw Sorting Gates at Bottom
+      const gateY = height - 65;
+      const gateWidth = width * 0.32;
+
+      // Gate 1: SMR Focus Channel (Left)
+      const leftGateX = width * 0.14;
+      ctx.fillStyle = inZone ? 'rgba(217, 119, 87, 0.12)' : 'rgba(217, 119, 87, 0.05)';
+      ctx.strokeStyle = inZone ? '#D97757' : 'rgba(217, 119, 87, 0.4)';
+      ctx.lineWidth = inZone ? 2 : 1;
       ctx.beginPath();
-      ctx.roundRect(leftBasketX, basketY - 24, basketW, 52, 14);
+      ctx.roundRect(leftGateX, gateY - 20, gateWidth, 48, 10);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#C46D4E';
-      ctx.font = '700 12px "DM Sans", sans-serif';
+      ctx.fillStyle = '#A35338';
+      ctx.font = '600 12px "DM Sans", -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('🎯 SMR Focus Gateway', leftBasketX + basketW / 2, basketY + 6);
+      ctx.fillText('Target Signal (SMR)', leftGateX + gateWidth / 2, gateY + 7);
 
-      // Distractor basket (Right: Lavender Filter)
-      const rightBasketX = width * 0.56;
-      ctx.fillStyle = 'rgba(123, 104, 174, 0.15)';
-      ctx.strokeStyle = '#7B68AE';
-      ctx.lineWidth = 1.5;
+      // Gate 2: Secondary Channel (Right)
+      const rightGateX = width * 0.54;
+      ctx.fillStyle = 'rgba(122, 107, 142, 0.06)';
+      ctx.strokeStyle = 'rgba(122, 107, 142, 0.35)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(rightBasketX, basketY - 24, basketW, 52, 14);
+      ctx.roundRect(rightGateX, gateY - 20, gateWidth, 48, 10);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#65539E';
-      ctx.fillText('🛡️ Filtered Noise', rightBasketX + basketW / 2, basketY + 6);
+      ctx.fillStyle = '#635377';
+      ctx.fillText('Filtered Noise', rightGateX + gateWidth / 2, gateY + 7);
 
-      // Update and draw orbs
-      orbsRef.current.forEach(orb => {
+      // 5. Update and render falling orbs with calm magnetic convergence
+      orbsRef.current.forEach((orb) => {
         if (!isPaused && !orb.collected) {
-          // Higher SMR = steadier trajectory
-          const speed = 150 - smrRatio * 65;
+          const speed = 120 - smrRatio * 45;
           orb.y += dt * speed;
 
-          // Magnetic attraction into the correct sorting basket scales with zoneScore
+          // Gentle magnetic guidance scaling with sustained stillness
           if (zoneScore > 0) {
-            orb.x += (orb.targetX - orb.x) * (dt * 4.2 * zoneScore);
+            orb.x += (orb.targetX - orb.x) * (dt * 3.6 * zoneScore);
           }
 
-          // Check if reached basket
-          if (orb.y >= basketY) {
+          // Check gate arrival
+          if (orb.y >= gateY) {
             orb.collected = true;
             const distance = Math.abs(orb.x - orb.targetX);
-            if (distance < 55) {
-              setScore(s => s + (orb.isTarget ? 20 : 10));
-              setCombo(c => c + 1);
+            if (distance < 50) {
+              setScore((s) => s + (orb.isTarget ? 20 : 10));
+              setStreak((st) => st + 1);
               audioEngine.playChime('success');
 
-              // Burst celebratory particles
-              for (let p = 0; p < 12; p++) {
-                particlesRef.current.push({
-                  x: orb.x,
-                  y: orb.y,
-                  vx: (Math.random() - 0.5) * 160,
-                  vy: (Math.random() - 0.5) * 160 - 50,
-                  color: orb.color,
-                  life: 1.0,
-                });
-              }
+              // Soft ripple
+              ripplesRef.current.push({
+                x: orb.x,
+                y: orb.y,
+                radius: 12,
+                alpha: 0.6,
+                color: orb.color,
+              });
             } else {
-              setCombo(0);
+              setStreak(0);
             }
           }
         }
@@ -170,34 +177,32 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
           ctx.fillStyle = orb.color;
           ctx.fill();
 
-          if (orb.isTarget && zoneScore > 0.4) {
-            // Glowing aura on target shapes during high SMR stillness
-            ctx.strokeStyle = `rgba(232, 150, 122, ${0.7 * zoneScore})`;
-            ctx.lineWidth = 4;
+          if (orb.isTarget && inZone) {
+            ctx.strokeStyle = 'rgba(217, 119, 87, 0.4)';
+            ctx.lineWidth = 2.5;
             ctx.stroke();
           }
         }
       });
 
-      // Update and render burst particles
-      particlesRef.current.forEach(p => {
-        if (!isPaused) {
-          p.x += p.vx * dt;
-          p.y += p.vy * dt;
-          p.life -= dt * 2.2;
-        }
-        if (p.life > 0) {
+      // 6. Draw soft ripples on collection
+      ripplesRef.current.forEach((rip) => {
+        rip.radius += dt * 30;
+        rip.alpha -= dt * 1.2;
+
+        if (rip.alpha > 0) {
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
-          ctx.fillStyle = p.color;
-          ctx.globalAlpha = p.life;
-          ctx.fill();
+          ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = rip.color;
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = rip.alpha;
+          ctx.stroke();
           ctx.globalAlpha = 1.0;
         }
       });
 
-      particlesRef.current = particlesRef.current.filter(p => p.life > 0);
-      orbsRef.current = orbsRef.current.filter(o => !o.collected && o.y < height + 40);
+      ripplesRef.current = ripplesRef.current.filter((r) => r.alpha > 0);
+      orbsRef.current = orbsRef.current.filter((o) => !o.collected && o.y < height + 40);
 
       animationId = requestAnimationFrame(render);
     };
@@ -207,11 +212,23 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, [eegData, isPaused]);
+  }, [smr, inZone, zoneScore, isPaused]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'var(--radius-lg)' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        borderRadius: 'var(--radius-lg)',
+        fontFamily: 'var(--font-body)',
+        userSelect: 'none',
+      }}
+    >
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+
+      {/* Top Clinical Score & Stillness HUD */}
       <div
         style={{
           position: 'absolute',
@@ -223,21 +240,24 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
       >
         <div
           style={{
-            background: 'rgba(255, 255, 255, 0.9)',
+            background: 'rgba(255, 255, 255, 0.92)',
             padding: '5px 12px',
             borderRadius: 'var(--radius-sm)',
-            fontSize: '13px',
-            fontWeight: 700,
+            fontSize: '12px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
             border: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
-            gap: '5px',
+            gap: '6px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           }}
         >
-          <Target size={14} color="var(--brand-primary)" />
+          <Target size={13} color="var(--brand-primary)" />
           <span>Score: {score}</span>
         </div>
-        {combo > 2 && (
+
+        {streak > 2 && (
           <div
             style={{
               background: 'var(--status-active-bg)',
@@ -245,16 +265,40 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
               padding: '5px 12px',
               borderRadius: 'var(--radius-sm)',
               fontSize: '12px',
-              fontWeight: 700,
+              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
             }}
           >
-            <Zap size={14} />
-            <span>{combo}x Streak!</span>
+            <CheckCircle2 size={13} />
+            <span>{streak} Focus Streak</span>
           </div>
         )}
+      </div>
+
+      {/* Top-Right Protocol Focus Indicator */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 14,
+          right: 14,
+          background: 'rgba(255, 255, 255, 0.92)',
+          padding: '5px 12px',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--text-secondary)',
+          border: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        }}
+      >
+        <Shield size={12} color="var(--brand-primary)" />
+        <span>SMR Motor Stillness: {smr.toFixed(1)} µV</span>
       </div>
     </div>
   );

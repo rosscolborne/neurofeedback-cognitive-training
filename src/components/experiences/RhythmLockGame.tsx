@@ -53,7 +53,7 @@ export const RhythmLockGame: React.FC<RhythmLockProps> = ({ eegData, isPaused = 
     const inZone = eegData?.inZone ?? true;
     const points = inZone ? 25 : 10;
     setScore(s => s + points);
-    setFeedbackText(inZone ? '✨ PERFECT SYNC (+25)' : '🎵 HARMONIC LOCK (+10)');
+    setFeedbackText(inZone ? 'PERFECT SYNC (+25)' : 'HARMONIC LOCK (+10)');
     audioEngine.playChime('success');
 
     setTimeout(() => setFeedbackText(null), 1200);
