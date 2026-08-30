@@ -80,4 +80,28 @@ describe('EEGEngine Muse Packet Bit-Unpacker (decodeChannelPacket)', () => {
     expect(decoded[1]).toBeCloseTo(-48.828, 3);
     expect(decoded[2]).toBeCloseTo(0.0, 3);
   });
+
+  it('maps the backend nested channel identity to the fit-check indicators', () => {
+    const engine = new EEGEngine();
+
+    (engine as any).updateChannelQualityFromServer({
+      state: 'good',
+      ready: false,
+      worn: true,
+      blockers: [],
+      channels: [
+        { channel: { id: 'tp9', label: 'TP9' }, state: 'good' },
+        { channel: { id: 'af7', label: 'AF7' }, state: 'adjusting' },
+        { channel: { id: 'af8', label: 'AF8' }, state: 'good' },
+        { channel: { id: 'tp10', label: 'TP10' }, state: 'good' },
+      ],
+    });
+
+    expect(engine.channelQuality).toEqual({
+      tp9: 'good',
+      af7: 'fair',
+      af8: 'good',
+      tp10: 'good',
+    });
+  });
 });
