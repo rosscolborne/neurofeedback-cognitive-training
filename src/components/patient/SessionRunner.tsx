@@ -114,10 +114,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const sessionTotalDuration = 1500; // 25 minutes = 1500 seconds
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
+  const [inZoneMeasuredSeconds, setInZoneMeasuredSeconds] = useState(0);
 
   const adaptiveEngineRef = useRef<AdaptiveDifficultyEngine>(new AdaptiveDifficultyEngine(client.assignedProtocol));
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
   const bandAccumulatorRef = useRef({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0, count: 0 });
+  const coherenceAccumulatorRef = useRef({ total: 0, count: 0 });
   const brainflowAccRef = useRef({ mindfulness: 0, valence: 0, arousal: 0, training: 0, count: 0 });
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const isPausedRef = useRef(isPaused);
@@ -142,7 +144,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   }, []);
 
   const finishSession = React.useCallback(() => {
-    const totalTrainTime = Math.max(1, totalSecondsElapsed - 60);
+    const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
     const acc = bandAccumulatorRef.current;
     const count = Math.max(1, acc.count);
@@ -161,7 +163,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       experience: selectedExperience,
       durationSeconds: totalSecondsElapsed,
       timeInZonePercent,
-      averageCoherence: eegDataRef.current?.coherence || 0,
+      averageCoherence: coherenceAccumulatorRef.current.count > 0
+        ? Math.round(coherenceAccumulatorRef.current.total / coherenceAccumulatorRef.current.count)
+        : 0,
       peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
       averageBands: {
         delta: count > 0 ? Math.round((acc.delta / count) * 10) / 10 : 0,
@@ -182,7 +186,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
     audioEngine.playChime('complete');
     onComplete(summary);
-  }, [client.assignedProtocol, client.id, client.name, inZoneSeconds, onComplete, selectedExperience, totalSecondsElapsed]);
+  }, [client.assignedProtocol, client.id, client.name, inZoneMeasuredSeconds, inZoneSeconds, onComplete, selectedExperience, totalSecondsElapsed]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {
@@ -203,6 +207,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         acc.beta += data.bands.beta;
         acc.gamma += data.bands.gamma;
         acc.count += 1;
+        if (data.coherenceAvailable) {
+          coherenceAccumulatorRef.current.total += data.coherence;
+          coherenceAccumulatorRef.current.count += 1;
+        }
 
         // Accumulate brainflow service metrics
         if (data.brainflowScores) {
@@ -288,8 +296,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         }
       }
 
-      if (currentData?.inZone && phaseRef.current !== 'calibration') {
-        setInZoneSeconds(z => z + (cleanSignalSecondsRef.current > 30 ? 1.5 : 1));
+      // The live in-zone display should reflect every valid observation as
+      // soon as a session begins. Calibration is real EEG data too; only an
+      // unavailable protocol metric should keep this value indeterminate.
+      if (currentData?.inZoneAvailable) {
+        setInZoneMeasuredSeconds(seconds => seconds + 1);
+        if (currentData.inZone) {
+          setInZoneSeconds(z => z + (cleanSignalSecondsRef.current > 30 ? 1.5 : 1));
+        }
       }
     }, 1000);
 
@@ -426,7 +440,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const remainingSeconds = Math.max(0, sessionTotalDuration - totalSecondsElapsed);
   const worstQuality = eegData?.signalQuality || 'good';
-  const inZonePercent = totalSecondsElapsed > 60 ? Math.min(100, Math.round((inZoneSeconds / (totalSecondsElapsed - 60)) * 100)) : 0;
+  const inZonePercent = inZoneMeasuredSeconds > 0
+    ? Math.min(100, Math.round((inZoneSeconds / inZoneMeasuredSeconds) * 100))
+    : null;
 
   return (
     <div
@@ -626,7 +642,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               eegData={eegData} 
               stage={client.tidalGardenState.stage} 
               growthPoints={client.tidalGardenState.growthPoints + Math.floor(inZoneSeconds * 10)} 
-              inZonePercent={inZonePercent}
+              inZonePercent={inZonePercent ?? undefined}
               isPaused={isPaused} 
             />
           )}
@@ -673,7 +689,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Theta/Beta</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {eegData ? eegData.thetaBetaRatio.toFixed(2) : '--'}
+              {eegData?.thetaBetaRatioAvailable ? eegData.thetaBetaRatio.toFixed(2) : '--'}
             </div>
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
@@ -687,14 +703,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>SMR (12-15Hz)</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-smr)' }}>
-              {eegData ? eegData.bands.smr.toFixed(1) + ' µV' : '--'}
+              {eegData?.bandAvailability.smr ? eegData.bands.smr.toFixed(1) + ' µV' : '--'}
             </div>
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone %</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {inZonePercent}%
+              {inZonePercent != null ? `${inZonePercent}%` : '--'}
             </div>
           </div>
         </div>

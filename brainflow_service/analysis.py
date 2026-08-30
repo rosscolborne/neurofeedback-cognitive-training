@@ -37,6 +37,7 @@ from .dsp import (
     extract_band_power_features,
     extract_brainflow_mindfulness,
     extract_brainflow_restfulness,
+    extract_interhemispheric_coherence,
     preprocess_eeg_window,
 )
 from .headset_fit import (
@@ -102,6 +103,9 @@ def analyze_window(
     if raw_window is not None:
         processed = preprocess_eeg_window(raw_window, sample_rate, processing)
         band_powers = extract_band_power_features(processed, sample_rate)
+        interhemispheric_coherence = extract_interhemispheric_coherence(
+            processed, sample_rate, [channel.id for channel in channels],
+        )
         brainflow_mindfulness = extract_brainflow_mindfulness(raw_window, sample_rate)
         brainflow_restfulness = extract_brainflow_restfulness(raw_window, sample_rate)
 
@@ -142,6 +146,7 @@ def analyze_window(
                 calibrationStatus=calibration.status,
                 calibrationProgress=calibration.progress,
                 calibrationRequired=calibration.required,
+                interhemisphericCoherence=interhemispheric_coherence,
             )
 
             attention = providers.attention.push(

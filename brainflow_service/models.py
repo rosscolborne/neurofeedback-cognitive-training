@@ -64,6 +64,11 @@ class SignalFeatures(BaseModel):
     )
     calibration_progress: int = Field(default=0, alias="calibrationProgress")
     calibration_required: int = Field(default=0, alias="calibrationRequired")
+    # 0–1 magnitude-squared spectral coherence across AF7↔AF8 and TP9↔TP10.
+    # Null when the window lacks one of those valid left/right channel pairs.
+    interhemispheric_coherence: float | None = Field(
+        default=None, alias="interhemisphericCoherence",
+    )
 
 
 class ChannelSignalQualityModel(BaseModel):

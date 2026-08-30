@@ -38,8 +38,8 @@ export interface MuseChannelQuality {
 }
 
 export interface BrainFlowScores {
-  focusScore: number;
-  relaxScore: number;
+  focusScore: number | null;
+  relaxScore: number | null;
   mindfulnessScore: number | null;
   restfulnessScore: number | null;
   valence?: number | null;       // -1 (negative) to +1 (positive)
@@ -71,7 +71,7 @@ export interface ServerFitState {
 }
 
 export interface TrainingMetricSample {
-  score: number;           // 0 – 100 baseline-relative
+  score: number | null;    // 0 – 100 baseline-relative, when available
   baselineReady: boolean;
 }
 
@@ -79,9 +79,14 @@ export interface EEGDataPoint {
   timestamp: number;
   rawSignal: number;
   bands: BandPowers;
+  /** Which server band-power values were actually supplied for this frame. */
+  bandAvailability: Partial<Record<keyof BandPowers, boolean>>;
   thetaBetaRatio: number;
-  coherence: number; // 0 - 100%
+  thetaBetaRatioAvailable: boolean;
+  coherence: number; // 0 - 100%, when coherenceAvailable is true
+  coherenceAvailable: boolean;
   inZone: boolean;
+  inZoneAvailable: boolean;
   zoneScore: number; // 0.0 - 1.0 continuous feedback score
   signalQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected';
   channelQuality: MuseChannelQuality;

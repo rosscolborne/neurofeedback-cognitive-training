@@ -46,6 +46,7 @@ export interface BrainFlowFeatures {
   relaxScore?: number;
   valence?: number | null;
   arousal?: number | null;
+  interhemisphericCoherence?: number | null;
   stateLabel?: string | null;
   emotionLabel?: string | null;
 }

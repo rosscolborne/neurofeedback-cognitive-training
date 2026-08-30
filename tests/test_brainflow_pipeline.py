@@ -11,6 +11,7 @@ from brainflow_service.config import DEFAULT_PROCESSING, DEVICE_CONFIGS
 from brainflow_service.dsp import (
     build_eeg_window,
     extract_band_power_features,
+    extract_interhemispheric_coherence,
     extract_brainflow_mindfulness,
     extract_brainflow_restfulness,
     preprocess_eeg_window,
@@ -64,7 +65,31 @@ def test_band_power_extracts_expected_bands() -> None:
     assert features.method == "brainflow_welch_psd"
     assert features.absolute["alpha"] > features.absolute["theta"]
     assert features.absolute["alpha"] > features.absolute["beta"]
+    assert "smr" in features.absolute
+    assert features.absolute["smr"] >= 0
     assert "betaOverAlphaTheta" in features.ratios
+
+
+def test_band_power_extracts_smr_from_a_12_to_15_hz_signal() -> None:
+    features = extract_band_power_features(sine_window(freq_hz=13.5), 256)
+
+    assert features is not None
+    assert features.absolute["smr"] > features.absolute["theta"]
+
+
+def test_interhemispheric_coherence_is_high_for_matched_left_right_signals() -> None:
+    window = sine_window(freq_hz=10)
+
+    score = extract_interhemispheric_coherence(window, 256, ["TP9", "AF7", "AF8", "TP10"])
+
+    assert score is not None
+    assert score > 0.95
+
+
+def test_interhemispheric_coherence_requires_a_left_right_pair() -> None:
+    score = extract_interhemispheric_coherence(sine_window()[:2], 256, ["TP9", "AF7"])
+
+    assert score is None
 
 
 def test_band_power_handles_exact_power_of_two_window() -> None:
