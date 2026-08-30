@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
-const BACKEND_URL = 'https://eeg-demo-4zud.onrender.com';
+const BACKEND_URL = import.meta.env.VITE_BRAINFLOW_SERVICE_URL || 'http://127.0.0.1:8000';
 
-describe('Live BrainFlow Backend Headset Fit API E2E', () => {
+describe('Local BrainFlow Backend Headset Fit API E2E', () => {
   it('checks backend health', async () => {
     const res = await fetch(`${BACKEND_URL}/health`);
     expect(res.ok).toBe(true);

@@ -34,3 +34,7 @@ build/output/
 .env.*.local
 !.env.example
 
+# Local Python environment and test artifacts
+.venv/
+__pycache__/
+.pytest_cache/
