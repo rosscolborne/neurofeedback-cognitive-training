@@ -3,9 +3,9 @@ import { eegEngine } from '../eegEngine';
 import { brainflowService } from '../brainflowService';
 
 describe('Muse BLE Pipeline End-to-End Simulation', () => {
-  it('streams simulated 20-byte BLE packets through parseChannelPacket into live backend analysis', async () => {
-    // 1. Point brainflowService to live backend
-    brainflowService.setBaseUrl('https://eeg-demo-4zud.onrender.com');
+  it('streams simulated 20-byte BLE packets through parseChannelPacket into local backend analysis', async () => {
+    // 1. Point brainflowService to the locally bundled backend
+    brainflowService.setBaseUrl(import.meta.env.VITE_BRAINFLOW_SERVICE_URL || 'http://127.0.0.1:8000');
 
     // 2. Start a fit session
     const fitSessionId = await brainflowService.startFitSession();

@@ -48,16 +48,22 @@ export interface BrainFlowScores {
   method?: 'brainflow_welch_psd' | 'browser_dsp';
 }
 
-export type ServerFitChannelState = 'good' | 'fair' | 'poor' | 'off';
+export type ServerFitChannelState = 'good' | 'adjusting' | 'poor';
+
+export interface ServerFitChannelIdentity {
+  id: string;
+  label: string;
+}
 
 export interface ServerFitChannel {
-  id: string;             // "TP9", "AF7", "AF8", "TP10"
+  // `brainflow_service` serializes the electrode as a nested SignalChannel.
+  channel: ServerFitChannelIdentity;
   state: ServerFitChannelState;
-  rms?: number;
+  rmsUv?: number;
 }
 
 export interface ServerFitState {
-  state: 'checking' | 'good' | 'poor' | 'off';
+  state: 'adjusting' | 'good' | 'poor' | 'ready';
   ready: boolean;
   worn: boolean;
   blockers: string[];
@@ -310,4 +316,3 @@ export interface PracticeOutcomeMetrics {
     peakPerformance: number;
   };
 }
-

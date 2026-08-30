@@ -2,6 +2,9 @@ import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, Protocol
 import { brainflowService, BrainFlowFeatures } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
+import { AthenaWasmDecoder, BleTransport } from '@elata-biosciences/eeg-web-ble';
+import { initEegWasm, type HeadbandFrameV1 } from '@elata-biosciences/eeg-web';
+import eegWasmUrl from '@elata-biosciences/eeg-web/wasm/eeg_wasm_bg.wasm?url';
 
 export class EEGEngine {
   private isRunning = false;
@@ -62,6 +65,7 @@ export class EEGEngine {
 
   private gattServer: any = null;
   private activeCharacteristics: any[] = [];
+  private webBluetoothTransport: BleTransport | null = null;
 
   // Demo Mode State & Fast Simulator Cycle (<10 seconds loop)
   public isDemoMode = false;
@@ -199,6 +203,14 @@ export class EEGEngine {
         return { success: false, error: `brainflow_service unavailable: ${err?.message || 'Cannot connect to http://127.0.0.1:8000'}` };
       }
 
+      // Use the same supported Muse Athena decoder as eeg_demo in a browser.
+      // The backend's Bluetooth fit thresholds are calibrated for these
+      // normalized samples, not for hand-decoded BLE packets.
+      if (!Capacitor.isNativePlatform()) {
+        await this.connectMuseBluetoothInBrowser();
+        return { success: true, deviceName: this.deviceName || undefined };
+      }
+
       // @ts-ignore
       let device: any = null;
       
@@ -259,14 +271,6 @@ export class EEGEngine {
         } catch (e) {}
 
         return { success: true, deviceName: this.deviceName || undefined };
-      } else {
-        device = await (navigator as any).bluetooth.requestDevice({
-          filters: [{ namePrefix: 'Muse' }],
-          optionalServices: [
-            '0000fe8d-0000-1000-8000-00805f9b34fb', // Muse Base EEG Service
-            '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
-          ],
-        });
       }
 
       if (!device || !device.gatt) {
@@ -349,6 +353,59 @@ export class EEGEngine {
   }
 
   /**
+   * Browser Muse acquisition through Elata's Athena WASM decoder. This is
+   * deliberately the same decoder and normalized sample format used by the
+   * known-working eeg_demo frontend.
+   */
+  private async connectMuseBluetoothInBrowser(): Promise<void> {
+    await initEegWasm(eegWasmUrl);
+
+    const transport = new BleTransport({
+      deviceOptions: {
+        athenaDecoderFactory: () => new AthenaWasmDecoder(),
+        onDisconnected: () => this.disconnectHardware(),
+      },
+      sourceName: 'Neurasticity Muse Athena',
+      eegProcessing: false,
+    });
+    this.webBluetoothTransport = transport;
+
+    transport.onFrame = (frame: HeadbandFrameV1) => {
+      this.ingestDecodedMuseFrame(frame);
+    };
+
+    await transport.connect();
+    const board = transport.getBoardInfo() as { device_name?: string } | null;
+    this.isHardwareConnected = true;
+    this.deviceName = board?.device_name || 'Muse Athena';
+    await transport.start();
+  }
+
+  private ingestDecodedMuseFrame(frame: HeadbandFrameV1) {
+    const eeg = frame.eegRaw ?? frame.eeg;
+    const channelIndices: Record<keyof MuseChannelQuality, number> = {
+      tp9: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'tp9'),
+      af7: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'af7'),
+      af8: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'af8'),
+      tp10: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'tp10'),
+    };
+
+    for (const [channel, index] of Object.entries(channelIndices) as Array<[keyof MuseChannelQuality, number]>) {
+      if (index < 0) continue;
+      const samples = eeg.samples
+        .map((row) => row[index])
+        .filter((sample): sample is number => Number.isFinite(sample));
+      if (samples.length === 0) continue;
+
+      const buffer = this.rawBuffers[channel];
+      buffer.push(...samples);
+      if (buffer.length > this.maxBufferSize) {
+        this.rawBuffers[channel] = buffer.slice(buffer.length - this.maxBufferSize);
+      }
+    }
+  }
+
+  /**
    * Connect to native BrainFlow acquisition service (e.g. Muse Athena or Synthetic Board)
    */
   public async connectBrainflowSession(deviceId = 'brainflow-synthetic'): Promise<{ success: boolean; error?: string }> {
@@ -417,6 +474,11 @@ export class EEGEngine {
   }
 
   public disconnectHardware() {
+    if (this.webBluetoothTransport) {
+      const transport = this.webBluetoothTransport;
+      this.webBluetoothTransport = null;
+      transport.disconnect().catch(() => {});
+    }
     if (Capacitor.isNativePlatform() && this.gattServer?.deviceId) {
       BleClient.disconnect(this.gattServer.deviceId).catch(() => {});
     } else if (this.gattServer && this.gattServer.connected) {
@@ -656,9 +718,9 @@ export class EEGEngine {
   /**
    * Map server-side fit quality to the local MuseChannelQuality and ServerFitState.
    */
-  private updateChannelQualityFromServer(quality: any) {
+  private updateChannelQualityFromServer(quality: ServerFitState) {
     this.serverFitState = {
-      state: quality.state || 'checking',
+      state: quality.state ?? 'poor',
       ready: quality.ready ?? false,
       worn: quality.worn ?? false,
       blockers: quality.blockers || [],
@@ -667,20 +729,20 @@ export class EEGEngine {
 
     // Map server channel states to local MuseChannelQuality
     const channelMap: Record<string, keyof MuseChannelQuality> = {
-      'TP9': 'tp9', 'tp9': 'tp9',
-      'AF7': 'af7', 'af7': 'af7',
-      'AF8': 'af8', 'af8': 'af8',
-      'TP10': 'tp10', 'tp10': 'tp10',
+      tp9: 'tp9',
+      af7: 'af7',
+      af8: 'af8',
+      tp10: 'tp10',
     };
 
     if (quality.channels && Array.isArray(quality.channels)) {
       for (const ch of quality.channels) {
-        const localKey = channelMap[ch.id];
+        const localKey = channelMap[ch.channel?.id?.toLowerCase()];
         if (localKey) {
           const serverState = (ch.state || 'poor').toLowerCase();
           if (serverState === 'good') {
             this.channelQuality[localKey] = 'good';
-          } else if (serverState === 'fair') {
+          } else if (serverState === 'adjusting') {
             this.channelQuality[localKey] = 'fair';
           } else {
             this.channelQuality[localKey] = 'poor';
