@@ -250,122 +250,127 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
             overflow: 'hidden',
           }}
         >
-          {/* Stylized Head Contour SVG */}
-          <svg width="180" height="190" viewBox="0 0 180 190" fill="none">
-            {/* Head Outline */}
-            <path
-              d="M 90 20 C 45 20, 25 55, 25 105 C 25 145, 50 175, 90 175 C 130 175, 155 145, 155 105 C 155 55, 135 20, 90 20 Z"
-              fill="#FFFFFF"
-              stroke="#E5E7EB"
-              strokeWidth="2.5"
-            />
-            {/* Nose Indicator */}
-            <path d="M 90 18 L 84 8 L 96 8 Z" fill="#D1D5DB" />
-            {/* Left Ear */}
-            <path d="M 23 85 C 15 92, 15 112, 23 120" stroke="#D1D5DB" strokeWidth="2.5" strokeLinecap="round" />
-            {/* Right Ear */}
-            <path d="M 157 85 C 165 92, 165 112, 157 120" stroke="#D1D5DB" strokeWidth="2.5" strokeLinecap="round" />
-            {/* Eyebrow Line */}
-            <path d="M 48 55 Q 62 48, 76 55" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" />
-            <path d="M 104 55 Q 118 48, 132 55" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" />
-          </svg>
+          {/* Inner 180x190 container to keep electrode dots locked to the SVG head */}
+          <div style={{ position: 'relative', width: '180px', height: '190px' }}>
+            {/* Stylized Head Contour SVG */}
+            <svg width="180" height="190" viewBox="0 0 180 190" fill="none">
+              {/* Head Outline */}
+              <path
+                d="M 90 20 C 45 20, 25 55, 25 105 C 25 145, 50 175, 90 175 C 130 175, 155 145, 155 105 C 155 55, 135 20, 90 20 Z"
+                fill="#FFFFFF"
+                stroke="#E5E7EB"
+                strokeWidth="2.5"
+              />
+              {/* Nose Indicator */}
+              <path d="M 90 18 L 84 8 L 96 8 Z" fill="#D1D5DB" />
+              {/* Left Ear */}
+              <path d="M 23 85 C 15 92, 15 112, 23 120" stroke="#D1D5DB" strokeWidth="2.5" strokeLinecap="round" />
+              {/* Right Ear */}
+              <path d="M 157 85 C 165 92, 165 112, 157 120" stroke="#D1D5DB" strokeWidth="2.5" strokeLinecap="round" />
+              {/* Eyebrow Line */}
+              <path d="M 48 55 Q 62 48, 76 55" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" />
+              <path d="M 104 55 Q 118 48, 132 55" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" />
+            </svg>
 
-          {/* AF7 (Left Forehead) Sensor */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '42px',
-              left: '34%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
+            {/* AF7 (Left Forehead) Sensor */}
             <div
               style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
-                backgroundColor: getStatusColor(quality.af7),
-                boxShadow: `0 0 8px ${getStatusColor(quality.af7)}`,
-                border: '2px solid #FFFFFF',
+                position: 'absolute',
+                top: '44px',
+                left: '58px',
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
               }}
-            />
-            <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>AF7</span>
-          </div>
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  backgroundColor: getStatusColor(quality.af7),
+                  boxShadow: `0 0 8px ${getStatusColor(quality.af7)}`,
+                  border: '2px solid #FFFFFF',
+                }}
+              />
+              <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>AF7</span>
+            </div>
 
-          {/* AF8 (Right Forehead) Sensor */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '42px',
-              right: '34%',
-              transform: 'translateX(50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
+            {/* AF8 (Right Forehead) Sensor */}
             <div
               style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
-                backgroundColor: getStatusColor(quality.af8),
-                boxShadow: `0 0 8px ${getStatusColor(quality.af8)}`,
-                border: '2px solid #FFFFFF',
+                position: 'absolute',
+                top: '44px',
+                left: '122px',
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
               }}
-            />
-            <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>AF8</span>
-          </div>
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  backgroundColor: getStatusColor(quality.af8),
+                  boxShadow: `0 0 8px ${getStatusColor(quality.af8)}`,
+                  border: '2px solid #FFFFFF',
+                }}
+              />
+              <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>AF8</span>
+            </div>
 
-          {/* TP9 (Left Ear / Temporal) Sensor */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '90px',
-              left: '7%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
+            {/* TP9 (Left Ear / Temporal) Sensor - Snug to left ear */}
             <div
               style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
-                backgroundColor: getStatusColor(quality.tp9),
-                boxShadow: `0 0 8px ${getStatusColor(quality.tp9)}`,
-                border: '2px solid #FFFFFF',
+                position: 'absolute',
+                top: '102px',
+                left: '12px',
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
               }}
-            />
-            <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>TP9</span>
-          </div>
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  backgroundColor: getStatusColor(quality.tp9),
+                  boxShadow: `0 0 8px ${getStatusColor(quality.tp9)}`,
+                  border: '2px solid #FFFFFF',
+                }}
+              />
+              <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>TP9</span>
+            </div>
 
-          {/* TP10 (Right Ear / Temporal) Sensor */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '90px',
-              right: '7%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
+            {/* TP10 (Right Ear / Temporal) Sensor - Snug to right ear */}
             <div
               style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
-                backgroundColor: getStatusColor(quality.tp10),
-                boxShadow: `0 0 8px ${getStatusColor(quality.tp10)}`,
-                border: '2px solid #FFFFFF',
+                position: 'absolute',
+                top: '102px',
+                left: '168px',
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
               }}
-            />
-            <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>TP10</span>
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  backgroundColor: getStatusColor(quality.tp10),
+                  boxShadow: `0 0 8px ${getStatusColor(quality.tp10)}`,
+                  border: '2px solid #FFFFFF',
+                }}
+              />
+              <span style={{ fontSize: '10px', fontWeight: 700, marginTop: '2px', color: 'var(--text-secondary)' }}>TP10</span>
+            </div>
           </div>
         </div>
 
