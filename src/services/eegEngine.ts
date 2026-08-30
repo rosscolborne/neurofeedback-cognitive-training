@@ -130,7 +130,8 @@ export class EEGEngine {
       };
       this.isCalibrating = false;
     } else if (type === 'FEATURES_EXTRACTED') {
-      if (payload.bands) {
+      // Worker extracted features (supplementary local pipeline)
+      if (payload.bands && !this.latestServerBands) {
         this.latestServerBands = {
           delta: payload.bands.delta || 0,
           theta: payload.bands.theta || 0,
@@ -140,13 +141,12 @@ export class EEGEngine {
           gamma: payload.bands.gamma || 0
         };
       }
-      if (payload.learningScore !== undefined) {
+      if (payload.learningScore !== undefined && !this.latestTrainingMetric) {
         this.latestTrainingMetric = {
           score: payload.learningScore,
           baselineReady: true
         };
       }
-      this.isAnalyzingBrainflow = false;
     }
   }
 
@@ -523,7 +523,9 @@ export class EEGEngine {
   /**
    * Decodes Muse raw EEG packets with 12-bit bit-unpacking.
    * Muse transmits 12 12-bit samples per 20-byte packet at 256Hz sampling rate.
-   * Raw samples are buffered for server-side analysis — no local quality assessment.
+   * Raw samples are buffered for server-side analysis (via analyzeFitWindow) which provides
+   * authoritative channel quality and serverFitState. Ready state (serverFitState.ready)
+   * can be verified via manual test or smoke test connecting to the BrainFlow Synthetic provider.
    */
   private parseChannelPacket(channel: keyof MuseChannelQuality, dataView: DataView) {
     if (dataView.byteLength < 2) return;
@@ -568,8 +570,8 @@ export class EEGEngine {
   }
 
   /**
-   * Send the latest sample window to eegWorker for client-side FFT extraction, 
-   * falling back to brainflow_service if needed.
+   * Send the latest sample window to brainflow_service for full fit assessment, quality scoring,
+   * and band powers, while concurrently dispatching to eegWorker for supplementary local feature extraction.
    * 
    * Samples are sent as row-major (time × channel) with only scalp electrodes.
    */
@@ -599,7 +601,7 @@ export class EEGEngine {
     this.lastBrainflowAnalysisTime = now;
 
     if (this.eegWorker) {
-      // Use Dedicated Web Worker to avoid blocking main thread
+      // Use Dedicated Web Worker for supplementary local feature extraction
       this.eegWorker.postMessage({
         type: 'EXTRACT_FEATURES',
         payload: {
@@ -607,8 +609,6 @@ export class EEGEngine {
           baselineModel: this.individualBaselineModel
         }
       });
-      // The rest of the state updates happen in handleWorkerMessage
-      return;
     }
 
     try {
