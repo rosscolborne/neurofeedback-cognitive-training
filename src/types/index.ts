@@ -83,7 +83,8 @@ export interface EEGDataPoint {
   bandAvailability: Partial<Record<keyof BandPowers, boolean>>;
   thetaBetaRatio: number;
   thetaBetaRatioAvailable: boolean;
-  coherence: number; // 0 - 100%, when coherenceAvailable is true
+  /** 0–100 measured coherence percentage; null when the service could not compute it. */
+  coherence: number | null;
   coherenceAvailable: boolean;
   inZone: boolean;
   inZoneAvailable: boolean;
@@ -186,7 +187,8 @@ export interface SessionRecord {
   experience: ExperienceType;
   durationSeconds: number;
   timeInZonePercent: number;
-  averageCoherence: number;
+  /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
+  averageCoherence: number | null;
   peakFocusScore: number;
   averageBands: BandPowers;
   timeSeries: Array<{

@@ -158,7 +158,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Inter-hemispheric coherence</span>
           <span className="font-mono" style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {session.averageCoherence}%
+            {session.averageCoherence == null ? '--' : `${session.averageCoherence}%`}
           </span>
         </div>
       </div>

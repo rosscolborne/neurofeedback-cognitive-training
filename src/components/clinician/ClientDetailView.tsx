@@ -536,7 +536,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                       {s.date} • {s.experience.replace(/-/g, ' ').toUpperCase()}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {Math.round(s.durationSeconds / 60)} min | In-Zone: {s.timeInZonePercent}% | Peak Focus: {s.peakFocusScore} | Coherence: {s.averageCoherence}%
+                      {Math.round(s.durationSeconds / 60)} min | In-Zone: {s.timeInZonePercent}% | Peak Focus: {s.peakFocusScore} | Coherence: {s.averageCoherence == null ? '--' : `${s.averageCoherence}%`}
                     </div>
                     {s.clinicianNotes && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>

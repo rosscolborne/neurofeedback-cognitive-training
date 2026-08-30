@@ -43,6 +43,8 @@ class StartSessionRequest(BaseModel):
     device_id: str = Field(alias="deviceId")
     mac_address: str | None = Field(default=None, alias="macAddress")
     serial_number: str | None = Field(default=None, alias="serialNumber")
+    protocol: str = "theta-beta-ratio"
+    threshold: float = 1.85
 
 
 class StartSessionResponse(BaseModel):
@@ -96,6 +98,8 @@ class AnalyzeSessionWindowRequest(BaseModel):
     sample_rate_hz: float = Field(alias="sampleRateHz")
     samples: list[list[float]]
     channel_ids: list[str] = Field(alias="channelIds")
+    protocol: str = "theta-beta-ratio"
+    threshold: float = 1.85
 
 
 class AnalyzeSessionWindowResponse(BaseModel):
@@ -327,6 +331,8 @@ def analyze_session_window(
         eeg_samples=eeg_samples,
         raw_window=window,
         sample_rate=sample_rate,
+        protocol=request.protocol,
+        threshold=request.threshold,
     )
     return AnalyzeSessionWindowResponse(
         features=result.features, quality=result.quality, training=result.training,
@@ -386,6 +392,8 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
             request.device_id,
             mac_address=request.mac_address,
             serial_number=request.serial_number,
+            protocol=request.protocol,
+            threshold=request.threshold,
         )
         try:
             device_info = session.prepare()

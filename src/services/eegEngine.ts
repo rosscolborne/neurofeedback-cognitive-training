@@ -64,6 +64,7 @@ export class EEGEngine {
   private latestServerBands: BandPowers | null = null;
   private latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
   private latestInterhemisphericCoherence: number | null = null;
+  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null } | null = null;
 
   private gattServer: any = null;
   private activeCharacteristics: any[] = [];
@@ -430,7 +431,7 @@ export class EEGEngine {
    */
   public async connectBrainflowSession(deviceId = 'brainflow-synthetic'): Promise<{ success: boolean; error?: string }> {
     try {
-      const session = await brainflowService.startSession(deviceId);
+      const session = await brainflowService.startSession(deviceId, undefined, undefined, this.currentProtocol, this.targetThreshold);
       this.brainflowSessionId = session.sessionId;
       this.isBrainflowActive = true;
       this.isHardwareConnected = true;
@@ -486,6 +487,7 @@ export class EEGEngine {
               method: 'brainflow_welch_psd',
             };
             this.latestInterhemisphericCoherence = frame.features.interhemisphericCoherence ?? null;
+            this.latestTrainingFeedback = { ratio: frame.features.thetaBetaRatio ?? null, inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null };
           }
 
           if (frame.training) {
@@ -549,6 +551,7 @@ export class EEGEngine {
     this.latestServerBands = null;
     this.latestServerBandAvailability = {};
     this.latestInterhemisphericCoherence = null;
+    this.latestTrainingFeedback = null;
     this.serverFitState = null;
     this.resetState();
   }
@@ -688,9 +691,12 @@ export class EEGEngine {
     const tp10 = this.rawBuffers.tp10;
 
     const minLen = Math.min(tp9.length, af7.length, af8.length, tp10.length);
-    if (minLen < 64 || !this.fitSessionId) return;
+    // Interhemispheric coherence is a cross-spectral estimate. It needs at
+    // least two 1-second segments, so keep a two-second window rather than
+    // sending the one-second window used by the other band metrics.
+    if (minLen < 512 || !this.fitSessionId) return;
 
-    const windowSize = Math.min(minLen, 256);
+    const windowSize = Math.min(minLen, 512);
 
     // Build row-major format: one inner array per time sample, 4 columns (TP9, AF7, AF8, TP10)
     const samples: number[][] = [];
@@ -724,6 +730,7 @@ export class EEGEngine {
             method: 'brainflow_welch_psd',
           };
           this.latestInterhemisphericCoherence = f.interhemisphericCoherence ?? null;
+          this.latestTrainingFeedback = { ratio: f.thetaBetaRatio ?? null, inZone: f.inZone ?? null, zoneScore: f.zoneScore ?? null };
 
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
@@ -932,16 +939,14 @@ export class EEGEngine {
       rawSignal = 0;
     }
 
-    const thetaBetaRatioAvailable = Boolean(bandAvailability.theta && bandAvailability.beta);
-    const thetaBetaRatio = thetaBetaRatioAvailable
-      ? Math.round((bands.theta / Math.max(0.1, bands.beta)) * 100) / 100
-      : 0;
-
-    let inZone = false;
-    let inZoneAvailable = false;
-    let zoneScore = 0.0;
+    const feedback = this.latestTrainingFeedback;
+    const thetaBetaRatioAvailable = feedback?.ratio != null;
+    const thetaBetaRatio = feedback?.ratio ?? 0;
+    const inZoneAvailable = feedback?.inZone != null;
+    const inZone = feedback?.inZone ?? false;
+    const zoneScore = feedback?.zoneScore ?? 0;
     
-    switch (this.currentProtocol) {
+    /*switch (this.currentProtocol) {
       case 'theta-beta-ratio':
         inZoneAvailable = thetaBetaRatioAvailable;
         if (inZoneAvailable) {
@@ -993,7 +998,7 @@ export class EEGEngine {
           }
         }
         break;
-    }
+    }*/
 
     // This value comes from the server's cross-spectral AF7↔AF8 / TP9↔TP10
     // calculation. Do not replace unavailable coherence with a band-power proxy.
@@ -1001,7 +1006,7 @@ export class EEGEngine {
     const coherenceAvailable = interhemisphericCoherence !== null;
     const coherence = coherenceAvailable
       ? Math.round(interhemisphericCoherence * 100)
-      : 0;
+      : null;
 
     // Signal quality derived from server fit state or demo mode
     const qualities = Object.values(this.channelQuality);

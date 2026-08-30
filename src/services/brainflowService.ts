@@ -47,6 +47,9 @@ export interface BrainFlowFeatures {
   valence?: number | null;
   arousal?: number | null;
   interhemisphericCoherence?: number | null;
+  thetaBetaRatio?: number | null;
+  inZone?: boolean | null;
+  zoneScore?: number | null;
   stateLabel?: string | null;
   emotionLabel?: string | null;
 }
@@ -266,7 +269,7 @@ class BrainFlowService {
   /**
    * Start a native BrainFlow board session (e.g. Muse Athena or Synthetic Board)
    */
-  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string): Promise<{ sessionId: string; deviceInfo: any }> {
+  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string, protocol = 'theta-beta-ratio', threshold = 1.85): Promise<{ sessionId: string; deviceInfo: any }> {
     const res = await fetch(`${this.baseUrl}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -274,6 +277,7 @@ class BrainFlowService {
         deviceId,
         macAddress: macAddress || null,
         serialNumber: serialNumber || null,
+        protocol, threshold,
       }),
     });
 

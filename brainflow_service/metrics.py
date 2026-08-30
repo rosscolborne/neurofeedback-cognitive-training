@@ -78,6 +78,26 @@ def normalize_brainflow_score(value: float | None) -> float | None:
     return _clamp(value * 100.0, 0.0, 100.0)
 
 
+def compute_training_feedback(bands: dict[str, float], protocol: str, threshold: float) -> tuple[float | None, bool | None, float | None]:
+    """Authoritative protocol feedback: ratio, in-zone flag, continuous score."""
+    theta, alpha, smr, beta = (bands.get(key) for key in ("theta", "alpha", "smr", "beta"))
+    ratio = theta / max(0.1, beta) if theta is not None and beta is not None else None
+    if protocol == "theta-beta-ratio" and ratio is not None:
+        return ratio, ratio <= threshold, _clamp(1 - (ratio - threshold) / 1.5, 0, 1)
+    if protocol == "smr-enhancement" and smr is not None:
+        return ratio, smr >= threshold, _clamp((smr - threshold + 1.5) / 3, 0, 1)
+    if protocol == "alpha-enhancement" and alpha is not None:
+        return ratio, alpha >= threshold, _clamp((alpha - threshold + 2) / 4, 0, 1)
+    if protocol == "alpha-theta-crossover" and theta is not None and alpha is not None:
+        value = theta / max(0.1, alpha)
+        return ratio, value >= threshold, _clamp((value - threshold + .5) / 1.5, 0, 1)
+    if protocol == "beta-downtraining" and beta is not None:
+        return ratio, beta <= threshold, _clamp(1 - (beta - threshold) / 5, 0, 1)
+    if protocol == "individualized-upper-alpha" and alpha is not None:
+        return ratio, alpha >= threshold, _clamp((alpha - threshold + 2) / 4, 0, 1)
+    return ratio, None, None
+
+
 def smooth_score(current: float | None, target: float, weight: float) -> float:
     """Port of `smoothScore`: exponential moving average, seeded on first call."""
     if current is None:

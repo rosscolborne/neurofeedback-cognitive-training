@@ -49,6 +49,7 @@ from .headset_fit import (
 )
 from .models import AttentionMetricSampleModel, SignalChannel, SignalFeatures, SignalQualityMetadata
 from .training import AttentionBaselineProvider, to_attention_metric_sample_model
+from .metrics import compute_training_feedback
 
 
 @dataclass
@@ -81,6 +82,8 @@ def analyze_window(
     sample_rate: int,
     processing: ProcessingConfig = DEFAULT_PROCESSING,
     at_ms: float | None = None,
+    protocol: str = "theta-beta-ratio",
+    threshold: float = 1.85,
 ) -> WindowAnalysis:
     """Turns one raw EEG window into a headset-fit assessment plus (when
     `raw_window` has enough samples) the finished, smoothed scores.
@@ -103,6 +106,9 @@ def analyze_window(
     if raw_window is not None:
         processed = preprocess_eeg_window(raw_window, sample_rate, processing)
         band_powers = extract_band_power_features(processed, sample_rate)
+        theta_beta_ratio, in_zone, zone_score = compute_training_feedback(
+            band_powers.absolute if band_powers else {}, protocol, threshold,
+        )
         interhemispheric_coherence = extract_interhemispheric_coherence(
             processed, sample_rate, [channel.id for channel in channels],
         )
@@ -147,6 +153,9 @@ def analyze_window(
                 calibrationProgress=calibration.progress,
                 calibrationRequired=calibration.required,
                 interhemisphericCoherence=interhemispheric_coherence,
+                thetaBetaRatio=theta_beta_ratio,
+                inZone=in_zone,
+                zoneScore=zone_score,
             )
 
             attention = providers.attention.push(

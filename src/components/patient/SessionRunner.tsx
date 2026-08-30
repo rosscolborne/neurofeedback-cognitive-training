@@ -165,7 +165,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       timeInZonePercent,
       averageCoherence: coherenceAccumulatorRef.current.count > 0
         ? Math.round(coherenceAccumulatorRef.current.total / coherenceAccumulatorRef.current.count)
-        : 0,
+        : null,
       peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
       averageBands: {
         delta: count > 0 ? Math.round((acc.delta / count) * 10) / 10 : 0,
@@ -207,11 +207,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         acc.beta += data.bands.beta;
         acc.gamma += data.bands.gamma;
         acc.count += 1;
-        if (data.coherenceAvailable) {
+        if (data.coherenceAvailable && data.coherence != null) {
           coherenceAccumulatorRef.current.total += data.coherence;
           coherenceAccumulatorRef.current.count += 1;
         }
-
         // Accumulate brainflow service metrics
         if (data.brainflowScores) {
           const bfAcc = brainflowAccRef.current;

@@ -25,12 +25,16 @@ class BrainFlowSession:
         mac_address: str | None = None,
         serial_number: str | None = None,
         processing: ProcessingConfig = DEFAULT_PROCESSING,
+        protocol: str = "theta-beta-ratio",
+        threshold: float = 1.85,
     ) -> None:
         self.id = str(uuid.uuid4())
         self.config = config
         self.mac_address = mac_address
         self.serial_number = serial_number
         self.processing = processing
+        self.protocol = protocol
+        self.threshold = threshold
         self.sequence_id = 0
         self.board = None
         self.board_id = 0
@@ -170,6 +174,8 @@ class BrainFlowSession:
             raw_window=window,
             sample_rate=sample_rate,
             processing=self.processing,
+            protocol=self.protocol,
+            threshold=self.threshold,
         )
 
         return SignalFrame(

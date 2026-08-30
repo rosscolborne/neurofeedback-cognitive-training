@@ -69,6 +69,9 @@ class SignalFeatures(BaseModel):
     interhemispheric_coherence: float | None = Field(
         default=None, alias="interhemisphericCoherence",
     )
+    theta_beta_ratio: float | None = Field(default=None, alias="thetaBetaRatio")
+    in_zone: bool | None = Field(default=None, alias="inZone")
+    zone_score: float | None = Field(default=None, alias="zoneScore")
 
 
 class ChannelSignalQualityModel(BaseModel):
