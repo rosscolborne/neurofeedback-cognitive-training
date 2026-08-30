@@ -6,6 +6,7 @@ import { applyBrandToDOM } from './services/brandEngine';
 import { PatientShell } from './components/patient/PatientShell';
 import { ClinicianShell } from './components/clinician/ClinicianShell';
 import { ClinicCustomizerModal } from './components/brand/ClinicCustomizerModal';
+import { BrandLogo } from './components/brand/BrandLogo';
 
 import { useAuth } from './contexts/AuthContext';
 import { Welcome } from './pages/onboarding/Welcome';
@@ -23,7 +24,6 @@ export function App() {
   const [brand, setBrand] = useState<ClinicBrandConfig>(() => storageEngine.getBrandConfig());
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [currentClient, setCurrentClient] = useState<ClientProfile | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
   const [messages, setMessages] = useState<MessageThread[]>([]);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
@@ -35,7 +35,6 @@ export function App() {
   useEffect(() => {
     let isMounted = true;
     async function loadClientData() {
-      setDataLoading(true);
       try {
         if (role === 'patient' && user) {
           const client = await storageEngine.getCurrentClient(user);
@@ -55,8 +54,6 @@ export function App() {
         if (isMounted) setAppointments(appts);
       } catch (err) {
         console.warn('Error loading client data:', err);
-      } finally {
-        if (isMounted) setDataLoading(false);
       }
     }
 
@@ -78,8 +75,12 @@ export function App() {
     }
   }, [user, role, loading]);
 
-  if (loading || (user && role && dataLoading)) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-patient-base)', color: 'var(--text-primary)' }}>Loading Brainswell...</div>;
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-patient-base, #F8F7F4)' }}>
+        <BrandLogo size={72} variant="terracotta" glow />
+      </div>
+    );
   }
 
   const handleUpdateClient = async (updated: ClientProfile) => {

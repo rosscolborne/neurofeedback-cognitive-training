@@ -33,11 +33,14 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-// Reliable Firestore role fetcher
+// Reliable Firestore role fetcher with timeout protection
 const fetchUserRole = async (uid: string): Promise<UserRole> => {
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) {
+    const snap = await Promise.race([
+      getDoc(doc(db, 'users', uid)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+    ]);
+    if (snap && snap.exists()) {
       return (snap.data()?.role as UserRole) || null;
     }
   } catch (err) {
@@ -57,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Safety fallback timer in case Firebase auth network completely hangs
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false);
-    }, 5000);
+    }, 1500);
 
     const unsubscribe = onAuthStateChanged(
       auth,

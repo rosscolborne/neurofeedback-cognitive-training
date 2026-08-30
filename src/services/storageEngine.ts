@@ -572,10 +572,15 @@ class StorageEngine {
         collection(db, 'clients'),
         where('clinicianId', '==', activeClinicianId)
       );
-      const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => d.data() as ClientProfile);
-      if (docs.length > 0) {
-        return docs;
+      const snap = await Promise.race([
+        getDocs(q),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+      ]);
+      if (snap) {
+        const docs = snap.docs.map((d) => d.data() as ClientProfile);
+        if (docs.length > 0) {
+          return docs;
+        }
       }
     } catch (err) {
       console.warn('Failed to fetch clients from Firestore:', err);
@@ -628,15 +633,18 @@ class StorageEngine {
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile> {
     if (user?.uid) {
       try {
-        const snap = await getDoc(doc(db, 'clients', user.uid));
-        if (snap.exists()) {
+        const snap = await Promise.race([
+          getDoc(doc(db, 'clients', user.uid)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+        ]);
+        if (snap && snap.exists()) {
           const existing = snap.data() as ClientProfile;
           if (!existing.name && user.displayName) {
             existing.name = user.displayName
               .trim()
               .replace(/[._]/g, ' ')
               .replace(/\b\w/g, (c) => c.toUpperCase());
-            await setDoc(doc(db, 'clients', user.uid), existing, { merge: true });
+            setDoc(doc(db, 'clients', user.uid), existing, { merge: true }).catch(() => {});
           }
           return existing;
         }
@@ -648,7 +656,7 @@ class StorageEngine {
       const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app', user.displayName);
       fresh.patientId = user.uid;
       try {
-        await setDoc(doc(db, 'clients', user.uid), fresh);
+        setDoc(doc(db, 'clients', user.uid), fresh).catch(() => {});
       } catch (err) {
         console.warn('Failed to initialize client profile in Firestore:', err);
       }

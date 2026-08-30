@@ -3,12 +3,12 @@ import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, get
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyC1dgTlWEo6ZRdz1XGQqzPN0FNFDGyd1rw',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'brainwell-327dc.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'brainwell-327dc',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'brainwell-327dc.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '814671644395',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:814671644395:ios:77b594b07593c2eaa1a0ae',
 };
 
 // Initialize Firebase using singleton pattern
