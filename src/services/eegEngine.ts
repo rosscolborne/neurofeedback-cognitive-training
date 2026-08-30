@@ -406,7 +406,25 @@ export class EEGEngine {
   }
 
   /**
-   * Connect to native BrainFlow acquisition service (e.g. Muse Athena or Synthetic Board)
+   * Connect to Muse Athena through the local BrainFlow service. This is the
+   * same `brainflow-muse-athena` BoardShim configuration used by eeg_demo;
+   * the app never opens a browser or Capacitor Bluetooth connection itself.
+   */
+  public async connectMuseAthenaBrainflow(): Promise<{
+    success: boolean;
+    deviceName?: string;
+    error?: string;
+  }> {
+    const result = await this.connectBrainflowSession('brainflow-muse-athena');
+    return {
+      ...result,
+      deviceName: result.success ? this.deviceName || undefined : undefined,
+    };
+  }
+
+  /**
+   * Connect to native BrainFlow acquisition service (also used by the dev-only
+   * synthetic board).
    */
   public async connectBrainflowSession(deviceId = 'brainflow-synthetic'): Promise<{ success: boolean; error?: string }> {
     try {
@@ -435,6 +453,18 @@ export class EEGEngine {
           }
 
           if (frame.features) {
+            const absoluteBands = frame.features.bandPowers?.absolute;
+            if (absoluteBands) {
+              this.latestServerBands = {
+                delta: absoluteBands.delta ?? 0,
+                theta: absoluteBands.theta ?? 0,
+                alpha: absoluteBands.alpha ?? 0,
+                smr: absoluteBands.smr ?? 0,
+                beta: absoluteBands.beta ?? 0,
+                gamma: absoluteBands.gamma ?? 0,
+              };
+            }
+
             this.latestBrainFlowScores = {
               focusScore: frame.features.focusScore ?? 50,
               relaxScore: frame.features.relaxScore ?? 50,
@@ -442,7 +472,7 @@ export class EEGEngine {
               restfulnessScore: frame.features.restfulnessScore ?? null,
               valence: frame.features.valence ?? null,
               arousal: frame.features.arousal ?? null,
-              emotionLabel: frame.features.emotionLabel ?? null,
+              emotionLabel: frame.features.stateLabel ?? frame.features.emotionLabel ?? null,
               method: 'brainflow_welch_psd',
             };
           }
