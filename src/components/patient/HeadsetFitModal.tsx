@@ -105,8 +105,8 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
               {fitState
-                ? 'brainflow_service is assessing sensor contact quality.'
-                : 'Waiting for brainflow_service signal assessment...'}
+                ? 'Assessing sensor contact quality...'
+                : 'Checking headband sensor signal...'}
             </p>
           </div>
           <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }}>
@@ -137,7 +137,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
               style={{ width: '100%', padding: '12px' }}
             >
               <Wifi size={16} />
-              {isPairing ? 'Pairing via Bluetooth...' : 'Connect Muse Headband (BLE)'}
+              {isPairing ? 'Connecting...' : 'Connect Muse Headband'}
             </button>
             {import.meta.env.DEV && (
               <button
@@ -471,7 +471,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
             lineHeight: 1.4,
           }}
         >
-          <strong>Clinical Tip:</strong> Hair trapped under the rubber ear sensors (TP9/TP10) acts as an electrical insulator and causes railed noise. Pull all hair back and ensure direct skin contact.
+          <strong>Tip:</strong> Ensure hair is pulled back from behind your ears so the sensors make direct contact with skin.
         </div>
 
         {/* Footer Actions */}

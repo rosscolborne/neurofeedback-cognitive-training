@@ -236,7 +236,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
                 {isPaired ? pairedDeviceName : 'Ready to Connect'}
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                {isPaired ? '4 Channels Verified (TP9, AF7, AF8, TP10)' : 'Place headband snugly across your forehead.'}
+                {isPaired ? 'Headset connected and signal verified' : 'Place headband snugly across your forehead.'}
               </div>
             </div>
 
@@ -248,7 +248,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
                   className="btn btn-secondary"
                   style={{ width: '100%' }}
                 >
-                  {isPairing ? 'Establishing Signal...' : 'Connect Muse Headband via Bluetooth'}
+                  {isPairing ? 'Connecting...' : 'Connect Muse Headband'}
                 </button>
                 {pairingError && (
                   <div style={{ fontSize: '13px', color: '#D32F2F', textAlign: 'center' }}>
@@ -263,7 +263,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
                 style={{ marginTop: '8px', fontSize: '13px' }}
               >
                 <Activity size={15} color="#10B981" />
-                Check 4-Channel Electrode Contact
+                Check Sensor Contact
               </button>
             )}
           </div>

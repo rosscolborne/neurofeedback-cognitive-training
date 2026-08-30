@@ -202,7 +202,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
           • Spent {session.timeInZonePercent}% of active training time in the target neural zone.<br />
           • Average band powers: θ={session.averageBands.theta.toFixed(1)} µV, α={session.averageBands.alpha.toFixed(1)} µV, SMR={session.averageBands.smr.toFixed(1)} µV, β={session.averageBands.beta.toFixed(1)} µV.<br />
           {session.averageMindfulness != null && (
-            <>• Average mindfulness score: {session.averageMindfulness} (brainflow_service, uncalibrated).<br /></>
+            <>• Average mindfulness score: {session.averageMindfulness}/100.<br /></>
           )}
           {session.averageTrainingScore != null && (
             <>• Training score (baseline-relative): {session.averageTrainingScore}/100.<br /></>

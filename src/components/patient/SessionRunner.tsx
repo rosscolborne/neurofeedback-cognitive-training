@@ -372,7 +372,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             Connect Muse Headband
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '340px', lineHeight: 1.5 }}>
-            Pair your Muse 2 or Muse S headband via Web Bluetooth to stream real 4-channel EEG (TP9, AF7, AF8, TP10).
+            Connect your Muse headband to begin real-time training.
           </p>
         </div>
 
@@ -383,7 +383,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             className="btn btn-primary"
             style={{ padding: '14px', fontSize: '14px' }}
           >
-            {isPairing ? 'Opening Bluetooth Pairing...' : 'Pair Muse via Web Bluetooth (Zero Install)'}
+            {isPairing ? 'Connecting...' : 'Connect Muse Headband'}
           </button>
 
           <button
@@ -391,7 +391,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             className="btn btn-secondary"
             style={{ padding: '12px', fontSize: '13px' }}
           >
-            Preview with Simulated Telemetry
+            Try Demo Mode
           </button>
 
           <button
