@@ -70,17 +70,10 @@ export class EEGEngine {
   public demoState: 'auto' | 'focus' | 'calm' | 'drift' | 'recovery' = 'auto';
   public currentSimulatedStateName = 'Auto 10s Cycle';
 
-  // Web Worker for FFT / Baseline
-  private eegWorker: Worker | null = null;
   public isCalibrating = false;
   public individualBaselineModel: IndividualBaselineModel | null = null;
 
-  constructor() {
-    if (typeof Worker !== 'undefined') {
-      this.eegWorker = new Worker(new URL('./eegWorker.ts', import.meta.url), { type: 'module' });
-      this.eegWorker.onmessage = (e) => this.handleWorkerMessage(e);
-    }
-  }
+  constructor() {}
 
   public setSimulatedState(state: 'auto' | 'focus' | 'calm' | 'drift' | 'recovery') {
     this.demoState = state;
@@ -117,61 +110,6 @@ export class EEGEngine {
       }
     } else {
       this.currentSimulatedStateName = 'Auto 10s Multi-State Cycle';
-    }
-  }
-
-  private handleWorkerMessage(e: MessageEvent) {
-    const { type, payload } = e.data;
-    if (type === 'BASELINE_CALIBRATED') {
-      this.individualBaselineModel = {
-        alphaPeakHz: payload.alphaPeakHz,
-        oneOverFSlope: payload.oneOverFSlope,
-        lastCalibratedAt: new Date().toISOString()
-      };
-      this.isCalibrating = false;
-    } else if (type === 'FEATURES_EXTRACTED') {
-      // Worker extracted features (supplementary local pipeline)
-      if (payload.bands && !this.latestServerBands) {
-        this.latestServerBands = {
-          delta: payload.bands.delta || 0,
-          theta: payload.bands.theta || 0,
-          alpha: payload.bands.alpha || 0,
-          smr: payload.bands.smr || 0,
-          beta: payload.bands.beta || 0,
-          gamma: payload.bands.gamma || 0
-        };
-      }
-      if (payload.learningScore !== undefined && !this.latestTrainingMetric) {
-        this.latestTrainingMetric = {
-          score: payload.learningScore,
-          baselineReady: true
-        };
-      }
-    }
-  }
-
-  public startCalibration() {
-    this.isCalibrating = true;
-    this.individualBaselineModel = null;
-    
-    // In a real scenario, this collects 2 minutes of Eyes Open/Closed data before sending
-    if (this.eegWorker) {
-      this.eegWorker.postMessage({
-        type: 'CALIBRATE_BASELINE',
-        payload: {
-          rawData: [this.rawBuffers.tp9, this.rawBuffers.af7, this.rawBuffers.af8, this.rawBuffers.tp10]
-        }
-      });
-    } else {
-      // Fallback if no worker
-      setTimeout(() => {
-        this.individualBaselineModel = {
-          alphaPeakHz: 10.0,
-          oneOverFSlope: -1.0,
-          lastCalibratedAt: new Date().toISOString()
-        };
-        this.isCalibrating = false;
-      }, 2000);
     }
   }
 
@@ -524,11 +462,10 @@ export class EEGEngine {
    * Decodes Muse raw EEG packets with 12-bit bit-unpacking.
    * Muse transmits 12 12-bit samples per 20-byte packet at 256Hz sampling rate.
    * Raw samples are buffered for server-side analysis (via analyzeFitWindow) which provides
-   * authoritative channel quality and serverFitState. Ready state (serverFitState.ready)
-   * can be verified via manual test or smoke test connecting to the BrainFlow Synthetic provider.
+   * authoritative channel quality and serverFitState.
    */
-  private parseChannelPacket(channel: keyof MuseChannelQuality, dataView: DataView) {
-    if (dataView.byteLength < 2) return;
+  public static decodeChannelPacket(dataView: DataView): number[] {
+    if (dataView.byteLength < 2) return [];
 
     const samples: number[] = [];
 
@@ -560,6 +497,11 @@ export class EEGEngine {
       }
     }
 
+    return samples;
+  }
+
+  private parseChannelPacket(channel: keyof MuseChannelQuality, dataView: DataView) {
+    const samples = EEGEngine.decodeChannelPacket(dataView);
     if (samples.length === 0) return;
 
     const buffer = this.rawBuffers[channel];
@@ -570,8 +512,67 @@ export class EEGEngine {
   }
 
   /**
+   * DEV-ONLY helper to simulate raw 20-byte BLE Muse packets and exercise
+   * parseChannelPacket() -> buffers -> dispatchServerAnalysis() without physical BLE hardware.
+   */
+  public simulateMuseBluetoothPackets(durationMs = 5000, frequencyHz = 10, amplitudeUv = 30): () => void {
+    this.isHardwareConnected = true;
+    this.deviceName = 'Simulated Muse S (Dev)';
+    let packetSeq = 0;
+    let elapsedMs = 0;
+
+    const interval = setInterval(() => {
+      elapsedMs += 47; // ~21.3 packets/sec per channel (12 samples * 21.33 ≈ 256Hz)
+      packetSeq = (packetSeq + 1) & 0xFFFF;
+
+      const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
+      for (const channel of channels) {
+        const buffer = new ArrayBuffer(20);
+        const view = new DataView(buffer);
+        view.setUint16(0, packetSeq, false); // Sequence number
+
+        for (let i = 0; i < 6; i++) {
+          const t1 = (elapsedMs + i * 2 * (1000 / 256)) / 1000;
+          const t2 = (elapsedMs + (i * 2 + 1) * (1000 / 256)) / 1000;
+
+          // Generate realistic EEG sine wave + small noise
+          const uv1 = amplitudeUv * Math.sin(2 * Math.PI * frequencyHz * t1);
+          const uv2 = amplitudeUv * Math.sin(2 * Math.PI * frequencyHz * t2);
+
+          const raw1 = Math.max(0, Math.min(4095, Math.round(uv1 / 0.48828 + 2048)));
+          const raw2 = Math.max(0, Math.min(4095, Math.round(uv2 / 0.48828 + 2048)));
+
+          const b0 = (raw1 >> 4) & 0xFF;
+          const b1 = ((raw1 & 0x0F) << 4) | ((raw2 >> 8) & 0x0F);
+          const b2 = raw2 & 0xFF;
+
+          view.setUint8(2 + i * 3, b0);
+          view.setUint8(2 + i * 3 + 1, b1);
+          view.setUint8(2 + i * 3 + 2, b2);
+        }
+
+        this.parseChannelPacket(channel, view);
+      }
+    }, 47);
+
+    const stopSim = () => {
+      clearInterval(interval);
+      if (this.deviceName === 'Simulated Muse S (Dev)') {
+        this.isHardwareConnected = false;
+        this.deviceName = null;
+      }
+    };
+
+    if (durationMs > 0) {
+      setTimeout(stopSim, durationMs);
+    }
+
+    return stopSim;
+  }
+
+  /**
    * Send the latest sample window to brainflow_service for full fit assessment, quality scoring,
-   * and band powers, while concurrently dispatching to eegWorker for supplementary local feature extraction.
+   * and band powers.
    * 
    * Samples are sent as row-major (time × channel) with only scalp electrodes.
    */
@@ -599,17 +600,6 @@ export class EEGEngine {
 
     this.isAnalyzingBrainflow = true;
     this.lastBrainflowAnalysisTime = now;
-
-    if (this.eegWorker) {
-      // Use Dedicated Web Worker for supplementary local feature extraction
-      this.eegWorker.postMessage({
-        type: 'EXTRACT_FEATURES',
-        payload: {
-          rawData: samples,
-          baselineModel: this.individualBaselineModel
-        }
-      });
-    }
 
     try {
       const response = await brainflowService.analyzeFitWindow(this.fitSessionId, samples, 256);

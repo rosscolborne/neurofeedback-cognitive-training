@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, ProtocolType, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
@@ -38,8 +38,17 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
   // Live telemetry interactive simulator state
   const [isStreaming, setIsStreaming] = useState(true);
+  const [sessions, setSessions] = useState<SessionRecord[]>([]);
 
-  const sessions = storageEngine.getSessions().filter((s) => s.patientId === client.id);
+  useEffect(() => {
+    let isMounted = true;
+    storageEngine.getSessions(client.id).then((data) => {
+      if (isMounted) setSessions(data);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [client.id]);
 
   const handleDownloadPDF = () => {
     generatePatientClinicalPDF(client, sessions, brand);

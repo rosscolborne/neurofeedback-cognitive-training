@@ -8,6 +8,8 @@ import {
   ExperienceType,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
+import { auth, db } from './firebase';
+import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
   BRAND: 'brainswell_brand_config',
@@ -525,6 +527,11 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
 ];
 
 class StorageEngine {
+  private demoClients: ClientProfile[] = [...INITIAL_DEMO_CLIENTS];
+  private demoSessions: SessionRecord[] = [...INITIAL_DEMO_SESSIONS];
+  private demoMessages: MessageThread[] = [...INITIAL_DEMO_MESSAGES];
+  private demoAppointments: CalendarAppointment[] = [...INITIAL_DEMO_APPOINTMENTS];
+
   public getBrandConfig(): ClinicBrandConfig {
     const raw = localStorage.getItem(STORAGE_KEYS.BRAND) || localStorage.getItem('brainwell_brand_config');
     if (raw) {
@@ -539,139 +546,177 @@ class StorageEngine {
     localStorage.setItem(STORAGE_KEYS.BRAND, JSON.stringify(brand));
   }
 
-  public getClients(): ClientProfile[] {
-    let clients: ClientProfile[] = [];
-    const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS) || localStorage.getItem('brainwell_clients');
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) clients = parsed;
-      } catch (e) {}
+  public async getClient(id: string): Promise<ClientProfile | null> {
+    if (id.startsWith('demo-') || !auth.currentUser) {
+      return this.demoClients.find((c) => c.id === id) || null;
     }
-    if (clients.length === 0) {
-      clients = [...INITIAL_DEMO_CLIENTS];
-    }
-
-    // Auto-migrate to inject new modalities for all clients if missing
-    let migrated = false;
-    const requiredNewExperiences: ExperienceType[] = ['immersive-3d', 'spatial-audio', 'narrative-story'];
-    clients.forEach(c => {
-      if (c.allowedExperiences) {
-        requiredNewExperiences.forEach(exp => {
-          if (!c.allowedExperiences.includes(exp)) {
-            c.allowedExperiences.push(exp);
-            migrated = true;
-          }
-        });
+    try {
+      const snap = await getDoc(doc(db, 'clients', id));
+      if (snap.exists()) {
+        return snap.data() as ClientProfile;
       }
-    });
+    } catch (err) {
+      console.warn('Failed to fetch client from Firestore:', err);
+    }
+    return this.demoClients.find((c) => c.id === id) || null;
+  }
 
-    if (migrated && raw) {
-      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+  public async getClients(clinicianId?: string): Promise<ClientProfile[]> {
+    const activeClinicianId = clinicianId || auth.currentUser?.uid;
+    if (!activeClinicianId) {
+      return [...this.demoClients];
     }
 
-    return clients;
+    try {
+      const q = query(
+        collection(db, 'clients'),
+        where('clinicianId', '==', activeClinicianId)
+      );
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => d.data() as ClientProfile);
+      if (docs.length > 0) {
+        return docs;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch clients from Firestore:', err);
+    }
+
+    return [...this.demoClients];
   }
 
-  public saveClients(clients: ClientProfile[]) {
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+  public async saveClient(client: ClientProfile): Promise<void> {
+    if (client.isDemo || client.id.startsWith('demo-') || !auth.currentUser) {
+      const idx = this.demoClients.findIndex((c) => c.id === client.id);
+      if (idx >= 0) {
+        this.demoClients[idx] = client;
+      } else {
+        this.demoClients.unshift(client);
+      }
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, 'clients', client.id), client, { merge: true });
+    } catch (err) {
+      console.error('Failed to save client to Firestore:', err);
+    }
   }
 
-  public getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): ClientProfile {
-    const clients = this.getClients();
+  public async saveClients(clients: ClientProfile[]): Promise<void> {
+    const demo = clients.filter((c) => c.isDemo || c.id.startsWith('demo-'));
+    this.demoClients = demo.length > 0 ? demo : clients;
+
+    const realClients = clients.filter((c) => !c.isDemo && !c.id.startsWith('demo-'));
+    for (const c of realClients) {
+      await this.saveClient(c);
+    }
+  }
+
+  public async deleteClient(id: string): Promise<void> {
+    if (id.startsWith('demo-') || !auth.currentUser) {
+      this.demoClients = this.demoClients.filter((c) => c.id !== id);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'clients', id));
+    } catch (err) {
+      console.error('Failed to delete client from Firestore:', err);
+    }
+  }
+
+  public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile> {
     if (user?.uid) {
-      const existing = clients.find((c) => c.id === user.uid || (user.email && c.email === user.email));
-      if (existing) {
-        let updated = false;
-        if (existing.isDemo) {
-          existing.isDemo = false;
-          updated = true;
+      try {
+        const snap = await getDoc(doc(db, 'clients', user.uid));
+        if (snap.exists()) {
+          const existing = snap.data() as ClientProfile;
+          if (!existing.name && user.displayName) {
+            existing.name = user.displayName
+              .trim()
+              .replace(/[._]/g, ' ')
+              .replace(/\b\w/g, (c) => c.toUpperCase());
+            await setDoc(doc(db, 'clients', user.uid), existing, { merge: true });
+          }
+          return existing;
         }
-        if (!existing.name && user.displayName) {
-          existing.name = user.displayName
-            .trim()
-            .replace(/[._]/g, ' ')
-            .replace(/\b\w/g, (c) => c.toUpperCase());
-          updated = true;
-        }
-        if (updated) {
-          this.saveClients(clients);
-        }
-        return existing;
+      } catch (err) {
+        console.warn('Failed to fetch client record from Firestore:', err);
       }
 
-      // Create new clean profile for this user
+      // Initialize new Firestore client profile
       const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app', user.displayName);
-      this.saveClients([fresh, ...clients]);
+      fresh.patientId = user.uid;
+      try {
+        await setDoc(doc(db, 'clients', user.uid), fresh);
+      } catch (err) {
+        console.warn('Failed to initialize client profile in Firestore:', err);
+      }
       return fresh;
     }
 
-    const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_CLIENT_ID) || localStorage.getItem('brainwell_current_client_id');
-    if (currentId) {
-      const match = clients.find((c) => c.id === currentId);
-      if (match) return match;
-    }
-
-    if (clients.length > 0) return clients[0];
-
-    return createBlankProfile('default-patient', 'patient@brainswell.app');
+    return this.demoClients[0] || createBlankProfile('default-patient', 'patient@brainswell.app');
   }
 
   public setCurrentClientId(id: string) {
     localStorage.setItem(STORAGE_KEYS.CURRENT_CLIENT_ID, id);
   }
 
-  public getSessions(clientId?: string): SessionRecord[] {
-    let all: SessionRecord[] = [];
-    const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) all = parsed;
-      } catch (e) {}
-    } else {
-      all = [...INITIAL_DEMO_SESSIONS];
+  public async getSessions(clientId?: string): Promise<SessionRecord[]> {
+    if (!auth.currentUser || (clientId && clientId.startsWith('demo-'))) {
+      if (clientId) {
+        return this.demoSessions.filter((s) => s.patientId === clientId);
+      }
+      return [...this.demoSessions];
     }
 
-    if (clientId) {
-      if (clientId.startsWith('demo-')) {
-        // Return demo client sessions
-        const match = all.filter(s => s.patientId === clientId);
-        if (match.length > 0) return match;
-        return INITIAL_DEMO_SESSIONS.filter(s => s.patientId === clientId);
+    try {
+      const activeClientId = clientId || auth.currentUser.uid;
+      const q = query(
+        collection(db, 'sessions'),
+        where('patientId', '==', activeClientId)
+      );
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => d.data() as SessionRecord);
+      if (docs.length > 0) {
+        return docs.sort((a, b) => b.timestamp - a.timestamp);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch sessions from Firestore:', err);
+    }
+
+    if (clientId && clientId.startsWith('demo-')) {
+      return this.demoSessions.filter((s) => s.patientId === clientId);
+    }
+    return this.demoSessions.filter((s) => (clientId ? s.patientId === clientId : true));
+  }
+
+  public async saveSession(session: SessionRecord): Promise<void> {
+    if (session.isDemo || session.patientId.startsWith('demo-') || !auth.currentUser) {
+      const existingIndex = this.demoSessions.findIndex((s) => s.id === session.id);
+      if (existingIndex >= 0) {
+        this.demoSessions[existingIndex] = session;
       } else {
-        // For real registered users, strictly return only their own recorded non-demo sessions
-        return all.filter(s => s.patientId === clientId && !s.isDemo);
+        this.demoSessions.unshift(session);
+      }
+    } else {
+      try {
+        await setDoc(doc(db, 'sessions', session.id), session, { merge: true });
+      } catch (err) {
+        console.error('Failed to save session to Firestore:', err);
       }
     }
 
-    return all.length > 0 ? all : INITIAL_DEMO_SESSIONS;
-  }
-
-  public saveSession(session: SessionRecord) {
-    const sessions = this.getSessions();
-    const existingIndex = sessions.findIndex(s => s.id === session.id);
-
-    if (existingIndex >= 0) {
-      sessions[existingIndex] = session;
-      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
-      return;
-    }
-
-    sessions.unshift(session);
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
-
-    const clients = this.getClients();
-    const client = clients.find((c) => c.id === session.patientId);
+    const client = await this.getClient(session.patientId);
     if (client) {
-      client.completedSessionsCount += 1;
+      client.completedSessionsCount = (client.completedSessionsCount || 0) + 1;
       client.lastSessionDate = 'Just now';
-      client.currentStreak += 1;
-      
+      client.currentStreak = (client.currentStreak || 0) + 1;
+
       if (client.completedSessionsCount >= 1 && !client.badges.includes('first-light')) {
         client.badges.push('first-light');
       }
-      
+
       if (client.currentStreak >= 7 && !client.badges.includes('steady-state')) {
         client.badges.push('steady-state');
       }
@@ -680,7 +725,6 @@ class StorageEngine {
         client.badges.push('deep-focus');
       }
 
-      // Sustained alpha: >= 15 min (900s) with good time in zone (e.g. >= 60%)
       if (session.protocol === 'alpha-enhancement' && session.durationSeconds >= 900 && session.timeInZonePercent >= 60 && !client.badges.includes('still-waters')) {
         client.badges.push('still-waters');
       }
@@ -702,83 +746,205 @@ class StorageEngine {
           client.tidalGardenState.stage = 3;
         if (client.tidalGardenState.growthPoints > 800 && client.tidalGardenState.stage < 4)
           client.tidalGardenState.stage = 4;
-          
+
         if (client.tidalGardenState.stage >= 3 && !client.badges.includes('garden-keeper')) {
           client.badges.push('garden-keeper');
         }
       }
-      
+
       if (client.skylineBiomesUnlocked.length >= 5 && !client.badges.includes('skyline-explorer')) {
         client.badges.push('skyline-explorer');
       }
 
-      this.saveClients(clients);
+      await this.saveClient(client);
     }
   }
 
-  public getMessages(): MessageThread[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.MESSAGES);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
+  public async getMessages(): Promise<MessageThread[]> {
+    if (!auth.currentUser) {
+      return [...this.demoMessages];
     }
-    return INITIAL_DEMO_MESSAGES;
-  }
-
-  public saveMessages(threads: MessageThread[]) {
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(threads));
-  }
-
-  public getAppointments(): CalendarAppointment[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.APPOINTMENTS);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
+    try {
+      const q = query(
+        collection(db, 'messages'),
+        where('clinicianId', '==', auth.currentUser.uid)
+      );
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => d.data() as MessageThread);
+      if (docs.length > 0) return docs;
+    } catch (err) {
+      console.warn('Failed to fetch messages for clinician from Firestore:', err);
     }
-    return INITIAL_DEMO_APPOINTMENTS;
-  }
 
-  public saveAppointments(appts: CalendarAppointment[]) {
-    localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appts));
-  }
-
-  public saveAppointment(appt: CalendarAppointment) {
-    const list = this.getAppointments();
-    const idx = list.findIndex((a) => a.id === appt.id);
-    if (idx >= 0) {
-      list[idx] = appt;
-    } else {
-      list.unshift(appt);
+    try {
+      const qPatient = query(
+        collection(db, 'messages'),
+        where('clientId', '==', auth.currentUser.uid)
+      );
+      const snapPatient = await getDocs(qPatient);
+      const docsPatient = snapPatient.docs.map((d) => d.data() as MessageThread);
+      if (docsPatient.length > 0) return docsPatient;
+    } catch (err) {
+      console.warn('Failed to fetch messages for patient from Firestore:', err);
     }
-    this.saveAppointments(list);
+
+    return [...this.demoMessages];
   }
 
-  public deleteAppointment(id: string) {
-    const list = this.getAppointments().filter((a) => a.id !== id);
-    this.saveAppointments(list);
+  public async saveMessageThread(thread: MessageThread): Promise<void> {
+    if (thread.isDemo || thread.clientId.startsWith('demo-') || !auth.currentUser) {
+      const idx = this.demoMessages.findIndex((t) => t.clientId === thread.clientId);
+      if (idx >= 0) {
+        this.demoMessages[idx] = thread;
+      } else {
+        this.demoMessages.unshift(thread);
+      }
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, 'messages', thread.clientId), thread, { merge: true });
+    } catch (err) {
+      console.error('Failed to save message thread to Firestore:', err);
+    }
+  }
+
+  public async saveMessages(threads: MessageThread[]): Promise<void> {
+    const demo = threads.filter((t) => t.isDemo || t.clientId.startsWith('demo-'));
+    this.demoMessages = demo.length > 0 ? demo : threads;
+
+    const realThreads = threads.filter((t) => !t.isDemo && !t.clientId.startsWith('demo-'));
+    for (const t of realThreads) {
+      await this.saveMessageThread(t);
+    }
+  }
+
+  public subscribeToMessages(callback: (threads: MessageThread[]) => void): () => void {
+    if (!auth.currentUser) {
+      callback([...this.demoMessages]);
+      return () => {};
+    }
+
+    const uid = auth.currentUser.uid;
+    const qClinician = query(
+      collection(db, 'messages'),
+      where('clinicianId', '==', uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      qClinician,
+      (snapshot) => {
+        const docs = snapshot.docs.map((d) => d.data() as MessageThread);
+        if (docs.length > 0) {
+          callback(docs);
+        } else {
+          const qPatient = query(
+            collection(db, 'messages'),
+            where('clientId', '==', uid)
+          );
+          getDocs(qPatient).then((pSnap) => {
+            const pDocs = pSnap.docs.map((d) => d.data() as MessageThread);
+            callback(pDocs.length > 0 ? pDocs : [...this.demoMessages]);
+          }).catch(() => {
+            callback([...this.demoMessages]);
+          });
+        }
+      },
+      (err) => {
+        console.warn('onSnapshot error for messages:', err);
+        callback([...this.demoMessages]);
+      }
+    );
+
+    return unsubscribe;
+  }
+
+  public async getAppointments(clinicianOrPatientId?: string): Promise<CalendarAppointment[]> {
+    if (!auth.currentUser) {
+      return [...this.demoAppointments];
+    }
+    const uid = clinicianOrPatientId || auth.currentUser.uid;
+
+    try {
+      const q = query(
+        collection(db, 'appointments'),
+        where('clinicianId', '==', uid)
+      );
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => d.data() as CalendarAppointment);
+      if (docs.length > 0) return docs;
+    } catch (err) {
+      console.warn('Failed to fetch appointments for clinician from Firestore:', err);
+    }
+
+    try {
+      const qPatient = query(
+        collection(db, 'appointments'),
+        where('clientId', '==', uid)
+      );
+      const snapPatient = await getDocs(qPatient);
+      const docsPatient = snapPatient.docs.map((d) => d.data() as CalendarAppointment);
+      if (docsPatient.length > 0) return docsPatient;
+    } catch (err) {
+      console.warn('Failed to fetch appointments for patient from Firestore:', err);
+    }
+
+    return [...this.demoAppointments];
+  }
+
+  public async saveAppointment(appt: CalendarAppointment): Promise<void> {
+    if (appt.isDemo || appt.clientId.startsWith('demo-') || !auth.currentUser) {
+      const idx = this.demoAppointments.findIndex((a) => a.id === appt.id);
+      if (idx >= 0) {
+        this.demoAppointments[idx] = appt;
+      } else {
+        this.demoAppointments.unshift(appt);
+      }
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, 'appointments', appt.id), appt, { merge: true });
+    } catch (err) {
+      console.error('Failed to save appointment to Firestore:', err);
+    }
+  }
+
+  public async saveAppointments(appts: CalendarAppointment[]): Promise<void> {
+    const demo = appts.filter((a) => a.isDemo || a.clientId.startsWith('demo-'));
+    this.demoAppointments = demo.length > 0 ? demo : appts;
+
+    const realAppts = appts.filter((a) => !a.isDemo && !a.clientId.startsWith('demo-'));
+    for (const a of realAppts) {
+      await this.saveAppointment(a);
+    }
+  }
+
+  public async deleteAppointment(id: string): Promise<void> {
+    if (id.startsWith('demo-') || !auth.currentUser) {
+      this.demoAppointments = this.demoAppointments.filter((a) => a.id !== id);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'appointments', id));
+    } catch (err) {
+      console.error('Failed to delete appointment from Firestore:', err);
+    }
   }
 
   public clearDemoData() {
-    const clients = this.getClients().filter((c) => !c.isDemo);
-    const sessions = this.getSessions().filter((s) => !s.isDemo);
-    const messages = this.getMessages().filter((m) => !m.isDemo);
-    const appointments = this.getAppointments().filter((a) => !a.isDemo);
-
-    this.saveClients(clients);
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
-    this.saveMessages(messages);
-    this.saveAppointments(appointments);
+    this.demoClients = [];
+    this.demoSessions = [];
+    this.demoMessages = [];
+    this.demoAppointments = [];
   }
 
   public resetToDefaultSeed() {
-    this.saveClients(INITIAL_DEMO_CLIENTS);
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(INITIAL_DEMO_SESSIONS));
-    this.saveMessages(INITIAL_DEMO_MESSAGES);
-    this.saveAppointments(INITIAL_DEMO_APPOINTMENTS);
+    this.demoClients = [...INITIAL_DEMO_CLIENTS];
+    this.demoSessions = [...INITIAL_DEMO_SESSIONS];
+    this.demoMessages = [...INITIAL_DEMO_MESSAGES];
+    this.demoAppointments = [...INITIAL_DEMO_APPOINTMENTS];
   }
 }
 

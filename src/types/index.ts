@@ -168,6 +168,7 @@ export interface SessionRecord {
   patientId: string;
   patientName: string;
   clinicId: string;
+  clinicianId?: string;
   date: string;
   timestamp: number;
   protocol: ProtocolType;
@@ -230,6 +231,8 @@ export interface ClientProfile {
   skylineBiomesUnlocked: string[];
   badges: string[];
   linkedClinicianCode?: string;
+  clinicianId?: string;
+  patientId?: string;
   isDemo?: boolean;
   notes?: string;
 }
@@ -254,6 +257,8 @@ export interface MessageItem {
 
 export interface MessageThread {
   clientId: string;
+  patientId?: string;
+  clinicianId?: string;
   clientName: string;
   clientAvatar: string;
   lastMessageTime: string;
@@ -274,6 +279,8 @@ export type AppointmentStatus = 'scheduled' | 'in-progress' | 'completed' | 'can
 export interface CalendarAppointment {
   id: string;
   clientId: string;
+  patientId?: string;
+  clinicianId?: string;
   clientName: string;
   clientAvatar: string;
   clientCondition: string;

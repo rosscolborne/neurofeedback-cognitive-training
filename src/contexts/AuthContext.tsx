@@ -33,17 +33,15 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-// Non-blocking Firestore role fetcher with 800ms limit
-const fetchUserRoleWithTimeout = async (uid: string): Promise<UserRole> => {
+// Reliable Firestore role fetcher
+const fetchUserRole = async (uid: string): Promise<UserRole> => {
   try {
-    const fetchPromise = getDoc(doc(db, 'users', uid));
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 800));
-    const result = await Promise.race([fetchPromise, timeoutPromise]);
-    if (result && 'exists' in result && result.exists()) {
-      return (result.data()?.role as UserRole) || null;
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      return (snap.data()?.role as UserRole) || null;
     }
   } catch (err) {
-    console.warn('Non-blocking role fetch error:', err);
+    console.warn('Failed to fetch user role from Firestore:', err);
   }
   return null;
 };
@@ -56,9 +54,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let isMounted = true;
 
+    // Safety fallback timer in case Firebase auth network completely hangs
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false);
-    }, 250);
+    }, 5000);
 
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -67,7 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(currentUser);
 
         if (currentUser) {
-          const userRole = await fetchUserRoleWithTimeout(currentUser.uid);
+          const userRole = await fetchUserRole(currentUser.uid);
           if (isMounted) setRole(userRole);
         } else {
           if (isMounted) setRole(null);
@@ -95,11 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signup = async (email: string, pass: string, displayName?: string) => {
-    const authPromise = createUserWithEmailAndPassword(auth, email.trim(), pass);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Sign up timed out. Please check your network connection.')), 7000)
-    );
-    const cred = await Promise.race([authPromise, timeoutPromise]);
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
 
     // Set displayName on the Firebase Auth profile
     if (displayName?.trim()) {
@@ -118,24 +113,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Failed to send verification email:', err);
     }
 
-    setDoc(doc(db, 'users', cred.user.uid), {
-      email: cred.user.email,
-      displayName: displayName?.trim() || null,
-      createdAt: new Date().toISOString(),
-      role: null,
-    }).catch((err) => {
-      console.warn('Background user record creation notice:', err);
-    });
+    try {
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        email: cred.user.email,
+        displayName: displayName?.trim() || null,
+        createdAt: new Date().toISOString(),
+        role: null,
+      });
+    } catch (err) {
+      console.warn('Failed to initialize user document:', err);
+    }
   };
 
   const login = async (email: string, pass: string) => {
-    const authPromise = signInWithEmailAndPassword(auth, email.trim(), pass);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Login timed out. Please check your network connection.')), 7000)
-    );
-    const cred = await Promise.race([authPromise, timeoutPromise]);
+    const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
     setUser(cred.user);
-    const userRole = await fetchUserRoleWithTimeout(cred.user.uid);
+    const userRole = await fetchUserRole(cred.user.uid);
     setRole(userRole);
   };
 

@@ -30,25 +30,6 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getCompletedDaysThisWeek(clientId: string): Set<number> {
-  const sessions = storageEngine.getSessions(clientId);
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday
-  // Get start of this week (Sunday)
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - dayOfWeek);
-  weekStart.setHours(0, 0, 0, 0);
-
-  const completedDays = new Set<number>();
-  for (const session of sessions) {
-    const sessionDate = new Date(session.timestamp);
-    if (sessionDate >= weekStart && sessionDate <= now) {
-      completedDays.add(sessionDate.getDay());
-    }
-  }
-  return completedDays;
-}
-
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   client,
   onStartSession,
@@ -56,11 +37,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 }) => {
   const [selectedExp, setSelectedExp] = useState<ExperienceType>(client.allowedExperiences[0] || 'skyline-drift');
   const [showScrollHint, setShowScrollHint] = useState(true);
+  const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
   const pillsRef = useRef<HTMLDivElement>(null);
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const todayIndex = new Date().getDay();
-  const completedDays = getCompletedDaysThisWeek(client.id);
+
+  useEffect(() => {
+    let isMounted = true;
+    storageEngine.getSessions(client.id).then((sessions) => {
+      if (!isMounted) return;
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - dayOfWeek);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const days = new Set<number>();
+      for (const session of sessions) {
+        const sessionDate = new Date(session.timestamp);
+        if (sessionDate >= weekStart && sessionDate <= now) {
+          days.add(sessionDate.getDay());
+        }
+      }
+      setCompletedDays(days);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [client.id]);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
 

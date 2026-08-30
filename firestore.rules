@@ -11,34 +11,110 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // User profiles
+    // User profiles (users/{userId})
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update, delete: if isOwner(userId);
+      allow write: if isOwner(userId);
     }
 
-    // Patient Profiles & Clinician Records
+    // Patient Profiles & Clinician Records (clients/{clientId})
     match /clients/{clientId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        request.auth.uid == clientId ||
+        resource.data.linkedClinicianCode == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        request.auth.uid == clientId ||
+        request.resource.data.id == request.auth.uid ||
+        request.resource.data.linkedClinicianCode == request.auth.uid ||
+        request.resource.data.clinicianId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        request.auth.uid == clientId ||
+        resource.data.linkedClinicianCode == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        request.auth.uid == clientId ||
+        resource.data.linkedClinicianCode == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid
+      );
     }
 
-    // Neurofeedback Session Records
+    // Neurofeedback Session Records (sessions/{sessionId})
     match /sessions/{sessionId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.clinicId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.patientId == request.auth.uid ||
+        request.resource.data.clinicId == request.auth.uid ||
+        request.resource.data.clinicianId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.clinicId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.clinicId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid
+      );
     }
 
-    // Messaging Threads
+    // Messaging Threads (messages/{messageId})
     match /messages/{messageId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.clientId == request.auth.uid ||
+        request.resource.data.clinicianId == request.auth.uid ||
+        request.resource.data.patientId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
     }
 
-    // Clinical Appointments
+    // Clinical Appointments (appointments/{appointmentId})
     match /appointments/{appointmentId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.clientId == request.auth.uid ||
+        request.resource.data.clinicianId == request.auth.uid ||
+        request.resource.data.patientId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.clinicianId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
     }
 
-    // Clinic Brand Configurations
+    // Clinic Brand Configurations (brands/{brandId})
     match /brands/{brandId} {
       allow read: if true;
       allow write: if isAuthenticated();

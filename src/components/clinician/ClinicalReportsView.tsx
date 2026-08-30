@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { generatePracticeOutcomePDF, generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
@@ -28,8 +28,17 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({
 }) => {
   const [filterCohort, setFilterCohort] = useState<'all' | 'real' | 'demo'>('all');
   const [dateRange, setDateRange] = useState<'30d' | '90d' | 'ytd'>('30d');
+  const [allSessions, setAllSessions] = useState<SessionRecord[]>([]);
 
-  const allSessions = storageEngine.getSessions();
+  useEffect(() => {
+    let isMounted = true;
+    storageEngine.getSessions().then((data) => {
+      if (isMounted) setAllSessions(data);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredClients = clients.filter((c) => {
     if (filterCohort === 'real') return !c.isDemo;

@@ -26,3 +26,11 @@ dist-ssr
 scratch/
 build/*.xcarchive
 build/output/
+
+# Environment files
+.env
+.env.production
+.env.local
+.env.*.local
+!.env.example
+

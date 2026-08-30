@@ -139,6 +139,30 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
               <Wifi size={16} />
               {isPairing ? 'Pairing via Bluetooth...' : 'Connect Muse Headband (BLE)'}
             </button>
+            {import.meta.env.DEV && (
+              <button
+                onClick={async () => {
+                  setIsPairing(true);
+                  setPairError(null);
+                  try {
+                    const res = await eegEngine.connectBrainflowSession('brainflow-synthetic');
+                    if (!res.success) {
+                      setPairError(res.error || 'Synthetic board connection failed');
+                    }
+                  } catch (err: any) {
+                    setPairError(err?.message || 'Synthetic board connection failed');
+                  } finally {
+                    setIsPairing(false);
+                  }
+                }}
+                disabled={isPairing}
+                className="btn btn-secondary"
+                style={{ width: '100%', padding: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              >
+                <Activity size={14} />
+                Connect Synthetic BrainFlow Board (Dev)
+              </button>
+            )}
             {pairError && (
               <div style={{ color: '#EF4444', fontSize: '12px' }}>
                 {pairError}

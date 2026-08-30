@@ -73,10 +73,16 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setActiveSessionExp(exp);
   };
 
-  const handleSessionComplete = (session: SessionRecord) => {
+  const handleSessionComplete = async (session: SessionRecord) => {
     setActiveSessionExp(null);
-    storageEngine.saveSession(session);
-    const updatedClient = storageEngine.getCurrentClient({ uid: client.id });
+    await storageEngine.saveSession(session);
+    const updatedClient: ClientProfile = {
+      ...client,
+      completedSessionsCount: (client.completedSessionsCount || 0) + 1,
+      lastSessionDate: 'Today',
+      currentStreak: (client.currentStreak || 0) + 1,
+    };
+    await storageEngine.saveClient(updatedClient);
     onUpdateClient(updatedClient);
     setCompletedSession(session);
   };
@@ -87,8 +93,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setIsMuted(newState);
   };
 
-  const exportCSV = () => {
-    const allSessions = storageEngine.getSessions(client.id);
+  const exportCSV = async () => {
+    const allSessions = await storageEngine.getSessions(client.id);
     if (allSessions.length === 0) {
       alert('No session data to export.');
       return;

@@ -36,10 +36,10 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
     });
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     session.moodRating = selectedMood;
     session.patientNotes = patientNotes;
-    storageEngine.saveSession(session);
+    await storageEngine.saveSession(session);
     setIsSaved(true);
   };
 

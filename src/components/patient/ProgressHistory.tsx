@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ClientProfile, MilestoneBadge, SessionRecord } from '../../types';
 import { storageEngine, INITIAL_BADGES } from '../../services/storageEngine';
 import { Download, Trophy, Sparkles, Waves, Target, Wind, Compass, Send, FileText } from 'lucide-react';
@@ -75,9 +75,19 @@ function generateChartPath(sessions: SessionRecord[], width: number, height: num
 
 export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
   const [period, setPeriod] = useState<'week' | 'month' | 'all'>('month');
-  const [allSessions] = useState<SessionRecord[]>(() => storageEngine.getSessions(client.id));
+  const [allSessions, setAllSessions] = useState<SessionRecord[]>([]);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
+
+  useEffect(() => {
+    let isMounted = true;
+    storageEngine.getSessions(client.id).then((sessions) => {
+      if (isMounted) setAllSessions(sessions);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [client.id]);
 
   const filteredSessions = useMemo(() => filterSessionsByPeriod(allSessions, period), [allSessions, period]);
   const changePercent = useMemo(() => computeChangePercent(filteredSessions), [filteredSessions]);
