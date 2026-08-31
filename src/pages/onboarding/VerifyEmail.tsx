@@ -5,10 +5,10 @@ import { sendEmailVerification, ActionCodeSettings } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 
 const ACTION_CODE_SETTINGS: ActionCodeSettings = {
-  url: typeof window !== 'undefined' ? window.location.origin : 'https://brainswell.app',
+  url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
   handleCodeInApp: true,
   iOS: {
-    bundleId: 'com.brainswell.app',
+    bundleId: 'com.waveable.app',
   },
 };
 

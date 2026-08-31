@@ -53,7 +53,7 @@ const fetchUserRole = async (uid: string): Promise<UserRole> => {
 
 const DEMO_CLINICIAN_USER = {
   uid: 'demo-clinician',
-  email: 'dr.vance@brainswell.clinic',
+  email: 'dr.vance@waveable.clinic',
   displayName: 'Dr. Evelyn Vance, Ph.D.',
   emailVerified: true,
   isAnonymous: false,
@@ -160,10 +160,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Send email verification with action code settings
     try {
       await sendEmailVerification(cred.user, {
-        url: typeof window !== 'undefined' ? window.location.origin : 'https://brainswell.app',
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
         handleCodeInApp: true,
         iOS: {
-          bundleId: 'com.brainswell.app',
+          bundleId: 'com.waveable.app',
         },
       });
     } catch (err) {

@@ -289,7 +289,7 @@ export function App() {
                   client={currentClient || {
                     id: user?.uid || 'patient',
                     name: user?.displayName || 'Patient',
-                    email: user?.email || 'patient@brainswell.app',
+                    email: user?.email || 'patient@waveable.app',
                     avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
                     condition: 'Peak Performance',
                     status: 'active',

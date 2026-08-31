@@ -90,7 +90,7 @@ export const Login: React.FC = () => {
           <BrandLogo size={44} variant="terracotta" />
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Log In</h1>
-            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Welcome back to Brainswell</p>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Welcome back to Waveable</p>
           </div>
         </div>
 

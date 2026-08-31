@@ -12,12 +12,12 @@ import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
-  BRAND: 'brainswell_brand_config',
-  CLIENTS: 'brainswell_clients',
-  SESSIONS: 'brainswell_sessions',
-  MESSAGES: 'brainswell_messages',
-  APPOINTMENTS: 'brainswell_appointments',
-  CURRENT_CLIENT_ID: 'brainswell_current_client_id',
+  BRAND: 'waveable_brand_config',
+  CLIENTS: 'waveable_clients',
+  SESSIONS: 'waveable_sessions',
+  MESSAGES: 'waveable_messages',
+  APPOINTMENTS: 'waveable_appointments',
+  CURRENT_CLIENT_ID: 'waveable_current_client_id',
 };
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
@@ -533,7 +533,7 @@ class StorageEngine {
   private demoAppointments: CalendarAppointment[] = [...INITIAL_DEMO_APPOINTMENTS];
 
   public getBrandConfig(): ClinicBrandConfig {
-    const raw = localStorage.getItem(STORAGE_KEYS.BRAND) || localStorage.getItem('brainwell_brand_config');
+    const raw = localStorage.getItem(STORAGE_KEYS.BRAND) || localStorage.getItem('brainswell_brand_config') || localStorage.getItem('brainwell_brand_config');
     if (raw) {
       try {
         return JSON.parse(raw);
@@ -668,7 +668,7 @@ class StorageEngine {
       }
 
       // Initialize new Firestore client profile
-      const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app', user.displayName);
+      const fresh = createBlankProfile(user.uid, user.email || 'user@waveable.app', user.displayName);
       fresh.patientId = user.uid;
       try {
         await setDoc(doc(db, 'clients', user.uid), fresh);

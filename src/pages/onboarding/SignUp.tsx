@@ -71,7 +71,7 @@ export const SignUp: React.FC = () => {
           <BrandLogo size={44} variant="terracotta" />
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Create Account</h1>
-            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Start your journey with Brainswell</p>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Start your journey with Waveable</p>
           </div>
         </div>
 

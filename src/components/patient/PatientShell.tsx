@@ -112,7 +112,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     ]);
     const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const filename = `brainswell_progress_${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `waveable_progress_${new Date().toISOString().split('T')[0]}.csv`;
 
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], filename, { type: 'text/csv' });
@@ -221,7 +221,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <BrandLogo size={28} variant="terracotta" />
           )}
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{client.linkedClinicianCode ? brand.name : 'Brainswell'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{client.linkedClinicianCode ? brand.name : 'Waveable'}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>
