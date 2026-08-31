@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Stethoscope } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginAsDemoClinician } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -56,6 +56,11 @@ export const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDemoClinician = () => {
+    loginAsDemoClinician();
+    navigate('/');
   };
 
   return (
@@ -156,6 +161,42 @@ export const Login: React.FC = () => {
           {loading ? 'Logging in...' : 'Log In'}
         </button>
       </form>
+
+      {/* Divider */}
+      <div style={{ display: 'flex', alignItems: 'center', margin: '24px 0 16px', gap: '12px' }}>
+        <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or</span>
+        <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+      </div>
+
+      {/* 1-Click Demo Clinician Access */}
+      <button
+        type="button"
+        onClick={handleDemoClinician}
+        style={{
+          width: '100%',
+          padding: '14px 16px',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(232, 150, 122, 0.12)',
+          border: '1.5px dashed var(--brand-primary)',
+          color: 'var(--text-primary)',
+          fontSize: '14px',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px',
+          cursor: 'pointer',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <Stethoscope size={18} color="var(--brand-primary)" />
+        <span>Explore Demo Clinician Portal</span>
+      </button>
+      <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '6px', marginBottom: 0 }}>
+        Pre-loaded with 4 clinical patients, QEEG brain maps, & session records
+      </p>
+
       </div>
     </div>
   );

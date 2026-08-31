@@ -569,6 +569,9 @@ class StorageEngine {
 
   public async getClients(clinicianId?: string): Promise<ClientProfile[]> {
     const activeClinicianId = clinicianId || auth.currentUser?.uid;
+    if (activeClinicianId === 'demo-clinician') {
+      return [...this.demoClients];
+    }
     if (!activeClinicianId) {
       return [];
     }
@@ -596,7 +599,7 @@ class StorageEngine {
   }
 
   public async saveClient(client: ClientProfile): Promise<void> {
-    if (client.isDemo || client.id.startsWith('demo-') || !auth.currentUser) {
+    if (client.isDemo || client.id.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
       const idx = this.demoClients.findIndex((c) => c.id === client.id);
       if (idx >= 0) {
         this.demoClients[idx] = client;
@@ -624,7 +627,7 @@ class StorageEngine {
   }
 
   public async deleteClient(id: string): Promise<void> {
-    if (id.startsWith('demo-') || !auth.currentUser) {
+    if (id.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
       this.demoClients = this.demoClients.filter((c) => c.id !== id);
       return;
     }
@@ -638,6 +641,10 @@ class StorageEngine {
 
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
     if (user?.uid) {
+      if (user.uid === 'demo-clinician') {
+        return this.demoClients[0] || null;
+      }
+
       try {
         const snap = await getDoc(doc(db, 'clients', user.uid));
         if (snap && snap.exists()) {
@@ -682,6 +689,12 @@ class StorageEngine {
     if (clientId && clientId.startsWith('demo-')) {
       return this.demoSessions.filter((s) => s.patientId === clientId);
     }
+    if (auth.currentUser?.uid === 'demo-clinician') {
+      if (clientId) {
+        return this.demoSessions.filter((s) => s.patientId === clientId);
+      }
+      return [...this.demoSessions];
+    }
     if (!auth.currentUser) {
       return [];
     }
@@ -702,7 +715,7 @@ class StorageEngine {
   }
 
   public async saveSession(session: SessionRecord): Promise<void> {
-    if (session.isDemo || session.patientId.startsWith('demo-') || !auth.currentUser) {
+    if (session.isDemo || session.patientId.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
       const existingIndex = this.demoSessions.findIndex((s) => s.id === session.id);
       if (existingIndex >= 0) {
         this.demoSessions[existingIndex] = session;
@@ -771,6 +784,9 @@ class StorageEngine {
   }
 
   public async getMessages(): Promise<MessageThread[]> {
+    if (auth.currentUser?.uid === 'demo-clinician') {
+      return [...this.demoMessages];
+    }
     if (!auth.currentUser) {
       return [];
     }
@@ -793,7 +809,7 @@ class StorageEngine {
       );
       const snapPatient = await getDocs(qPatient);
       const docsPatient = snapPatient.docs.map((d) => d.data() as MessageThread);
-      return docsPatient;
+      if (docsPatient.length > 0) return docsPatient;
     } catch (err) {
       console.warn('Failed to fetch messages for patient from Firestore:', err);
     }
@@ -802,7 +818,7 @@ class StorageEngine {
   }
 
   public async saveMessageThread(thread: MessageThread): Promise<void> {
-    if (thread.isDemo || thread.clientId.startsWith('demo-') || !auth.currentUser) {
+    if (thread.isDemo || thread.clientId.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
       const idx = this.demoMessages.findIndex((t) => t.clientId === thread.clientId);
       if (idx >= 0) {
         this.demoMessages[idx] = thread;
@@ -830,6 +846,10 @@ class StorageEngine {
   }
 
   public subscribeToMessages(callback: (threads: MessageThread[]) => void, role?: 'clinician' | 'patient' | null): () => void {
+    if (auth.currentUser?.uid === 'demo-clinician') {
+      callback([...this.demoMessages]);
+      return () => {};
+    }
     if (!auth.currentUser) {
       callback([]);
       return () => {};
@@ -856,6 +876,9 @@ class StorageEngine {
   }
 
   public async getAppointments(clinicianOrPatientId?: string): Promise<CalendarAppointment[]> {
+    if (auth.currentUser?.uid === 'demo-clinician') {
+      return [...this.demoAppointments];
+    }
     if (!auth.currentUser) {
       return [];
     }
@@ -880,7 +903,7 @@ class StorageEngine {
       );
       const snapPatient = await getDocs(qPatient);
       const docsPatient = snapPatient.docs.map((d) => d.data() as CalendarAppointment);
-      return docsPatient;
+      if (docsPatient.length > 0) return docsPatient;
     } catch (err) {
       console.warn('Failed to fetch appointments for patient from Firestore:', err);
     }
