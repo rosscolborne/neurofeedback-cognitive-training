@@ -759,13 +759,13 @@ export class EEGEngine {
           this.updateChannelQualityFromServer(response.quality);
         }
 
-        // Update training metric
         if (response.training) {
           this.latestTrainingMetric = {
             score: response.training.score ?? null,
             baselineReady: response.training.baselineReady ?? false,
           };
         }
+
       }
     } catch {
       // Server analysis failed — scores remain stale

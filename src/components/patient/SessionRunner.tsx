@@ -120,11 +120,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
   const bandAccumulatorRef = useRef({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0, count: 0 });
   const coherenceAccumulatorRef = useRef({ total: 0, count: 0 });
-  const brainflowAccRef = useRef({ mindfulness: 0, valence: 0, arousal: 0, training: 0, count: 0 });
+  const brainflowAccRef = useRef({
+    mindfulness: 0,
+    mindfulnessCount: 0,
+    valence: 0,
+    valenceCount: 0,
+    arousal: 0,
+    arousalCount: 0,
+    training: 0,
+    trainingCount: 0,
+  });
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const isPausedRef = useRef(isPaused);
   const phaseRef = useRef(phase);
-  const cleanSignalSecondsRef = useRef(0);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -150,8 +158,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const count = Math.max(1, acc.count);
 
     const bfAcc = brainflowAccRef.current;
-    const bfCount = Math.max(1, bfAcc.count);
-
     const summary: SessionRecord = {
       id: 'sess-' + Date.now(),
       patientId: client.id,
@@ -178,10 +184,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
       adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
       finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
-      averageTrainingScore: bfAcc.count > 0 ? Math.round(bfAcc.training / bfCount) : undefined,
-      averageMindfulness: bfAcc.count > 0 ? Math.round(bfAcc.mindfulness / bfCount) : undefined,
-      averageValence: bfAcc.count > 0 ? Math.round((bfAcc.valence / bfCount) * 100) / 100 : undefined,
-      averageArousal: bfAcc.count > 0 ? Math.round((bfAcc.arousal / bfCount) * 100) / 100 : undefined,
+      averageTrainingScore: bfAcc.trainingCount > 0 ? Math.round(bfAcc.training / bfAcc.trainingCount) : null,
+      averageMindfulness: bfAcc.mindfulnessCount > 0 ? Math.round(bfAcc.mindfulness / bfAcc.mindfulnessCount) : undefined,
+      averageValence: bfAcc.valenceCount > 0 ? Math.round((bfAcc.valence / bfAcc.valenceCount) * 100) / 100 : undefined,
+      averageArousal: bfAcc.arousalCount > 0 ? Math.round((bfAcc.arousal / bfAcc.arousalCount) * 100) / 100 : undefined,
     };
 
     audioEngine.playChime('complete');
@@ -196,6 +202,15 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const unsubscribe = eegEngine.subscribe(data => {
       eegDataRef.current = data;
       setEegData(data);
+
+      // The Training score owns its own 24-window baseline and is deliberately
+      // independent of the UI's 60-second Calibration phase. Keep samples
+      // once the service can compute them, even while that phase is shown.
+      if (!isPausedRef.current && isFitAccepted && data.trainingMetric?.score != null) {
+        const bfAcc = brainflowAccRef.current;
+        bfAcc.training += data.trainingMetric.score;
+        bfAcc.trainingCount += 1;
+      }
 
       if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
         // Collect rolling band averages
@@ -214,11 +229,18 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         // Accumulate brainflow service metrics
         if (data.brainflowScores) {
           const bfAcc = brainflowAccRef.current;
-          if (data.brainflowScores.mindfulnessScore != null) bfAcc.mindfulness += data.brainflowScores.mindfulnessScore;
-          if (data.brainflowScores.valence != null) bfAcc.valence += data.brainflowScores.valence;
-          if (data.brainflowScores.arousal != null) bfAcc.arousal += data.brainflowScores.arousal;
-          if (data.trainingMetric?.score != null) bfAcc.training += data.trainingMetric.score;
-          bfAcc.count += 1;
+          if (data.brainflowScores.mindfulnessScore != null) {
+            bfAcc.mindfulness += data.brainflowScores.mindfulnessScore;
+            bfAcc.mindfulnessCount += 1;
+          }
+          if (data.brainflowScores.valence != null) {
+            bfAcc.valence += data.brainflowScores.valence;
+            bfAcc.valenceCount += 1;
+          }
+          if (data.brainflowScores.arousal != null) {
+            bfAcc.arousal += data.brainflowScores.arousal;
+            bfAcc.arousalCount += 1;
+          }
         }
 
         // Feed adaptive difficulty engine during Core Training
@@ -284,24 +306,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         return next;
       });
 
-      // Clean Signal Multiplier logic
       const currentData = eegDataRef.current;
-      if (currentData) {
-        const hasArtifact = currentData.artifacts.blink || currentData.artifacts.clench || currentData.signalQuality === 'poor' || currentData.signalQuality === 'disconnected';
-        if (!hasArtifact) {
-          cleanSignalSecondsRef.current += 1;
-        } else {
-          cleanSignalSecondsRef.current = 0;
-        }
-      }
-
       // The live in-zone display should reflect every valid observation as
       // soon as a session begins. Calibration is real EEG data too; only an
       // unavailable protocol metric should keep this value indeterminate.
       if (currentData?.inZoneAvailable) {
         setInZoneMeasuredSeconds(seconds => seconds + 1);
         if (currentData.inZone) {
-          setInZoneSeconds(z => z + (cleanSignalSecondsRef.current > 30 ? 1.5 : 1));
+          setInZoneSeconds(seconds => seconds + 1);
         }
       }
     }, 1000);

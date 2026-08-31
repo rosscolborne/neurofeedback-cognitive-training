@@ -40,30 +40,15 @@ class SignalFeatures(BaseModel):
     focus_score: int | None = Field(default=None, alias="focusScore")
     relax_score: int | None = Field(default=None, alias="relaxScore")
 
-    # Valence/arousal proxy, its raw (pre-smoothing, pre-calibration) values,
-    # nearest-label classification, and confidence. From `/analyze-window`
-    # `valence`/`arousal` equal the raw values (no session to smooth or
-    # calibrate across). From a session stream they carry smoothing and,
-    # once calibration is active, a baseline offset -- see
-    # `calibrationActive` and the `/sessions/{id}/calibration*` endpoints.
+    # Valence/arousal proxy, its raw values, nearest-label classification,
+    # and confidence. Session streams smooth these values; no baseline
+    # calibration is applied.
     valence: float | None = None
     arousal: float | None = None
     raw_valence: float | None = Field(default=None, alias="rawValence")
     raw_arousal: float | None = Field(default=None, alias="rawArousal")
     state_label: str | None = Field(default=None, alias="stateLabel")
     confidence: float | None = None
-    calibration_active: bool = Field(default=False, alias="calibrationActive")
-
-    # This connection's valence/arousal calibration progress (see
-    # `affective_state.AffectiveStateProvider.get_calibration_state` and the
-    # `/sessions/{id}/calibration*` / `/headset-fit/sessions/{id}/calibration*`
-    # endpoints that start/reset it). Riding along on every window means a
-    # caller doesn't need a separate poll to show calibration progress.
-    calibration_status: Literal["off", "collecting", "active"] = Field(
-        default="off", alias="calibrationStatus",
-    )
-    calibration_progress: int = Field(default=0, alias="calibrationProgress")
-    calibration_required: int = Field(default=0, alias="calibrationRequired")
     # 0–1 magnitude-squared spectral coherence across AF7↔AF8 and TP9↔TP10.
     # Null when the window lacks one of those valid left/right channel pairs.
     interhemispheric_coherence: float | None = Field(
@@ -134,37 +119,14 @@ class DeviceInfo(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class AttentionMetricSampleModel(BaseModel):
-    """Baseline-relative attention score, from
-    `brainflow_service/training.py`'s `AttentionBaselineProvider` -- the
-    Training feature's metric, distinct from the always-on headline scores
-    in `SignalFeatures`. Every score here is `null` until its own baseline
-    has enough samples with real spread to compute a z-score from (a brief
-    startup window, typically a few seconds) -- see `training.py`'s module
-    docstring for why there is no non-baseline fallback."""
+class TrainingMetricSampleModel(BaseModel):
+    """A mindfulness score normalized against this connection's first 24
+    reliable mindfulness windows."""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    displayed_score: float | None = Field(default=None, alias="displayedScore")
-    restfulness_score: float | None = Field(default=None, alias="restfulnessScore")
-    focus_score: float | None = Field(default=None, alias="focusScore")
-    relax_score: float | None = Field(default=None, alias="relaxScore")
-    raw_ratio: float = Field(alias="rawRatio")
-    baseline_ratio: float | None = Field(default=None, alias="baselineRatio")
-    raw_brainflow_mindfulness: float | None = Field(default=None, alias="rawBrainflowMindfulness")
-    baseline_brainflow_mindfulness: float | None = Field(default=None, alias="baselineBrainflowMindfulness")
-    baseline_relative_value: float | None = Field(default=None, alias="baselineRelativeValue")
-    baseline_z_score: float | None = Field(default=None, alias="baselineZScore")
-    raw_brainflow_restfulness: float | None = Field(default=None, alias="rawBrainflowRestfulness")
-    baseline_brainflow_restfulness: float | None = Field(default=None, alias="baselineBrainflowRestfulness")
-    restfulness_baseline_relative_value: float | None = Field(
-        default=None, alias="restfulnessBaselineRelativeValue",
-    )
-    restfulness_baseline_z_score: float | None = Field(default=None, alias="restfulnessBaselineZScore")
-    score_source: Literal["brainflow_mindfulness", "unavailable"] = Field(alias="scoreSource")
-    restfulness_score_source: Literal["brainflow_restfulness", "unavailable"] = Field(
-        alias="restfulnessScoreSource",
-    )
+    score: float | None = None
+    baseline_ready: bool = Field(alias="baselineReady")
 
 
 class SignalFrame(BaseModel):
@@ -179,45 +141,4 @@ class SignalFrame(BaseModel):
     sequence_id: int = Field(alias="sequenceId")
     quality: SignalQualityMetadata | None = None
     features: SignalFeatures | None = None
-    training: AttentionMetricSampleModel | None = None
-
-
-class AffectiveCalibrationStateResponse(BaseModel):
-    """Response for the `/sessions/{id}/calibration*` endpoints. Unrelated
-    to `CalibrationProfile` below, which is a different (training-feature)
-    baseline-ratio calibration."""
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    status: Literal["off", "collecting", "active"]
-    progress: int
-    required: int
-
-
-class CalibrationProfile(BaseModel):
-    """The Training feature's locked-in baseline snapshot -- returned by
-    `GET /sessions/{id}/training/calibration-profile` once
-    `AttentionBaselineProvider`'s baseline has filled (metadata/diagnostics
-    only; it doesn't gate whether scores are being produced -- see
-    `training.py`)."""
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str
-    algorithm_version: str = Field(alias="algorithmVersion")
-    created_at_ms: float = Field(alias="createdAtMs")
-    baseline_ratio: float | None = Field(alias="baselineRatio")
-    baseline_ratio_spread: float | None = Field(default=None, alias="baselineRatioSpread")
-    baseline_brainflow_mindfulness: float | None = Field(default=None, alias="baselineBrainflowMindfulness")
-    baseline_brainflow_mindfulness_spread: float | None = Field(
-        default=None, alias="baselineBrainflowMindfulnessSpread",
-    )
-    baseline_brainflow_restfulness: float | None = Field(default=None, alias="baselineBrainflowRestfulness")
-    baseline_brainflow_restfulness_spread: float | None = Field(
-        default=None, alias="baselineBrainflowRestfulnessSpread",
-    )
-    accepted_windows: int = Field(alias="acceptedWindows")
-    rejected_windows: int = Field(alias="rejectedWindows")
-    rejection_reasons: dict[str, int] = Field(alias="rejectionReasons")
-    device_info: DeviceInfo | None = Field(default=None, alias="deviceInfo")
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    training: TrainingMetricSampleModel | None = None

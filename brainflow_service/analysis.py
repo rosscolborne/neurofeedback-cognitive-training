@@ -3,24 +3,12 @@ connection this service serves -- a direct BrainFlow connection
 (`runtime.BrainFlowSession`) and a Bluetooth connection (`AnalysisSessionStore`
 below, driven by the `/headset-fit/sessions/*` endpoints in `app.py`).
 
-Before this module existed, a direct BrainFlow connection got its headline
-scores (mindfulness/restfulness/focus/relax, valence/arousal, and Training's
-baseline-relative attention score) from stateful, per-session smoothing
-(`affective_state.AffectiveStateProvider`, `training.AttentionBaselineProvider`),
-while a Bluetooth connection was served by the stateless `/analyze-window`
-endpoint, which has no session to smooth or calibrate across and so returned
-raw, single-window scores. Both the frontend's `HeuristicHeadsetFitProvider`
-sat on the same live-vs-stateless gap for headset fit until
-`HeadsetFitSessionStore` closed it; `AnalysisSessionStore` here is the same
-fix, extended to cover the rest of what a live connection needs.
-
 `analyze_window` is now the *only* place that turns a raw EEG window into
 those finished scores. `BrainFlowSession._normalize_frame` and the Bluetooth
 `/headset-fit/sessions/{id}/analyze-window` endpoint both call it, each
 handing it their connection's own `AnalysisProviders` -- so whichever
-transport collected the EEG, the smoothing, calibration, and baselines are
-the exact same code running against the exact same per-connection state,
-not two implementations that can drift apart.
+transport collected the EEG, the smoothing and headset-fit assessment are
+the exact same code running against the exact same per-connection state.
 """
 
 from __future__ import annotations
@@ -47,9 +35,9 @@ from .headset_fit import (
     HeuristicHeadsetFitProvider,
     to_signal_quality_metadata,
 )
-from .models import AttentionMetricSampleModel, SignalChannel, SignalFeatures, SignalQualityMetadata
-from .training import AttentionBaselineProvider, to_attention_metric_sample_model
-from .metrics import compute_training_feedback
+from .models import SignalChannel, SignalFeatures, SignalQualityMetadata, TrainingMetricSampleModel
+from .metrics import ProtocolMetricSmoother, compute_training_feedback
+from .training import TrainingScoreProvider
 
 
 @dataclass
@@ -62,7 +50,8 @@ class AnalysisProviders:
 
     headset_fit: HeuristicHeadsetFitProvider
     affective_state: AffectiveStateProvider = field(default_factory=AffectiveStateProvider)
-    attention: AttentionBaselineProvider = field(default_factory=AttentionBaselineProvider)
+    training_score: TrainingScoreProvider = field(default_factory=TrainingScoreProvider)
+    protocol_metrics: ProtocolMetricSmoother = field(default_factory=ProtocolMetricSmoother)
 
 
 @dataclass(frozen=True)
@@ -70,7 +59,7 @@ class WindowAnalysis:
     fit_snapshot: HeadsetFitSnapshot
     quality: SignalQualityMetadata
     features: SignalFeatures | None
-    training: AttentionMetricSampleModel | None
+    training: TrainingMetricSampleModel | None
 
 
 def analyze_window(
@@ -93,7 +82,7 @@ def analyze_window(
     array ready for band-power/BrainFlow-classifier extraction, or `None`
     when the caller doesn't yet have a full analysis window (e.g. a
     BrainFlow session's ring buffer hasn't filled) -- fit is still assessed
-    in that case, just without features/training.
+    in that case, just without features.
     """
     at_ms = time.time() * 1000.0 if at_ms is None else at_ms
 
@@ -101,14 +90,11 @@ def analyze_window(
     quality = to_signal_quality_metadata(fit_snapshot)
 
     features: SignalFeatures | None = None
-    training: AttentionMetricSampleModel | None = None
+    training: TrainingMetricSampleModel | None = None
 
     if raw_window is not None:
         processed = preprocess_eeg_window(raw_window, sample_rate, processing)
         band_powers = extract_band_power_features(processed, sample_rate)
-        theta_beta_ratio, in_zone, zone_score = compute_training_feedback(
-            band_powers.absolute if band_powers else {}, protocol, threshold,
-        )
         interhemispheric_coherence = extract_interhemispheric_coherence(
             processed, sample_rate, [channel.id for channel in channels],
         )
@@ -116,6 +102,17 @@ def analyze_window(
         brainflow_restfulness = extract_brainflow_restfulness(raw_window, sample_rate)
 
         if band_powers or brainflow_mindfulness is not None or brainflow_restfulness is not None:
+            smoothed_metrics = providers.protocol_metrics.push(
+                band_powers.absolute if band_powers else {}, interhemispheric_coherence,
+            )
+            theta_beta_ratio, in_zone, zone_score = compute_training_feedback(
+                smoothed_metrics.bands,
+                protocol,
+                threshold,
+                smoothed_metrics.theta_beta_ratio,
+            )
+            if band_powers:
+                band_powers = band_powers.model_copy(update={"absolute": smoothed_metrics.bands})
             theta_power = band_powers.absolute.get("theta", 0.0) if band_powers else 0.0
             alpha_power = band_powers.absolute.get("alpha", 0.0) if band_powers else 0.0
             beta_power = band_powers.absolute.get("beta", 0.0) if band_powers else 0.0
@@ -133,7 +130,13 @@ def analyze_window(
                 reliable=reliable,
                 fit=FitQualityHint(ready=fit_snapshot.ready, state=fit_snapshot.state),
             )
-            calibration = providers.affective_state.get_calibration_state()
+            training_sample = providers.training_score.push(
+                brainflow_mindfulness, reliable=reliable,
+            )
+            training = TrainingMetricSampleModel(
+                score=training_sample.score,
+                baselineReady=training_sample.baseline_ready,
+            )
             features = SignalFeatures(
                 bandPowers=band_powers,
                 brainflowConcentration=brainflow_mindfulness,
@@ -148,26 +151,11 @@ def analyze_window(
                 rawArousal=sample.raw_arousal if sample else None,
                 stateLabel=sample.label if sample else None,
                 confidence=sample.confidence if sample else None,
-                calibrationActive=sample.calibration_active if sample else False,
-                calibrationStatus=calibration.status,
-                calibrationProgress=calibration.progress,
-                calibrationRequired=calibration.required,
-                interhemisphericCoherence=interhemispheric_coherence,
+                interhemisphericCoherence=smoothed_metrics.interhemispheric_coherence,
                 thetaBetaRatio=theta_beta_ratio,
                 inZone=in_zone,
                 zoneScore=zone_score,
             )
-
-            attention = providers.attention.push(
-                at_ms=at_ms,
-                theta_power=theta_power,
-                alpha_power=alpha_power,
-                beta_power=beta_power,
-                raw_mindfulness=brainflow_mindfulness,
-                raw_restfulness=brainflow_restfulness,
-                reliable=reliable,
-            )
-            training = to_attention_metric_sample_model(attention) if attention else None
 
     return WindowAnalysis(fit_snapshot=fit_snapshot, quality=quality, features=features, training=training)
 

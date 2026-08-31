@@ -20,7 +20,6 @@ class ProcessingConfig:
     bandpass_low_hz: float = 3.0
     bandpass_high_hz: float = 45.0
     filter_order: int = 4
-    baseline_windows_required: int = 24
     smoothing_alpha: float = 0.22
 
 

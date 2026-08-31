@@ -121,17 +121,15 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
             {session.timeInZonePercent}%
           </span>
         </div>
-        {session.averageTrainingScore != null && (
-          <>
-            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Training score (baseline-relative)</span>
-              <span className="font-mono" style={{ fontSize: '16px', fontWeight: 700, color: '#7B68AE' }}>
-                {session.averageTrainingScore}
-              </span>
-            </div>
-          </>
-        )}
+        <>
+          <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Training score (baseline-relative)</span>
+            <span className="font-mono" style={{ fontSize: '16px', fontWeight: 700, color: '#7B68AE' }}>
+              {session.averageTrainingScore == null ? '--' : session.averageTrainingScore}
+            </span>
+          </div>
+        </>
         {session.averageMindfulness != null && (
           <>
             <div style={{ height: '1px', background: 'var(--border-subtle)' }} />

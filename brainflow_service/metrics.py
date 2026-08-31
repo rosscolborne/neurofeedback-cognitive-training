@@ -48,6 +48,65 @@ class MindStateScores:
     relax_score: int
 
 
+@dataclass(frozen=True)
+class SmoothedProtocolMetrics:
+    """Session-scoped smoothed inputs for live displays and protocol feedback."""
+
+    bands: dict[str, float]
+    theta_beta_ratio: float | None
+    interhemispheric_coherence: float | None
+
+
+class ProtocolMetricSmoother:
+    """EMA-smooths EEG metrics that otherwise come directly from one PSD window.
+
+    A missing coherence result remains missing; it never falls back to an old
+    value.  This prevents a stale value being presented as a measurement.
+    """
+
+    def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
+        self._alpha = smoothing_alpha
+        self._bands: dict[str, float] = {}
+        self._theta_beta_ratio: float | None = None
+        self._coherence: float | None = None
+
+    def push(
+        self,
+        bands: dict[str, float],
+        interhemispheric_coherence: float | None,
+    ) -> SmoothedProtocolMetrics:
+        smoothed_bands: dict[str, float] = {}
+        for name, value in bands.items():
+            if not math.isfinite(value):
+                continue
+            self._bands[name] = smooth_score(self._bands.get(name), value, self._alpha)
+            smoothed_bands[name] = self._bands[name]
+
+        theta = bands.get("theta")
+        beta = bands.get("beta")
+        raw_ratio = (
+            theta / max(0.1, beta)
+            if theta is not None and beta is not None and math.isfinite(theta) and math.isfinite(beta)
+            else None
+        )
+        if raw_ratio is not None:
+            self._theta_beta_ratio = smooth_score(self._theta_beta_ratio, raw_ratio, self._alpha)
+        smoothed_ratio = self._theta_beta_ratio if raw_ratio is not None else None
+
+        # Do not retain an old coherence reading across an unavailable window.
+        if interhemispheric_coherence is None or not math.isfinite(interhemispheric_coherence):
+            smoothed_coherence = None
+        else:
+            self._coherence = smooth_score(self._coherence, interhemispheric_coherence, self._alpha)
+            smoothed_coherence = self._coherence
+
+        return SmoothedProtocolMetrics(
+            bands=smoothed_bands,
+            theta_beta_ratio=smoothed_ratio,
+            interhemispheric_coherence=smoothed_coherence,
+        )
+
+
 def compute_neurofeedback_scores(
     theta_power: float,
     alpha_power: float,
@@ -78,10 +137,17 @@ def normalize_brainflow_score(value: float | None) -> float | None:
     return _clamp(value * 100.0, 0.0, 100.0)
 
 
-def compute_training_feedback(bands: dict[str, float], protocol: str, threshold: float) -> tuple[float | None, bool | None, float | None]:
+def compute_training_feedback(
+    bands: dict[str, float],
+    protocol: str,
+    threshold: float,
+    theta_beta_ratio: float | None = None,
+) -> tuple[float | None, bool | None, float | None]:
     """Authoritative protocol feedback: ratio, in-zone flag, continuous score."""
     theta, alpha, smr, beta = (bands.get(key) for key in ("theta", "alpha", "smr", "beta"))
-    ratio = theta / max(0.1, beta) if theta is not None and beta is not None else None
+    ratio = theta_beta_ratio if theta_beta_ratio is not None else (
+        theta / max(0.1, beta) if theta is not None and beta is not None else None
+    )
     if protocol == "theta-beta-ratio" and ratio is not None:
         return ratio, ratio <= threshold, _clamp(1 - (ratio - threshold) / 1.5, 0, 1)
     if protocol == "smr-enhancement" and smr is not None:

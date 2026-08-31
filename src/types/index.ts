@@ -201,7 +201,7 @@ export interface SessionRecord {
   }>;
   adaptiveAdjustmentsCount: number;
   finalThreshold: number;
-  averageTrainingScore?: number;        // brainflow_service training metric (0 – 100)
+  averageTrainingScore?: number | null;
   averageMindfulness?: number;          // brainflow_service mindfulness metric (0 – 100)
   averageValence?: number;              // brainflow_service valence (-1 to +1)
   averageArousal?: number;              // brainflow_service arousal (0 to 1)
