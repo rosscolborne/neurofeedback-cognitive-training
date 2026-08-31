@@ -12,7 +12,7 @@ import { MediaModePlayer } from '../experiences/MediaModePlayer';
 import { SoundscapePlayer } from '../experiences/SoundscapePlayer';
 import { MandalaBreathing } from '../experiences/MandalaBreathing';
 import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
-import { SpatialAudioMode } from '../experiences/SpatialAudioMode';
+import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { Play, Pause, Wifi, Sparkles, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, BrainCircuit } from 'lucide-react';
@@ -73,10 +73,10 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
     instructions: 'Observe the 3D space. Your coherence score directly manipulates the gravity, color, and flow of the particles.',
   },
   'spatial-audio': {
-    title: 'Spatial Audio',
-    mechanism: 'Maps frontal lobe asymmetry to 3D audio panning and reverb.',
-    benefit: 'Aids in emotional regulation and trauma processing by grounding the user in an immersive auditory environment.',
-    instructions: 'Use headphones. Pay attention to where the sounds originate. Keep your emotional state neutral to center the audio.',
+    title: 'Generative Music',
+    mechanism: 'Maps real-time EEG band powers to generative musical parameters — alpha selects pitch, attention drives tempo, coherence adds harmonic richness.',
+    benefit: 'Provides immediate, intuitive auditory neurofeedback through brain-generated music. Sustained target states produce melodic clarity; drift results in muffled, sparse output.',
+    instructions: 'Use headphones for best effect. Select a mode (Melody, Synth, or Drums). Your brain activity directly creates the music — relax into the target state to hear it bloom.',
   },
   'narrative-story': {
     title: 'Narrative Therapy',
@@ -679,7 +679,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <GenerativeWebXRCanvas eegData={eegData} />
           )}
           {selectedExperience === 'spatial-audio' && (
-            <SpatialAudioMode eegData={eegData} />
+            <GenerativeMusicMode eegData={eegData} />
           )}
           {selectedExperience === 'narrative-story' && (
             <NarrativeTherapyMode eegData={eegData} />
