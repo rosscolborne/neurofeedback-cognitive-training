@@ -157,9 +157,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(cred.user);
     setRole(null);
     
-    // Send email verification
+    // Send email verification with action code settings
     try {
-      await sendEmailVerification(cred.user);
+      await sendEmailVerification(cred.user, {
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://brainswell.app',
+        handleCodeInApp: true,
+        iOS: {
+          bundleId: 'com.brainswell.app',
+        },
+      });
     } catch (err) {
       console.warn('Failed to send verification email:', err);
     }
