@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors magenta,cyan \"npm run brainflow\" \"npm run dev:web\"",
     "dev:web": "vite",
+    "debug_console": "node scripts/run-debug-console.mjs",
+    "debug_console:web": "vite --host 127.0.0.1 --port 5174 --strictPort --open /debug-console.html",
     "brainflow": "uv run uvicorn brainflow_service.app:app --host 127.0.0.1 --port 8000",
     "setup:brainflow": "uv sync --extra test",
     "build": "tsc -b && vite build",

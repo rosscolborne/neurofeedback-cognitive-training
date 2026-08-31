@@ -31,6 +31,21 @@ npm run brainflow  # backend only
 npm run dev:web    # frontend only
 ```
 
+## EEG acquisition console
+
+The development-only EEG Acquisition Console is a separate page for raw EEG
+acquisition, hardware-provider validation, recording, replay, live plots, and
+signal-quality debugging. It uses the same local BrainFlow service as
+Neurasticity, but does not form part of the patient or clinician UI.
+
+```bash
+npm run debug_console
+```
+
+This opens the console at `http://127.0.0.1:5174/debug-console.html`. It
+uses a healthy local service on port 8000 when one is already running;
+otherwise it starts one. Stop it with `Ctrl+C`.
+
 The frontend calls `http://127.0.0.1:8000` by default. To use another local
 address or port, set `VITE_BRAINFLOW_SERVICE_URL` in `.env.local`.
 
