@@ -33,7 +33,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
   const handlePair = async () => {
     setIsPairing(true);
     setPairError(null);
-    const res = await eegEngine.connectMuseAthenaBrainflow();
+    const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     if (!res.success) {
       setPairError(res.error || 'Muse Athena connection failed');
