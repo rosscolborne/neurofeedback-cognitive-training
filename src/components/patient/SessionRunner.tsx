@@ -203,9 +203,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegDataRef.current = data;
       setEegData(data);
 
-      // The Training score owns its own 24-window baseline and is deliberately
-      // independent of the UI's 60-second Calibration phase. Keep samples
-      // once the service can compute them, even while that phase is shown.
+      // The training score owns its own 24-window baseline. The app leaves
+      // the other derived metrics raw unless a future view explicitly opts a
+      // metric into the service's per-metric calibration.
       if (!isPausedRef.current && isFitAccepted && data.trainingMetric?.score != null) {
         const bfAcc = brainflowAccRef.current;
         bfAcc.training += data.trainingMetric.score;

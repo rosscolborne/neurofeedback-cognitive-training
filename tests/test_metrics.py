@@ -1,127 +1,65 @@
-from __future__ import annotations
-
-from brainflow_service.metrics import (
-    MindStateSmoother,
-    ProtocolMetricSmoother,
-    compute_neurofeedback_scores,
-    normalize_brainflow_score,
-    smooth_score,
-)
+from brainflow_service.metrics import BrainFlowScoreSmoother, MetricCalculator, MetricInput, compute_band_ratios, compute_protocol_feedback, normalize_brainflow_score, smooth_ema
 
 
-def test_protocol_metric_smoother_smooths_smr_theta_beta_and_coherence() -> None:
-    smoother = ProtocolMetricSmoother(smoothing_alpha=0.5)
-
-    first = smoother.push({"theta": 8.0, "beta": 4.0, "smr": 4.0}, 0.2)
-    second = smoother.push({"theta": 4.0, "beta": 8.0, "smr": 8.0}, 0.8)
-
-    assert second.bands["smr"] == 6.0
-    assert second.theta_beta_ratio == 1.25
-    assert second.interhemispheric_coherence == 0.5
-
-
-def test_protocol_metric_smoother_does_not_reuse_unavailable_coherence() -> None:
-    smoother = ProtocolMetricSmoother()
-    smoother.push({"theta": 8.0, "beta": 4.0, "smr": 4.0}, 0.6)
-
-    unavailable = smoother.push({"theta": 8.0, "beta": 4.0, "smr": 4.0}, None)
-
-    assert unavailable.interhemispheric_coherence is None
+def test_band_derived_ratios_use_smoothed_bands() -> None:
+    calculator = MetricCalculator(smoothing_alpha=.5)
+    calculator.push(MetricInput({"theta": 8, "alpha": 4, "smr": 4, "beta": 4, "gamma": 1}, None, None, None, "theta-beta-ratio", 1.85, True))
+    snapshot = calculator.push(MetricInput({"theta": 4, "alpha": 8, "smr": 8, "beta": 8, "gamma": 1}, None, None, None, "theta-beta-ratio", 1.85, True))
+    assert snapshot.absolute_bands["theta"] == 6
+    assert snapshot.absolute_bands["beta"] == 6
+    assert snapshot.ratios["thetaBeta"] == 1
+    assert sum(snapshot.relative_bands.values()) == 1
 
 
-def test_focus_rises_with_relative_beta_power() -> None:
-    low_beta = compute_neurofeedback_scores(theta_power=10, alpha_power=10, beta_power=2)
-    high_beta = compute_neurofeedback_scores(theta_power=10, alpha_power=10, beta_power=20)
-
-    assert high_beta.focus_score > low_beta.focus_score
+def test_every_named_ratio_is_available() -> None:
+    ratios = compute_band_ratios({"theta": 2, "alpha": 4, "smr": 3, "beta": 8, "gamma": 1})
+    assert {"thetaBeta", "betaTheta", "alphaTheta", "thetaAlpha", "smrTheta", "thetaAlphaBeta", "alphaBeta", "betaAlpha", "arousal", "valence"} <= ratios.keys()
 
 
-def test_relax_rises_with_relative_alpha_power() -> None:
-    low_alpha = compute_neurofeedback_scores(theta_power=10, alpha_power=2, beta_power=10)
-    high_alpha = compute_neurofeedback_scores(theta_power=10, alpha_power=20, beta_power=10)
-
-    assert high_alpha.relax_score > low_alpha.relax_score
-
-
-def test_neurofeedback_scores_are_bounded() -> None:
-    scores = compute_neurofeedback_scores(theta_power=1e-9, alpha_power=1e6, beta_power=1e6)
-
-    assert 0 <= scores.focus_score <= 100
-    assert 0 <= scores.relax_score <= 100
-
-
-def test_normalize_brainflow_score_scales_and_clamps() -> None:
-    assert normalize_brainflow_score(0.5) == 50.0
-    assert normalize_brainflow_score(1.5) == 100.0
-    assert normalize_brainflow_score(-0.5) == 0.0
-
-
-def test_normalize_brainflow_score_passes_through_missing_values() -> None:
-    assert normalize_brainflow_score(None) is None
-    assert normalize_brainflow_score(float("nan")) is None
-
-
-def test_smooth_score_seeds_on_first_call_then_averages() -> None:
-    first = smooth_score(None, 80.0, weight=0.05)
-    second = smooth_score(first, 0.0, weight=0.05)
-
-    assert first == 80.0
-    assert 0.0 < second < 80.0
-
-
-def test_mind_state_smoother_reports_null_scores_when_brainflow_metrics_missing() -> None:
-    smoother = MindStateSmoother()
-
-    scores = smoother.push(
-        theta_power=5,
-        alpha_power=5,
-        beta_power=5,
-        raw_mindfulness=None,
-        raw_restfulness=None,
-    )
-
-    assert scores.mindfulness_score is None
-    assert scores.restfulness_score is None
-    assert 0 <= scores.focus_score <= 100
-    assert 0 <= scores.relax_score <= 100
-
-
-def test_mind_state_smoother_reports_scores_once_brainflow_metrics_present() -> None:
-    smoother = MindStateSmoother()
-
-    scores = smoother.push(
-        theta_power=5,
-        alpha_power=5,
-        beta_power=5,
-        raw_mindfulness=0.7,
-        raw_restfulness=0.3,
-    )
-
-    assert scores.mindfulness_score == 70
-    assert scores.restfulness_score == 30
-
-
-def test_mind_state_smoother_smooths_across_pushes() -> None:
-    smoother = MindStateSmoother(smoothing_alpha=0.5)
-
-    first = smoother.push(
-        theta_power=5, alpha_power=5, beta_power=5, raw_mindfulness=1.0, raw_restfulness=1.0,
-    )
-    second = smoother.push(
-        theta_power=5, alpha_power=5, beta_power=5, raw_mindfulness=0.0, raw_restfulness=0.0,
-    )
-
-    assert first.mindfulness_score == 100
-    assert 0 < second.mindfulness_score < 100
-
-
-def test_mind_state_smoother_reset_clears_smoothing_state() -> None:
-    smoother = MindStateSmoother(smoothing_alpha=0.5)
-    smoother.push(theta_power=5, alpha_power=5, beta_power=5, raw_mindfulness=1.0, raw_restfulness=1.0)
-
+def test_brainflow_scores_are_output_smoothed_and_resettable() -> None:
+    smoother = BrainFlowScoreSmoother(.5)
+    assert smoother.push(1, 1).mindfulness_score == 100
+    assert smoother.push(0, 0).mindfulness_score == 50
     smoother.reset()
-    scores = smoother.push(
-        theta_power=5, alpha_power=5, beta_power=5, raw_mindfulness=0.2, raw_restfulness=0.2,
-    )
+    assert smoother.push(.2, .2).mindfulness_score == 20
 
-    assert scores.mindfulness_score == 20
+
+def test_protocol_feedback_names_the_actual_metric() -> None:
+    bands = {"theta": 8, "alpha": 5, "smr": 7, "beta": 4}
+    feedback = compute_protocol_feedback(bands, compute_band_ratios(bands), "smr-enhancement", 6)
+    assert feedback.metric_name == "smr" and feedback.value == 7 and feedback.in_zone
+
+
+def test_normalize_and_ema_helpers() -> None:
+    assert normalize_brainflow_score(.5) == 50
+    assert normalize_brainflow_score(None) is None
+    assert smooth_ema(80, 0, .5) == 40
+
+
+def test_calibration_makes_selected_display_metrics_relative_to_their_own_baselines() -> None:
+    calculator = MetricCalculator()
+    baseline = MetricInput({"theta": 4, "alpha": 6, "smr": 3, "beta": 2, "gamma": 1}, .5, .4, .6, "theta-beta-ratio", 1.85, True)
+    calculator.start_calibration({"thetaBeta"})
+    for _ in range(24):
+        snapshot = calculator.push(baseline)
+    assert snapshot.calibration_status == "active"
+    assert snapshot.ratios["thetaBeta"] == 50
+    # A selected calibration changes only that metric; other values remain raw.
+    assert snapshot.brainflow_scores.mindfulness_score == 40
+    # Protocol feedback remains in absolute units so its training target does
+    # not move when the display is calibrated.
+    assert snapshot.protocol_feedback.value is not None and snapshot.protocol_feedback.value > 0
+    calculator.reset_calibration()
+    snapshot = calculator.push(baseline)
+    assert snapshot.calibration_status == "off"
+    assert snapshot.ratios["thetaBeta"] > 0
+
+
+def test_calibration_uses_a_normal_distribution_percentile() -> None:
+    calculator = MetricCalculator(smoothing_alpha=1)
+    calculator.start_calibration({"thetaBeta"})
+    for theta in range(1, 25):
+        calculator.push(MetricInput({"theta": theta, "beta": 1}, None, None, None, "theta-beta-ratio", 1.85, True))
+    snapshot = calculator.push(MetricInput({"theta": 30, "beta": 1}, None, None, None, "theta-beta-ratio", 1.85, True))
+    # A value well above calibration maps above the distribution midpoint.
+    assert 50 < snapshot.ratios["thetaBeta"] < 100

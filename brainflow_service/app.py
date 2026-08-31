@@ -17,15 +17,16 @@ from .dsp import (
     extract_band_power_features,
     extract_brainflow_mindfulness,
     extract_brainflow_restfulness,
+    extract_interhemispheric_coherence,
     preprocess_eeg_window,
 )
-from .affective_state import compute_raw_affective_sample
+from .affective_state import FitQualityHint
 from .headset_fit import (
     HeuristicHeadsetFitProvider,
     select_scalp_electrode_indices,
     to_signal_quality_metadata,
 )
-from .metrics import compute_neurofeedback_scores, normalize_brainflow_score
+from .metrics import MetricCalculator, MetricInput
 from .models import (
     SignalChannel,
     SignalFeatures,
@@ -71,6 +72,12 @@ class StartHeadsetFitSessionResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     fit_session_id: str = Field(alias="fitSessionId")
+
+
+class StartMetricCalibrationRequest(BaseModel):
+    """Omit metrics to calibrate every available derived metric."""
+    model_config = ConfigDict(populate_by_name=True)
+    metrics: list[str] | None = None
 
 
 class AssessHeadsetFitRequest(BaseModel):
@@ -180,49 +187,38 @@ def analyze_window(request: AnalyzeWindowRequest) -> AnalyzeWindowResponse:
     brainflow_restfulness = extract_brainflow_restfulness(window, sample_rate)
     features = None
     if band_powers or brainflow_mindfulness is not None or brainflow_restfulness is not None:
-        if fit_snapshot.excessive_artifact:
-            # Mirrors AffectiveStateProvider/HeuristicAttentionProvider's
-            # quality gate: raw band powers and BrainFlow's ML outputs are
-            # still reported, but the derived/smoothed scores are withheld
-            # since they aren't reliable for a window this noisy.
-            features = SignalFeatures(
-                bandPowers=band_powers,
-                brainflowConcentration=brainflow_mindfulness,
-                brainflowRestfulness=brainflow_restfulness,
-            )
-        else:
-            # This endpoint is stateless (no session to smooth across), so
-            # these are single-window scores -- callers streaming a session
-            # should use `/sessions/{id}/stream` instead, which returns the
-            # same finished scores with the bundled app's EMA smoothing
-            # applied.
-            theta_power = band_powers.absolute.get("theta", 0.0) if band_powers else 0.0
-            alpha_power = band_powers.absolute.get("alpha", 0.0) if band_powers else 0.0
-            beta_power = band_powers.absolute.get("beta", 0.0) if band_powers else 0.0
-            gamma_power = band_powers.absolute.get("gamma", 0.0) if band_powers else 0.0
-            neurofeedback = compute_neurofeedback_scores(
-                theta_power=theta_power,
-                alpha_power=alpha_power,
-                beta_power=beta_power,
-            )
-            # No session here, so no smoothing/calibration to apply --
-            # valence and arousal equal their raw values.
-            raw_affective = compute_raw_affective_sample(theta_power, alpha_power, beta_power, gamma_power)
-            features = SignalFeatures(
-                bandPowers=band_powers,
-                brainflowConcentration=brainflow_mindfulness,
-                brainflowRestfulness=brainflow_restfulness,
-                mindfulnessScore=normalize_brainflow_score(brainflow_mindfulness),
-                restfulnessScore=normalize_brainflow_score(brainflow_restfulness),
-                focusScore=neurofeedback.focus_score,
-                relaxScore=neurofeedback.relax_score,
-                valence=raw_affective.valence if raw_affective else None,
-                arousal=raw_affective.arousal if raw_affective else None,
-                rawValence=raw_affective.valence if raw_affective else None,
-                rawArousal=raw_affective.arousal if raw_affective else None,
-                stateLabel=raw_affective.label if raw_affective else None,
-                confidence=raw_affective.confidence if raw_affective else None,
-            )
+        # A fresh calculator intentionally makes this endpoint a one-window
+        # snapshot while still using precisely the same metric definitions.
+        coherence = extract_interhemispheric_coherence(processed, sample_rate, [c.id for c in channels])
+        snapshot = MetricCalculator().push(MetricInput(
+            absolute_bands=band_powers.absolute if band_powers else {},
+            interhemispheric_coherence=coherence,
+            raw_mindfulness=brainflow_mindfulness,
+            raw_restfulness=brainflow_restfulness,
+            protocol="theta-beta-ratio",
+            threshold=1.85,
+            reliable=not fit_snapshot.excessive_artifact,
+            fit=FitQualityHint(ready=fit_snapshot.ready, state=fit_snapshot.state),
+        ))
+        if band_powers:
+            band_powers = band_powers.model_copy(update={"absolute": snapshot.absolute_bands, "relative": snapshot.relative_bands, "ratios": snapshot.ratios})
+        affective, feedback = snapshot.affective_state, snapshot.protocol_feedback
+        features = SignalFeatures(
+            bandPowers=band_powers,
+            brainflowConcentration=brainflow_mindfulness,
+            brainflowRestfulness=brainflow_restfulness,
+            mindfulnessScore=snapshot.brainflow_scores.mindfulness_score,
+            restfulnessScore=snapshot.brainflow_scores.restfulness_score,
+            valence=affective.valence if affective else None,
+            arousal=affective.arousal if affective else None,
+            stateLabel=affective.label if affective else None,
+            confidence=affective.confidence if affective else None,
+            interhemisphericCoherence=snapshot.interhemispheric_coherence,
+            primaryMetricName=feedback.metric_name,
+            primaryMetricValue=feedback.value,
+            inZone=feedback.in_zone,
+            zoneScore=feedback.zone_score,
+        )
 
     return AnalyzeWindowResponse(features=features, quality=quality).model_dump(by_alias=True)
 
@@ -342,6 +338,18 @@ def stop_headset_fit_session(fit_session_id: str) -> dict[str, str]:
     return {"state": "stopped"}
 
 
+@app.post("/headset-fit/sessions/{fit_session_id}/metrics/calibration")
+def start_fit_metric_calibration(fit_session_id: str, request: StartMetricCalibrationRequest | None = None) -> dict[str, str]:
+    _get_analysis_session_or_404(fit_session_id).metrics.start_calibration(None if request is None else set(request.metrics or []))
+    return {"state": "collecting"}
+
+
+@app.delete("/headset-fit/sessions/{fit_session_id}/metrics/calibration")
+def reset_fit_metric_calibration(fit_session_id: str) -> dict[str, str]:
+    _get_analysis_session_or_404(fit_session_id).metrics.reset_calibration()
+    return {"state": "off"}
+
+
 def _get_analysis_session_or_404(fit_session_id: str):
     try:
         return analysis_session_store.get(fit_session_id)
@@ -417,3 +425,15 @@ async def stream_session(session_id: str) -> StreamingResponse:
 def stop_session(session_id: str) -> dict[str, str]:
     store.stop(session_id)
     return {"state": "disconnected"}
+
+
+@app.post("/sessions/{session_id}/metrics/calibration")
+def start_session_metric_calibration(session_id: str, request: StartMetricCalibrationRequest | None = None) -> dict[str, str]:
+    _get_session_or_404(session_id).start_metric_calibration(None if request is None else set(request.metrics or []))
+    return {"state": "collecting"}
+
+
+@app.delete("/sessions/{session_id}/metrics/calibration")
+def reset_session_metric_calibration(session_id: str) -> dict[str, str]:
+    _get_session_or_404(session_id).reset_metric_calibration()
+    return {"state": "off"}

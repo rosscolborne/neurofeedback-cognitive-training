@@ -29,24 +29,13 @@ class SignalFeatures(BaseModel):
     brainflow_concentration: float | None = Field(default=None, alias="brainflowConcentration")
     brainflow_restfulness: float | None = Field(default=None, alias="brainflowRestfulness")
 
-    # Finished, display-ready 0-100 scores. From `/analyze-window` these are
-    # instantaneous (no smoothing, since that endpoint is stateless). From a
-    # `/sessions/{id}/stream` SSE feed these carry the same slow-EMA
-    # smoothing the bundled frontend applies, so a consumer needs no
-    # client-side scoring logic at all. mindfulness/restfulness are null
-    # when BrainFlow's classifier had no usable prediction for the window.
+    # Finished output-smoothed scores from BrainFlow's pretrained models.
     mindfulness_score: float | None = Field(default=None, alias="mindfulnessScore")
     restfulness_score: float | None = Field(default=None, alias="restfulnessScore")
-    focus_score: int | None = Field(default=None, alias="focusScore")
-    relax_score: int | None = Field(default=None, alias="relaxScore")
-
-    # Valence/arousal proxy, its raw values, nearest-label classification,
-    # and confidence. Session streams smooth these values; no baseline
-    # calibration is applied.
+    # Valence/arousal are derived from input-smoothed bands and receive no
+    # additional score-level smoothing.
     valence: float | None = None
     arousal: float | None = None
-    raw_valence: float | None = Field(default=None, alias="rawValence")
-    raw_arousal: float | None = Field(default=None, alias="rawArousal")
     state_label: str | None = Field(default=None, alias="stateLabel")
     confidence: float | None = None
     # 0–1 magnitude-squared spectral coherence across AF7↔AF8 and TP9↔TP10.
@@ -54,9 +43,15 @@ class SignalFeatures(BaseModel):
     interhemispheric_coherence: float | None = Field(
         default=None, alias="interhemisphericCoherence",
     )
-    theta_beta_ratio: float | None = Field(default=None, alias="thetaBetaRatio")
+    primary_metric_name: str | None = Field(default=None, alias="primaryMetricName")
+    primary_metric_value: float | None = Field(default=None, alias="primaryMetricValue")
     in_zone: bool | None = Field(default=None, alias="inZone")
     zone_score: float | None = Field(default=None, alias="zoneScore")
+    calibration_status: Literal["off", "collecting", "active"] = Field(default="off", alias="calibrationStatus")
+    calibration_progress: int = Field(default=0, alias="calibrationProgress")
+    calibration_required: int = Field(default=24, alias="calibrationRequired")
+    raw_metrics: dict[str, float] = Field(default_factory=dict, alias="rawMetrics")
+    baseline_relative_metrics: dict[str, float] = Field(default_factory=dict, alias="baselineRelativeMetrics")
 
 
 class ChannelSignalQualityModel(BaseModel):

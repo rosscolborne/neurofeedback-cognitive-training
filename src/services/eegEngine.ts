@@ -63,6 +63,10 @@ export class EEGEngine {
   // Latest band powers from server
   private latestServerBands: BandPowers | null = null;
   private latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
+  private latestServerRatios: Record<string, number> = {};
+  private latestMetricCalibration: { status: 'off' | 'collecting' | 'active'; progress: number; required: number } = { status: 'off', progress: 0, required: 24 };
+  private latestRawMetrics: Record<string, number> = {};
+  private latestBaselineRelativeMetrics: Record<string, number> = {};
   private latestInterhemisphericCoherence: number | null = null;
   private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null } | null = null;
 
@@ -151,6 +155,18 @@ export class EEGEngine {
 
   public getThreshold(): number {
     return this.targetThreshold;
+  }
+
+  public async startMetricCalibration(metrics?: string[]): Promise<void> {
+    if (this.brainflowSessionId) return brainflowService.startMetricCalibration(this.brainflowSessionId, false, metrics);
+    if (this.fitSessionId) return brainflowService.startMetricCalibration(this.fitSessionId, true, metrics);
+    throw new Error('Connect an EEG device before calibrating metrics.');
+  }
+
+  public async resetMetricCalibration(): Promise<void> {
+    if (this.brainflowSessionId) return brainflowService.resetMetricCalibration(this.brainflowSessionId);
+    if (this.fitSessionId) return brainflowService.resetMetricCalibration(this.fitSessionId, true);
+    throw new Error('Connect an EEG device before resetting metric calibration.');
   }
 
   public subscribe(cb: (data: EEGDataPoint) => void): () => void {
@@ -474,11 +490,10 @@ export class EEGEngine {
                 beta: typeof absoluteBands.beta === 'number',
                 gamma: typeof absoluteBands.gamma === 'number',
               };
+              this.latestServerRatios = frame.features.bandPowers?.ratios ?? {};
             }
 
             this.latestBrainFlowScores = {
-              focusScore: frame.features.focusScore ?? null,
-              relaxScore: frame.features.relaxScore ?? null,
               mindfulnessScore: frame.features.mindfulnessScore ?? null,
               restfulnessScore: frame.features.restfulnessScore ?? null,
               valence: frame.features.valence ?? null,
@@ -487,7 +502,10 @@ export class EEGEngine {
               method: 'brainflow_welch_psd',
             };
             this.latestInterhemisphericCoherence = frame.features.interhemisphericCoherence ?? null;
-            this.latestTrainingFeedback = { ratio: frame.features.thetaBetaRatio ?? null, inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null };
+            this.latestMetricCalibration = { status: frame.features.calibrationStatus ?? 'off', progress: frame.features.calibrationProgress ?? 0, required: frame.features.calibrationRequired ?? 24 };
+            this.latestRawMetrics = frame.features.rawMetrics ?? {};
+            this.latestBaselineRelativeMetrics = frame.features.baselineRelativeMetrics ?? {};
+            this.latestTrainingFeedback = { ratio: frame.features.bandPowers?.ratios?.thetaBeta ?? null, inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null };
           }
 
           if (frame.training) {
@@ -550,6 +568,7 @@ export class EEGEngine {
     this.latestTrainingMetric = null;
     this.latestServerBands = null;
     this.latestServerBandAvailability = {};
+    this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
     this.serverFitState = null;
@@ -720,8 +739,6 @@ export class EEGEngine {
         if (response.features) {
           const f = response.features;
           this.latestBrainFlowScores = {
-            focusScore: f.focusScore ?? null,
-            relaxScore: f.relaxScore ?? null,
             mindfulnessScore: f.mindfulnessScore ?? null,
             restfulnessScore: f.restfulnessScore ?? null,
             valence: f.valence ?? null,
@@ -730,7 +747,10 @@ export class EEGEngine {
             method: 'brainflow_welch_psd',
           };
           this.latestInterhemisphericCoherence = f.interhemisphericCoherence ?? null;
-          this.latestTrainingFeedback = { ratio: f.thetaBetaRatio ?? null, inZone: f.inZone ?? null, zoneScore: f.zoneScore ?? null };
+          this.latestMetricCalibration = { status: f.calibrationStatus ?? 'off', progress: f.calibrationProgress ?? 0, required: f.calibrationRequired ?? 24 };
+          this.latestRawMetrics = f.rawMetrics ?? {};
+          this.latestBaselineRelativeMetrics = f.baselineRelativeMetrics ?? {};
+          this.latestTrainingFeedback = { ratio: f.bandPowers?.ratios?.thetaBeta ?? null, inZone: f.inZone ?? null, zoneScore: f.zoneScore ?? null };
 
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
@@ -751,6 +771,7 @@ export class EEGEngine {
               beta: typeof abs.beta === 'number',
               gamma: typeof abs.gamma === 'number',
             };
+            this.latestServerRatios = f.bandPowers.ratios ?? {};
           }
         }
 
@@ -882,8 +903,6 @@ export class EEGEngine {
         this.userCalm += (targetCalm - this.userCalm) * (dt * 1.8);
 
         this.latestBrainFlowScores = {
-          focusScore: Math.round(this.userFocus),
-          relaxScore: Math.round(this.userCalm),
           mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
           restfulnessScore: Math.round(this.userCalm),
           valence: (this.userCalm - 50) / 50,
@@ -1041,6 +1060,12 @@ export class EEGEngine {
       rawSignal: Math.round(rawSignal * 10) / 10,
       bands,
       bandAvailability,
+      bandRatios: { ...this.latestServerRatios },
+      calibrationStatus: this.latestMetricCalibration.status,
+      calibrationProgress: this.latestMetricCalibration.progress,
+      calibrationRequired: this.latestMetricCalibration.required,
+      rawMetrics: this.latestRawMetrics,
+      baselineRelativeMetrics: this.latestBaselineRelativeMetrics,
       thetaBetaRatio,
       thetaBetaRatioAvailable,
       coherence,

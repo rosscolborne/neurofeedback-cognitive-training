@@ -1,20 +1,19 @@
-"""Per-session baseline-relative Training score.
+"""Per-session z-score-calibrated Training score.
 
 This is intentionally separate from the UI's 60-second Calibration phase
 and from the explicit calibration controls.  It learns a fixed personal
-reference from the first 24 reliable BrainFlow mindfulness readings, then
-reports later readings relative to that reference.
+reference distribution from the first 24 reliable BrainFlow mindfulness
+readings, then scores later readings from their z-score.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from statistics import median
+from .metrics import baseline_distribution, calibration_percentile
 
 
 BASELINE_WINDOW_COUNT = 24
-Z_SCORE_SCALE = 1.5
 SMOOTHING_ALPHA = 0.22
 
 
@@ -46,8 +45,7 @@ class TrainingScoreProvider:
         if self._center is None or self._spread is None:
             return TrainingScoreSample(score=None, baseline_ready=False)
 
-        z_score = (mindfulness - self._center) / self._spread
-        raw_score = 50.0 + math.tanh(z_score / Z_SCORE_SCALE) * 45.0
+        raw_score = calibration_percentile(mindfulness, self._center, self._spread)
         self._smoothed_score = (
             raw_score
             if self._smoothed_score is None
@@ -60,9 +58,7 @@ class TrainingScoreProvider:
         return self._center is not None and self._spread is not None
 
     def _freeze_baseline(self) -> None:
-        center = median(self._baseline_values)
-        mad = median([abs(value - center) for value in self._baseline_values])
-        spread = max(mad * 1.4826, (max(self._baseline_values) - min(self._baseline_values)) / 6.0)
+        center, spread = baseline_distribution(self._baseline_values)
         if math.isfinite(spread) and spread > 0.0:
             self._center = center
             self._spread = spread

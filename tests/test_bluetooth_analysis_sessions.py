@@ -57,8 +57,6 @@ def test_analyze_window_returns_smoothed_features() -> None:
     features = body["features"]
     assert features is not None
     assert features["bandPowers"] is not None
-    assert 0 <= features["focusScore"] <= 100
-    assert 0 <= features["relaxScore"] <= 100
     assert -1 <= features["valence"] <= 1
     assert -1 <= features["arousal"] <= 1
     assert isinstance(features["stateLabel"], str)
@@ -67,7 +65,7 @@ def test_analyze_window_returns_smoothed_features() -> None:
     assert quality["state"] in ("poor", "adjusting", "good", "ready")
     assert len(quality["channels"]) == 4
 
-def test_analyze_window_smooths_across_calls_instead_of_resetting() -> None:
+def test_analyze_window_smooths_band_derived_metrics_across_calls() -> None:
     # Mirrors `test_stability_accumulates_across_calls_on_the_same_session`
     # in test_headset_fit_sessions.py, but for score smoothing: a fresh
     # per-call provider (the old stateless `/analyze-window`) jumps
@@ -90,7 +88,7 @@ def test_analyze_window_smooths_across_calls_instead_of_resetting() -> None:
             json={"sampleRateHz": 256, "samples": samples, "channelIds": channel_ids},
         )
         assert response.status_code == 200
-        return response.json()["features"]["focusScore"]
+        return response.json()["features"]["bandPowers"]["absolute"]["beta"]
 
     first_score = analyze(low_focus_window)
     second_score = analyze(high_focus_window)
@@ -108,8 +106,8 @@ def test_analyze_window_smooths_across_calls_instead_of_resetting() -> None:
         "/analyze-window",
         json={"sampleRateHz": 256, "samples": high_focus_window},
     )
-    raw_high_focus_score = stateless_response.json()["features"]["focusScore"]
-    assert second_score < raw_high_focus_score
+    raw_high_beta = stateless_response.json()["features"]["bandPowers"]["absolute"]["beta"]
+    assert second_score < raw_high_beta
 
 
 def test_analyze_window_404_for_unknown_session() -> None:
