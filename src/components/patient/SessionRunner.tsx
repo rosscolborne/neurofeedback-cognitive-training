@@ -338,7 +338,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const handleConnectHardware = async () => {
     setIsPairing(true);
-    const res = await eegEngine.connectMuseAthenaBrainflow();
+    const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     forceUpdate({});
     if (res.success) {
