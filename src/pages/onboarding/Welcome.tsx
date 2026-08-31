@@ -9,26 +9,16 @@ export const Welcome: React.FC = () => {
   const hasPlayedAudio = useRef(false);
 
   useEffect(() => {
-    // Auto-play the serene 432Hz meditative singing bowl chime on startup
-    const playChimeOnce = () => {
+    // Play the serene 432Hz meditative singing bowl chime on the user's first touch/click
+    const handleFirstInteraction = () => {
       if (!hasPlayedAudio.current) {
         hasPlayedAudio.current = true;
         try {
           audioEngine.playMeditativeIntroChime();
         } catch (e) {
-          // Gracefully ignore any browser autoplay restrictions
+          // Gracefully ignore any audio restrictions
         }
       }
-    };
-
-    // Attempt immediate playback
-    playChimeOnce();
-
-    // Fallback: If browser audio context was blocked until first gesture, play on first touch/click
-    const handleFirstInteraction = () => {
-      playChimeOnce();
-      window.removeEventListener('pointerdown', handleFirstInteraction);
-      window.removeEventListener('keydown', handleFirstInteraction);
     };
 
     window.addEventListener('pointerdown', handleFirstInteraction, { once: true });

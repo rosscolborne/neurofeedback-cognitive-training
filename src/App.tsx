@@ -70,7 +70,7 @@ export function App() {
     if (!loading) {
       const unsubscribe = storageEngine.subscribeToMessages((threads) => {
         setMessages(threads);
-      });
+      }, role);
       return unsubscribe;
     }
   }, [user, role, loading]);

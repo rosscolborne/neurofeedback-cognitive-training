@@ -835,39 +835,30 @@ class StorageEngine {
     }
   }
 
-  public subscribeToMessages(callback: (threads: MessageThread[]) => void): () => void {
+  public subscribeToMessages(callback: (threads: MessageThread[]) => void, role?: 'clinician' | 'patient' | null): () => void {
     if (!auth.currentUser) {
       callback([...this.demoMessages]);
       return () => {};
     }
 
     const uid = auth.currentUser.uid;
-    const qClinician = query(
-      collection(db, 'messages'),
-      where('clinicianId', '==', uid)
-    );
+    const isPatient = role === 'patient';
+    const primaryQuery = isPatient
+      ? query(collection(db, 'messages'), where('clientId', '==', uid))
+      : query(collection(db, 'messages'), where('clinicianId', '==', uid));
 
     const unsubscribe = onSnapshot(
-      qClinician,
+      primaryQuery,
       (snapshot) => {
         const docs = snapshot.docs.map((d) => d.data() as MessageThread);
         if (docs.length > 0) {
           callback(docs);
         } else {
-          const qPatient = query(
-            collection(db, 'messages'),
-            where('clientId', '==', uid)
-          );
-          getDocs(qPatient).then((pSnap) => {
-            const pDocs = pSnap.docs.map((d) => d.data() as MessageThread);
-            callback(pDocs.length > 0 ? pDocs : [...this.demoMessages]);
-          }).catch(() => {
-            callback([...this.demoMessages]);
-          });
+          callback([...this.demoMessages]);
         }
       },
       (err) => {
-        console.warn('onSnapshot error for messages:', err);
+        // If Firestore rules or offline restricts this listener, fall back gracefully
         callback([...this.demoMessages]);
       }
     );
