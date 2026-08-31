@@ -553,18 +553,24 @@ class StorageEngine {
     try {
       const snap = await getDoc(doc(db, 'clients', id));
       if (snap.exists()) {
-        return snap.data() as ClientProfile;
+        const client = snap.data() as ClientProfile;
+        if (client.allowedExperiences) {
+          client.allowedExperiences = client.allowedExperiences.map((e: any) =>
+            e === 'spatial-audio' ? 'generative-music' : e
+          );
+        }
+        return client;
       }
     } catch (err) {
       console.warn('Failed to fetch client from Firestore:', err);
     }
-    return this.demoClients.find((c) => c.id === id) || null;
+    return null;
   }
 
   public async getClients(clinicianId?: string): Promise<ClientProfile[]> {
     const activeClinicianId = clinicianId || auth.currentUser?.uid;
     if (!activeClinicianId) {
-      return [...this.demoClients];
+      return [];
     }
 
     try {
@@ -572,29 +578,21 @@ class StorageEngine {
         collection(db, 'clients'),
         where('clinicianId', '==', activeClinicianId)
       );
-      const snap = await Promise.race([
-        getDocs(q),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-      ]);
-      if (snap) {
-        const docs = snap.docs.map((d) => {
-          const client = d.data() as ClientProfile;
-          if (client.allowedExperiences) {
-            client.allowedExperiences = client.allowedExperiences.map((e: any) =>
-              e === 'spatial-audio' ? 'generative-music' : e
-            );
-          }
-          return client;
-        });
-        if (docs.length > 0) {
-          return docs;
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => {
+        const client = d.data() as ClientProfile;
+        if (client.allowedExperiences) {
+          client.allowedExperiences = client.allowedExperiences.map((e: any) =>
+            e === 'spatial-audio' ? 'generative-music' : e
+          );
         }
-      }
+        return client;
+      });
+      return docs;
     } catch (err) {
       console.warn('Failed to fetch clients from Firestore:', err);
+      return [];
     }
-
-    return [...this.demoClients];
   }
 
   public async saveClient(client: ClientProfile): Promise<void> {
@@ -638,15 +636,17 @@ class StorageEngine {
     }
   }
 
-  public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile> {
+  public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
     if (user?.uid) {
       try {
-        const snap = await Promise.race([
-          getDoc(doc(db, 'clients', user.uid)),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-        ]);
+        const snap = await getDoc(doc(db, 'clients', user.uid));
         if (snap && snap.exists()) {
           const existing = snap.data() as ClientProfile;
+          if (existing.allowedExperiences) {
+            existing.allowedExperiences = existing.allowedExperiences.map((e: any) =>
+              e === 'spatial-audio' ? 'generative-music' : e
+            );
+          }
           if (!existing.name && user.displayName) {
             existing.name = user.displayName
               .trim()
@@ -664,14 +664,14 @@ class StorageEngine {
       const fresh = createBlankProfile(user.uid, user.email || 'user@brainswell.app', user.displayName);
       fresh.patientId = user.uid;
       try {
-        setDoc(doc(db, 'clients', user.uid), fresh).catch(() => {});
+        await setDoc(doc(db, 'clients', user.uid), fresh);
       } catch (err) {
         console.warn('Failed to initialize client profile in Firestore:', err);
       }
       return fresh;
     }
 
-    return this.demoClients[0] || createBlankProfile('default-patient', 'patient@brainswell.app');
+    return null;
   }
 
   public setCurrentClientId(id: string) {
@@ -679,11 +679,11 @@ class StorageEngine {
   }
 
   public async getSessions(clientId?: string): Promise<SessionRecord[]> {
-    if (!auth.currentUser || (clientId && clientId.startsWith('demo-'))) {
-      if (clientId) {
-        return this.demoSessions.filter((s) => s.patientId === clientId);
-      }
-      return [...this.demoSessions];
+    if (clientId && clientId.startsWith('demo-')) {
+      return this.demoSessions.filter((s) => s.patientId === clientId);
+    }
+    if (!auth.currentUser) {
+      return [];
     }
 
     try {
@@ -694,17 +694,11 @@ class StorageEngine {
       );
       const snap = await getDocs(q);
       const docs = snap.docs.map((d) => d.data() as SessionRecord);
-      if (docs.length > 0) {
-        return docs.sort((a, b) => b.timestamp - a.timestamp);
-      }
+      return docs.sort((a, b) => b.timestamp - a.timestamp);
     } catch (err) {
       console.warn('Failed to fetch sessions from Firestore:', err);
+      return [];
     }
-
-    if (clientId && clientId.startsWith('demo-')) {
-      return this.demoSessions.filter((s) => s.patientId === clientId);
-    }
-    return this.demoSessions.filter((s) => (clientId ? s.patientId === clientId : true));
   }
 
   public async saveSession(session: SessionRecord): Promise<void> {
@@ -778,7 +772,7 @@ class StorageEngine {
 
   public async getMessages(): Promise<MessageThread[]> {
     if (!auth.currentUser) {
-      return [...this.demoMessages];
+      return [];
     }
     try {
       const q = query(
@@ -799,12 +793,12 @@ class StorageEngine {
       );
       const snapPatient = await getDocs(qPatient);
       const docsPatient = snapPatient.docs.map((d) => d.data() as MessageThread);
-      if (docsPatient.length > 0) return docsPatient;
+      return docsPatient;
     } catch (err) {
       console.warn('Failed to fetch messages for patient from Firestore:', err);
     }
 
-    return [...this.demoMessages];
+    return [];
   }
 
   public async saveMessageThread(thread: MessageThread): Promise<void> {
@@ -837,7 +831,7 @@ class StorageEngine {
 
   public subscribeToMessages(callback: (threads: MessageThread[]) => void, role?: 'clinician' | 'patient' | null): () => void {
     if (!auth.currentUser) {
-      callback([...this.demoMessages]);
+      callback([]);
       return () => {};
     }
 
@@ -851,15 +845,10 @@ class StorageEngine {
       primaryQuery,
       (snapshot) => {
         const docs = snapshot.docs.map((d) => d.data() as MessageThread);
-        if (docs.length > 0) {
-          callback(docs);
-        } else {
-          callback([...this.demoMessages]);
-        }
+        callback(docs);
       },
       (err) => {
-        // If Firestore rules or offline restricts this listener, fall back gracefully
-        callback([...this.demoMessages]);
+        callback([]);
       }
     );
 
@@ -868,7 +857,7 @@ class StorageEngine {
 
   public async getAppointments(clinicianOrPatientId?: string): Promise<CalendarAppointment[]> {
     if (!auth.currentUser) {
-      return [...this.demoAppointments];
+      return [];
     }
     const uid = clinicianOrPatientId || auth.currentUser.uid;
 
@@ -891,12 +880,12 @@ class StorageEngine {
       );
       const snapPatient = await getDocs(qPatient);
       const docsPatient = snapPatient.docs.map((d) => d.data() as CalendarAppointment);
-      if (docsPatient.length > 0) return docsPatient;
+      return docsPatient;
     } catch (err) {
       console.warn('Failed to fetch appointments for patient from Firestore:', err);
     }
 
-    return [...this.demoAppointments];
+    return [];
   }
 
   public async saveAppointment(appt: CalendarAppointment): Promise<void> {
