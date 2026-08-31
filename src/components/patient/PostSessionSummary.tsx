@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
-import confetti from 'canvas-confetti';
 
 interface PostSessionSummaryProps {
   session: SessionRecord;
@@ -26,15 +25,6 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
   const [selectedMood, setSelectedMood] = useState<1 | 2 | 3 | 4 | 5 | undefined>(session.moodRating || 4);
   const [patientNotes, setPatientNotes] = useState(session.patientNotes || '');
   const [isSaved, setIsSaved] = useState(false);
-
-  React.useEffect(() => {
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.6 },
-      colors: ['#E8967A', '#E4B87C', '#7B68AE', '#5C8C46'],
-    });
-  }, []);
 
   const handleSave = async () => {
     session.moodRating = selectedMood;

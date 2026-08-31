@@ -15,7 +15,7 @@ import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
 import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { HeadsetFitModal } from './HeadsetFitModal';
-import { Play, Pause, Wifi, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, BrainCircuit } from 'lucide-react';
+import { Play, Pause, Wifi, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, Brain } from 'lucide-react';
 
 const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism: string; benefit: string; instructions: string }> = {
   'skyline-drift': {
@@ -503,7 +503,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: 'var(--brand-primary-subtle)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <BrainCircuit size={24} />
+                <Brain size={24} />
               </div>
               <h2 className="font-display" style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 {MODALITY_BRIEFING_DATA[selectedExperience]?.title || 'Session Briefing'}
@@ -632,7 +632,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             animation: 'gentleFloat 0.3s ease',
           }}
         >
-          <BrainCircuit size={18} color="var(--brand-primary)" />
+          <Brain size={18} color="var(--brand-primary)" />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
               Adaptive Engine: Target {adjustmentNotice.direction}
