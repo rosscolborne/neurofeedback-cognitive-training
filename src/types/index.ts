@@ -38,8 +38,6 @@ export interface MuseChannelQuality {
 }
 
 export interface BrainFlowScores {
-  focusScore: number | null;
-  relaxScore: number | null;
   mindfulnessScore: number | null;
   restfulnessScore: number | null;
   valence?: number | null;       // -1 (negative) to +1 (positive)
@@ -81,6 +79,13 @@ export interface EEGDataPoint {
   bands: BandPowers;
   /** Which server band-power values were actually supplied for this frame. */
   bandAvailability: Partial<Record<keyof BandPowers, boolean>>;
+  /** Server-computed ratios, all derived from the same smoothed band snapshot. */
+  bandRatios: Record<string, number>;
+  calibrationStatus?: 'off' | 'collecting' | 'active';
+  calibrationProgress?: number;
+  calibrationRequired?: number;
+  rawMetrics?: Record<string, number>;
+  baselineRelativeMetrics?: Record<string, number>;
   thetaBetaRatio: number;
   thetaBetaRatioAvailable: boolean;
   /** 0–100 measured coherence percentage; null when the service could not compute it. */

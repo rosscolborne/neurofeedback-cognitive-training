@@ -26,12 +26,7 @@ export interface BrainFlowBandPowers {
     gamma?: number;
   };
   relative: Record<string, number>;
-  ratios: {
-    alphaTheta?: number;
-    betaTheta?: number;
-    thetaBeta?: number;
-    betaOverAlphaTheta?: number;
-  };
+  ratios: Record<string, number>;
   windowSeconds: number;
   method: 'brainflow_welch_psd';
 }
@@ -42,16 +37,20 @@ export interface BrainFlowFeatures {
   brainflowRestfulness?: number | null;
   mindfulnessScore?: number | null;
   restfulnessScore?: number | null;
-  focusScore?: number;
-  relaxScore?: number;
   valence?: number | null;
   arousal?: number | null;
   interhemisphericCoherence?: number | null;
-  thetaBetaRatio?: number | null;
+  primaryMetricName?: string | null;
+  primaryMetricValue?: number | null;
   inZone?: boolean | null;
   zoneScore?: number | null;
   stateLabel?: string | null;
   emotionLabel?: string | null;
+  calibrationStatus?: 'off' | 'collecting' | 'active';
+  calibrationProgress?: number;
+  calibrationRequired?: number;
+  rawMetrics?: Record<string, number>;
+  baselineRelativeMetrics?: Record<string, number>;
 }
 
 export interface FitWindowResponse {
@@ -100,6 +99,20 @@ class BrainFlowService {
 
   public isServiceOnline(): boolean {
     return this.isOnline;
+  }
+
+  public async startMetricCalibration(sessionId: string, fitSession = false, metrics?: string[]): Promise<void> {
+    const base = fitSession ? `/headset-fit/sessions/${sessionId}` : `/sessions/${sessionId}`;
+    const response = await fetch(`${this.baseUrl}${base}/metrics/calibration`, metrics === undefined ? { method: 'POST' } : {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metrics }),
+    });
+    if (!response.ok) throw new Error('Unable to start metric calibration.');
+  }
+
+  public async resetMetricCalibration(sessionId: string, fitSession = false): Promise<void> {
+    const base = fitSession ? `/headset-fit/sessions/${sessionId}` : `/sessions/${sessionId}`;
+    const response = await fetch(`${this.baseUrl}${base}/metrics/calibration`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Unable to reset metric calibration.');
   }
 
   /**

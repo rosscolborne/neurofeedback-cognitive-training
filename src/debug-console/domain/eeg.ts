@@ -80,29 +80,20 @@ export interface SignalFeatures {
   brainflowConcentration?: number | null;
   brainflowRestfulness?: number | null;
 
-  // Finished, display-ready 0-100 scores and the valence/arousal proxy,
-  // computed and smoothed entirely by `brainflow_service` -- see
-  // `metrics.MindStateSmoother` and `affective_state.AffectiveStateProvider`.
-  // Both connection methods (BrainFlow's `/sessions/{id}/stream` and
-  // Bluetooth's `/headset-fit/sessions/{id}/analyze-window`) populate these
-  // the same way, from the same per-connection smoothing state, so the
-  // frontend never needs its own copy of this math for a real connection --
-  // see `metrics/affectiveStateMetric.ts`'s `AffectiveStateProvider.pushFrame`.
+  // Authoritative values from brainflow_service. The console only presents
+  // them; it never computes a competing local metric pipeline.
   mindfulnessScore?: number | null;
   restfulnessScore?: number | null;
-  focusScore?: number | null;
-  relaxScore?: number | null;
   valence?: number | null;
   arousal?: number | null;
-  rawValence?: number | null;
-  rawArousal?: number | null;
   stateLabel?: string | null;
   confidence?: number | null;
   calibrationActive?: boolean;
   calibrationStatus?: "off" | "collecting" | "active";
   calibrationProgress?: number;
   calibrationRequired?: number;
-  thetaBetaRatio?: number | null;
+  rawMetrics?: Record<string, number>;
+  baselineRelativeMetrics?: Record<string, number>;
   interhemisphericCoherence?: number | null;
 }
 

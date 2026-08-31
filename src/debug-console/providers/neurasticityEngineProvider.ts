@@ -92,6 +92,9 @@ export class NeurasticityEngineProvider implements EegProvider {
     this.events.onState("disconnected", reason);
   }
 
+  async startAffectiveCalibration() { await eegEngine.startMetricCalibration(); }
+  async resetAffectiveCalibration() { await eegEngine.resetMetricCalibration(); }
+
   private publish(point: Parameters<typeof eegEngine.subscribe>[0] extends (data: infer T) => void ? T : never) {
     if (!eegEngine.isHardwareConnected) return;
 
@@ -122,25 +125,26 @@ function toFeatures(point: EEGDataPoint): SignalFeatures {
     bandPowers: {
       absolute: { ...point.bands },
       relative: {},
-      ratios: {
-        thetaBeta: point.thetaBetaRatioAvailable ? point.thetaBetaRatio : 0,
-      },
+      ratios: point.bandRatios,
       windowSeconds: 2,
       method: "brainflow_welch_psd",
     },
     mindfulnessScore: scores?.mindfulnessScore ?? null,
     restfulnessScore: scores?.restfulnessScore ?? null,
-    focusScore: scores?.focusScore ?? null,
-    relaxScore: scores?.relaxScore ?? null,
     valence: scores?.valence ?? null,
     arousal: scores?.arousal ?? null,
-    // EEGEngine exposes the finished product values. The console needs raw
-    // fields to render its proxy panel, so use those same values rather than
-    // recomputing a second, divergent estimate.
-    rawValence: scores?.valence ?? null,
-    rawArousal: scores?.arousal ?? null,
     stateLabel: scores?.emotionLabel ?? null,
-    thetaBetaRatio: point.thetaBetaRatioAvailable ? point.thetaBetaRatio : null,
+    // EEGEngine exposes coherence as a percentage for the product UI; the
+    // debug-console SignalFeatures contract uses the service's 0–1 value.
+    interhemisphericCoherence:
+      point.coherenceAvailable && point.coherence != null
+        ? point.coherence / 100
+        : null,
+    calibrationStatus: point.calibrationStatus,
+    calibrationProgress: point.calibrationProgress,
+    calibrationRequired: point.calibrationRequired,
+    rawMetrics: point.rawMetrics,
+    baselineRelativeMetrics: point.baselineRelativeMetrics,
   };
 }
 

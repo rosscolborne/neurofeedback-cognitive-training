@@ -85,12 +85,9 @@ export function LiveEegPlot({ channelNames, history }: LiveEegPlotProps) {
     });
   }, [channelNames, history]);
 
-  return (
-    <canvas
+  return <div className="live-plot-frame"><canvas
       ref={canvasRef}
       className="live-plot"
       aria-label="Live EEG channel plot"
-    />
-  );
+    />{channelNames.length > 1 && <div className="plot-legend">{channelNames.map((name, index) => <span key={name}><i style={{ backgroundColor: colors[index % colors.length] }} />{name}</span>)}</div>}</div>;
 }
-

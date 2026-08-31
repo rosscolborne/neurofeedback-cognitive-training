@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .affective_state import AffectiveStateProvider, FitQualityHint
+from .affective_state import FitQualityHint
 from .config import DEFAULT_PROCESSING, ProcessingConfig
 from .dsp import (
     extract_band_power_features,
@@ -36,7 +36,7 @@ from .headset_fit import (
     to_signal_quality_metadata,
 )
 from .models import SignalChannel, SignalFeatures, SignalQualityMetadata, TrainingMetricSampleModel
-from .metrics import ProtocolMetricSmoother, compute_training_feedback
+from .metrics import MetricCalculator, MetricInput
 from .training import TrainingScoreProvider
 
 
@@ -49,9 +49,8 @@ class AnalysisProviders:
     each reimplementing which state goes with which score."""
 
     headset_fit: HeuristicHeadsetFitProvider
-    affective_state: AffectiveStateProvider = field(default_factory=AffectiveStateProvider)
     training_score: TrainingScoreProvider = field(default_factory=TrainingScoreProvider)
-    protocol_metrics: ProtocolMetricSmoother = field(default_factory=ProtocolMetricSmoother)
+    metrics: MetricCalculator = field(default_factory=MetricCalculator)
 
 
 @dataclass(frozen=True)
@@ -102,34 +101,23 @@ def analyze_window(
         brainflow_restfulness = extract_brainflow_restfulness(raw_window, sample_rate)
 
         if band_powers or brainflow_mindfulness is not None or brainflow_restfulness is not None:
-            smoothed_metrics = providers.protocol_metrics.push(
-                band_powers.absolute if band_powers else {}, interhemispheric_coherence,
-            )
-            theta_beta_ratio, in_zone, zone_score = compute_training_feedback(
-                smoothed_metrics.bands,
-                protocol,
-                threshold,
-                smoothed_metrics.theta_beta_ratio,
-            )
-            if band_powers:
-                band_powers = band_powers.model_copy(update={"absolute": smoothed_metrics.bands})
-            theta_power = band_powers.absolute.get("theta", 0.0) if band_powers else 0.0
-            alpha_power = band_powers.absolute.get("alpha", 0.0) if band_powers else 0.0
-            beta_power = band_powers.absolute.get("beta", 0.0) if band_powers else 0.0
-            gamma_power = band_powers.absolute.get("gamma", 0.0) if band_powers else 0.0
             reliable = not fit_snapshot.excessive_artifact
-
-            sample = providers.affective_state.push(
-                at_ms=at_ms,
-                theta_power=theta_power,
-                alpha_power=alpha_power,
-                beta_power=beta_power,
-                gamma_power=gamma_power,
+            snapshot = providers.metrics.push(MetricInput(
+                absolute_bands=band_powers.absolute if band_powers else {},
+                interhemispheric_coherence=interhemispheric_coherence,
                 raw_mindfulness=brainflow_mindfulness,
                 raw_restfulness=brainflow_restfulness,
+                protocol=protocol,
+                threshold=threshold,
                 reliable=reliable,
                 fit=FitQualityHint(ready=fit_snapshot.ready, state=fit_snapshot.state),
-            )
+            ))
+            if band_powers:
+                band_powers = band_powers.model_copy(update={
+                    "absolute": snapshot.absolute_bands,
+                    "relative": snapshot.relative_bands,
+                    "ratios": snapshot.ratios,
+                })
             training_sample = providers.training_score.push(
                 brainflow_mindfulness, reliable=reliable,
             )
@@ -141,20 +129,22 @@ def analyze_window(
                 bandPowers=band_powers,
                 brainflowConcentration=brainflow_mindfulness,
                 brainflowRestfulness=brainflow_restfulness,
-                mindfulnessScore=sample.mindfulness_score if sample else None,
-                restfulnessScore=sample.restfulness_score if sample else None,
-                focusScore=sample.focus_score if sample else None,
-                relaxScore=sample.relax_score if sample else None,
-                valence=sample.valence if sample else None,
-                arousal=sample.arousal if sample else None,
-                rawValence=sample.raw_valence if sample else None,
-                rawArousal=sample.raw_arousal if sample else None,
-                stateLabel=sample.label if sample else None,
-                confidence=sample.confidence if sample else None,
-                interhemisphericCoherence=smoothed_metrics.interhemispheric_coherence,
-                thetaBetaRatio=theta_beta_ratio,
-                inZone=in_zone,
-                zoneScore=zone_score,
+                mindfulnessScore=snapshot.brainflow_scores.mindfulness_score,
+                restfulnessScore=snapshot.brainflow_scores.restfulness_score,
+                valence=snapshot.affective_state.valence if snapshot.affective_state else None,
+                arousal=snapshot.affective_state.arousal if snapshot.affective_state else None,
+                stateLabel=snapshot.affective_state.label if snapshot.affective_state else None,
+                confidence=snapshot.affective_state.confidence if snapshot.affective_state else None,
+                interhemisphericCoherence=snapshot.interhemispheric_coherence,
+                primaryMetricName=snapshot.protocol_feedback.metric_name,
+                primaryMetricValue=snapshot.protocol_feedback.value,
+                inZone=snapshot.protocol_feedback.in_zone,
+                zoneScore=snapshot.protocol_feedback.zone_score,
+                calibrationStatus=snapshot.calibration_status,
+                calibrationProgress=snapshot.calibration_progress,
+                calibrationRequired=snapshot.calibration_required,
+                rawMetrics=snapshot.raw_metrics,
+                baselineRelativeMetrics=snapshot.baseline_relative_metrics,
             )
 
     return WindowAnalysis(fit_snapshot=fit_snapshot, quality=quality, features=features, training=training)

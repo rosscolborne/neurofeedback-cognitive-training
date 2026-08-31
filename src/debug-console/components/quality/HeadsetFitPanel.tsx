@@ -5,6 +5,8 @@ import {
   Headphones,
   Info,
   RefreshCw,
+  RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { HeadsetFitSnapshot } from "../../signalQuality/headsetFitProvider";
 
@@ -21,6 +23,9 @@ interface HeadsetFitPanelProps {
   fit: HeadsetFitSnapshot;
   check: FitCheckState;
   onRunCheck: () => void;
+  calibrationStatus: "off" | "collecting" | "active";
+  onCalibrate: () => void;
+  onResetCalibration: () => void;
 }
 
 const channelPositions: Record<string, string> = {
@@ -34,7 +39,7 @@ const channelPositions: Record<string, string> = {
   aux4: "aux-four",
 };
 
-export function HeadsetFitPanel({ fit, check, onRunCheck }: HeadsetFitPanelProps) {
+export function HeadsetFitPanel({ fit, check, onRunCheck, calibrationStatus, onCalibrate, onResetCalibration }: HeadsetFitPanelProps) {
   const stableSeconds = Math.min(
     fit.requiredStableMs / 1000,
     fit.stableForMs / 1000,
@@ -78,6 +83,8 @@ export function HeadsetFitPanel({ fit, check, onRunCheck }: HeadsetFitPanelProps
                 ? "Re-run Check"
                 : "Run Check"}
           </button>
+          <button className="secondary-button fit-check-button" onClick={onCalibrate} disabled={calibrationStatus === "collecting"}><SlidersHorizontal aria-hidden="true" />Calibrate</button>
+          <button className="secondary-button fit-check-button" onClick={onResetCalibration} disabled={calibrationStatus === "off"}><RotateCcw aria-hidden="true" />Reset</button>
         </div>
       </div>
 
@@ -212,4 +219,3 @@ function fitCheckDescription(check: FitCheckState, liveFit: HeadsetFitSnapshot) 
 
   return check.result.blockers[0] ?? check.result.message;
 }
-

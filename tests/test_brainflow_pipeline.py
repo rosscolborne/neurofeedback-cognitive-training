@@ -146,12 +146,11 @@ def test_analyze_window_returns_brainflow_restfulness_for_frontend() -> None:
     assert 0 <= features["brainflowRestfulness"] <= 1
     assert 0 <= features["mindfulnessScore"] <= 100
     assert 0 <= features["restfulnessScore"] <= 100
-    assert 0 <= features["focusScore"] <= 100
-    assert 0 <= features["relaxScore"] <= 100
     assert -1 <= features["valence"] <= 1
     assert -1 <= features["arousal"] <= 1
-    assert features["valence"] == features["rawValence"]
-    assert features["arousal"] == features["rawArousal"]
+    assert "rawValence" not in features
+    assert "rawArousal" not in features
+    assert "thetaBeta" in features["bandPowers"]["ratios"]
     assert isinstance(features["stateLabel"], str)
     assert 0 <= features["confidence"] <= 1
 
@@ -178,7 +177,6 @@ def test_analyze_window_withholds_derived_scores_for_noisy_window() -> None:
     assert body["quality"]["excessiveArtifact"] is True
     features = body["features"]
     assert features["mindfulnessScore"] is None
-    assert features["focusScore"] is None
     assert features["valence"] is None
     # Raw band powers are still reported even when derived scores are withheld.
     assert features["bandPowers"] is not None
@@ -229,8 +227,8 @@ async def collect_one_frame():
                 assert 0 <= frame.features.mindfulness_score <= 100
                 assert frame.features.restfulness_score is not None
                 assert 0 <= frame.features.restfulness_score <= 100
-                assert 0 <= frame.features.focus_score <= 100
-                assert 0 <= frame.features.relax_score <= 100
+                assert "thetaBeta" in frame.features.band_powers.ratios
+                assert "smrTheta" in frame.features.band_powers.ratios
                 assert frame.features.valence is not None
                 assert -1 <= frame.features.valence <= 1
                 assert frame.features.arousal is not None

@@ -21,7 +21,10 @@ import {
   type FitCheckState,
 } from "./components/quality/HeadsetFitPanel";
 import { AffectiveStatePanel } from "./components/AffectiveStatePanel";
+import { BandPowerMonitorPanel } from "./components/BandPowerMonitorPanel";
 import { LiveEegPlot } from "./components/LiveEegPlot";
+import { MetricMonitorPanel, type MetricKey } from "./components/MetricMonitorPanel";
+import { PlotSeriesSelector } from "./components/PlotSeriesSelector";
 import {
   type DeviceInfo,
   type EegConnectionState,
@@ -93,6 +96,7 @@ export default function App() {
   const lastFrameArrivedAtRef = useRef<number | null>(null);
   const sampleCountRef = useRef(0);
   const frameCountRef = useRef(0);
+  const calibrationStatusRef = useRef<AffectiveCalibrationState["status"]>("off");
   const [state, setState] = useState<EegConnectionState>("idle");
   const [statusDetail, setStatusDetail] = useState("");
   const [error, setError] = useState("");
@@ -101,6 +105,12 @@ export default function App() {
   const [sampleCount, setSampleCount] = useState(0);
   const [frameCount, setFrameCount] = useState(0);
   const [plotHistory, setPlotHistory] = useState<Record<string, number[]>>({});
+  const [bandHistory, setBandHistory] = useState<Record<string, number[]>>({});
+  const [latestBands, setLatestBands] = useState<Record<string, number>>({});
+  const [metricHistory, setMetricHistory] = useState<Record<string, number[]>>({});
+  const [baselineMetricHistory, setBaselineMetricHistory] = useState<Record<string, number[]>>({});
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey>("mindfulness");
+  const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [providerLabel, setProviderLabel] = useState("");
   const [selectedDeviceId, setSelectedDeviceId] = useState("brainflow-muse-athena");
   const [latestFrame, setLatestFrame] = useState<SignalFrame | null>(null);
@@ -145,6 +155,14 @@ export default function App() {
       ? eegCapability.channels.map((channel) => channel.label)
       : Object.keys(latest);
   }, [eegCapability, latest]);
+  const plottedChannels = selectedChannels.filter((name) => channelNames.includes(name));
+
+  useEffect(() => {
+    setSelectedChannels((current) => {
+      const available = current.filter((name) => channelNames.includes(name));
+      return available.length || channelNames.length === 0 ? available : [channelNames[0]];
+    });
+  }, [channelNames]);
 
   useEffect(() => {
     const providerKey = selectedDevice.providerKey ?? getConfiguredProviderKey();
@@ -163,10 +181,12 @@ export default function App() {
 
         lastFrameArrivedAtRef.current = performance.now();
         setLatestFrame(frame);
-        setAffectiveState(affectiveProviderRef.current.pushFrame(frame, fitSnapshotRef.current));
-        setAffectiveCalibration(
-          calibrationStateFromFrame(frame) ?? affectiveProviderRef.current.getCalibrationState(),
-        );
+        const nextAffective = affectiveProviderRef.current.pushFrame(frame, fitSnapshotRef.current);
+        setAffectiveState(nextAffective);
+        const calibration = calibrationStateFromFrame(frame) ?? affectiveProviderRef.current.getCalibrationState();
+        if (calibrationStatusRef.current !== calibration.status) setMetricHistory({});
+        calibrationStatusRef.current = calibration.status;
+        setAffectiveCalibration(calibration);
         if (recordingActiveRef.current) {
           recordingFramesRef.current.push(frame);
           setRecordedFrameCount(recordingFramesRef.current.length);
@@ -190,6 +210,13 @@ export default function App() {
           }
           return next;
         });
+        const bands = frame.features?.bandPowers?.absolute;
+        if (bands) {
+          setLatestBands(bands);
+          setBandHistory((current) => appendHistory(current, bands));
+        }
+        setMetricHistory((current) => appendHistory(current, metricValuesFromService(frame.features?.rawMetrics ?? {})));
+        setBaselineMetricHistory((current) => appendHistory(current, metricValuesFromService(frame.features?.baselineRelativeMetrics ?? {})));
       },
       onError: (providerError) => {
         setError(
@@ -220,6 +247,10 @@ export default function App() {
     setSampleCount(0);
     setFrameCount(0);
     setPlotHistory({});
+    setBandHistory({});
+    setLatestBands({});
+    setMetricHistory({});
+    setBaselineMetricHistory({});
     setLatestFrame(null);
     setAffectiveState(null);
     lastFrameArrivedAtRef.current = null;
@@ -407,29 +438,43 @@ export default function App() {
     URL.revokeObjectURL(url);
   }
 
-  function startAffectiveCalibration() {
+  async function startAffectiveCalibration() {
     // BrainFlow and Bluetooth connections calibrate server-side (see
     // `analysis.AnalysisProviders.affective_state`) -- the next frame's
     // `features.calibrationStatus` picks up the new state (see
     // `calibrationStateFromFrame`). Providers with no server session
     // (Mock, replay) fall back to the client-only provider.
-    if (providerRef.current?.startAffectiveCalibration) {
-      void providerRef.current.startAffectiveCalibration();
-    } else {
-      affectiveProviderRef.current.startCalibration();
-      setAffectiveCalibration(affectiveProviderRef.current.getCalibrationState());
+    try {
+      if (providerRef.current?.startAffectiveCalibration) {
+        await providerRef.current.startAffectiveCalibration();
+      } else {
+        affectiveProviderRef.current.startCalibration();
+        setAffectiveCalibration(affectiveProviderRef.current.getCalibrationState());
+      }
+      calibrationStatusRef.current = "collecting";
+      setMetricHistory({});
+      setBaselineMetricHistory({});
+      setAffectiveState(null);
+    } catch (calibrationError) {
+      setError(calibrationError instanceof Error ? calibrationError.message : "Unable to start metric calibration.");
     }
-    setAffectiveState(null);
   }
 
-  function resetAffectiveCalibration() {
-    if (providerRef.current?.resetAffectiveCalibration) {
-      void providerRef.current.resetAffectiveCalibration();
-    } else {
-      affectiveProviderRef.current.resetCalibration();
-      setAffectiveCalibration(affectiveProviderRef.current.getCalibrationState());
+  async function resetAffectiveCalibration() {
+    try {
+      if (providerRef.current?.resetAffectiveCalibration) {
+        await providerRef.current.resetAffectiveCalibration();
+      } else {
+        affectiveProviderRef.current.resetCalibration();
+        setAffectiveCalibration(affectiveProviderRef.current.getCalibrationState());
+      }
+      calibrationStatusRef.current = "off";
+      setMetricHistory({});
+      setBaselineMetricHistory({});
+      setAffectiveState(null);
+    } catch (calibrationError) {
+      setError(calibrationError instanceof Error ? calibrationError.message : "Unable to reset metric calibration.");
     }
-    setAffectiveState(null);
   }
 
   async function disconnect() {
@@ -617,14 +662,26 @@ export default function App() {
           check={fitCheck}
           fit={fitSnapshot}
           onRunCheck={runFitCheck}
-        />
-
-        <AffectiveStatePanel
-          calibration={affectiveCalibration}
+          calibrationStatus={affectiveCalibration.status}
           onCalibrate={startAffectiveCalibration}
           onResetCalibration={resetAffectiveCalibration}
-          sample={affectiveState}
         />
+
+        <AffectiveStatePanel sample={affectiveState} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} rawMetrics={latestFrame?.features?.rawMetrics ?? {}} baselineMetrics={latestFrame?.features?.baselineRelativeMetrics ?? {}} />
+
+        <MetricMonitorPanel
+          sample={affectiveState}
+          coherence={latestFrame?.features?.interhemisphericCoherence}
+          history={metricHistory}
+          baselineHistory={baselineMetricHistory}
+          selectedMetric={selectedMetric}
+          onSelectMetric={setSelectedMetric}
+          calibration={affectiveCalibration}
+          rawMetrics={latestFrame?.features?.rawMetrics ?? {}}
+          baselineMetrics={latestFrame?.features?.baselineRelativeMetrics ?? {}}
+        />
+
+        <BandPowerMonitorPanel latest={latestBands} history={bandHistory} />
 
         <section id="chart" className="panel chart-card">
           <div className="panel-header">
@@ -637,7 +694,7 @@ export default function App() {
                 <p>Recent latest sample per received frame</p>
               </div>
             </div>
-            <span className="panel-meta">{channelNames.length} channels</span>
+            <PlotSeriesSelector options={channelNames} selected={plottedChannels} onChange={setSelectedChannels} />
           </div>
           <div className="chart-surface">
             {channelNames.length === 0 && (
@@ -649,7 +706,7 @@ export default function App() {
                 <span>Connect a provider to draw incoming channel values.</span>
               </div>
             )}
-            <LiveEegPlot channelNames={channelNames} history={plotHistory} />
+            <LiveEegPlot channelNames={plottedChannels} history={plotHistory} />
           </div>
         </section>
 
@@ -687,6 +744,20 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function appendHistory(current: Record<string, number[]>, values: Record<string, number | null | undefined>) {
+  const next = { ...current };
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    next[name] = [...(next[name] ?? []), value].slice(-maxHistorySamples);
+  }
+  return next;
+}
+
+function metricValuesFromService(metrics: Record<string, number>): Record<string, number | null> {
+  const ratio = (name: string) => metrics[`ratio:${name}`] ?? null;
+  return { mindfulness: metrics.mindfulness ?? null, restfulness: metrics.restfulness ?? null, valence: metrics.valence ?? null, arousal: metrics.arousal ?? null, confidence: metrics.confidence ?? null, ihc: metrics.ihc ?? null, thetaBeta: ratio("thetaBeta"), betaTheta: ratio("betaTheta"), alphaTheta: ratio("alphaTheta"), thetaAlpha: ratio("thetaAlpha"), smrTheta: ratio("smrTheta"), thetaAlphaBeta: ratio("thetaAlphaBeta"), alphaBeta: ratio("alphaBeta"), betaAlpha: ratio("betaAlpha"), arousalRatio: ratio("arousal"), valenceRatio: ratio("valence") };
 }
 
 /** Reads valence/arousal calibration progress straight off a frame's

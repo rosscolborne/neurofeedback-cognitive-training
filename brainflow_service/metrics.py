@@ -1,252 +1,284 @@
-"""Mindfulness, restfulness, focus, and relax scoring.
-
-This is a Python port of the scoring logic that previously lived only in the
-browser (`src/metrics/neurofeedbackRatios.ts` and the relevant parts of
-`src/metrics/affectiveStateMetric.ts`). Moving it here means any front-end --
-not just the bundled React app -- gets the same four finished 0-100 scores by
-calling this service over HTTP/SSE, instead of having to reimplement the
-smoothing and normalization itself.
-
-Two consumption modes are supported:
-
-- `compute_neurofeedback_scores` + `normalize_brainflow_score` give
-  instantaneous, unsmoothed scores for a single window (used by the stateless
-  `/analyze-window` endpoint).
-- `MindStateSmoother` adds the same slow EMA smoothing the frontend used,
-  keyed per BrainFlow session (used by the `/sessions/{id}/stream` SSE feed).
-"""
-
+"""One session-scoped source of truth for derived EEG metrics."""
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 
-# Matches `vrchatStyleEmaDecay` in src/metrics/affectiveStateMetric.ts, which
-# is what actually drives the smoothing shown in the app today (the
-# `smoothing_alpha` field on `ProcessingConfig` is unrelated and unused for
-# this purpose).
+from .affective_state import AffectiveState, FitQualityHint, compute_affective_state
+
 DEFAULT_SMOOTHING_ALPHA = 0.05
 
-_NEUROFEEDBACK_NORMALIZE_SCALE = 1.1
+
+@dataclass(frozen=True)
+class MetricInput:
+    absolute_bands: dict[str, float]
+    interhemispheric_coherence: float | None
+    raw_mindfulness: float | None
+    raw_restfulness: float | None
+    protocol: str
+    threshold: float
+    reliable: bool
+    fit: FitQualityHint | None = None
 
 
 @dataclass(frozen=True)
-class NeurofeedbackScores:
-    focus_score: int
-    relax_score: int
-    focus_signed: float
-    relax_signed: float
-
-
-@dataclass(frozen=True)
-class MindStateScores:
-    """The four finished, display-ready scores."""
-
+class BrainFlowScores:
     mindfulness_score: float | None
     restfulness_score: float | None
-    focus_score: int
-    relax_score: int
 
 
 @dataclass(frozen=True)
-class SmoothedProtocolMetrics:
-    """Session-scoped smoothed inputs for live displays and protocol feedback."""
+class ProtocolFeedback:
+    metric_name: str | None
+    value: float | None
+    in_zone: bool | None
+    zone_score: float | None
 
-    bands: dict[str, float]
-    theta_beta_ratio: float | None
+
+@dataclass(frozen=True)
+class MetricSnapshot:
+    absolute_bands: dict[str, float]
+    relative_bands: dict[str, float]
+    ratios: dict[str, float]
+    brainflow_scores: BrainFlowScores
+    affective_state: AffectiveState | None
     interhemispheric_coherence: float | None
+    protocol_feedback: ProtocolFeedback
+    calibration_status: str = "off"
+    calibration_progress: int = 0
+    calibration_required: int = 24
+    raw_metrics: dict[str, float] | None = None
+    baseline_relative_metrics: dict[str, float] | None = None
 
 
-class ProtocolMetricSmoother:
-    """EMA-smooths EEG metrics that otherwise come directly from one PSD window.
+class MetricCalibration:
+    """Independent baseline-relative display transforms for one session.
 
-    A missing coherence result remains missing; it never falls back to an old
-    value.  This prevents a stale value being presented as a measurement.
+    A caller can start a selected set of metrics, or omit the set to
+    calibrate every metric that becomes available (the Debug Console case).
     """
+    required = 24
+    def __init__(self) -> None:
+        self.status = "off"
+        self._requested: set[str] | None = set()
+        self._samples: dict[str, list[float]] = {}
+        self._baselines: dict[str, tuple[float, float]] = {}
 
+    def start(self, metric_names: set[str] | None = None) -> None:
+        self.status = "collecting"
+        self._requested = None if metric_names is None else {_calibration_key(name) for name in metric_names}
+        self._samples, self._baselines = {}, {}
+
+    def reset(self) -> None:
+        self.status, self._requested, self._samples, self._baselines = "off", set(), {}, {}
+
+    def apply(self, values: dict[str, float]) -> dict[str, float]:
+        if self.status == "off":
+            return values
+        keys = set(values) if self._requested is None else self._requested & set(values)
+        for key in keys:
+            samples = self._samples.setdefault(key, [])
+            if len(samples) < self.required:
+                samples.append(values[key])
+                if len(samples) == self.required:
+                    self._baselines[key] = baseline_distribution(samples)
+        active = {key for key in keys if key in self._baselines}
+        collecting = keys - active
+        if collecting:
+            self.status = "collecting"
+        elif active:
+            self.status = "active"
+        return {
+            key: calibration_percentile(value, *self._baselines[key])
+            if key in self._baselines else value
+            for key, value in values.items()
+        }
+
+    @property
+    def progress(self) -> int:
+        if not self._samples:
+            return 0
+        return min(len(samples) for samples in self._samples.values())
+
+    @property
+    def active_keys(self) -> set[str]:
+        return set(self._baselines)
+
+
+def _calibration_key(name: str) -> str:
+    """Accept public metric names (e.g. thetaBeta) and internal keys."""
+    if name in {"mindfulness", "restfulness", "valence", "arousal", "confidence", "ihc"} or name.startswith("ratio:"):
+        return name
+    return f"ratio:{name}"
+
+
+def baseline_distribution(samples: list[float]) -> tuple[float, float]:
+    """Mean and standard deviation defining the calibration normal curve."""
+    centre = sum(samples) / len(samples)
+    spread = math.sqrt(sum((value - centre) ** 2 for value in samples) / len(samples))
+    spread = max(spread, 1e-9)
+    return centre, spread
+
+
+def calibration_percentile(
+    value: float,
+    centre: float,
+    spread: float,
+) -> float:
+    """Percentile in the normal distribution fitted to calibration samples."""
+    z_score = (value - centre) / max(spread, 1e-9)
+    return 50.0 * (1.0 + math.erf(z_score / math.sqrt(2.0)))
+
+
+class BandPowerSmoother:
+    """EMA history for absolute PSD band powers, scoped to one device session."""
     def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
         self._alpha = smoothing_alpha
         self._bands: dict[str, float] = {}
-        self._theta_beta_ratio: float | None = None
-        self._coherence: float | None = None
 
-    def push(
-        self,
-        bands: dict[str, float],
-        interhemispheric_coherence: float | None,
-    ) -> SmoothedProtocolMetrics:
-        smoothed_bands: dict[str, float] = {}
+    def reset(self) -> None:
+        self._bands.clear()
+
+    def push(self, bands: dict[str, float]) -> dict[str, float]:
+        result: dict[str, float] = {}
         for name, value in bands.items():
-            if not math.isfinite(value):
-                continue
-            self._bands[name] = smooth_score(self._bands.get(name), value, self._alpha)
-            smoothed_bands[name] = self._bands[name]
+            if math.isfinite(value):
+                self._bands[name] = smooth_ema(self._bands.get(name), max(0.0, value), self._alpha)
+                result[name] = self._bands[name]
+        return result
 
-        theta = bands.get("theta")
-        beta = bands.get("beta")
-        raw_ratio = (
-            theta / max(0.1, beta)
-            if theta is not None and beta is not None and math.isfinite(theta) and math.isfinite(beta)
-            else None
-        )
-        if raw_ratio is not None:
-            self._theta_beta_ratio = smooth_score(self._theta_beta_ratio, raw_ratio, self._alpha)
-        smoothed_ratio = self._theta_beta_ratio if raw_ratio is not None else None
 
-        # Do not retain an old coherence reading across an unavailable window.
-        if interhemispheric_coherence is None or not math.isfinite(interhemispheric_coherence):
-            smoothed_coherence = None
-        else:
-            self._coherence = smooth_score(self._coherence, interhemispheric_coherence, self._alpha)
-            smoothed_coherence = self._coherence
+class BrainFlowScoreSmoother:
+    """Output-level EMA for BrainFlow's independently trained model outputs."""
+    def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
+        self._alpha = smoothing_alpha
+        self._mindfulness: float | None = None
+        self._restfulness: float | None = None
 
-        return SmoothedProtocolMetrics(
-            bands=smoothed_bands,
-            theta_beta_ratio=smoothed_ratio,
-            interhemispheric_coherence=smoothed_coherence,
+    def reset(self) -> None:
+        self._mindfulness = self._restfulness = None
+
+    def push(self, mindfulness: float | None, restfulness: float | None) -> BrainFlowScores:
+        m, r = normalize_brainflow_score(mindfulness), normalize_brainflow_score(restfulness)
+        if m is not None:
+            self._mindfulness = smooth_ema(self._mindfulness, m, self._alpha)
+        if r is not None:
+            self._restfulness = smooth_ema(self._restfulness, r, self._alpha)
+        return BrainFlowScores(
+            None if self._mindfulness is None else round(_clamp(self._mindfulness, 0, 100)),
+            None if self._restfulness is None else round(_clamp(self._restfulness, 0, 100)),
         )
 
 
-def compute_neurofeedback_scores(
-    theta_power: float,
-    alpha_power: float,
-    beta_power: float,
-) -> NeurofeedbackScores:
-    """Port of `computeBrainflowsNeurofeedbackScores` (neurofeedbackRatios.ts).
+class MetricCalculator:
+    """Calculates every product metric for one live EEG connection."""
+    def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
+        self._bands = BandPowerSmoother(smoothing_alpha)
+        self._brainflow = BrainFlowScoreSmoother(smoothing_alpha)
+        self._calibration = MetricCalibration()
+        self._coherence: float | None = None
+        self._alpha = smoothing_alpha
 
-    Focus rises with beta power relative to theta; relax rises with alpha
-    power relative to theta.
-    """
-    theta = max(1e-9, theta_power)
-    focus_signed = _tanh_log(beta_power / theta, _NEUROFEEDBACK_NORMALIZE_SCALE)
-    relax_signed = _tanh_log(alpha_power / theta, _NEUROFEEDBACK_NORMALIZE_SCALE)
+    def reset(self) -> None:
+        self._bands.reset()
+        self._brainflow.reset()
+        self._coherence = None
+        self._calibration.reset()
 
-    return NeurofeedbackScores(
-        focus_score=_signed_to_score(focus_signed),
-        relax_score=_signed_to_score(relax_signed),
-        focus_signed=focus_signed,
-        relax_signed=relax_signed,
-    )
+    def start_calibration(self, metric_names: set[str] | None = None) -> None:
+        self._calibration.start(metric_names)
+
+    def reset_calibration(self) -> None:
+        self._calibration.reset()
+
+    def push(self, metric_input: MetricInput) -> MetricSnapshot:
+        absolute = self._bands.push(metric_input.absolute_bands)
+        relative, ratios = compute_relative_band_powers(absolute), compute_band_ratios(absolute)
+        coherence = self._push_coherence(metric_input.interhemispheric_coherence)
+        # Do not display or feed an artifact-contaminated prediction into the
+        # EMA history; raw model outputs remain available separately for
+        # diagnostics in the transport payload.
+        brainflow_scores = self._brainflow.push(metric_input.raw_mindfulness, metric_input.raw_restfulness) if metric_input.reliable else BrainFlowScores(None, None)
+        affective = compute_affective_state(absolute, metric_input.fit) if metric_input.reliable else None
+        feedback = compute_protocol_feedback(absolute, ratios, metric_input.protocol, metric_input.threshold) if metric_input.reliable else ProtocolFeedback(None, None, None, None)
+        raw_display = _display_values(brainflow_scores, affective, coherence, ratios) if metric_input.reliable else {}
+        display = self._calibration.apply(raw_display) if metric_input.reliable else {}
+        baseline_relative = {key: display[key] for key in self._calibration.active_keys if key in display}
+        if self._calibration.status == "active":
+            brainflow_scores = BrainFlowScores(
+                display.get("mindfulness", brainflow_scores.mindfulness_score),
+                display.get("restfulness", brainflow_scores.restfulness_score),
+            )
+            ratios = {key: display.get(f"ratio:{key}", value) for key, value in ratios.items()}
+            coherence = display.get("ihc", coherence)
+            if affective:
+                affective = AffectiveState(display.get("valence", affective.valence), display.get("arousal", affective.arousal), affective.label, display.get("confidence", affective.confidence))
+        return MetricSnapshot(absolute, relative, ratios, brainflow_scores, affective, coherence, feedback, self._calibration.status, self._calibration.progress, self._calibration.required, raw_display, baseline_relative)
+
+    def _push_coherence(self, value: float | None) -> float | None:
+        if value is None or not math.isfinite(value):
+            return None
+        self._coherence = smooth_ema(self._coherence, value, self._alpha)
+        return self._coherence
+
+
+def _display_values(scores: BrainFlowScores, affective: AffectiveState | None, coherence: float | None, ratios: dict[str, float]) -> dict[str, float]:
+    values = {f"ratio:{key}": value for key, value in ratios.items()}
+    if scores.mindfulness_score is not None: values["mindfulness"] = scores.mindfulness_score
+    if scores.restfulness_score is not None: values["restfulness"] = scores.restfulness_score
+    if coherence is not None: values["ihc"] = coherence
+    if affective:
+        values.update(valence=affective.valence, arousal=affective.arousal, confidence=affective.confidence)
+    return values
+
+
+def compute_relative_band_powers(bands: dict[str, float]) -> dict[str, float]:
+    total = sum(max(0.0, value) for value in bands.values() if math.isfinite(value))
+    return {name: (max(0.0, value) / total if total else 0.0) for name, value in bands.items()}
+
+
+def compute_band_ratios(bands: dict[str, float]) -> dict[str, float]:
+    theta, alpha, smr, beta, gamma = (bands.get(name, 0.0) for name in ("theta", "alpha", "smr", "beta", "gamma"))
+    return {
+        "thetaBeta": safe_ratio(theta, beta), "betaTheta": safe_ratio(beta, theta),
+        "alphaTheta": safe_ratio(alpha, theta), "thetaAlpha": safe_ratio(theta, alpha),
+        "smrTheta": safe_ratio(smr, theta), "thetaAlphaBeta": safe_ratio(theta, alpha + beta),
+        "alphaBeta": safe_ratio(alpha, beta), "betaAlpha": safe_ratio(beta, alpha),
+        "arousal": safe_ratio(beta + gamma, alpha + theta),
+        "valence": safe_ratio(alpha, theta + beta),
+        "betaOverAlphaTheta": safe_ratio(beta, alpha + theta),
+    }
+
+
+def compute_protocol_feedback(bands: dict[str, float], ratios: dict[str, float], protocol: str, threshold: float) -> ProtocolFeedback:
+    if protocol == "theta-beta-ratio": return _lower_is_better("thetaBeta", ratios.get("thetaBeta"), threshold, 1.5)
+    if protocol == "smr-enhancement": return _higher_is_better("smr", bands.get("smr"), threshold, 1.5)
+    if protocol in {"alpha-enhancement", "individualized-upper-alpha"}: return _higher_is_better("alpha", bands.get("alpha"), threshold, 2.0)
+    if protocol == "alpha-theta-crossover": return _higher_is_better("thetaAlpha", ratios.get("thetaAlpha"), threshold, .5)
+    if protocol == "beta-downtraining": return _lower_is_better("beta", bands.get("beta"), threshold, 5.0)
+    return ProtocolFeedback(None, None, None, None)
 
 
 def normalize_brainflow_score(value: float | None) -> float | None:
-    """Port of `normalizeBrainflowMindfulness`: scales a 0-1 BrainFlow ML
-    metric (mindfulness or restfulness) to a 0-100 score."""
-    if value is None or not math.isfinite(value):
-        return None
-    return _clamp(value * 100.0, 0.0, 100.0)
+    return None if value is None or not math.isfinite(value) else _clamp(value * 100.0, 0, 100)
 
 
-def compute_training_feedback(
-    bands: dict[str, float],
-    protocol: str,
-    threshold: float,
-    theta_beta_ratio: float | None = None,
-) -> tuple[float | None, bool | None, float | None]:
-    """Authoritative protocol feedback: ratio, in-zone flag, continuous score."""
-    theta, alpha, smr, beta = (bands.get(key) for key in ("theta", "alpha", "smr", "beta"))
-    ratio = theta_beta_ratio if theta_beta_ratio is not None else (
-        theta / max(0.1, beta) if theta is not None and beta is not None else None
-    )
-    if protocol == "theta-beta-ratio" and ratio is not None:
-        return ratio, ratio <= threshold, _clamp(1 - (ratio - threshold) / 1.5, 0, 1)
-    if protocol == "smr-enhancement" and smr is not None:
-        return ratio, smr >= threshold, _clamp((smr - threshold + 1.5) / 3, 0, 1)
-    if protocol == "alpha-enhancement" and alpha is not None:
-        return ratio, alpha >= threshold, _clamp((alpha - threshold + 2) / 4, 0, 1)
-    if protocol == "alpha-theta-crossover" and theta is not None and alpha is not None:
-        value = theta / max(0.1, alpha)
-        return ratio, value >= threshold, _clamp((value - threshold + .5) / 1.5, 0, 1)
-    if protocol == "beta-downtraining" and beta is not None:
-        return ratio, beta <= threshold, _clamp(1 - (beta - threshold) / 5, 0, 1)
-    if protocol == "individualized-upper-alpha" and alpha is not None:
-        return ratio, alpha >= threshold, _clamp((alpha - threshold + 2) / 4, 0, 1)
-    return ratio, None, None
+def smooth_ema(current: float | None, target: float, weight: float) -> float:
+    return target if current is None else current * (1 - weight) + target * weight
 
 
-def smooth_score(current: float | None, target: float, weight: float) -> float:
-    """Port of `smoothScore`: exponential moving average, seeded on first call."""
-    if current is None:
-        return target
-    return current * (1 - weight) + target * weight
+def safe_ratio(numerator: float, denominator: float) -> float:
+    return 0.0 if not math.isfinite(numerator) or not math.isfinite(denominator) else max(0.0, numerator) / max(1e-9, max(0.0, denominator))
 
 
-class MindStateSmoother:
-    """Stateful, per-session port of the smoothing in `AffectiveStateProvider`.
-
-    Call `push` once per analyzed window; it mirrors the EMA smoothing the
-    frontend applies so a session's SSE stream carries the same finished
-    scores the bundled app displays, without needing any client-side logic.
-    """
-
-    def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
-        self._alpha = smoothing_alpha
-        self._smoothed_mindfulness: float | None = None
-        self._smoothed_restfulness: float | None = None
-        self._smoothed_focus: float | None = None
-        self._smoothed_relax: float | None = None
-
-    def reset(self) -> None:
-        self._smoothed_mindfulness = None
-        self._smoothed_restfulness = None
-        self._smoothed_focus = None
-        self._smoothed_relax = None
-
-    def push(
-        self,
-        *,
-        theta_power: float,
-        alpha_power: float,
-        beta_power: float,
-        raw_mindfulness: float | None,
-        raw_restfulness: float | None,
-    ) -> MindStateScores:
-        neurofeedback = compute_neurofeedback_scores(theta_power, alpha_power, beta_power)
-
-        raw_mindfulness_score = normalize_brainflow_score(raw_mindfulness)
-        raw_restfulness_score = normalize_brainflow_score(raw_restfulness)
-
-        self._smoothed_mindfulness = (
-            None
-            if raw_mindfulness_score is None
-            else smooth_score(self._smoothed_mindfulness, raw_mindfulness_score, self._alpha)
-        )
-        self._smoothed_restfulness = (
-            None
-            if raw_restfulness_score is None
-            else smooth_score(self._smoothed_restfulness, raw_restfulness_score, self._alpha)
-        )
-        self._smoothed_focus = smooth_score(
-            self._smoothed_focus, float(neurofeedback.focus_score), self._alpha,
-        )
-        self._smoothed_relax = smooth_score(
-            self._smoothed_relax, float(neurofeedback.relax_score), self._alpha,
-        )
-
-        return MindStateScores(
-            mindfulness_score=(
-                None
-                if self._smoothed_mindfulness is None
-                else round(_clamp(self._smoothed_mindfulness, 0.0, 100.0))
-            ),
-            restfulness_score=(
-                None
-                if self._smoothed_restfulness is None
-                else round(_clamp(self._smoothed_restfulness, 0.0, 100.0))
-            ),
-            focus_score=round(_clamp(self._smoothed_focus, 0.0, 100.0)),
-            relax_score=round(_clamp(self._smoothed_relax, 0.0, 100.0)),
-        )
+def _higher_is_better(name: str, value: float | None, threshold: float, width: float) -> ProtocolFeedback:
+    if value is None or not math.isfinite(value): return ProtocolFeedback(name, None, None, None)
+    return ProtocolFeedback(name, value, value >= threshold, _clamp((value - threshold + width) / (2 * width), 0, 1))
 
 
-def _tanh_log(value: float, scale: float) -> float:
-    if not math.isfinite(value) or value <= 0:
-        return 0.0
-    return math.tanh(scale * math.log(value))
-
-
-def _signed_to_score(value: float) -> int:
-    return round(_clamp((value + 1) * 50, 0.0, 100.0))
+def _lower_is_better(name: str, value: float | None, threshold: float, width: float) -> ProtocolFeedback:
+    if value is None or not math.isfinite(value): return ProtocolFeedback(name, None, None, None)
+    return ProtocolFeedback(name, value, value <= threshold, _clamp(1 - (value - threshold) / width, 0, 1))
 
 
 def _clamp(value: float, low: float, high: float) -> float:

@@ -45,6 +45,12 @@ class BrainFlowSession:
         # with this same provider bundle for the life of the connection.
         self._analysis = AnalysisProviders(headset_fit=HeuristicHeadsetFitProvider())
 
+    def start_metric_calibration(self, metric_names: set[str] | None = None) -> None:
+        self._analysis.metrics.start_calibration(metric_names)
+
+    def reset_metric_calibration(self) -> None:
+        self._analysis.metrics.reset_calibration()
+
     def prepare(self) -> DeviceInfo:
         from brainflow.board_shim import BoardIds, BrainFlowInputParams, BrainFlowPresets, BoardShim
 
