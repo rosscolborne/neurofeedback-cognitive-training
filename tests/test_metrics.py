@@ -2,10 +2,31 @@ from __future__ import annotations
 
 from brainflow_service.metrics import (
     MindStateSmoother,
+    ProtocolMetricSmoother,
     compute_neurofeedback_scores,
     normalize_brainflow_score,
     smooth_score,
 )
+
+
+def test_protocol_metric_smoother_smooths_smr_theta_beta_and_coherence() -> None:
+    smoother = ProtocolMetricSmoother(smoothing_alpha=0.5)
+
+    first = smoother.push({"theta": 8.0, "beta": 4.0, "smr": 4.0}, 0.2)
+    second = smoother.push({"theta": 4.0, "beta": 8.0, "smr": 8.0}, 0.8)
+
+    assert second.bands["smr"] == 6.0
+    assert second.theta_beta_ratio == 1.25
+    assert second.interhemispheric_coherence == 0.5
+
+
+def test_protocol_metric_smoother_does_not_reuse_unavailable_coherence() -> None:
+    smoother = ProtocolMetricSmoother()
+    smoother.push({"theta": 8.0, "beta": 4.0, "smr": 4.0}, 0.6)
+
+    unavailable = smoother.push({"theta": 8.0, "beta": 4.0, "smr": 4.0}, None)
+
+    assert unavailable.interhemispheric_coherence is None
 
 
 def test_focus_rises_with_relative_beta_power() -> None:

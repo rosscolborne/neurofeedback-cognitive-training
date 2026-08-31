@@ -62,6 +62,9 @@ export class EEGEngine {
 
   // Latest band powers from server
   private latestServerBands: BandPowers | null = null;
+  private latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
+  private latestInterhemisphericCoherence: number | null = null;
+  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null } | null = null;
 
   private gattServer: any = null;
   private activeCharacteristics: any[] = [];
@@ -406,11 +409,29 @@ export class EEGEngine {
   }
 
   /**
-   * Connect to native BrainFlow acquisition service (e.g. Muse Athena or Synthetic Board)
+   * Connect to Muse Athena through the local BrainFlow service. This is the
+   * same `brainflow-muse-athena` BoardShim configuration used by eeg_demo;
+   * the app never opens a browser or Capacitor Bluetooth connection itself.
+   */
+  public async connectMuseAthenaBrainflow(): Promise<{
+    success: boolean;
+    deviceName?: string;
+    error?: string;
+  }> {
+    const result = await this.connectBrainflowSession('brainflow-muse-athena');
+    return {
+      ...result,
+      deviceName: result.success ? this.deviceName || undefined : undefined,
+    };
+  }
+
+  /**
+   * Connect to native BrainFlow acquisition service (also used by the dev-only
+   * synthetic board).
    */
   public async connectBrainflowSession(deviceId = 'brainflow-synthetic'): Promise<{ success: boolean; error?: string }> {
     try {
-      const session = await brainflowService.startSession(deviceId);
+      const session = await brainflowService.startSession(deviceId, undefined, undefined, this.currentProtocol, this.targetThreshold);
       this.brainflowSessionId = session.sessionId;
       this.isBrainflowActive = true;
       this.isHardwareConnected = true;
@@ -435,21 +456,43 @@ export class EEGEngine {
           }
 
           if (frame.features) {
+            const absoluteBands = frame.features.bandPowers?.absolute;
+            if (absoluteBands) {
+              this.latestServerBands = {
+                delta: absoluteBands.delta ?? 0,
+                theta: absoluteBands.theta ?? 0,
+                alpha: absoluteBands.alpha ?? 0,
+                smr: absoluteBands.smr ?? 0,
+                beta: absoluteBands.beta ?? 0,
+                gamma: absoluteBands.gamma ?? 0,
+              };
+              this.latestServerBandAvailability = {
+                delta: typeof absoluteBands.delta === 'number',
+                theta: typeof absoluteBands.theta === 'number',
+                alpha: typeof absoluteBands.alpha === 'number',
+                smr: typeof absoluteBands.smr === 'number',
+                beta: typeof absoluteBands.beta === 'number',
+                gamma: typeof absoluteBands.gamma === 'number',
+              };
+            }
+
             this.latestBrainFlowScores = {
-              focusScore: frame.features.focusScore ?? 50,
-              relaxScore: frame.features.relaxScore ?? 50,
+              focusScore: frame.features.focusScore ?? null,
+              relaxScore: frame.features.relaxScore ?? null,
               mindfulnessScore: frame.features.mindfulnessScore ?? null,
               restfulnessScore: frame.features.restfulnessScore ?? null,
               valence: frame.features.valence ?? null,
               arousal: frame.features.arousal ?? null,
-              emotionLabel: frame.features.emotionLabel ?? null,
+              emotionLabel: frame.features.stateLabel ?? frame.features.emotionLabel ?? null,
               method: 'brainflow_welch_psd',
             };
+            this.latestInterhemisphericCoherence = frame.features.interhemisphericCoherence ?? null;
+            this.latestTrainingFeedback = { ratio: frame.features.thetaBetaRatio ?? null, inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null };
           }
 
           if (frame.training) {
             this.latestTrainingMetric = {
-              score: frame.training.score ?? 50,
+              score: frame.training.score ?? null,
               baselineReady: frame.training.baselineReady ?? false,
             };
           }
@@ -506,6 +549,9 @@ export class EEGEngine {
     this.latestBrainFlowScores = null;
     this.latestTrainingMetric = null;
     this.latestServerBands = null;
+    this.latestServerBandAvailability = {};
+    this.latestInterhemisphericCoherence = null;
+    this.latestTrainingFeedback = null;
     this.serverFitState = null;
     this.resetState();
   }
@@ -645,9 +691,12 @@ export class EEGEngine {
     const tp10 = this.rawBuffers.tp10;
 
     const minLen = Math.min(tp9.length, af7.length, af8.length, tp10.length);
-    if (minLen < 64 || !this.fitSessionId) return;
+    // Interhemispheric coherence is a cross-spectral estimate. It needs at
+    // least two 1-second segments, so keep a two-second window rather than
+    // sending the one-second window used by the other band metrics.
+    if (minLen < 512 || !this.fitSessionId) return;
 
-    const windowSize = Math.min(minLen, 256);
+    const windowSize = Math.min(minLen, 512);
 
     // Build row-major format: one inner array per time sample, 4 columns (TP9, AF7, AF8, TP10)
     const samples: number[][] = [];
@@ -671,8 +720,8 @@ export class EEGEngine {
         if (response.features) {
           const f = response.features;
           this.latestBrainFlowScores = {
-            focusScore: f.focusScore ?? 50,
-            relaxScore: f.relaxScore ?? 50,
+            focusScore: f.focusScore ?? null,
+            relaxScore: f.relaxScore ?? null,
             mindfulnessScore: f.mindfulnessScore ?? null,
             restfulnessScore: f.restfulnessScore ?? null,
             valence: f.valence ?? null,
@@ -680,6 +729,8 @@ export class EEGEngine {
             emotionLabel: f.emotionLabel ?? null,
             method: 'brainflow_welch_psd',
           };
+          this.latestInterhemisphericCoherence = f.interhemisphericCoherence ?? null;
+          this.latestTrainingFeedback = { ratio: f.thetaBetaRatio ?? null, inZone: f.inZone ?? null, zoneScore: f.zoneScore ?? null };
 
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
@@ -692,6 +743,14 @@ export class EEGEngine {
               beta: abs.beta ?? 0,
               gamma: abs.gamma ?? 0,
             };
+            this.latestServerBandAvailability = {
+              delta: typeof abs.delta === 'number',
+              theta: typeof abs.theta === 'number',
+              alpha: typeof abs.alpha === 'number',
+              smr: typeof abs.smr === 'number',
+              beta: typeof abs.beta === 'number',
+              gamma: typeof abs.gamma === 'number',
+            };
           }
         }
 
@@ -700,13 +759,13 @@ export class EEGEngine {
           this.updateChannelQualityFromServer(response.quality);
         }
 
-        // Update training metric
         if (response.training) {
           this.latestTrainingMetric = {
-            score: response.training.score ?? 50,
+            score: response.training.score ?? null,
             baselineReady: response.training.baselineReady ?? false,
           };
         }
+
       }
     } catch {
       // Server analysis failed — scores remain stale
@@ -754,12 +813,14 @@ export class EEGEngine {
 
   private generateSample(dt: number): EEGDataPoint {
     let bands: BandPowers;
+    let bandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
     let rawSignal = 0;
 
     if (this.isHardwareConnected) {
       // Use server-provided band powers when available, otherwise zero
       if (this.latestServerBands) {
         bands = { ...this.latestServerBands };
+        bandAvailability = { ...this.latestServerBandAvailability };
       } else {
         bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
       }
@@ -860,6 +921,9 @@ export class EEGEngine {
         beta: Math.round(beta * 10) / 10,
         gamma: Math.round(gamma * 10) / 10,
       };
+      bandAvailability = {
+        delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true,
+      };
 
       rawSignal =
         slowDrift +
@@ -875,46 +939,74 @@ export class EEGEngine {
       rawSignal = 0;
     }
 
-    const thetaBetaRatio = Math.round((bands.theta / Math.max(0.1, bands.beta)) * 100) / 100;
-
-    let inZone = false;
-    let zoneScore = 0.0;
+    const feedback = this.latestTrainingFeedback;
+    const thetaBetaRatioAvailable = feedback?.ratio != null;
+    const thetaBetaRatio = feedback?.ratio ?? 0;
+    const inZoneAvailable = feedback?.inZone != null;
+    const inZone = feedback?.inZone ?? false;
+    const zoneScore = feedback?.zoneScore ?? 0;
     
-    switch (this.currentProtocol) {
+    /*switch (this.currentProtocol) {
       case 'theta-beta-ratio':
-        inZone = thetaBetaRatio <= this.targetThreshold;
-        zoneScore = Math.max(0, Math.min(1, 1 - (thetaBetaRatio - this.targetThreshold) / 1.5));
+        inZoneAvailable = thetaBetaRatioAvailable;
+        if (inZoneAvailable) {
+          inZone = thetaBetaRatio <= this.targetThreshold;
+          zoneScore = Math.max(0, Math.min(1, 1 - (thetaBetaRatio - this.targetThreshold) / 1.5));
+        }
         break;
       case 'smr-enhancement':
-        inZone = bands.smr >= this.targetThreshold;
-        zoneScore = Math.max(0, Math.min(1, (bands.smr - this.targetThreshold + 1.5) / 3.0));
+        inZoneAvailable = Boolean(bandAvailability.smr);
+        if (inZoneAvailable) {
+          inZone = bands.smr >= this.targetThreshold;
+          zoneScore = Math.max(0, Math.min(1, (bands.smr - this.targetThreshold + 1.5) / 3.0));
+        }
         break;
       case 'alpha-enhancement':
-        inZone = bands.alpha >= this.targetThreshold;
-        zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
-        break;
-      case 'alpha-theta-crossover':
-        inZone = bands.theta >= bands.alpha * this.targetThreshold;
-        zoneScore = Math.max(0, Math.min(1, (bands.theta / Math.max(0.1, bands.alpha) - this.targetThreshold + 0.5) / 1.5));
-        break;
-      case 'beta-downtraining':
-        inZone = bands.beta <= this.targetThreshold;
-        zoneScore = Math.max(0, Math.min(1, 1 - (bands.beta - this.targetThreshold) / 5.0));
-        break;
-      case 'individualized-upper-alpha':
-        if (this.individualBaselineModel) {
-          const paf = this.individualBaselineModel.alphaPeakHz;
-          inZone = bands.alpha >= (paf + 1.0);
-          zoneScore = Math.max(0, Math.min(1, (bands.alpha - paf + 1.0) / 4.0));
-        } else {
+        inZoneAvailable = Boolean(bandAvailability.alpha);
+        if (inZoneAvailable) {
           inZone = bands.alpha >= this.targetThreshold;
           zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
         }
         break;
-    }
+      case 'alpha-theta-crossover':
+        inZoneAvailable = Boolean(bandAvailability.theta && bandAvailability.alpha);
+        if (inZoneAvailable) {
+          inZone = bands.theta >= bands.alpha * this.targetThreshold;
+          zoneScore = Math.max(0, Math.min(1, (bands.theta / Math.max(0.1, bands.alpha) - this.targetThreshold + 0.5) / 1.5));
+        }
+        break;
+      case 'beta-downtraining':
+        inZoneAvailable = Boolean(bandAvailability.beta);
+        if (inZoneAvailable) {
+          inZone = bands.beta <= this.targetThreshold;
+          zoneScore = Math.max(0, Math.min(1, 1 - (bands.beta - this.targetThreshold) / 5.0));
+        }
+        break;
+      case 'individualized-upper-alpha':
+        if (this.individualBaselineModel) {
+          const paf = this.individualBaselineModel.alphaPeakHz;
+          inZoneAvailable = Boolean(bandAvailability.alpha);
+          if (inZoneAvailable) {
+            inZone = bands.alpha >= (paf + 1.0);
+            zoneScore = Math.max(0, Math.min(1, (bands.alpha - paf + 1.0) / 4.0));
+          }
+        } else {
+          inZoneAvailable = Boolean(bandAvailability.alpha);
+          if (inZoneAvailable) {
+            inZone = bands.alpha >= this.targetThreshold;
+            zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
+          }
+        }
+        break;
+    }*/
 
-    const rawCoherence = 45 + (bands.alpha / 20) * 30 + (bands.beta / 20) * 20;
-    const coherence = Math.max(10, Math.min(99, Math.round(rawCoherence)));
+    // This value comes from the server's cross-spectral AF7↔AF8 / TP9↔TP10
+    // calculation. Do not replace unavailable coherence with a band-power proxy.
+    const interhemisphericCoherence = this.latestInterhemisphericCoherence;
+    const coherenceAvailable = interhemisphericCoherence !== null;
+    const coherence = coherenceAvailable
+      ? Math.round(interhemisphericCoherence * 100)
+      : null;
 
     // Signal quality derived from server fit state or demo mode
     const qualities = Object.values(this.channelQuality);
@@ -948,9 +1040,13 @@ export class EEGEngine {
       timestamp: Date.now(),
       rawSignal: Math.round(rawSignal * 10) / 10,
       bands,
+      bandAvailability,
       thetaBetaRatio,
+      thetaBetaRatioAvailable,
       coherence,
+      coherenceAvailable,
       inZone,
+      inZoneAvailable,
       zoneScore,
       signalQuality: overallQuality,
       channelQuality: this.channelQuality,

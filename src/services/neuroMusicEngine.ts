@@ -244,7 +244,7 @@ class NeuroMusicEngine {
   }
 
   // Real-Time Neurofeedback Modulator
-  private updateNeuroModulation(inZone: boolean, zoneScore: number, coherence: number, alphaPower: number) {
+  private updateNeuroModulation(inZone: boolean, zoneScore: number, coherence: number | null, alphaPower: number) {
     if (!this.ctx || !this.neuroFilter || !this.neuroGain) return;
     const now = this.ctx.currentTime;
 
@@ -265,7 +265,7 @@ class NeuroMusicEngine {
 
     // 3. Binaural Resonance & Harmonic Coherence:
     if (this.binauralGain) {
-      const binauralVol = inZone && coherence > 50 ? ((coherence - 40) / 100) * 0.04 : 0;
+      const binauralVol = inZone && coherence != null && coherence > 50 ? ((coherence - 40) / 100) * 0.04 : 0;
       this.binauralGain.gain.setTargetAtTime(binauralVol, now, 0.8);
     }
   }

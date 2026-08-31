@@ -84,7 +84,7 @@ class AudioFeedbackEngine {
     });
   }
 
-  private updateParameters(inZone: boolean, coherence: number) {
+  private updateParameters(inZone: boolean, coherence: number | null) {
     if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
@@ -95,9 +95,11 @@ class AudioFeedbackEngine {
       // Voices 1 and 2 (Harmonics) require higher coherence
       let targetVol = 0;
       if (inZone) {
-        if (i === 0) targetVol = 0.2 + (coherence / 100) * 0.2;
-        if (i === 1 && coherence > 30) targetVol = (coherence / 100) * 0.3;
-        if (i === 2 && coherence > 60) targetVol = ((coherence - 40) / 100) * 0.2;
+        // A missing reading is not a low reading: retain only the basic
+        // in-zone voice and do not activate coherence-dependent harmonics.
+        if (i === 0) targetVol = coherence == null ? 0.2 : 0.2 + (coherence / 100) * 0.2;
+        if (i === 1 && coherence != null && coherence > 30) targetVol = (coherence / 100) * 0.3;
+        if (i === 2 && coherence != null && coherence > 60) targetVol = ((coherence - 40) / 100) * 0.2;
       }
       
       voice.gain.gain.setTargetAtTime(targetVol, now, 1.0);

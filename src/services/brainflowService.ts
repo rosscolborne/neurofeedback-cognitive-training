@@ -4,11 +4,11 @@
  *
  * Primary flow for Web Bluetooth front-ends:
  *   1. POST /headset-fit/sessions → fitSessionId
- *   2. POST /headset-fit/sessions/{id}/analyze-window (per-window scoring + fit + training)
+ *   2. POST /headset-fit/sessions/{id}/analyze-window (per-window scoring + fit)
  *   3. DELETE /headset-fit/sessions/{id} on disconnect
  *
  * All scoring (mindfulness, restfulness, focus, relax, valence/arousal,
- * training, headset fit) runs server-side through the same analyze_window()
+ * headset fit) runs server-side through the same analyze_window()
  * pipeline that BrainFlow-direct sessions use — smoothing can't drift.
  */
 
@@ -46,6 +46,11 @@ export interface BrainFlowFeatures {
   relaxScore?: number;
   valence?: number | null;
   arousal?: number | null;
+  interhemisphericCoherence?: number | null;
+  thetaBetaRatio?: number | null;
+  inZone?: boolean | null;
+  zoneScore?: number | null;
+  stateLabel?: string | null;
   emotionLabel?: string | null;
 }
 
@@ -162,9 +167,8 @@ class BrainFlowService {
   }
 
   /**
-   * Send a raw EEG window to the server for full scoring + fit assessment + training.
-   * This is the primary per-window endpoint — returns smoothed metrics, channel quality,
-   * and baseline-relative training score.
+   * Send a raw EEG window to the server for full scoring and fit assessment.
+   * This is the primary per-window endpoint — returns smoothed metrics and channel quality.
    *
    * Only sends scalp electrode data (TP9, AF7, AF8, TP10) — AUX channels excluded.
    *
@@ -264,7 +268,7 @@ class BrainFlowService {
   /**
    * Start a native BrainFlow board session (e.g. Muse Athena or Synthetic Board)
    */
-  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string): Promise<{ sessionId: string; deviceInfo: any }> {
+  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string, protocol = 'theta-beta-ratio', threshold = 1.85): Promise<{ sessionId: string; deviceInfo: any }> {
     const res = await fetch(`${this.baseUrl}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -272,6 +276,7 @@ class BrainFlowService {
         deviceId,
         macAddress: macAddress || null,
         serialNumber: serialNumber || null,
+        protocol, threshold,
       }),
     });
 

@@ -11,10 +11,8 @@ import numpy as np
 from .analysis import AnalysisProviders, analyze_window
 from .config import DEFAULT_PROCESSING, DEVICE_CONFIGS, BrainFlowDeviceConfig, ProcessingConfig
 from .dsp import build_eeg_window, config_metadata
-from .affective_state import AffectiveCalibrationState
 from .headset_fit import HeuristicHeadsetFitProvider
-from .models import CalibrationProfile, DeviceInfo, SensorCapability, SignalChannel, SignalFrame
-from .training import to_calibration_profile_model
+from .models import DeviceInfo, SensorCapability, SignalChannel, SignalFrame
 
 
 class BrainFlowSession:
@@ -25,12 +23,16 @@ class BrainFlowSession:
         mac_address: str | None = None,
         serial_number: str | None = None,
         processing: ProcessingConfig = DEFAULT_PROCESSING,
+        protocol: str = "theta-beta-ratio",
+        threshold: float = 1.85,
     ) -> None:
         self.id = str(uuid.uuid4())
         self.config = config
         self.mac_address = mac_address
         self.serial_number = serial_number
         self.processing = processing
+        self.protocol = protocol
+        self.threshold = threshold
         self.sequence_id = 0
         self.board = None
         self.board_id = 0
@@ -40,25 +42,8 @@ class BrainFlowSession:
         self.device_info: DeviceInfo | None = None
         self._running = False
         # Every window this session analyzes goes through `analyze_window`
-        # with this same bundle of providers, for the life of the
-        # connection -- see `analysis.py`'s module docstring for why that's
-        # also exactly what a Bluetooth connection's analysis session does,
-        # so the two transports' smoothing/calibration/baselines can never
-        # drift apart.
+        # with this same provider bundle for the life of the connection.
         self._analysis = AnalysisProviders(headset_fit=HeuristicHeadsetFitProvider())
-
-    def start_calibration(self) -> None:
-        self._analysis.affective_state.start_calibration()
-
-    def reset_calibration(self) -> None:
-        self._analysis.affective_state.reset_calibration()
-
-    def get_calibration_state(self) -> AffectiveCalibrationState:
-        return self._analysis.affective_state.get_calibration_state()
-
-    def get_training_calibration_profile(self) -> CalibrationProfile | None:
-        profile = self._analysis.attention.get_calibration_profile()
-        return to_calibration_profile_model(profile) if profile else None
 
     def prepare(self) -> DeviceInfo:
         from brainflow.board_shim import BoardIds, BrainFlowInputParams, BrainFlowPresets, BoardShim
@@ -170,6 +155,8 @@ class BrainFlowSession:
             raw_window=window,
             sample_rate=sample_rate,
             processing=self.processing,
+            protocol=self.protocol,
+            threshold=self.threshold,
         )
 
         return SignalFrame(
@@ -180,9 +167,9 @@ class BrainFlowSession:
             timestampsMs=timestamps_ms,
             receivedAtMs=time.time() * 1000.0,
             sequenceId=self.sequence_id,
-            training=analysis.training,
             quality=analysis.quality,
             features=analysis.features,
+            training=analysis.training,
         )
 
     def _device_info(self, board_shim, presets) -> DeviceInfo:

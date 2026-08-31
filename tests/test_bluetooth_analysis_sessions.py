@@ -1,6 +1,6 @@
 """HTTP-level tests for the Bluetooth analysis-session endpoints added in
 `brainflow_service/analysis.py` -- `/headset-fit/sessions/{id}/analyze-window`
-and `.../calibration/*`. These are the Bluetooth counterpart of
+These are the Bluetooth counterpart of
 `BrainFlowSession`'s per-session smoothing, already exercised for a direct
 BrainFlow connection by `test_brainflow_pipeline.py`'s synthetic-board
 tests: the point of this file is to show a Bluetooth connection now gets
@@ -39,7 +39,7 @@ def _create_session(client) -> str:
     return created.json()["fitSessionId"]
 
 
-def test_analyze_window_returns_smoothed_features_and_training() -> None:
+def test_analyze_window_returns_smoothed_features() -> None:
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
 
@@ -62,16 +62,10 @@ def test_analyze_window_returns_smoothed_features_and_training() -> None:
     assert -1 <= features["valence"] <= 1
     assert -1 <= features["arousal"] <= 1
     assert isinstance(features["stateLabel"], str)
-    assert features["calibrationStatus"] == "off"
-    assert features["calibrationRequired"] == 24
 
     quality = body["quality"]
     assert quality["state"] in ("poor", "adjusting", "good", "ready")
     assert len(quality["channels"]) == 4
-
-    assert body["training"] is not None
-    assert isinstance(body["training"]["rawRatio"], float)
-
 
 def test_analyze_window_smooths_across_calls_instead_of_resetting() -> None:
     # Mirrors `test_stability_accumulates_across_calls_on_the_same_session`
@@ -116,34 +110,6 @@ def test_analyze_window_smooths_across_calls_instead_of_resetting() -> None:
     )
     raw_high_focus_score = stateless_response.json()["features"]["focusScore"]
     assert second_score < raw_high_focus_score
-
-
-def test_calibration_endpoints_round_trip_for_a_bluetooth_session() -> None:
-    pytest.importorskip("httpx")
-    from fastapi.testclient import TestClient
-
-    client = TestClient(app)
-    session_id = _create_session(client)
-
-    idle_state = client.get(f"/headset-fit/sessions/{session_id}/calibration").json()
-    assert idle_state == {"status": "off", "progress": 0, "required": 24}
-
-    started_state = client.post(f"/headset-fit/sessions/{session_id}/calibration/start").json()
-    assert started_state["status"] == "collecting"
-
-    reset_state = client.post(f"/headset-fit/sessions/{session_id}/calibration/reset").json()
-    assert reset_state == {"status": "off", "progress": 0, "required": 24}
-
-
-def test_calibration_endpoints_404_for_unknown_bluetooth_session() -> None:
-    pytest.importorskip("httpx")
-    from fastapi.testclient import TestClient
-
-    client = TestClient(app)
-
-    assert client.get("/headset-fit/sessions/does-not-exist/calibration").status_code == 404
-    assert client.post("/headset-fit/sessions/does-not-exist/calibration/start").status_code == 404
-    assert client.post("/headset-fit/sessions/does-not-exist/calibration/reset").status_code == 404
 
 
 def test_analyze_window_404_for_unknown_session() -> None:

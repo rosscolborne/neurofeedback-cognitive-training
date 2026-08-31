@@ -117,11 +117,16 @@ export async function generatePatientClinicalPDF(
 
   const totalSessions = sessions.length;
   const avgInZone = totalSessions > 0 ? Math.round(sessions.reduce((s, r) => s + r.timeInZonePercent, 0) / totalSessions) : 0;
-  const avgCoherence = totalSessions > 0 ? Math.round(sessions.reduce((s, r) => s + r.averageCoherence, 0) / totalSessions) : 0;
+  const coherenceValues = sessions
+    .map(session => session.averageCoherence)
+    .filter((value): value is number => value != null);
+  const avgCoherence = coherenceValues.length > 0
+    ? Math.round(coherenceValues.reduce((sum, value) => sum + value, 0) / coherenceValues.length)
+    : null;
 
   const summaryText = [
     `Patient completed ${totalSessions} neurofeedback session${totalSessions !== 1 ? 's' : ''} using the ${(client?.assignedProtocol || '').replace(/-/g, ' ')} protocol.`,
-    `Average time in target neural zone: ${avgInZone}%. Average inter-hemispheric coherence: ${avgCoherence}%.`,
+    `Average time in target neural zone: ${avgInZone}%. Average inter-hemispheric coherence: ${avgCoherence == null ? '--' : `${avgCoherence}%`}.`,
     `Band power averages below are computed from real EEG telemetry recorded during training sessions at AF7, AF8, TP9, TP10.`,
   ];
   doc.text(summaryText, 15, 86, { maxWidth: 180, lineHeightFactor: 1.4 });

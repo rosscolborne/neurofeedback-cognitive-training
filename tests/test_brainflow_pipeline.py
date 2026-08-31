@@ -11,6 +11,7 @@ from brainflow_service.config import DEFAULT_PROCESSING, DEVICE_CONFIGS
 from brainflow_service.dsp import (
     build_eeg_window,
     extract_band_power_features,
+    extract_interhemispheric_coherence,
     extract_brainflow_mindfulness,
     extract_brainflow_restfulness,
     preprocess_eeg_window,
@@ -64,7 +65,31 @@ def test_band_power_extracts_expected_bands() -> None:
     assert features.method == "brainflow_welch_psd"
     assert features.absolute["alpha"] > features.absolute["theta"]
     assert features.absolute["alpha"] > features.absolute["beta"]
+    assert "smr" in features.absolute
+    assert features.absolute["smr"] >= 0
     assert "betaOverAlphaTheta" in features.ratios
+
+
+def test_band_power_extracts_smr_from_a_12_to_15_hz_signal() -> None:
+    features = extract_band_power_features(sine_window(freq_hz=13.5), 256)
+
+    assert features is not None
+    assert features.absolute["smr"] > features.absolute["theta"]
+
+
+def test_interhemispheric_coherence_is_high_for_matched_left_right_signals() -> None:
+    window = sine_window(freq_hz=10)
+
+    score = extract_interhemispheric_coherence(window, 256, ["TP9", "AF7", "AF8", "TP10"])
+
+    assert score is not None
+    assert score > 0.95
+
+
+def test_interhemispheric_coherence_requires_a_left_right_pair() -> None:
+    score = extract_interhemispheric_coherence(sine_window()[:2], 256, ["TP9", "AF7"])
+
+    assert score is None
 
 
 def test_band_power_handles_exact_power_of_two_window() -> None:
@@ -129,7 +154,6 @@ def test_analyze_window_returns_brainflow_restfulness_for_frontend() -> None:
     assert features["arousal"] == features["rawArousal"]
     assert isinstance(features["stateLabel"], str)
     assert 0 <= features["confidence"] <= 1
-    assert features["calibrationActive"] is False
 
     quality = response.json()["quality"]
     assert quality["state"] in ("poor", "adjusting", "good", "ready")
@@ -158,53 +182,6 @@ def test_analyze_window_withholds_derived_scores_for_noisy_window() -> None:
     assert features["valence"] is None
     # Raw band powers are still reported even when derived scores are withheld.
     assert features["bandPowers"] is not None
-
-
-def test_calibration_endpoints_round_trip_for_a_session() -> None:
-    pytest.importorskip("brainflow")
-    pytest.importorskip("httpx")
-    from fastapi.testclient import TestClient
-
-    client = TestClient(app)
-    start_response = client.post(
-        "/sessions",
-        json={"deviceId": "brainflow-synthetic"},
-    )
-    assert start_response.status_code == 200
-    session_id = start_response.json()["sessionId"]
-
-    try:
-        idle_state = client.get(f"/sessions/{session_id}/calibration").json()
-        assert idle_state == {"status": "off", "progress": 0, "required": 24}
-
-        started_state = client.post(f"/sessions/{session_id}/calibration/start").json()
-        assert started_state["status"] == "collecting"
-
-        reset_state = client.post(f"/sessions/{session_id}/calibration/reset").json()
-        assert reset_state == {"status": "off", "progress": 0, "required": 24}
-
-        # Training's baseline-relative calibration profile is separate from
-        # the above and null until its baseline fills (exercised with a
-        # live streaming session in
-        # test_training_baseline_produces_scores_and_a_calibration_profile_once_filled).
-        # Checked here, sharing this test's session, rather than in its own
-        # test: BrainFlow's synthetic board can only successfully
-        # start_stream() once per process, so a second `POST /sessions` in
-        # the same pytest process reliably fails.
-        profile_response = client.get(f"/sessions/{session_id}/training/calibration-profile")
-        assert profile_response.status_code == 200
-        assert profile_response.json() is None
-    finally:
-        client.delete(f"/sessions/{session_id}")
-
-
-def test_calibration_endpoints_404_for_unknown_session() -> None:
-    pytest.importorskip("httpx")
-    from fastapi.testclient import TestClient
-
-    response = TestClient(app).get("/sessions/does-not-exist/calibration")
-
-    assert response.status_code == 404
 
 
 def test_brainflow_device_configs_include_live_and_synthetic() -> None:
@@ -264,8 +241,6 @@ async def collect_one_frame():
                 assert frame.quality is not None
                 assert frame.quality.state in ("poor", "adjusting", "good", "ready")
                 assert len(frame.quality.channels) == len(frame.channels)
-                assert frame.training is not None
-                assert isinstance(frame.training.raw_ratio, float)
                 return
     finally:
         session.stop()
@@ -281,55 +256,3 @@ asyncio.run(asyncio.wait_for(collect_one_frame(), timeout=5.0))
         capture_output=True,
     )
     assert result.returncode == 0, result.stderr
-
-
-def test_training_baseline_produces_scores_and_a_calibration_profile_once_filled() -> None:
-    pytest.importorskip("brainflow")
-
-    script = """
-import asyncio
-from brainflow_service.config import DEVICE_CONFIGS
-from brainflow_service.runtime import BrainFlowSession
-
-async def collect_until_baselined():
-    session = BrainFlowSession(DEVICE_CONFIGS["brainflow-synthetic"])
-    try:
-        session.prepare()
-        session.start()
-        async for frame in session.frames():
-            # displayed_score/focus_score/relax_score can turn non-null
-            # earlier (as soon as their own baseline has >=4 samples with
-            # real spread) -- the calibration profile specifically needs
-            # the ratio baseline to fill completely (24 windows).
-            profile = session.get_training_calibration_profile()
-            if profile is not None:
-                assert profile.algorithm_version == "median_mad_zscore_v1"
-                assert profile.accepted_windows == 24
-                assert frame.training is not None
-                assert 0 <= frame.training.displayed_score <= 100
-                assert 0 <= frame.training.focus_score <= 100
-                assert 0 <= frame.training.relax_score <= 100
-                return
-    finally:
-        session.stop()
-    raise AssertionError("Training baseline never filled")
-
-asyncio.run(asyncio.wait_for(collect_until_baselined(), timeout=15.0))
-"""
-
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    assert result.returncode == 0, result.stderr
-
-
-def test_training_calibration_profile_endpoint_404_for_unknown_session() -> None:
-    pytest.importorskip("httpx")
-    from fastapi.testclient import TestClient
-
-    response = TestClient(app).get("/sessions/does-not-exist/training/calibration-profile")
-
-    assert response.status_code == 404

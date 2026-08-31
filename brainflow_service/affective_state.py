@@ -1,19 +1,9 @@
-"""Valence/arousal state, calibration, and smoothing.
+"""Valence/arousal state and smoothing.
 
 Python port of `src/metrics/affectiveStateMetric.ts`'s `AffectiveStateProvider`.
 Wraps `MindStateSmoother` (mindfulness/restfulness/focus/relax) and adds the
-two-axis valence/arousal proxy, its baseline calibration, and nearest-label
-classification, so a session carries the full set of scores the bundled
-app's "Valence / Arousal" panel shows -- not just the four headline scores.
-
-Calibration uses `baseline.py`'s median/MAD z-score normalization -- the
-same one `training.py` uses -- rather than the TS version's simpler
-`value - median`, clamped offset. This is a deliberate improvement over the
-current bundled app, not a faithful port of this one piece: with only a
-flat offset, the same absolute deviation means something different
-depending on how naturally noisy the signal is, whereas a z-score accounts
-for that spread. There is intentionally no less-robust alternative left in
-this module.
+two-axis valence/arousal proxy and nearest-label classification. These are
+live, smoothed metrics; the service has no baseline-calibration state.
 
 `AffectiveStateProvider.push` accepts `reliable` and `fit` so a caller can
 wire in real quality gating -- `brainflow_service/runtime.py` does this with
@@ -28,9 +18,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Literal
-
-from .baseline import DEFAULT_BASELINE_SAMPLE_COUNT, DEFAULT_Z_SCORE_SCALE, BaselineCollector, z_score
 from .metrics import DEFAULT_SMOOTHING_ALPHA, MindStateSmoother
 
 NEUTRAL_RADIUS = 0.18
@@ -61,20 +48,12 @@ AFFECTIVE_EMOTION_REGIONS: tuple[EmotionRegion, ...] = (
 
 
 @dataclass(frozen=True)
-class AffectiveCalibrationState:
-    status: Literal["off", "collecting", "active"]
-    progress: int
-    required: int
-
-
-@dataclass(frozen=True)
 class AffectiveStateSample:
     at_ms: float
     valence: float
     arousal: float
     raw_valence: float
     raw_arousal: float
-    calibration_active: bool
     label: str
     confidence: float
     theta_power: float
@@ -115,7 +94,7 @@ def confidence_quality_factor(fit: FitQualityHint | None) -> float:
 
 @dataclass(frozen=True)
 class RawAffectiveSample:
-    """Single-window valence/arousal with no smoothing or calibration --
+    """Single-window valence/arousal with no smoothing --
     used by the stateless `/analyze-window` endpoint."""
 
     valence: float
@@ -181,59 +160,21 @@ def compute_raw_affective_sample(
 class AffectiveStateProvider:
     """Stateful, per-session port of `AffectiveStateProvider`
     (affectiveStateMetric.ts): valence/arousal with slow-EMA smoothing and
-    optional robust-baseline calibration, plus the four headline scores via
-    an internal `MindStateSmoother`."""
+    the four headline scores via an internal `MindStateSmoother`."""
 
     def __init__(
         self,
         smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA,
-        calibration_sample_count: int = DEFAULT_BASELINE_SAMPLE_COUNT,
-        z_score_scale: float = DEFAULT_Z_SCORE_SCALE,
     ) -> None:
         self._alpha = smoothing_alpha
-        self._z_score_scale = z_score_scale
         self._mind_state = MindStateSmoother(smoothing_alpha)
         self._smoothed_valence: float | None = None
         self._smoothed_arousal: float | None = None
-        self._calibration_status: Literal["off", "collecting", "active"] = "off"
-        self._valence_baseline = BaselineCollector(calibration_sample_count)
-        self._arousal_baseline = BaselineCollector(calibration_sample_count)
-        self._calibration_profile_active = False
 
     def reset(self) -> None:
         self._smoothed_valence = None
         self._smoothed_arousal = None
         self._mind_state.reset()
-        self.reset_calibration()
-
-    def start_calibration(self) -> None:
-        self._calibration_status = "collecting"
-        self._valence_baseline.reset()
-        self._arousal_baseline.reset()
-        self._calibration_profile_active = False
-        self._smoothed_valence = None
-        self._smoothed_arousal = None
-
-    def reset_calibration(self) -> None:
-        self._calibration_status = "off"
-        self._valence_baseline.reset()
-        self._arousal_baseline.reset()
-        self._calibration_profile_active = False
-        self._smoothed_valence = None
-        self._smoothed_arousal = None
-
-    def get_calibration_state(self) -> AffectiveCalibrationState:
-        if self._calibration_status == "collecting":
-            progress = min(self._valence_baseline.collected, self._valence_baseline.sample_count)
-        elif self._calibration_status == "active":
-            progress = self._valence_baseline.sample_count
-        else:
-            progress = 0
-        return AffectiveCalibrationState(
-            status=self._calibration_status,
-            progress=progress,
-            required=self._valence_baseline.sample_count,
-        )
 
     def push(
         self,
@@ -260,19 +201,6 @@ class AffectiveStateProvider:
 
         raw_arousal = map_ratio_to_axis((beta + gamma) / (alpha + theta + 1e-9))
         raw_valence = map_ratio_to_axis(alpha / (theta + beta + 1e-9))
-        self._accept_calibration_sample(raw_valence, raw_arousal)
-
-        calibrated_valence = (
-            raw_valence
-            if not self._calibration_profile_active
-            else self._map_z_score_to_axis(z_score(raw_valence, self._valence_baseline.stats()))
-        )
-        calibrated_arousal = (
-            raw_arousal
-            if not self._calibration_profile_active
-            else self._map_z_score_to_axis(z_score(raw_arousal, self._arousal_baseline.stats()))
-        )
-
         mind_state = self._mind_state.push(
             theta_power=theta,
             alpha_power=alpha,
@@ -282,14 +210,14 @@ class AffectiveStateProvider:
         )
 
         self._smoothed_valence = (
-            calibrated_valence
+            raw_valence
             if self._smoothed_valence is None
-            else _smooth(self._smoothed_valence, calibrated_valence, self._alpha)
+            else _smooth(self._smoothed_valence, raw_valence, self._alpha)
         )
         self._smoothed_arousal = (
-            calibrated_arousal
+            raw_arousal
             if self._smoothed_arousal is None
-            else _smooth(self._smoothed_arousal, calibrated_arousal, self._alpha)
+            else _smooth(self._smoothed_arousal, raw_arousal, self._alpha)
         )
 
         valence = _clamp(self._smoothed_valence, -1.0, 1.0)
@@ -301,7 +229,6 @@ class AffectiveStateProvider:
             arousal=arousal,
             raw_valence=raw_valence,
             raw_arousal=raw_arousal,
-            calibration_active=self._calibration_profile_active,
             label=classify_affective_state(valence, arousal),
             confidence=estimate_confidence(valence, arousal, confidence_quality_factor(fit)),
             theta_power=theta,
@@ -314,33 +241,6 @@ class AffectiveStateProvider:
             relax_score=mind_state.relax_score,
             reliable=reliable,
         )
-
-    def _accept_calibration_sample(self, raw_valence: float, raw_arousal: float) -> None:
-        if self._calibration_status != "collecting":
-            return
-
-        self._valence_baseline.accept(raw_valence)
-        self._arousal_baseline.accept(raw_arousal)
-        if not (self._valence_baseline.is_full and self._arousal_baseline.is_full):
-            return
-
-        # Robust stats need real spread in the baseline (see
-        # `baseline.compute_robust_stats`); a baseline with none (e.g. a
-        # perfectly flat/frozen signal) leaves calibration "collecting"
-        # rather than activating on a meaningless zero-spread baseline.
-        if self._valence_baseline.stats() is None or self._arousal_baseline.stats() is None:
-            return
-
-        self._calibration_profile_active = True
-        self._calibration_status = "active"
-        self._smoothed_valence = None
-        self._smoothed_arousal = None
-
-    def _map_z_score_to_axis(self, value: float | None) -> float:
-        if value is None or not math.isfinite(value):
-            return 0.0
-        return _clamp(math.tanh(value / self._z_score_scale), -1.0, 1.0)
-
 
 def _finite_power(value: float) -> float:
     return max(0.0, value) if math.isfinite(value) else 0.0

@@ -20,7 +20,6 @@ class ProcessingConfig:
     bandpass_low_hz: float = 3.0
     bandpass_high_hz: float = 45.0
     filter_order: int = 4
-    baseline_windows_required: int = 24
     smoothing_alpha: float = 0.22
 
 
@@ -28,6 +27,10 @@ DEFAULT_BANDS = (
     FrequencyBand("delta", "Delta", 1.0, 4.0),
     FrequencyBand("theta", "Theta", 4.0, 8.0),
     FrequencyBand("alpha", "Alpha", 8.0, 13.0),
+    # SMR is a clinically distinct 12–15 Hz reward band. It intentionally
+    # overlaps the conventional alpha/beta boundaries so it can be surfaced
+    # independently for SMR-enhancement protocols.
+    FrequencyBand("smr", "Sensorimotor Rhythm", 12.0, 15.0),
     FrequencyBand("beta", "Beta", 13.0, 30.0),
     FrequencyBand("gamma", "Gamma", 30.0, 45.0),
 )

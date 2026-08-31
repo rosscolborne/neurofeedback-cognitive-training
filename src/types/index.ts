@@ -38,8 +38,8 @@ export interface MuseChannelQuality {
 }
 
 export interface BrainFlowScores {
-  focusScore: number;
-  relaxScore: number;
+  focusScore: number | null;
+  relaxScore: number | null;
   mindfulnessScore: number | null;
   restfulnessScore: number | null;
   valence?: number | null;       // -1 (negative) to +1 (positive)
@@ -71,7 +71,7 @@ export interface ServerFitState {
 }
 
 export interface TrainingMetricSample {
-  score: number;           // 0 – 100 baseline-relative
+  score: number | null;    // 0 – 100 baseline-relative, when available
   baselineReady: boolean;
 }
 
@@ -79,9 +79,15 @@ export interface EEGDataPoint {
   timestamp: number;
   rawSignal: number;
   bands: BandPowers;
+  /** Which server band-power values were actually supplied for this frame. */
+  bandAvailability: Partial<Record<keyof BandPowers, boolean>>;
   thetaBetaRatio: number;
-  coherence: number; // 0 - 100%
+  thetaBetaRatioAvailable: boolean;
+  /** 0–100 measured coherence percentage; null when the service could not compute it. */
+  coherence: number | null;
+  coherenceAvailable: boolean;
   inZone: boolean;
+  inZoneAvailable: boolean;
   zoneScore: number; // 0.0 - 1.0 continuous feedback score
   signalQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected';
   channelQuality: MuseChannelQuality;
@@ -181,7 +187,8 @@ export interface SessionRecord {
   experience: ExperienceType;
   durationSeconds: number;
   timeInZonePercent: number;
-  averageCoherence: number;
+  /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
+  averageCoherence: number | null;
   peakFocusScore: number;
   averageBands: BandPowers;
   timeSeries: Array<{
@@ -194,7 +201,7 @@ export interface SessionRecord {
   }>;
   adaptiveAdjustmentsCount: number;
   finalThreshold: number;
-  averageTrainingScore?: number;        // brainflow_service training metric (0 – 100)
+  averageTrainingScore?: number | null;
   averageMindfulness?: number;          // brainflow_service mindfulness metric (0 – 100)
   averageValence?: number;              // brainflow_service valence (-1 to +1)
   averageArousal?: number;              // brainflow_service arousal (0 to 1)

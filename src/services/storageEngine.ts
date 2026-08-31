@@ -742,7 +742,7 @@ class StorageEngine {
         session.timeInZonePercent * 0.4 +
           consistency * 0.3 +
           session.peakFocusScore * 0.2 +
-          session.averageCoherence * 0.1
+          (session.averageCoherence ?? 0) * 0.1
       );
       client.brainCapacityScore = Math.max(30, Math.min(99, newScore));
 

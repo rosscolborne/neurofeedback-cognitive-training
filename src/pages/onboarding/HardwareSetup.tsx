@@ -13,7 +13,7 @@ export const HardwareSetup: React.FC = () => {
     setConnecting(true);
     setError('');
     try {
-      const res = await eegEngine.connectMuseBluetooth();
+      const res = await eegEngine.connectMuseAthenaBrainflow();
       if (res.success) {
         setConnected(true);
         setTimeout(() => {
@@ -68,7 +68,7 @@ export const HardwareSetup: React.FC = () => {
       <p style={{ color: 'var(--text-secondary)', marginBottom: '40px', textAlign: 'center', maxWidth: '300px' }}>
         {connected 
           ? 'You are all set to start your first session.'
-          : 'Turn on your Muse headband and make sure Bluetooth is enabled on your device.'}
+          : 'Turn on your Muse Athena headset. BrainFlow will connect to it from the local acquisition service.'}
       </p>
 
       {error && (

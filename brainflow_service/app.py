@@ -27,12 +27,10 @@ from .headset_fit import (
 )
 from .metrics import compute_neurofeedback_scores, normalize_brainflow_score
 from .models import (
-    AffectiveCalibrationStateResponse,
-    AttentionMetricSampleModel,
-    CalibrationProfile,
     SignalChannel,
     SignalFeatures,
     SignalQualityMetadata,
+    TrainingMetricSampleModel,
 )
 from .runtime import SessionStore, sse_event
 
@@ -43,6 +41,8 @@ class StartSessionRequest(BaseModel):
     device_id: str = Field(alias="deviceId")
     mac_address: str | None = Field(default=None, alias="macAddress")
     serial_number: str | None = Field(default=None, alias="serialNumber")
+    protocol: str = "theta-beta-ratio"
+    threshold: float = 1.85
 
 
 class StartSessionResponse(BaseModel):
@@ -96,6 +96,8 @@ class AnalyzeSessionWindowRequest(BaseModel):
     sample_rate_hz: float = Field(alias="sampleRateHz")
     samples: list[list[float]]
     channel_ids: list[str] = Field(alias="channelIds")
+    protocol: str = "theta-beta-ratio"
+    threshold: float = 1.85
 
 
 class AnalyzeSessionWindowResponse(BaseModel):
@@ -103,7 +105,7 @@ class AnalyzeSessionWindowResponse(BaseModel):
 
     features: SignalFeatures | None
     quality: SignalQualityMetadata
-    training: AttentionMetricSampleModel | None = None
+    training: TrainingMetricSampleModel | None = None
 
 
 app = FastAPI(title="Neurasticity BrainFlow Service")
@@ -220,7 +222,6 @@ def analyze_window(request: AnalyzeWindowRequest) -> AnalyzeWindowResponse:
                 rawArousal=raw_affective.arousal if raw_affective else None,
                 stateLabel=raw_affective.label if raw_affective else None,
                 confidence=raw_affective.confidence if raw_affective else None,
-                calibrationActive=False,
             )
 
     return AnalyzeWindowResponse(features=features, quality=quality).model_dump(by_alias=True)
@@ -230,8 +231,8 @@ def analyze_window(request: AnalyzeWindowRequest) -> AnalyzeWindowResponse:
 def start_headset_fit_session() -> StartHeadsetFitSessionResponse:
     """Starts a stateful analysis session for one Bluetooth connection --
     headset fit, plus (via `.../analyze-window` below) the same smoothed
-    mindfulness/restfulness/focus/relax/valence/arousal scores and Training
-    baseline a direct BrainFlow connection gets from its own
+    mindfulness/restfulness/focus/relax/valence/arousal scores a direct
+    BrainFlow connection gets from its own
     `BrainFlowSession`, all from `analysis.AnalysisProviders`. Call this
     once per connection, then POST each analyzed window's samples to
     `/headset-fit/sessions/{fitSessionId}/analyze-window` (or, for fit
@@ -283,8 +284,8 @@ def analyze_session_window(
     """The Bluetooth counterpart of `/sessions/{id}/stream`: runs this
     session's window through the same `analyze_window` pipeline a direct
     BrainFlow connection's `BrainFlowSession` uses, so the two transports'
-    headset fit, smoothing, calibration, and Training baseline are
-    identical rather than two separate implementations. Supersedes calling
+    headset fit and smoothing are identical rather than two separate
+    implementations. Supersedes calling
     the stateless `/analyze-window` and `.../assess` separately -- one
     session-scoped call now does both, with real smoothing instead of
     single-window scores."""
@@ -327,29 +328,12 @@ def analyze_session_window(
         eeg_samples=eeg_samples,
         raw_window=window,
         sample_rate=sample_rate,
+        protocol=request.protocol,
+        threshold=request.threshold,
     )
     return AnalyzeSessionWindowResponse(
         features=result.features, quality=result.quality, training=result.training,
     )
-
-
-@app.post("/headset-fit/sessions/{fit_session_id}/calibration/start")
-def start_bluetooth_calibration(fit_session_id: str) -> AffectiveCalibrationStateResponse:
-    session = _get_analysis_session_or_404(fit_session_id)
-    session.affective_state.start_calibration()
-    return _analysis_calibration_response(session)
-
-
-@app.post("/headset-fit/sessions/{fit_session_id}/calibration/reset")
-def reset_bluetooth_calibration(fit_session_id: str) -> AffectiveCalibrationStateResponse:
-    session = _get_analysis_session_or_404(fit_session_id)
-    session.affective_state.reset_calibration()
-    return _analysis_calibration_response(session)
-
-
-@app.get("/headset-fit/sessions/{fit_session_id}/calibration")
-def get_bluetooth_calibration(fit_session_id: str) -> AffectiveCalibrationStateResponse:
-    return _analysis_calibration_response(_get_analysis_session_or_404(fit_session_id))
 
 
 @app.delete("/headset-fit/sessions/{fit_session_id}")
@@ -363,13 +347,6 @@ def _get_analysis_session_or_404(fit_session_id: str):
         return analysis_session_store.get(fit_session_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown headset-fit session.") from exc
-
-
-def _analysis_calibration_response(session) -> AffectiveCalibrationStateResponse:
-    state = session.affective_state.get_calibration_state()
-    return AffectiveCalibrationStateResponse(
-        status=state.status, progress=state.progress, required=state.required,
-    )
 
 
 @app.post("/sessions")
@@ -386,6 +363,8 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
             request.device_id,
             mac_address=request.mac_address,
             serial_number=request.serial_number,
+            protocol=request.protocol,
+            threshold=request.threshold,
         )
         try:
             device_info = session.prepare()
@@ -409,48 +388,11 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
     )
 
 
-@app.post("/sessions/{session_id}/calibration/start")
-def start_calibration(session_id: str) -> AffectiveCalibrationStateResponse:
-    session = _get_session_or_404(session_id)
-    session.start_calibration()
-    return _calibration_response(session)
-
-
-@app.post("/sessions/{session_id}/calibration/reset")
-def reset_calibration(session_id: str) -> AffectiveCalibrationStateResponse:
-    session = _get_session_or_404(session_id)
-    session.reset_calibration()
-    return _calibration_response(session)
-
-
-@app.get("/sessions/{session_id}/calibration")
-def get_calibration(session_id: str) -> AffectiveCalibrationStateResponse:
-    return _calibration_response(_get_session_or_404(session_id))
-
-
-@app.get("/sessions/{session_id}/training/calibration-profile")
-def get_training_calibration_profile(session_id: str) -> CalibrationProfile | None:
-    # Training's baseline (brainflow_service/training.py) collects
-    # automatically from the session's first window -- there's no
-    # start/reset control the way valence/arousal calibration above has.
-    # This is null until the baseline fills (typically a few seconds).
-    return _get_session_or_404(session_id).get_training_calibration_profile()
-
-
 def _get_session_or_404(session_id: str):
     try:
         return store.get(session_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown BrainFlow session.") from exc
-
-
-def _calibration_response(session) -> AffectiveCalibrationStateResponse:
-    state = session.get_calibration_state()
-    return AffectiveCalibrationStateResponse(
-        status=state.status,
-        progress=state.progress,
-        required=state.required,
-    )
 
 
 @app.get("/sessions/{session_id}/stream")

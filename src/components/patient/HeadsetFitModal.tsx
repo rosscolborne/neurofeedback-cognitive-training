@@ -33,10 +33,10 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
   const handlePair = async () => {
     setIsPairing(true);
     setPairError(null);
-    const res = await eegEngine.connectMuseBluetooth();
+    const res = await eegEngine.connectMuseAthenaBrainflow();
     setIsPairing(false);
     if (!res.success) {
-      setPairError(res.error || 'Bluetooth pairing failed');
+      setPairError(res.error || 'Muse Athena connection failed');
     }
   };
 
@@ -128,7 +128,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
             }}
           >
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              No Muse Headband connected yet.
+              No Muse Athena headset connected yet.
             </div>
             <button
               onClick={handlePair}
@@ -137,7 +137,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
               style={{ width: '100%', padding: '12px' }}
             >
               <Wifi size={16} />
-              {isPairing ? 'Connecting...' : 'Connect Muse Headband'}
+              {isPairing ? 'Connecting...' : 'Connect Muse Athena'}
             </button>
             {import.meta.env.DEV && (
               <button
