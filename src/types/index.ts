@@ -16,7 +16,7 @@ export type ExperienceType =
   | 'soundscape-mode'
   | 'mandala'
   | 'immersive-3d'
-  | 'spatial-audio'
+  | 'generative-music'
   | 'narrative-story';
 
 export type SessionPhase = 'calibration' | 'warmup' | 'training' | 'cooldown' | 'debrief';

@@ -87,7 +87,7 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     assignedProtocol: 'theta-beta-ratio',
     allowedExperiences: [
       'immersive-3d',
-      'spatial-audio',
+      'generative-music',
       'narrative-story',
       'skyline-drift',
       'tidal-garden',
@@ -127,7 +127,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'ADHD (Inattentive)',
     status: 'active',
     assignedProtocol: 'theta-beta-ratio',
-    allowedExperiences: ['immersive-3d', 'spatial-audio', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 14,
     currentStreak: 5,
@@ -172,7 +172,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Generalized Anxiety',
     status: 'active',
     assignedProtocol: 'alpha-enhancement',
-    allowedExperiences: ['immersive-3d', 'spatial-audio', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala'],
     prescribedSessionsPerWeek: 3,
     completedSessionsCount: 9,
     currentStreak: 3,
@@ -200,7 +200,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Stress / Insomnia',
     status: 'paused',
     assignedProtocol: 'beta-downtraining',
-    allowedExperiences: ['immersive-3d', 'spatial-audio', 'narrative-story', 'breath-weave', 'soundscape-mode', 'mandala'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'soundscape-mode', 'mandala'],
     prescribedSessionsPerWeek: 3,
     completedSessionsCount: 6,
     currentStreak: 0,
@@ -228,7 +228,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Peak Performance',
     status: 'active',
     assignedProtocol: 'smr-enhancement',
-    allowedExperiences: ['immersive-3d', 'spatial-audio', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 18,
     currentStreak: 8,
@@ -577,7 +577,15 @@ class StorageEngine {
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
       ]);
       if (snap) {
-        const docs = snap.docs.map((d) => d.data() as ClientProfile);
+        const docs = snap.docs.map((d) => {
+          const client = d.data() as ClientProfile;
+          if (client.allowedExperiences) {
+            client.allowedExperiences = client.allowedExperiences.map((e: any) =>
+              e === 'spatial-audio' ? 'generative-music' : e
+            );
+          }
+          return client;
+        });
         if (docs.length > 0) {
           return docs;
         }

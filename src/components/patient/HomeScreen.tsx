@@ -19,7 +19,7 @@ const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ 
   'soundscape-mode': { name: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural & nature soundscapes for eyes-closed training', tag: 'Audio' },
   'mandala': { name: 'Mandala Breathing', icon: Sparkles, desc: 'Calm concentric breathing mandala with live µV telemetry', tag: 'Calm' },
   'immersive-3d': { name: 'Generative XR', icon: Sparkles, desc: 'Subtle atmospheric WebXR experience', tag: 'VR' },
-  'spatial-audio': { name: 'Generative Music', icon: Music, desc: 'Brain-state-driven melody, synthesis & rhythm — your EEG creates the music', tag: 'Music' },
+  'generative-music': { name: 'Generative Music', icon: Music, desc: 'Brain-state-driven melody, synthesis & rhythm — your EEG creates the music', tag: 'Music' },
   'narrative-story': { name: 'Contemplative Reading', icon: BookOpen, desc: 'Calm mindfulness reflections guided by neurofeedback therapy', tag: 'Reading' },
 };
 

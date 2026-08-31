@@ -72,7 +72,7 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
     benefit: 'Provides powerful, immediate visual biofeedback, accelerating the brain\'s operant conditioning loop.',
     instructions: 'Observe the 3D space. Your coherence score directly manipulates the gravity, color, and flow of the particles.',
   },
-  'spatial-audio': {
+  'generative-music': {
     title: 'Generative Music',
     mechanism: 'Maps real-time EEG band powers to generative musical parameters — alpha selects pitch, attention drives tempo, coherence adds harmonic richness.',
     benefit: 'Provides immediate, intuitive auditory neurofeedback through brain-generated music. Sustained target states produce melodic clarity; drift results in muffled, sparse output.',
@@ -678,7 +678,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           {selectedExperience === 'immersive-3d' && (
             <GenerativeWebXRCanvas eegData={eegData} />
           )}
-          {selectedExperience === 'spatial-audio' && (
+          {selectedExperience === 'generative-music' && (
             <GenerativeMusicMode eegData={eegData} />
           )}
           {selectedExperience === 'narrative-story' && (
