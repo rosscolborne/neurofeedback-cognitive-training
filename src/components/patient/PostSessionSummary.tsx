@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
-import { CheckCircle, ArrowRight, Sparkles, Heart } from 'lucide-react';
+import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface PostSessionSummaryProps {
@@ -192,7 +192,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
       {/* Key Insights Section — computed from real session data */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Sparkles size={16} color="var(--brand-primary)" />
+          <CheckCircle size={16} color="var(--brand-primary)" />
           <span>Session Summary</span>
         </div>
         <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>

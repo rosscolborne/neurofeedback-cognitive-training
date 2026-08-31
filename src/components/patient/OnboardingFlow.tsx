@@ -3,7 +3,7 @@ import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { BrandLogo } from '../brand/BrandLogo';
-import { ArrowRight, Check, Sparkles, Wifi, ShieldCheck, Target, Waves, Zap, Moon, Activity } from 'lucide-react';
+import { ArrowRight, Check, Wifi, ShieldCheck, Target, Waves, Zap, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
   client: ClientProfile;

@@ -15,7 +15,7 @@ import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
 import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { HeadsetFitModal } from './HeadsetFitModal';
-import { Play, Pause, Wifi, Sparkles, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, BrainCircuit } from 'lucide-react';
+import { Play, Pause, Wifi, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, BrainCircuit } from 'lucide-react';
 
 const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism: string; benefit: string; instructions: string }> = {
   'skyline-drift': {
@@ -632,7 +632,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             animation: 'gentleFloat 0.3s ease',
           }}
         >
-          <Sparkles size={18} color="var(--brand-primary)" />
+          <BrainCircuit size={18} color="var(--brand-primary)" />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
               Adaptive Engine: Target {adjustmentNotice.direction}

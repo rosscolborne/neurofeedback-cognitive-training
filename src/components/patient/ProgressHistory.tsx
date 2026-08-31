@@ -1,14 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ClientProfile, MilestoneBadge, SessionRecord } from '../../types';
 import { storageEngine, INITIAL_BADGES } from '../../services/storageEngine';
-import { Download, Trophy, Sparkles, Waves, Target, Wind, Compass, Send, FileText } from 'lucide-react';
+import { Download, Trophy, Award, Waves, Target, Wind, Compass, Send, FileText } from 'lucide-react';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
 }
 
 const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
-  Sparkles,
+  Award,
+  Trophy,
   Waves,
   Target,
   Wind,
@@ -262,7 +263,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <Sparkles size={24} />
+                <Award size={24} />
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Your Journey Starts Here</div>

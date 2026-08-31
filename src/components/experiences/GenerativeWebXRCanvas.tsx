@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { EEGDataPoint } from '../../types';
-import { Sparkles, Camera, RotateCcw, Palette } from 'lucide-react';
+import { Box, Camera, RotateCcw, Palette } from 'lucide-react';
 
 interface GenerativeArtProps {
   eegData: EEGDataPoint | null;
@@ -334,7 +334,7 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
             pointerEvents: 'auto',
           }}
         >
-          <Sparkles size={13} color="var(--brand-primary)" />
+          <Box size={13} color="var(--brand-primary)" />
           <span style={{ fontSize: '12px', fontWeight: 600, color: '#F0EBE1' }}>
             Generative EEG Tapestry
           </span>

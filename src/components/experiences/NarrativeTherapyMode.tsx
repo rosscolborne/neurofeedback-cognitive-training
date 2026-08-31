@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { EEGDataPoint } from '../../types';
 import { audioEngine } from '../../services/audioEngine';
-import { ChevronRight, ChevronLeft, Feather, BookOpen, RotateCcw, Compass, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Feather, BookOpen, RotateCcw, Compass, CheckCircle2 } from 'lucide-react';
 
 interface NarrativeTherapyProps {
   eegData: EEGDataPoint | null;

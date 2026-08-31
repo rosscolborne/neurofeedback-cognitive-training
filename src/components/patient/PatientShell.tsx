@@ -11,7 +11,7 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { EducationHub } from './EducationHub';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Sparkles, Camera, LogOut, Trash2, FileText, VolumeX, Volume2 } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Camera, LogOut, Trash2, FileText, VolumeX, Volume2 } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 
@@ -260,7 +260,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
               {[
-                { id: 'immersive-3d', title: 'Generative XR', icon: Sparkles, desc: 'Subtle atmospheric WebXR experience', badge: 'VR', gradient: 'linear-gradient(135deg, #7B68AE22, #E8967A22)', researchUrl: 'https://doi.org/10.3389/fnhum.2019.00210' },
+                { id: 'immersive-3d', title: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', badge: 'VR', gradient: 'linear-gradient(135deg, #7B68AE22, #E8967A22)', researchUrl: 'https://doi.org/10.3389/fnhum.2019.00210' },
                 { id: 'generative-music', title: 'Generative Music', icon: Music, desc: 'Brain-generated melody, synth & rhythm', badge: 'Music', gradient: 'linear-gradient(135deg, #4A90D922, #5C8C4622)', researchUrl: 'https://doi.org/10.1016/s0031-9384(97)00436-8' },
                 { id: 'narrative-story', title: 'Graphic Novel', icon: BookOpen, desc: 'Biometric driven narrative therapy', badge: 'Narrative', gradient: 'linear-gradient(135deg, #E8967A22, #C4A35A22)', researchUrl: 'https://doi.org/10.1145/1978942.1978958' },
                 { id: 'skyline-drift', title: 'Skyline Drift', icon: Mountain, desc: 'Focus-driven glider flight across procedural landscapes', badge: 'Focus', gradient: 'linear-gradient(135deg, #E8967A22, #E4B87C22)', researchUrl: 'https://doi.org/10.1109/TNSRE.2016.2626989' },
@@ -270,7 +270,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 { id: 'rhythm-lock', title: 'Rhythm Lock', icon: Music, desc: 'Polyrhythmic ambient synthesizer with real-time feedback', badge: 'Attention', gradient: 'linear-gradient(135deg, #4A90D922, #7B68AE22)', researchUrl: 'https://doi.org/10.3389/fnhum.2020.00310' },
                 { id: 'media-mode', title: 'Media Mode', icon: Tv, desc: 'Watch videos with neuro-luminosity modulation', badge: 'Streaming', gradient: 'linear-gradient(135deg, #E4B87C22, #C4A35A22)', researchUrl: 'https://doi.org/10.1007/s10484-016-9324-4' },
                 { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural soundscapes for eyes-closed training', badge: 'Audio', gradient: 'linear-gradient(135deg, #5C8C4622, #7B68AE22)', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
-                { id: 'mandala', title: 'Mandala Breathing', icon: Sparkles, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
+                { id: 'mandala', title: 'Mandala Breathing', icon: CircleDot, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
               ].map(exp => {
                 const Icon = exp.icon;
                 return (

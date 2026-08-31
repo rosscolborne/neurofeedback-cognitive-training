@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { EEGDataPoint } from '../../types';
 import { audioEngine } from '../../services/audioEngine';
-import { Volume2, VolumeX, Sparkles, Waves, CloudRain, Wind, Moon } from 'lucide-react';
+import { Volume2, VolumeX, Waves, CloudRain, Wind, Moon, Headphones } from 'lucide-react';
 
 interface SoundscapeProps {
   eegData: EEGDataPoint | null;
@@ -126,7 +126,7 @@ export const SoundscapePlayer: React.FC<SoundscapeProps> = ({ eegData, isPaused 
               color: '#FFFFFF',
             }}
           >
-            <Sparkles size={28} />
+            <Waves size={28} />
           </div>
         </div>
 

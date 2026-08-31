@@ -6,7 +6,7 @@ import {
   THERAPEUTIC_SCALES,
   TherapeuticScale,
 } from '../../services/generativeMusicEngine';
-import { Play, Pause, Music, Waves, Drum, Radio, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { Play, Pause, Music, Waves, Drum, Radio, Volume2, VolumeX, Activity } from 'lucide-react';
 
 interface GenerativeMusicProps {
   eegData: EEGDataPoint | null;
@@ -306,7 +306,7 @@ export const GenerativeMusicMode: React.FC<GenerativeMusicProps> = ({ eegData })
           <div style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Sparkles size={12} color={inZone ? '#68D391' : '#F6AD55'} />
+            <Activity size={12} color={inZone ? '#68D391' : '#F6AD55'} />
             <span style={{ color: inZone ? '#68D391' : '#F6AD55', fontWeight: 600, fontSize: '10px' }}>
               {inZone ? `Zone ${Math.round(zoneScore * 100)}%` : 'Drift'}
             </span>

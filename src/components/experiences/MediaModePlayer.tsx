@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { EEGDataPoint } from '../../types';
-import { Video, Eye, Sun, Compass, Waves, Moon, Tv, Play, Sparkles } from 'lucide-react';
+import { Video, Eye, Sun, Compass, Waves, Moon, Tv, Play } from 'lucide-react';
 
 interface MediaModeProps {
   eegData: EEGDataPoint | null;
@@ -233,7 +233,7 @@ export const MediaModePlayer: React.FC<MediaModeProps> = ({ eegData, isPaused = 
               gap: '8px',
             }}
           >
-            <Sparkles size={16} color="var(--brand-primary)" />
+            <Sun size={16} color="var(--brand-primary)" />
             <span>Sustain calm attention to restore full video luminosity</span>
           </div>
         )}

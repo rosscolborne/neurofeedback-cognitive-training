@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { audioEngine } from '../../services/audioEngine';
-import { BookOpen, Activity, Sparkles, Brain, CheckCircle, HelpCircle, Volume2, ShieldCheck, ChevronRight, Zap, Heart, Eye, Lightbulb, Check, X, Target, Moon } from 'lucide-react';
+import { BookOpen, Activity, Brain, CheckCircle, HelpCircle, Volume2, ShieldCheck, ChevronRight, Zap, Heart, Eye, Lightbulb, Check, X, Target, Moon } from 'lucide-react';
 
 // Quiz question data
 const QUIZ_QUESTIONS = [
@@ -314,7 +314,7 @@ export const EducationHub: React.FC = () => {
             { icon: Activity, label: 'Calibration', time: '~1 min', desc: 'We measure your baseline brainwave patterns', color: 'var(--chart-delta)' },
             { icon: Heart, label: 'Warm-up', time: '~2 min', desc: 'Gentle exercises ease your brain into training mode', color: 'var(--chart-alpha)' },
             { icon: Zap, label: 'Core Training', time: '~19 min', desc: 'Your brain gets real-time rewards for staying in the target zone', color: 'var(--brand-primary)' },
-            { icon: Sparkles, label: 'Cool-down', time: '~2 min', desc: 'Gradual transition back to natural state', color: 'var(--chart-smr)' },
+            { icon: Moon, label: 'Cool-down', time: '~2 min', desc: 'Gradual transition back to natural state', color: 'var(--chart-smr)' },
             { icon: CheckCircle, label: 'Summary', time: '~1 min', desc: 'Review your performance and log how you feel', color: 'var(--status-active)' },
           ].map((phase, idx, arr) => {
             const Icon = phase.icon;

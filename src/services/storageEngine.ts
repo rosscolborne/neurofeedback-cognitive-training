@@ -26,7 +26,7 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
     title: 'First Light',
     description: 'Completed your very first neurofeedback training session.',
     category: 'consistency',
-    iconName: 'Sparkles',
+    iconName: 'Award',
     unlockedAt: undefined,
   },
   {

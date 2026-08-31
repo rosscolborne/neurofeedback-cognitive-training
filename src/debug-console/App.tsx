@@ -13,7 +13,6 @@ import {
   LoaderCircle,
   Radio,
   Rows3,
-  Sparkles,
   Unplug,
 } from "lucide-react";
 import {
@@ -532,7 +531,7 @@ export default function App() {
             <p>Hardware-agnostic raw EEG acquisition and provider validation.</p>
           </div>
           <div className="header-badge">
-            <Sparkles aria-hidden="true" />
+            <Radio aria-hidden="true" />
             <span>{providerLabel || getConfiguredProviderKey()}</span>
           </div>
         </header>

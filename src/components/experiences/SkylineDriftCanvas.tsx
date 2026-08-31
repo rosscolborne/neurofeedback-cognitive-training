@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { EEGDataPoint } from '../../types';
 import { audioEngine } from '../../services/audioEngine';
-import { Compass, Sparkles, Wind } from 'lucide-react';
+import { Compass, Target, Wind } from 'lucide-react';
 
 interface SkylineDriftProps {
   eegData: EEGDataPoint | null;
@@ -313,7 +313,7 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
               gap: '4px',
             }}
           >
-            <Sparkles size={13} />
+            <Target size={13} />
             <span>{ringsPassed} Rings Cleared</span>
           </div>
         )}

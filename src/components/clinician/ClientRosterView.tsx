@@ -8,7 +8,6 @@ import {
   Trash2,
   Calendar,
   MessageSquare,
-  Sparkles,
   FileText,
   User,
 } from 'lucide-react';
