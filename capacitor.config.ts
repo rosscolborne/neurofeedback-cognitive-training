@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.brainswell.app',
-  appName: 'Brainswell',
+  appId: 'com.waveable.app',
+  appName: 'Waveable',
   webDir: 'dist',
   server: {
     iosScheme: 'https',
