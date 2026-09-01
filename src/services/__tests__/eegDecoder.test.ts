@@ -104,4 +104,28 @@ describe('EEGEngine Muse Packet Bit-Unpacker (decodeChannelPacket)', () => {
       tp10: 'good',
     });
   });
+
+  it('computes theta/beta feedback in demo mode without leaking mock metrics into headset mode', () => {
+    const engine = new EEGEngine();
+    engine.isDemoMode = true;
+
+    const demoSample = (engine as any).generateSample(0.1);
+    expect(demoSample.thetaBetaRatioAvailable).toBe(true);
+    expect(demoSample.thetaBetaRatio).toBeCloseTo(
+      demoSample.bands.theta / demoSample.bands.beta,
+      10,
+    );
+    expect(demoSample.brainflowScores).toBeDefined();
+    expect(demoSample.trainingMetric).toBeDefined();
+    expect(demoSample.batteryLevel).toBe(92);
+
+    engine.jawClenched = true;
+    engine.isHardwareConnected = true;
+    const headsetSample = (engine as any).generateSample(0.1);
+    expect(headsetSample.thetaBetaRatioAvailable).toBe(false);
+    expect(headsetSample.brainflowScores).toBeUndefined();
+    expect(headsetSample.trainingMetric).toBeUndefined();
+    expect(headsetSample.batteryLevel).toBeUndefined();
+    expect(headsetSample.artifacts.clench).toBe(false);
+  });
 });
