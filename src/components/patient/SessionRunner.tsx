@@ -244,7 +244,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         }
 
         // Feed adaptive difficulty engine during Core Training
-        if (phaseRef.current === 'training') {
+        if (phaseRef.current === 'training' && data.inZoneAvailable) {
           const result = adaptiveEngineRef.current.addSample(data.inZone);
           if (result.adjusted && result.log) {
             eegEngine.setThreshold(result.log.newThreshold);
