@@ -3,6 +3,7 @@ import { ClientProfile, EEGDataPoint, ExperienceType, SessionPhase, SessionRecor
 import { eegEngine } from '../../services/eegEngine';
 import { AdaptiveDifficultyEngine, AdaptiveAdjustmentLog } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
+import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
 import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
 import { BreathWeaveCanvas } from '../experiences/BreathWeaveCanvas';
@@ -86,6 +87,8 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
   }
 };
 
+const RECENT_IN_ZONE_WINDOW_SECONDS = 30;
+
 interface SessionRunnerProps {
   client: ClientProfile;
   selectedExperience: ExperienceType;
@@ -131,11 +134,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     trainingCount: 0,
   });
   const eegDataRef = useRef<EEGDataPoint | null>(null);
+  const inZoneObservationsRef = useRef<InZoneObservation[]>([]);
+  const [recentInZonePercent, setRecentInZonePercent] = useState<number | null>(null);
   const isPausedRef = useRef(isPaused);
   const phaseRef = useRef(phase);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
+    if (isPaused) {
+      // A pause is not measured training time. Start a fresh trailing window
+      // on resume so the preceding state cannot span the pause.
+      inZoneObservationsRef.current = [];
+      setRecentInZonePercent(null);
+    }
   }, [isPaused]);
 
   useEffect(() => {
@@ -202,6 +213,22 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const unsubscribe = eegEngine.subscribe(data => {
       eegDataRef.current = data;
       setEegData(data);
+
+      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
+        const observations = inZoneObservationsRef.current;
+        observations.push({
+          timestamp: data.timestamp,
+          inZone: data.inZone,
+          available: data.inZoneAvailable,
+        });
+        const oldestTimestamp = data.timestamp - (RECENT_IN_ZONE_WINDOW_SECONDS + 5) * 1_000;
+        while (observations.length > 1 && observations[1].timestamp < oldestTimestamp) {
+          observations.shift();
+        }
+        setRecentInZonePercent(
+          calculateRecentInZonePercent(observations, data.timestamp, RECENT_IN_ZONE_WINDOW_SECONDS).percent,
+        );
+      }
 
       // The training score owns its own 24-window baseline. The app leaves
       // the other derived metrics raw unless a future view explicitly opts a
@@ -719,9 +746,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone %</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone (30s)</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {inZonePercent != null ? `${inZonePercent}%` : '--'}
+              {recentInZonePercent != null ? `${recentInZonePercent}%` : '--'}
             </div>
           </div>
         </div>
