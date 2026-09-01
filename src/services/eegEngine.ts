@@ -731,9 +731,17 @@ export class EEGEngine {
         thetaBeta,
         betaTheta: ratio(bands.beta, bands.theta),
         alphaTheta: ratio(bands.alpha, bands.theta),
+        thetaAlpha: ratio(bands.theta, bands.alpha),
+        smrTheta: ratio(bands.smr, bands.theta),
+        thetaAlphaBeta: ratio(bands.theta, bands.alpha + bands.beta),
         alphaBeta: ratio(bands.alpha, bands.beta),
+        betaAlpha: ratio(bands.beta, bands.alpha),
+        arousal: ratio(bands.beta + bands.gamma, bands.alpha + bands.theta),
+        valence: ratio(bands.alpha, bands.theta + bands.beta),
         betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
       };
+      this.latestInterhemisphericCoherence = this.calculateBrowserCoherence(windows);
+      this.updateBrowserDerivedMetrics();
       this.latestTrainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
     } finally {
       this.isAnalyzingBrainflow = false;
@@ -877,6 +885,99 @@ export class EEGEngine {
       beta: amplitude(15, 30),
       gamma: amplitude(30, 45),
     };
+  }
+
+  /** A frequency-domain AF7↔AF8 / TP9↔TP10 coherence estimate in 4–30 Hz. */
+  private calculateBrowserCoherence(windows: Record<keyof MuseChannelQuality, number[]>): number | null {
+    const sampleCount = Math.min(...Object.values(windows).map(values => values.length));
+    if (sampleCount < 64) return null;
+    const sampleRate = 256;
+    const coherenceForPair = (left: number[], right: number[]) => {
+      const leftMean = left.reduce((sum, value) => sum + value, 0) / sampleCount;
+      const rightMean = right.reduce((sum, value) => sum + value, 0) / sampleCount;
+      let crossReal = 0;
+      let crossImaginary = 0;
+      let leftPower = 0;
+      let rightPower = 0;
+      for (let bin = 1; bin < sampleCount / 2; bin++) {
+        const frequency = (bin * sampleRate) / sampleCount;
+        if (frequency < 4 || frequency > 30) continue;
+        let leftReal = 0;
+        let leftImaginary = 0;
+        let rightReal = 0;
+        let rightImaginary = 0;
+        for (let index = 0; index < sampleCount; index++) {
+          const weight = 0.5 * (1 - Math.cos((2 * Math.PI * index) / Math.max(1, sampleCount - 1)));
+          const angle = (2 * Math.PI * bin * index) / sampleCount;
+          const cosine = Math.cos(angle);
+          const sine = Math.sin(angle);
+          const leftValue = (left[index] - leftMean) * weight;
+          const rightValue = (right[index] - rightMean) * weight;
+          leftReal += leftValue * cosine;
+          leftImaginary -= leftValue * sine;
+          rightReal += rightValue * cosine;
+          rightImaginary -= rightValue * sine;
+        }
+        crossReal += leftReal * rightReal + leftImaginary * rightImaginary;
+        crossImaginary += leftImaginary * rightReal - leftReal * rightImaginary;
+        leftPower += leftReal * leftReal + leftImaginary * leftImaginary;
+        rightPower += rightReal * rightReal + rightImaginary * rightImaginary;
+      }
+      const denominator = leftPower * rightPower;
+      return denominator > 0
+        ? Math.max(0, Math.min(1, (crossReal * crossReal + crossImaginary * crossImaginary) / denominator))
+        : null;
+    };
+    const values = [
+      coherenceForPair(windows.af7.slice(-sampleCount), windows.af8.slice(-sampleCount)),
+      coherenceForPair(windows.tp9.slice(-sampleCount), windows.tp10.slice(-sampleCount)),
+    ].filter((value): value is number => value !== null);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  }
+
+  /**
+   * Populate the console's shared metric contract from browser-computed
+   * bands. These are deterministic band-power proxies, not BrainFlow's
+   * pretrained classifiers, and are marked `browser_dsp` on the data point.
+   */
+  private updateBrowserDerivedMetrics() {
+    const ratios = this.latestServerRatios;
+    const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+    const mapRatioToAxis = (value: number) => value > 0 && Number.isFinite(value)
+      ? clamp(Math.tanh(Math.log2(value) / 2.5), -1, 1)
+      : 0;
+    const valence = mapRatioToAxis(ratios.valence);
+    const arousal = mapRatioToAxis(ratios.arousal);
+    const confidenceFactor = this.serverFitState?.ready ? 1 : this.serverFitState?.state === 'good' ? 0.75 : 0.45;
+    const confidence = clamp(Math.hypot(valence, arousal) * confidenceFactor, 0, 1);
+    const mindfulness = clamp(50 + 25 * valence - 20 * arousal, 0, 100);
+    const restfulness = clamp(50 + 35 * valence - 30 * arousal, 0, 100);
+    const emotionLabel = Math.hypot(valence, arousal) < 0.18
+      ? 'Neutral'
+      : arousal > 0.35 && valence >= 0 ? 'Excited'
+      : arousal > 0.35 ? 'Tense'
+      : valence > 0.25 ? 'Relaxed'
+      : valence < -0.25 ? 'Bored'
+      : 'Neutral';
+
+    this.latestBrainFlowScores = {
+      mindfulnessScore: Math.round(mindfulness),
+      restfulnessScore: Math.round(restfulness),
+      valence,
+      arousal,
+      emotionLabel,
+      method: 'browser_dsp',
+    };
+    this.latestRawMetrics = {
+      mindfulness: Math.round(mindfulness),
+      restfulness: Math.round(restfulness),
+      valence,
+      arousal,
+      confidence,
+      ...(this.latestInterhemisphericCoherence === null ? {} : { ihc: this.latestInterhemisphericCoherence }),
+      ...Object.fromEntries(Object.entries(ratios).map(([name, value]) => [`ratio:${name}`, value])),
+    };
+    this.latestBaselineRelativeMetrics = {};
   }
 
   private calculateBrowserFeedback(bands: BandPowers, thetaBeta: number) {
