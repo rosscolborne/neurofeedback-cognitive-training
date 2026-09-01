@@ -20,7 +20,7 @@ export const HardwareSetup: React.FC = () => {
           navigate('/');
         }, 1500);
       } else {
-        setError('Connection failed. Make sure your headband is powered on.');
+        setError(res.error || 'Connection failed. Make sure your headband is powered on.');
       }
     } catch (err: any) {
       setError(err.message || 'Connection failed.');

@@ -86,7 +86,13 @@ class BrainFlowService {
   private activeEventSource: EventSource | null = null;
 
   constructor() {
-    this.baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BRAINFLOW_SERVICE_URL) || 'http://127.0.0.1:8000';
+    const configuredUrl = typeof import.meta !== 'undefined'
+      ? import.meta.env?.VITE_BRAINFLOW_SERVICE_URL
+      : undefined;
+    // Loopback is a convenient development default, but it must never be
+    // baked into a deployed build: a remote page would then silently depend
+    // on a service running on the visitor's own computer.
+    this.baseUrl = configuredUrl || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '');
   }
 
   public getBaseUrl(): string {
