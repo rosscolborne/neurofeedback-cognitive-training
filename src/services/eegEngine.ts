@@ -30,7 +30,7 @@ export class EEGEngine {
   private brainflowUnsubscribe: (() => void) | null = null;
 
   public deviceName: string | null = null;
-  public batteryLevel = 92;
+  public batteryLevel: number | null = null;
   public packetsReceivedCount = 0;
   
   // Real-time raw signal storage buffers (256 samples = 1 sec at 256Hz)
@@ -248,6 +248,7 @@ export class EEGEngine {
         });
 
         this.isHardwareConnected = true;
+        this.isDemoMode = false;
         this.deviceName = device.name || 'Muse Headband';
         this.gattServer = { connected: true, deviceId: device.id };
 
@@ -302,6 +303,7 @@ export class EEGEngine {
 
       this.gattServer = await device.gatt.connect();
       this.isHardwareConnected = true;
+      this.isDemoMode = false;
       this.deviceName = device.name || 'Muse Headband';
 
       // Disconnection listener
@@ -396,6 +398,7 @@ export class EEGEngine {
     await transport.connect();
     const board = transport.getBoardInfo() as { device_name?: string } | null;
     this.isHardwareConnected = true;
+    this.isDemoMode = false;
     this.deviceName = board?.device_name || 'Muse Athena';
     await transport.start();
   }
@@ -483,6 +486,7 @@ export class EEGEngine {
       this.brainflowSessionId = session.sessionId;
       this.isBrainflowActive = true;
       this.isHardwareConnected = true;
+      this.isDemoMode = false;
       this.deviceName = session.deviceInfo?.label || 'BrainFlow Board';
 
       this.brainflowUnsubscribe = brainflowService.streamSession(
@@ -1208,6 +1212,10 @@ export class EEGEngine {
   private generateSample(dt: number): EEGDataPoint {
     let bands: BandPowers;
     let bandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
+    let bandRatios = this.latestServerRatios;
+    let trainingFeedback = this.latestTrainingFeedback;
+    let brainFlowScores = this.latestBrainFlowScores;
+    let trainingMetric = this.latestTrainingMetric;
     let rawSignal = 0;
 
     if (this.isHardwareConnected) {
@@ -1275,15 +1283,6 @@ export class EEGEngine {
         this.userFocus += (targetFocus - this.userFocus) * (dt * 1.8);
         this.userCalm += (targetCalm - this.userCalm) * (dt * 1.8);
 
-        this.latestBrainFlowScores = {
-          mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
-          restfulnessScore: Math.round(this.userCalm),
-          valence: (this.userCalm - 50) / 50,
-          arousal: (this.userFocus - 50) / 50,
-          emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
-          method: 'brainflow_welch_psd',
-        };
-        this.latestTrainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
       }
 
       const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
@@ -1317,6 +1316,35 @@ export class EEGEngine {
         delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true,
       };
 
+      // Demo metrics are deliberately sample-local. Never write them into the
+      // shared fields consumed by a connected headset, where they could remain
+      // visible while the first real analysis window is being collected.
+      const ratio = (numerator: number, denominator: number) => numerator / Math.max(1e-9, denominator);
+      const thetaBeta = ratio(bands.theta, bands.beta);
+      bandRatios = {
+        thetaBeta,
+        betaTheta: ratio(bands.beta, bands.theta),
+        alphaTheta: ratio(bands.alpha, bands.theta),
+        thetaAlpha: ratio(bands.theta, bands.alpha),
+        smrTheta: ratio(bands.smr, bands.theta),
+        thetaAlphaBeta: ratio(bands.theta, bands.alpha + bands.beta),
+        alphaBeta: ratio(bands.alpha, bands.beta),
+        betaAlpha: ratio(bands.beta, bands.alpha),
+        arousal: ratio(bands.beta + bands.gamma, bands.alpha + bands.theta),
+        valence: ratio(bands.alpha, bands.theta + bands.beta),
+        betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
+      };
+      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
+      brainFlowScores = {
+        mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
+        restfulnessScore: Math.round(this.userCalm),
+        valence: (this.userCalm - 50) / 50,
+        arousal: (this.userFocus - 50) / 50,
+        emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
+        method: 'brainflow_welch_psd',
+      };
+      trainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
+
       rawSignal =
         slowDrift +
         Math.sin(this.phaseAngle * 2) * (delta * 0.4) +
@@ -1331,12 +1359,11 @@ export class EEGEngine {
       rawSignal = 0;
     }
 
-    const feedback = this.latestTrainingFeedback;
-    const thetaBetaRatioAvailable = feedback?.ratio != null;
-    const thetaBetaRatio = feedback?.ratio ?? 0;
-    const inZoneAvailable = feedback?.inZone != null;
-    const inZone = feedback?.inZone ?? false;
-    const zoneScore = feedback?.zoneScore ?? 0;
+    const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
+    const thetaBetaRatio = trainingFeedback?.ratio ?? 0;
+    const inZoneAvailable = trainingFeedback?.inZone != null;
+    const inZone = trainingFeedback?.inZone ?? false;
+    const zoneScore = trainingFeedback?.zoneScore ?? 0;
     
     /*switch (this.currentProtocol) {
       case 'theta-beta-ratio':
@@ -1405,7 +1432,7 @@ export class EEGEngine {
     let overallQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected' = 'excellent';
     if (!this.isHardwareConnected && !this.isDemoMode) {
       overallQuality = 'disconnected';
-    } else if (this.isDemoMode) {
+    } else if (!this.isHardwareConnected && this.isDemoMode) {
       overallQuality = 'good';
     } else if (this.serverFitState) {
       // Use server's overall assessment
@@ -1433,7 +1460,7 @@ export class EEGEngine {
       rawSignal: Math.round(rawSignal * 10) / 10,
       bands,
       bandAvailability,
-      bandRatios: { ...this.latestServerRatios },
+      bandRatios: { ...bandRatios },
       calibrationStatus: this.latestMetricCalibration.status,
       calibrationProgress: this.latestMetricCalibration.progress,
       calibrationRequired: this.latestMetricCalibration.required,
@@ -1448,13 +1475,17 @@ export class EEGEngine {
       zoneScore,
       signalQuality: overallQuality,
       channelQuality: this.channelQuality,
-      batteryLevel: this.batteryLevel,
+      batteryLevel: this.isDemoMode && !this.isHardwareConnected
+        ? 92
+        : this.batteryLevel ?? undefined,
       artifacts: {
         blink: this.isHardwareConnected ? (this.rawBuffers.af7.slice(-10).some(v => Math.abs(v) > 120)) : (Math.random() < 0.01),
-        clench: this.jawClenched || (this.isHardwareConnected && (this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200))),
+        clench: this.isHardwareConnected
+          ? this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200)
+          : this.jawClenched,
       },
-      brainflowScores: this.latestBrainFlowScores || undefined,
-      trainingMetric: this.latestTrainingMetric || undefined,
+      brainflowScores: brainFlowScores || undefined,
+      trainingMetric: trainingMetric || undefined,
       isCalibrating: this.isCalibrating,
     };
   }
