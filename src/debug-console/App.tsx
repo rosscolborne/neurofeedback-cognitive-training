@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  BrainCircuit,
+  Brain,
   Cable,
   ChevronDown,
   CircleAlert,
   CircleOff,
-  Cpu,
   Download,
   Gauge,
   LineChart,
@@ -629,7 +628,7 @@ export default function App() {
           </article>
           <article className="metric-card">
             <div className="metric-icon">
-              <Cpu aria-hidden="true" />
+              <Activity aria-hidden="true" />
             </div>
             <span>Provider</span>
             <strong>{deviceInfo?.providerName ?? providerLabel}</strong>

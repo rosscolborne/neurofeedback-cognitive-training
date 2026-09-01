@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { EEGDataPoint } from '../../types';
 import { audioEngine } from '../../services/audioEngine';
-import { Music, Zap } from 'lucide-react';
+import { Music, Target } from 'lucide-react';
 
 interface RhythmLockProps {
   eegData: EEGDataPoint | null;
@@ -243,7 +243,7 @@ export const RhythmLockGame: React.FC<RhythmLockProps> = ({ eegData, isPaused = 
               gap: '4px',
             }}
           >
-            <Zap size={13} />
+            <Target size={13} />
             <span>{feedbackText}</span>
           </div>
         )}

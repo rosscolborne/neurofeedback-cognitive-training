@@ -20,6 +20,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, displayName?: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
+  loginAsDemoClinician: () => void;
   logout: () => Promise<void>;
 }
 
@@ -30,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   signup: async () => {},
   selectRole: async () => {},
+  loginAsDemoClinician: () => {},
   logout: async () => {},
 });
 
@@ -49,13 +51,51 @@ const fetchUserRole = async (uid: string): Promise<UserRole> => {
   return null;
 };
 
+const DEMO_CLINICIAN_USER = {
+  uid: 'demo-clinician',
+  email: 'dr.vance@waveable.clinic',
+  displayName: 'Dr. Evelyn Vance, Ph.D.',
+  emailVerified: true,
+  isAnonymous: false,
+  metadata: {},
+  providerData: [],
+  refreshToken: '',
+  tenantId: null,
+  delete: async () => {},
+  getIdToken: async () => 'demo-token',
+  getIdTokenResult: async () => ({} as any),
+  reload: async () => {},
+  toJSON: () => ({}),
+  phoneNumber: null,
+  photoURL: null,
+  providerId: 'firebase',
+} as unknown as User;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<UserRole>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+      return DEMO_CLINICIAN_USER;
+    }
+    return null;
+  });
+  const [role, setRole] = useState<UserRole>(() => {
+    if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+      return 'clinician';
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
+
+    // If already in demo clinician mode, skip firebase check
+    if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+      setUser(DEMO_CLINICIAN_USER);
+      setRole('clinician');
+      setLoading(false);
+      return;
+    }
 
     // Safety fallback timer in case Firebase auth network completely hangs
     const safetyTimer = setTimeout(() => {
@@ -66,6 +106,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       auth,
       async (currentUser) => {
         if (!isMounted) return;
+        if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+          setUser(DEMO_CLINICIAN_USER);
+          setRole('clinician');
+          setLoading(false);
+          return;
+        }
+
         setUser(currentUser);
 
         if (currentUser) {
@@ -97,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signup = async (email: string, pass: string, displayName?: string) => {
+    localStorage.removeItem('neura_demo_auth');
     const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
 
     // Set displayName on the Firebase Auth profile
@@ -109,9 +157,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(cred.user);
     setRole(null);
     
-    // Send email verification
+    // Send email verification with action code settings
     try {
-      await sendEmailVerification(cred.user);
+      await sendEmailVerification(cred.user, {
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
+        handleCodeInApp: true,
+        iOS: {
+          bundleId: 'com.waveable.app',
+        },
+      });
     } catch (err) {
       console.warn('Failed to send verification email:', err);
     }
@@ -129,31 +183,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, pass: string) => {
+    localStorage.removeItem('neura_demo_auth');
     const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
     setUser(cred.user);
     const userRole = await fetchUserRole(cred.user.uid);
     setRole(userRole);
   };
 
+  const loginAsDemoClinician = () => {
+    localStorage.setItem('neura_demo_auth', 'clinician');
+    setUser(DEMO_CLINICIAN_USER);
+    setRole('clinician');
+  };
+
   const selectRole = async (newRole: UserRole) => {
     if (!user) return;
     setRole(newRole);
-    updateDoc(doc(db, 'users', user.uid), {
-      role: newRole,
-      updatedAt: new Date().toISOString(),
-    }).catch((err) => {
-      console.warn('Background role update notice:', err);
-    });
+    if (user.uid !== 'demo-clinician') {
+      updateDoc(doc(db, 'users', user.uid), {
+        role: newRole,
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => {
+        console.warn('Background role update notice:', err);
+      });
+    }
   };
 
   const logout = async () => {
-    await signOut(auth);
+    localStorage.removeItem('neura_demo_auth');
+    await signOut(auth).catch(() => {});
     setUser(null);
     setRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, logout }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, loginAsDemoClinician, logout }}>
       {children}
     </AuthContext.Provider>
   );

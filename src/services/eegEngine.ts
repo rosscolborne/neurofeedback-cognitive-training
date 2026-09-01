@@ -378,7 +378,7 @@ export class EEGEngine {
         athenaDecoderFactory: () => new AthenaWasmDecoder(),
         onDisconnected: () => this.disconnectHardware(),
       },
-      sourceName: 'Neurasticity Muse Athena',
+      sourceName: 'Waveable Muse Athena',
       eegProcessing: false,
     });
     this.webBluetoothTransport = transport;
