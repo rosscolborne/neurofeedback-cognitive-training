@@ -1,6 +1,8 @@
 /**
  * BrainFlow Service Client — v0.5.0
- * Connects to the local FastAPI brainflow_service (http://127.0.0.1:8000)
+ * Connects to the configured FastAPI brainflow_service. Local development
+ * defaults to http://127.0.0.1:8000; deployed builds must set
+ * VITE_BRAINFLOW_SERVICE_URL to the hosted service (for example, Render).
  *
  * Primary flow for Web Bluetooth front-ends:
  *   1. POST /headset-fit/sessions → fitSessionId
@@ -97,6 +99,14 @@ class BrainFlowService {
 
   public getBaseUrl(): string {
     return this.baseUrl;
+  }
+
+  /**
+   * A production bundle has no implicit backend URL. This prevents a deployed
+   * app from accidentally treating its own Vercel origin as the EEG service.
+   */
+  public hasConfiguredService(): boolean {
+    return this.baseUrl.length > 0;
   }
 
   public setBaseUrl(url: string) {

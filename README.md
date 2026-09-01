@@ -1,8 +1,9 @@
 # Neurasticity
 
-Neurasticity includes its BrainFlow acquisition and analysis service. The
-application talks to that service locally; it does not require the former
-Render deployment.
+Neurasticity connects a Muse Athena directly from the user's Chrome or Edge
+browser. It can send the browser-collected EEG windows to its BrainFlow
+analysis service for the shared smoothing, mindfulness, restfulness, fit, and
+training calculations. The service never attempts to use Bluetooth itself.
 
 ## Local development
 
@@ -15,7 +16,8 @@ plus Python 3.11+ with `uv`.
 npm install
 ```
 
-Then start the complete app (the BrainFlow service and Vite frontend) with:
+Then start the complete app (the BrainFlow analysis service and Vite frontend)
+with:
 
 ```bash
 npm run dev
@@ -46,8 +48,21 @@ This opens the console at `http://127.0.0.1:5174/debug-console.html`. It
 uses a healthy local service on port 8000 when one is already running;
 otherwise it starts one. Stop it with `Ctrl+C`.
 
-The frontend calls `http://127.0.0.1:8000` by default. To use another local
-address or port, set `VITE_BRAINFLOW_SERVICE_URL` in `.env.local`.
+Local development defaults to `http://127.0.0.1:8000`. To use another address
+or port, set `VITE_BRAINFLOW_SERVICE_URL` in `.env.local`.
+
+## Vercel + Render deployment
+
+Deploy `render.yaml` as a Render web service. Then add
+`VITE_BRAINFLOW_SERVICE_URL` to the Vercel project's environment variables,
+using the public HTTPS URL of that Render service, and redeploy the frontend.
+The URL is included when Vite builds the app, so setting it without a new
+deployment does not update an already-published site.
+
+The Chrome Bluetooth chooser appears before the app contacts Render. If Render
+is cold or unavailable, the headband connection remains usable and the app
+temporarily uses its browser-side metric fallback; it does not try to contact
+the visitor's localhost.
 
 ## Checks
 
