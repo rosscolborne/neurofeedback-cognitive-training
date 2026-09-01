@@ -84,7 +84,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       {/* Main Logo Container */}
       <img
         src={imageSrc}
-        alt="Brainswell App Logo"
+        alt="Waveable App Logo"
         draggable={false}
         style={{
           width: '100%',

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProtocolTemplate, ProtocolType } from '../../types';
-import { X, Cpu, Info } from 'lucide-react';
+import { X, Info } from 'lucide-react';
 
 interface ProtocolBuilderModalProps {
   initialProtocol?: ProtocolTemplate;

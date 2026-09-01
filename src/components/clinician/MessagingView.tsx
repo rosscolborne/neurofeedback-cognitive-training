@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageThread } from '../../types';
-import { Search, Send, CheckCheck, ArrowLeft, Zap, AlertCircle } from 'lucide-react';
+import { Search, Send, CheckCheck, ArrowLeft, MessageSquare, AlertCircle } from 'lucide-react';
 
 interface MessagingViewProps {
   threads: MessageThread[];
@@ -368,7 +368,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0 }}>
-                <Zap size={12} color="var(--brand-primary)" />
+                <MessageSquare size={12} color="var(--brand-primary)" />
                 <span>Quick:</span>
               </div>
               {CLINICAL_QUICK_TEMPLATES.map((tmpl, idx) => (

@@ -58,7 +58,7 @@ export function adjustColorBrightness(hex: string, percent: number): string {
   return rgbToHex(r * factor, g * factor, b * factor);
 }
 
-export function createBrandPalette(accentHex: string, clinicName = 'Brainswell', logoUrl = '/app-logo.png'): ClinicBrandConfig {
+export function createBrandPalette(accentHex: string, clinicName = 'Waveable', logoUrl = '/app-logo.png'): ClinicBrandConfig {
   const { r, g, b } = hexToRgb(accentHex);
   const lum = getRelativeLuminance(r, g, b);
   
@@ -92,8 +92,8 @@ export function createBrandPalette(accentHex: string, clinicName = 'Brainswell',
 
 export const BRAND_PRESETS: ClinicBrandConfig[] = [
   {
-    clinicId: 'brainswell-core',
-    name: 'Brainswell',
+    clinicId: 'waveable-core',
+    name: 'Waveable',
     tagline: 'Neurofeedback & Brain Training Suite',
     logoUrl: '/app-logo.png',
     primaryAccent: '#D16D4D', // Warm Terracotta Coral

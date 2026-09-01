@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { audioEngine } from '../../services/audioEngine';
-import { BookOpen, Activity, Brain, CheckCircle, HelpCircle, Volume2, ShieldCheck, ChevronRight, Zap, Heart, Eye, Lightbulb, Check, X, Target, Moon } from 'lucide-react';
+import { BookOpen, Activity, Brain, CheckCircle, HelpCircle, Volume2, ShieldCheck, ChevronRight, Heart, Eye, Lightbulb, Check, X, Target, Moon } from 'lucide-react';
 
 // Quiz question data
 const QUIZ_QUESTIONS = [
@@ -31,7 +31,7 @@ const ANALOGIES = [
   { band: 'Alpha', icon: Heart, analogy: 'Like the calm after a warm shower — relaxed but aware', color: 'var(--chart-alpha)' },
   { band: 'SMR', icon: Target, analogy: 'Like focused physical poise — body still, mind sharp', color: 'var(--chart-smr)' },
   { band: 'Beta', icon: Lightbulb, analogy: 'Like engaging in active work — focused, structured thinking', color: 'var(--chart-beta)' },
-  { band: 'Gamma', icon: Zap, analogy: 'Like a moment of insight — cognitive synthesis across regions', color: 'var(--chart-gamma)' },
+  { band: 'Gamma', icon: Activity, analogy: 'Like a moment of insight — cognitive synthesis across regions', color: 'var(--chart-gamma)' },
 ];
 
 export const EducationHub: React.FC = () => {
@@ -313,7 +313,7 @@ export const EducationHub: React.FC = () => {
           {[
             { icon: Activity, label: 'Calibration', time: '~1 min', desc: 'We measure your baseline brainwave patterns', color: 'var(--chart-delta)' },
             { icon: Heart, label: 'Warm-up', time: '~2 min', desc: 'Gentle exercises ease your brain into training mode', color: 'var(--chart-alpha)' },
-            { icon: Zap, label: 'Core Training', time: '~19 min', desc: 'Your brain gets real-time rewards for staying in the target zone', color: 'var(--brand-primary)' },
+            { icon: Target, label: 'Core Training', time: '~19 min', desc: 'Your brain gets real-time rewards for staying in the target zone', color: 'var(--brand-primary)' },
             { icon: Moon, label: 'Cool-down', time: '~2 min', desc: 'Gradual transition back to natural state', color: 'var(--chart-smr)' },
             { icon: CheckCircle, label: 'Summary', time: '~1 min', desc: 'Review your performance and log how you feel', color: 'var(--status-active)' },
           ].map((phase, idx, arr) => {

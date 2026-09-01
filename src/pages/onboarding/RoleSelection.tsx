@@ -38,7 +38,7 @@ export const RoleSelection: React.FC = () => {
       flexDirection: 'column',
       alignItems: 'center'
     }}>
-      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>How will you use Brainswell?</h1>
+      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>How will you use Waveable?</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: '40px', textAlign: 'center' }}>
         Select your account type to customize your experience.
       </p>

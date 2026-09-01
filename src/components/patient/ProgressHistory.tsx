@@ -114,7 +114,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     ]);
     const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const filename = `brainswell_progress_${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `waveable_progress_${new Date().toISOString().split('T')[0]}.csv`;
 
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], filename, { type: 'text/csv' });

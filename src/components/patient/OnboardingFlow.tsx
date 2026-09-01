@@ -3,7 +3,7 @@ import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { BrandLogo } from '../brand/BrandLogo';
-import { ArrowRight, Check, Wifi, ShieldCheck, Target, Waves, Zap, Moon, Activity } from 'lucide-react';
+import { ArrowRight, Check, Wifi, ShieldCheck, Target, Waves, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
   client: ClientProfile;
@@ -140,7 +140,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
             {[
               { id: 'focus', title: 'ADHD & Focus Enhancement', desc: 'Downregulate theta waves, sharpen executive attention & impulse control', icon: Target },
               { id: 'calm', title: 'Anxiety Relief & Emotional Calm', desc: 'Upregulate alpha waves to enter serene, grounded mental stillness', icon: Waves },
-              { id: 'performance', title: 'Sensorimotor (SMR) Peak Poise', desc: 'Still body, active mind training for high-demand cognitive tasks', icon: Zap },
+              { id: 'performance', title: 'Sensorimotor (SMR) Peak Poise', desc: 'Still body, active mind training for high-demand cognitive tasks', icon: Activity },
               { id: 'sleep', title: 'Stress Reduction & Deep Rest', desc: 'Downtrain high-frequency beta tension before evening wind-down', icon: Moon },
             ].map(goal => {
               const Icon = goal.icon;

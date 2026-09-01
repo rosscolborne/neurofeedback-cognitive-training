@@ -4,7 +4,6 @@ import {
   Settings,
   Sliders,
   ShieldCheck,
-  Cpu,
   RefreshCw,
   Trash2,
   CheckCircle2,
@@ -129,7 +128,7 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({
       <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Cpu size={18} color="var(--brand-primary)" />
+            <Activity size={18} color="var(--brand-primary)" />
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                 Muse S (Athena) Biosensing Subsystem
