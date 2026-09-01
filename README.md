@@ -49,7 +49,10 @@ uses a healthy local service on port 8000 when one is already running;
 otherwise it starts one. Stop it with `Ctrl+C`.
 
 Local development defaults to `http://127.0.0.1:8000`. To use another address
-or port, set `VITE_BRAINFLOW_SERVICE_URL` in `.env.local`.
+or port, set `VITE_BRAINFLOW_SERVICE_URL` in `.env.local`. When that variable
+is set, `npm run dev` health-checks the configured service, prints its URL, and
+does not launch the local BrainFlow process. It exits instead of silently
+falling back when the configured service is unavailable.
 
 ## Vercel + Render deployment
 
