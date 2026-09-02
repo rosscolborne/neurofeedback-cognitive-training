@@ -62,10 +62,9 @@ using the public HTTPS URL of that Render service, and redeploy the frontend.
 The URL is included when Vite builds the app, so setting it without a new
 deployment does not update an already-published site.
 
-The Chrome Bluetooth chooser appears before the app contacts Render. If Render
-is cold or unavailable, the headband connection remains usable and the app
-temporarily uses its browser-side metric fallback; it does not try to contact
-the visitor's localhost.
+The app verifies the Render service before opening the Chrome Bluetooth chooser.
+If Render is unavailable, the headset connection does not start and no local or
+browser-derived metrics are substituted.
 
 ## Checks
 
