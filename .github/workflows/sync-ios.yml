@@ -9,11 +9,11 @@ on:
 jobs:
   sync-ios:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -57,7 +57,7 @@ jobs:
         run: |
           git add -A
           git commit -m "chore: auto-sync iOS build"
-          git push
+          git push origin main
 
       - name: Upload build artifacts
         if: success()
