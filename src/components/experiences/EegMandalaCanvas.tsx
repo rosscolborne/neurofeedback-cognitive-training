@@ -339,7 +339,7 @@ export const EegMandalaCanvas: React.FC<EegMandalaCanvasProps> = ({
     let hasInitialCamera = false;
     let baselinePower = 0;
     let smoothed = { ...targetsRef.current };
-    const motifSeconds = 5.625;
+    const motifSeconds = .55;
 
     const setupCanvas = (target: HTMLCanvasElement, width: number, height: number) => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
