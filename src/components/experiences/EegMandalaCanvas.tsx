@@ -42,10 +42,10 @@ interface MotifSnapshot {
 }
 
 const TAU = Math.PI * 2;
-const VIEWPORT_FILL_DIAMETER = .76;
+const VIEWPORT_FILL_DIAMETER = .92;
 const MIN_FRAMING_RADIUS = 32;
 const MAX_CAMERA_ZOOM = 5.5;
-const CAMERA_PADDING_RATIO = 1.04;
+const CAMERA_PADDING_RATIO = 1.02;
 const CAMERA_EASING_RATE = 2.2;
 const BUFFER_REBASE_MIN_RATIO = .86;
 const BUFFER_REBASE_MAX_RATIO = 1.3;
@@ -339,7 +339,7 @@ export const EegMandalaCanvas: React.FC<EegMandalaCanvasProps> = ({
     let hasInitialCamera = false;
     let baselinePower = 0;
     let smoothed = { ...targetsRef.current };
-    const motifSeconds = 5.625;
+    const motifSeconds = .55;
 
     const setupCanvas = (target: HTMLCanvasElement, width: number, height: number) => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
