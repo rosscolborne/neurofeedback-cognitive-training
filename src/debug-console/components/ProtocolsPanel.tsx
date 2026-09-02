@@ -5,18 +5,26 @@ import type { ProtocolType } from '../../types';
 interface ProtocolsPanelProps {
   protocol: ProtocolType;
   threshold: string;
+  totalInZonePercent: number | null;
+  recentInZonePercent: number | null;
+  recentWindowSeconds: string;
   protocols: readonly ProtocolDefinition[];
   onProtocolChange: (protocol: ProtocolType) => void;
   onThresholdChange: (threshold: string) => void;
+  onRecentWindowSecondsChange: (windowSeconds: string) => void;
   onResetThreshold: () => void;
 }
 
 export function ProtocolsPanel({
   protocol,
   threshold,
+  totalInZonePercent,
+  recentInZonePercent,
+  recentWindowSeconds,
   protocols,
   onProtocolChange,
   onThresholdChange,
+  onRecentWindowSecondsChange,
   onResetThreshold,
 }: ProtocolsPanelProps) {
   const selectedProtocol = protocols.find((definition) => definition.value === protocol);
@@ -59,6 +67,25 @@ export function ProtocolsPanel({
             Reset to default
           </button>
         </div>
+      </div>
+      <div className="protocol-in-zone-metrics">
+        <div className="protocol-metric-value">
+          <span>Total in-zone</span>
+          <strong>{totalInZonePercent == null ? '--' : `${totalInZonePercent}%`}</strong>
+        </div>
+        <div className="protocol-metric-value">
+          <span>Recent in-zone</span>
+          <strong>{recentInZonePercent == null ? '--' : `${recentInZonePercent}%`}</strong>
+        </div>
+        <label className="protocol-window-control">
+          <span>Recent window (seconds)</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={recentWindowSeconds}
+            onChange={(event) => onRecentWindowSecondsChange(event.target.value)}
+          />
+        </label>
       </div>
     </section>
   );

@@ -145,6 +145,8 @@ function toFeatures(point: EEGDataPoint): SignalFeatures {
     calibrationRequired: point.calibrationRequired,
     rawMetrics: point.rawMetrics,
     baselineRelativeMetrics: point.baselineRelativeMetrics,
+    inZone: point.inZone,
+    inZoneAvailable: point.inZoneAvailable,
   };
 }
 
