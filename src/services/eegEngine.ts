@@ -45,6 +45,9 @@ export class EEGEngine {
   // Server-side fit state from brainflow_service
   public serverFitState: ServerFitState | null = null;
   private fitSessionId: string | null = null;
+  private bluetoothConnectionGeneration = 0;
+  private isStartingFitSession = false;
+  private hostedAnalysisFailures = 0;
 
   // Channel quality — driven exclusively by server-side fit assessment
   public channelQuality: MuseChannelQuality = {
@@ -187,8 +190,9 @@ export class EEGEngine {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Browser Bluetooth is deliberately self-contained. A fit session is
-      // only present for explicitly selected backend/BrainFlow workflows.
+      // Bluetooth acquisition always remains in the browser. When a hosted
+      // BrainFlow service is configured, raw browser-collected windows are
+      // sent there for the shared smoothing and scoring pipeline.
       if (this.isHardwareConnected && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 400) {
         if (this.fitSessionId) {
           this.dispatchServerAnalysis(now);
@@ -212,9 +216,8 @@ export class EEGEngine {
 
   /**
    * Connect to real Muse 2 or Muse S Headband via Web Bluetooth (or the
-   * Capacitor BLE bridge on native builds). This path must not depend on the
-   * optional BrainFlow service: deployed web builds connect and process EEG
-   * entirely in the browser.
+   * Capacitor BLE bridge on native builds). The browser owns this connection;
+   * an optional hosted BrainFlow service is started only after it succeeds.
    */
   public async connectMuseBluetooth(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
     if (!Capacitor.isNativePlatform() && !('bluetooth' in navigator)) {
@@ -226,6 +229,7 @@ export class EEGEngine {
       // Use the same supported Muse Athena decoder as eeg_demo in a browser.
       if (!Capacitor.isNativePlatform()) {
         await this.connectMuseBluetoothInBrowser();
+        this.startHostedBluetoothAnalysis();
         return { success: true, deviceName: this.deviceName || undefined };
       }
 
@@ -289,6 +293,7 @@ export class EEGEngine {
           this.batteryLevel = val.getUint8(0);
         } catch (e) {}
 
+        this.startHostedBluetoothAnalysis();
         return { success: true, deviceName: this.deviceName || undefined };
       }
 
@@ -359,6 +364,7 @@ export class EEGEngine {
         this.batteryLevel = val.getUint8(0);
       } catch (e) {}
 
+      this.startHostedBluetoothAnalysis();
       return { success: true, deviceName: this.deviceName || undefined };
     } catch (err: any) {
       this.isHardwareConnected = false;
@@ -395,6 +401,38 @@ export class EEGEngine {
     this.isDemoMode = false;
     this.deviceName = board?.device_name || 'Muse Athena';
     await transport.start();
+  }
+
+  /**
+   * Start the remote analysis session after, never before, the user's browser
+   * has connected to the headband. Failure is intentionally non-fatal: it
+   * leaves the live Bluetooth session running with browser-side fallback
+   * metrics instead of turning a Render outage into a connection failure.
+   */
+  private startHostedBluetoothAnalysis() {
+    if (!brainflowService.hasConfiguredService() || this.fitSessionId || this.isStartingFitSession) return;
+
+    const connectionGeneration = ++this.bluetoothConnectionGeneration;
+    this.isStartingFitSession = true;
+    this.hostedAnalysisFailures = 0;
+    void brainflowService.startFitSession()
+      .then((fitSessionId) => {
+        // The user may have disconnected or begun a new connection while the
+        // hosted service was waking up. Do not attach that stale session.
+        if (!this.isHardwareConnected || connectionGeneration !== this.bluetoothConnectionGeneration) {
+          void brainflowService.stopFitSession(fitSessionId);
+          return;
+        }
+        this.fitSessionId = fitSessionId;
+      })
+      .catch((error) => {
+        console.warn('Hosted BrainFlow analysis is unavailable; using browser metrics.', error);
+      })
+      .finally(() => {
+        if (connectionGeneration === this.bluetoothConnectionGeneration) {
+          this.isStartingFitSession = false;
+        }
+      });
   }
 
   private ingestDecodedMuseFrame(frame: HeadbandFrameV1) {
@@ -533,6 +571,10 @@ export class EEGEngine {
   }
 
   public disconnectHardware() {
+    // Invalidates an in-flight hosted-session request as well as active ones.
+    this.bluetoothConnectionGeneration++;
+    this.isStartingFitSession = false;
+    this.hostedAnalysisFailures = 0;
     if (this.webBluetoothTransport) {
       const transport = this.webBluetoothTransport;
       this.webBluetoothTransport = null;
@@ -1056,6 +1098,7 @@ export class EEGEngine {
       const response = await brainflowService.analyzeFitWindow(this.fitSessionId, samples, 256);
 
       if (response) {
+        this.hostedAnalysisFailures = 0;
         // Update scores from server features
         if (response.features) {
           const f = response.features;
@@ -1107,13 +1150,26 @@ export class EEGEngine {
             baselineReady: response.training.baselineReady ?? false,
           };
         }
-
+      } else {
+        this.handleHostedAnalysisFailure();
       }
     } catch {
-      // Server analysis failed — scores remain stale
+      this.handleHostedAnalysisFailure();
     } finally {
       this.isAnalyzingBrainflow = false;
     }
+  }
+
+  /** Leave an unavailable hosted analyzer without interrupting Bluetooth. */
+  private handleHostedAnalysisFailure() {
+    this.hostedAnalysisFailures++;
+    if (this.hostedAnalysisFailures < 3 || !this.fitSessionId) return;
+
+    const unavailableSessionId = this.fitSessionId;
+    this.fitSessionId = null;
+    this.hostedAnalysisFailures = 0;
+    void brainflowService.stopFitSession(unavailableSessionId);
+    console.warn('Hosted BrainFlow analysis stopped responding; using browser metrics.');
   }
 
   /**

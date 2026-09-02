@@ -1,20 +1,27 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { loadEnv } from "vite";
 
-const serviceUrl = "http://127.0.0.1:8000/health";
+const localServiceUrl = "http://127.0.0.1:8000";
+const configuredServiceUrl = loadEnv("development", process.cwd(), "")
+  .VITE_BRAINFLOW_SERVICE_URL?.trim().replace(/\/+$/, "");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const execFileAsync = promisify(execFile);
 
-async function hasLocalService() {
+async function isServiceHealthy(baseUrl, timeoutMs = 700) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 700);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return (await fetch(serviceUrl, { signal: controller.signal })).ok;
+    return (await fetch(`${baseUrl}/health`, { signal: controller.signal })).ok;
   } catch {
     return false;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function hasLocalService() {
+  return isServiceHealthy(localServiceUrl);
 }
 
 async function listenerPids() {
@@ -64,6 +71,24 @@ async function waitForLocalService() {
   throw new Error("The local BrainFlow service did not become ready within 20 seconds.");
 }
 
+async function requireConfiguredService() {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(configuredServiceUrl);
+  } catch {
+    throw new Error(`VITE_BRAINFLOW_SERVICE_URL is not a valid URL: ${configuredServiceUrl}`);
+  }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new Error('VITE_BRAINFLOW_SERVICE_URL must use HTTP or HTTPS.');
+  }
+
+  console.log(`Using configured BrainFlow service: ${configuredServiceUrl}`);
+  console.log('The local BrainFlow service will not be started.');
+  if (!(await isServiceHealthy(configuredServiceUrl, 30_000))) {
+    throw new Error(`The configured BrainFlow service failed its health check: ${configuredServiceUrl}/health`);
+  }
+}
+
 let backend;
 let frontend;
 let stopping = false;
@@ -78,13 +103,17 @@ process.on("SIGINT", () => stopChildren());
 process.on("SIGTERM", () => stopChildren());
 
 try {
-  await restartExistingService();
-  console.log("Starting the local BrainFlow service on port 8000.");
-  backend = start(npmCommand, ["run", "brainflow"]);
-  backend.on("exit", (code) => {
-    if (!stopping) { console.error(`BrainFlow service exited unexpectedly (code ${code ?? "unknown"}).`); stopChildren(1); }
-  });
-  await waitForLocalService();
+  if (configuredServiceUrl) {
+    await requireConfiguredService();
+  } else {
+    await restartExistingService();
+    console.log("Starting the local BrainFlow service on port 8000.");
+    backend = start(npmCommand, ["run", "brainflow"]);
+    backend.on("exit", (code) => {
+      if (!stopping) { console.error(`BrainFlow service exited unexpectedly (code ${code ?? "unknown"}).`); stopChildren(1); }
+    });
+    await waitForLocalService();
+  }
   frontend = start(npmCommand, ["run", "dev:web"]);
   frontend.on("exit", (code) => stopChildren(code ?? 1));
 } catch (error) {
