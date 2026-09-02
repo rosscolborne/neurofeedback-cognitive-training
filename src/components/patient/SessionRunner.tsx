@@ -69,7 +69,7 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
     instructions: 'Focus on the center of the mandala. Let your breath guide the geometry. The pattern completes as you achieve inner stillness.',
   },
   'eeg-mandala': {
-    title: 'EEG Mandala',
+    title: 'Generative Mandella',
     mechanism: 'Maps EEG state to ornamental character while recent target-zone performance controls drawing precision.',
     benefit: 'Creates an enduring visual history in which regulated periods produce cleaner, richer radial ornament.',
     instructions: 'Watch the mandala grow from the center. Settle into your target state; each new curve records the quality of that moment.',

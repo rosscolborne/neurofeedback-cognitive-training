@@ -18,7 +18,7 @@ const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ 
   'media-mode': { name: 'Media Mode', icon: Tv, desc: 'Watch streaming video with real-time neuro-luminosity modulation', tag: 'Universal' },
   'soundscape-mode': { name: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural & nature soundscapes for eyes-closed training', tag: 'Audio' },
   'mandala': { name: 'Mandala Breathing', icon: CircleDot, desc: 'Calm concentric breathing mandala with live µV telemetry', tag: 'Calm' },
-  'eeg-mandala': { name: 'EEG Mandala', icon: Flower2, desc: 'An ornamental mandala that records neurofeedback quality as it grows', tag: 'Visual' },
+  'eeg-mandala': { name: 'Generative Mandella', icon: Flower2, desc: 'An ornamental mandala that records neurofeedback quality as it grows', tag: 'Visual' },
   'immersive-3d': { name: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', tag: 'VR' },
   'generative-music': { name: 'Generative Music', icon: Music, desc: 'Brain-state-driven melody, synthesis & rhythm — your EEG creates the music', tag: 'Music' },
   'narrative-story': { name: 'Contemplative Reading', icon: BookOpen, desc: 'Calm mindfulness reflections guided by neurofeedback therapy', tag: 'Reading' },
