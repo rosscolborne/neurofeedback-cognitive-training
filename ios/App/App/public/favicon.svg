@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="28" fill="#D16D4D"/>
+  <g fill="none" stroke="#FBEEE8" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Brain left & right hemispheres with organic folds -->
+    <!-- Left outer lobe -->
+    <path d="M64 24 C50 24 32 34 30 52 C28 66 36 78 36 88 C36 100 50 106 64 104"/>
+    <!-- Right outer lobe -->
+    <path d="M64 24 C78 24 96 34 98 52 C100 66 92 78 92 88 C92 100 78 106 64 104"/>
+    <!-- Central fissure -->
+    <path d="M64 24 L64 104"/>
+    <!-- Left sulci folds -->
+    <path d="M48 38 C42 46 44 56 52 58 C60 60 62 70 54 78 C46 84 48 94 60 96"/>
+    <path d="M34 62 C42 64 46 72 42 80"/>
+    <path d="M50 46 C56 48 58 52 56 56"/>
+    <!-- Right sulci folds -->
+    <path d="M80 38 C86 46 84 56 76 58 C68 60 66 70 74 78 C82 84 80 94 68 96"/>
+    <path d="M94 62 C86 64 82 72 86 80"/>
+    <path d="M78 46 C72 48 70 52 72 56"/>
+  </g>
+</svg>
