@@ -199,6 +199,8 @@ class BrainFlowService {
     fitSessionId: string,
     samples: number[][],
     sampleRateHz = 256,
+    protocol = 'theta-beta-ratio',
+    threshold = 1.85,
   ): Promise<FitWindowResponse | null> {
     if (!samples || samples.length === 0) return null;
 
@@ -215,6 +217,8 @@ class BrainFlowService {
             sampleRateHz,
             samples,
             channelIds: SCALP_CHANNEL_IDS,
+            protocol,
+            threshold,
           }),
           signal: controller.signal,
         },
@@ -305,6 +309,19 @@ class BrainFlowService {
     }
 
     return await res.json();
+  }
+
+  public async updateSessionProtocol(sessionId: string, protocol: string, threshold: number): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/sessions/${sessionId}/protocol`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protocol, threshold }),
+      });
+    } catch {
+      // The local service may be offline; the browser feedback path still
+      // applies the new settings immediately.
+    }
   }
 
   /**

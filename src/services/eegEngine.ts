@@ -1,4 +1,5 @@
 import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample, IndividualBaselineModel } from '../types';
+import { getDefaultProtocolThreshold } from './protocols';
 import { brainflowService } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
@@ -127,35 +128,31 @@ export class EEGEngine {
 
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
-    if (threshold !== undefined) {
-      this.targetThreshold = threshold;
-    } else {
-      switch (protocol) {
-        case 'theta-beta-ratio':
-          this.targetThreshold = 1.85;
-          break;
-        case 'smr-enhancement':
-          this.targetThreshold = 7.5;
-          break;
-        case 'alpha-enhancement':
-          this.targetThreshold = 11.0;
-          break;
-        case 'alpha-theta-crossover':
-          this.targetThreshold = 1.0;
-          break;
-        case 'beta-downtraining':
-          this.targetThreshold = 14.0;
-          break;
-      }
-    }
+    this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
+    this.syncProtocolToBrainflowSession();
   }
 
   public setThreshold(threshold: number) {
     this.targetThreshold = threshold;
+    this.syncProtocolToBrainflowSession();
   }
 
   public getThreshold(): number {
     return this.targetThreshold;
+  }
+
+  public getProtocol(): ProtocolType {
+    return this.currentProtocol;
+  }
+
+  private syncProtocolToBrainflowSession() {
+    if (this.brainflowSessionId) {
+      void brainflowService.updateSessionProtocol(
+        this.brainflowSessionId,
+        this.currentProtocol,
+        this.targetThreshold,
+      );
+    }
   }
 
   public async startMetricCalibration(metrics?: string[]): Promise<void> {
@@ -1053,7 +1050,13 @@ export class EEGEngine {
     this.lastBrainflowAnalysisTime = now;
 
     try {
-      const response = await brainflowService.analyzeFitWindow(this.fitSessionId, samples, 256);
+      const response = await brainflowService.analyzeFitWindow(
+        this.fitSessionId,
+        samples,
+        256,
+        this.currentProtocol,
+        this.targetThreshold,
+      );
 
       if (response) {
         // Update scores from server features

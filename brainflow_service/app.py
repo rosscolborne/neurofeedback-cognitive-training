@@ -53,6 +53,11 @@ class StartSessionResponse(BaseModel):
     device_info: dict = Field(alias="deviceInfo")
 
 
+class ProtocolConfigurationRequest(BaseModel):
+    protocol: str
+    threshold: float
+
+
 class AnalyzeWindowRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -427,6 +432,17 @@ async def stream_session(session_id: str) -> StreamingResponse:
 def stop_session(session_id: str) -> dict[str, str]:
     store.stop(session_id)
     return {"state": "disconnected"}
+
+
+@app.put("/sessions/{session_id}/protocol")
+def update_session_protocol(
+    session_id: str, request: ProtocolConfigurationRequest,
+) -> dict[str, float | str]:
+    """Apply Debug Console protocol changes to a running BrainFlow session."""
+    session = _get_session_or_404(session_id)
+    session.protocol = request.protocol
+    session.threshold = request.threshold
+    return {"protocol": session.protocol, "threshold": session.threshold}
 
 
 @app.post("/sessions/{session_id}/metrics/calibration")

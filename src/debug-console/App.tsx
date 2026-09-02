@@ -22,6 +22,7 @@ import { AffectiveStatePanel } from "./components/AffectiveStatePanel";
 import { BandPowerMonitorPanel } from "./components/BandPowerMonitorPanel";
 import { LiveEegPlot } from "./components/LiveEegPlot";
 import { MetricMonitorPanel, type MetricKey } from "./components/MetricMonitorPanel";
+import { ProtocolsPanel } from "./components/ProtocolsPanel";
 import { PlotSeriesSelector } from "./components/PlotSeriesSelector";
 import {
   type DeviceInfo,
@@ -38,6 +39,9 @@ import {
   getConfiguredProviderKey,
 } from "./providers/providerRegistry";
 import { defaultHeadsetFitThresholds } from "./signalQuality/headsetFitConfig";
+import { eegEngine } from "../services/eegEngine";
+import { getDefaultProtocolThreshold, protocolDefinitions } from "../services/protocols";
+import type { ProtocolType } from "../types";
 import {
   createInitialSnapshot,
   frameAgeMs,
@@ -132,6 +136,8 @@ export default function App() {
     completedAtMs: null,
     result: null,
   });
+  const [protocol, setProtocol] = useState<ProtocolType>(() => eegEngine.getProtocol());
+  const [threshold, setThreshold] = useState(() => String(eegEngine.getThreshold()));
 
   const eegCapability = useMemo(
     () => getCapability(deviceInfo, "eeg"),
@@ -296,6 +302,26 @@ export default function App() {
     affectiveProviderRef.current.reset();
     setAffectiveCalibration(affectiveProviderRef.current.getCalibrationState());
     lastFrameArrivedAtRef.current = null;
+  }
+
+  function changeProtocol(nextProtocol: ProtocolType) {
+    eegEngine.setProtocol(nextProtocol);
+    setProtocol(nextProtocol);
+    setThreshold(String(eegEngine.getThreshold()));
+  }
+
+  function changeThreshold(nextThreshold: string) {
+    setThreshold(nextThreshold);
+    const numericThreshold = Number(nextThreshold);
+    if (nextThreshold.trim() !== '' && Number.isFinite(numericThreshold)) {
+      eegEngine.setThreshold(numericThreshold);
+    }
+  }
+
+  function resetProtocolThreshold() {
+    const defaultThreshold = getDefaultProtocolThreshold(protocol);
+    eegEngine.setThreshold(defaultThreshold);
+    setThreshold(String(defaultThreshold));
   }
 
   useEffect(() => {
@@ -655,6 +681,15 @@ export default function App() {
             <small>{eegCapability?.channels.length ?? channelNames.length} EEG channels</small>
           </article>
         </section>
+
+        <ProtocolsPanel
+          protocol={protocol}
+          threshold={threshold}
+          protocols={protocolDefinitions}
+          onProtocolChange={changeProtocol}
+          onThresholdChange={changeThreshold}
+          onResetThreshold={resetProtocolThreshold}
+        />
 
         <HeadsetFitPanel
           check={fitCheck}
