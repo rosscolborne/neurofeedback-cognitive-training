@@ -22,6 +22,7 @@ import { AffectiveStatePanel } from "./components/AffectiveStatePanel";
 import { BandPowerMonitorPanel } from "./components/BandPowerMonitorPanel";
 import { LiveEegPlot } from "./components/LiveEegPlot";
 import { MetricMonitorPanel, type MetricKey } from "./components/MetricMonitorPanel";
+import { ProtocolsPanel } from "./components/ProtocolsPanel";
 import { PlotSeriesSelector } from "./components/PlotSeriesSelector";
 import {
   type DeviceInfo,
@@ -38,6 +39,10 @@ import {
   getConfiguredProviderKey,
 } from "./providers/providerRegistry";
 import { defaultHeadsetFitThresholds } from "./signalQuality/headsetFitConfig";
+import { eegEngine } from "../services/eegEngine";
+import { getDefaultProtocolThreshold, protocolDefinitions } from "../services/protocols";
+import { calculateRecentInZonePercent, type InZoneObservation } from "../services/inZoneMetric";
+import type { ProtocolType } from "../types";
 import {
   createInitialSnapshot,
   frameAgeMs,
@@ -53,6 +58,7 @@ import {
 const maxHistorySamples = 640;
 const fitCheckDurationMs = 3500;
 const streamStaleMs = 2000;
+const defaultRecentInZoneWindowSeconds = 30;
 function formatValue(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "--";
   return value.toFixed(2);
@@ -95,6 +101,8 @@ export default function App() {
   const sampleCountRef = useRef(0);
   const frameCountRef = useRef(0);
   const calibrationStatusRef = useRef<AffectiveCalibrationState["status"]>("off");
+  const inZoneObservationsRef = useRef<InZoneObservation[]>([]);
+  const recentInZoneWindowSecondsRef = useRef(defaultRecentInZoneWindowSeconds);
   const [state, setState] = useState<EegConnectionState>("idle");
   const [statusDetail, setStatusDetail] = useState("");
   const [error, setError] = useState("");
@@ -132,6 +140,11 @@ export default function App() {
     completedAtMs: null,
     result: null,
   });
+  const [protocol, setProtocol] = useState<ProtocolType>(() => eegEngine.getProtocol());
+  const [threshold, setThreshold] = useState(() => String(eegEngine.getThreshold()));
+  const [totalInZonePercent, setTotalInZonePercent] = useState<number | null>(null);
+  const [recentInZonePercent, setRecentInZonePercent] = useState<number | null>(null);
+  const [recentInZoneWindowSeconds, setRecentInZoneWindowSeconds] = useState(String(defaultRecentInZoneWindowSeconds));
 
   const eegCapability = useMemo(
     () => getCapability(deviceInfo, "eeg"),
@@ -215,6 +228,7 @@ export default function App() {
         }
         setMetricHistory((current) => appendHistory(current, metricValuesFromService(frame.features?.rawMetrics ?? {})));
         setBaselineMetricHistory((current) => appendHistory(current, metricValuesFromService(frame.features?.baselineRelativeMetrics ?? {})));
+        recordInZoneObservation(frame);
       },
       onError: (providerError) => {
         setError(
@@ -249,6 +263,7 @@ export default function App() {
     setLatestBands({});
     setMetricHistory({});
     setBaselineMetricHistory({});
+    resetInZoneMetrics();
     setLatestFrame(null);
     setAffectiveState(null);
     lastFrameArrivedAtRef.current = null;
@@ -296,6 +311,62 @@ export default function App() {
     affectiveProviderRef.current.reset();
     setAffectiveCalibration(affectiveProviderRef.current.getCalibrationState());
     lastFrameArrivedAtRef.current = null;
+    resetInZoneMetrics();
+  }
+
+  function changeProtocol(nextProtocol: ProtocolType) {
+    eegEngine.setProtocol(nextProtocol);
+    setProtocol(nextProtocol);
+    setThreshold(String(eegEngine.getThreshold()));
+    resetInZoneMetrics();
+  }
+
+  function changeThreshold(nextThreshold: string) {
+    setThreshold(nextThreshold);
+    const numericThreshold = Number(nextThreshold);
+    if (nextThreshold.trim() !== '' && Number.isFinite(numericThreshold)) {
+      eegEngine.setThreshold(numericThreshold);
+    }
+  }
+
+  function resetProtocolThreshold() {
+    const defaultThreshold = getDefaultProtocolThreshold(protocol);
+    eegEngine.setThreshold(defaultThreshold);
+    setThreshold(String(defaultThreshold));
+  }
+
+  function changeRecentInZoneWindowSeconds(nextWindowSeconds: string) {
+    setRecentInZoneWindowSeconds(nextWindowSeconds);
+    const windowSeconds = Number(nextWindowSeconds);
+    if (nextWindowSeconds.trim() === '' || !Number.isFinite(windowSeconds) || windowSeconds <= 0) return;
+
+    recentInZoneWindowSecondsRef.current = windowSeconds;
+    const observations = inZoneObservationsRef.current;
+    const latestTimestamp = observations.at(-1)?.timestamp;
+    if (latestTimestamp != null) {
+      setRecentInZonePercent(calculateRecentInZonePercent(observations, latestTimestamp, windowSeconds).percent);
+    }
+  }
+
+  function resetInZoneMetrics() {
+    inZoneObservationsRef.current = [];
+    setTotalInZonePercent(null);
+    setRecentInZonePercent(null);
+  }
+
+  function recordInZoneObservation(frame: SignalFrame) {
+    const { inZone, inZoneAvailable } = frame.features ?? {};
+    if (typeof inZone !== 'boolean' || typeof inZoneAvailable !== 'boolean') return;
+
+    const observations = inZoneObservationsRef.current;
+    observations.push({ timestamp: frame.receivedAtMs, inZone, available: inZoneAvailable });
+    const now = frame.receivedAtMs;
+    const firstTimestamp = observations[0]?.timestamp ?? now;
+    const totalWindowSeconds = Math.max(0.001, (now - firstTimestamp) / 1_000);
+    setTotalInZonePercent(calculateRecentInZonePercent(observations, now, totalWindowSeconds).percent);
+    setRecentInZonePercent(
+      calculateRecentInZonePercent(observations, now, recentInZoneWindowSecondsRef.current).percent,
+    );
   }
 
   useEffect(() => {
@@ -655,6 +726,19 @@ export default function App() {
             <small>{eegCapability?.channels.length ?? channelNames.length} EEG channels</small>
           </article>
         </section>
+
+        <ProtocolsPanel
+          protocol={protocol}
+          threshold={threshold}
+          totalInZonePercent={totalInZonePercent}
+          recentInZonePercent={recentInZonePercent}
+          recentWindowSeconds={recentInZoneWindowSeconds}
+          protocols={protocolDefinitions}
+          onProtocolChange={changeProtocol}
+          onThresholdChange={changeThreshold}
+          onRecentWindowSecondsChange={changeRecentInZoneWindowSeconds}
+          onResetThreshold={resetProtocolThreshold}
+        />
 
         <HeadsetFitPanel
           check={fitCheck}
