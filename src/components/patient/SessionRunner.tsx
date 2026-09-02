@@ -94,8 +94,15 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
   }
 };
 
-const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
+const DEMO_STATES = [
+  { id: 'focus', label: 'Focus' },
+  { id: 'drift', label: 'Drift' },
+  { id: 'recovery', label: 'Recovery' },
+  { id: 'calm', label: 'Calm' },
+] as const;
 
+type DemoState = (typeof DEMO_STATES)[number]['id'];
+const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
 interface SessionRunnerProps {
   client: ClientProfile;
   selectedExperience: ExperienceType;
@@ -118,6 +125,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
+  const [demoState, setDemoState] = useState<DemoState | null>(
+    eegEngine.demoState === 'auto' ? null : eegEngine.demoState,
+  );
 
   // Timers (in seconds)
   // Standard duration: 25 mins total (60s calib, 120s warmup, 1140s training, 120s cooldown, 60s debrief)
@@ -386,6 +396,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const handleStartDemoMode = () => {
     eegEngine.isDemoMode = true;
     eegEngine.setSimulatedState('auto');
+    setDemoState(null);
     setIsFitAccepted(true);
     setIsSessionStarted(true);
     setPhase('training');
@@ -729,6 +740,46 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <NarrativeTherapyMode eegData={eegData} />
           )}
         </div>
+
+        {eegEngine.isDemoMode && (
+          <section
+            aria-label="Demo state controls"
+            className="card-patient-recessed"
+            style={{ padding: '8px 10px', flexShrink: 0 }}
+          >
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '6px' }}>
+              Demo state
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '6px' }}>
+              {DEMO_STATES.map((state) => {
+                const isActive = demoState === state.id;
+                return (
+                  <button
+                    key={state.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      eegEngine.setSimulatedState(state.id);
+                      setDemoState(state.id);
+                    }}
+                    style={{
+                      border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      background: isActive ? 'var(--brand-primary)' : 'var(--surface-patient-card)',
+                      color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
+                      padding: '7px 4px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {state.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Live Monospace EEG Telemetry Panel */}
         <div
