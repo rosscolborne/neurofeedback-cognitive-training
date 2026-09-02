@@ -78,6 +78,10 @@ export interface BrainFlowDeviceItem {
 
 // Only scalp electrodes — never AUX channels (per Ross's guidance)
 const SCALP_CHANNEL_IDS = ['TP9', 'AF7', 'AF8', 'TP10'];
+// Render's free instances can take several seconds to wake after idling. A
+// short health-check timeout incorrectly reports a healthy configured service
+// as unavailable before it has had a chance to start.
+const HEALTH_CHECK_TIMEOUT_MS = 60_000;
 
 // ─── Service Class ──────────────────────────────────────────────────────────
 
@@ -131,9 +135,7 @@ class BrainFlowService {
     if (!response.ok) throw new Error('Unable to reset metric calibration.');
   }
 
-  /**
-   * Healthcheck against local BrainFlow service
-   */
+  /** Health-check the configured BrainFlow service before starting a session. */
   public async checkHealth(): Promise<boolean> {
     const now = Date.now();
     if (now - this.lastHealthCheck < 2000 && this.isOnline) {
@@ -143,13 +145,16 @@ class BrainFlowService {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
-
-      const res = await fetch(`${this.baseUrl}/health`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       this.isOnline = res.ok;
       return this.isOnline;
