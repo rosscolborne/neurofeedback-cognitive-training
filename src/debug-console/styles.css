@@ -503,6 +503,69 @@ h2 {
   padding: 0.45rem 0.65rem;
 }
 
+.protocol-controls {
+  align-items: end;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.45fr) max-content;
+  padding: 0 1.05rem 1.05rem;
+}
+
+.protocol-controls label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.protocol-controls label > span {
+  color: #aeb8d6;
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.protocol-controls select,
+.protocol-controls input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #eef2ff;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  min-height: 46px;
+  outline: 0;
+  padding: 0 0.85rem;
+}
+
+.protocol-controls select option { background: #111827; color: #eef2ff; }
+.protocol-controls input:focus,
+.protocol-controls select:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16); }
+.protocol-reset-control { display: grid; gap: 0.45rem; }
+.protocol-controls small { color: #9aa6c5; font-size: 0.75rem; }
+.protocol-reset-button { white-space: nowrap; }
+
+.protocol-in-zone-metrics {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(190px, 0.7fr);
+  padding: 1rem 1.05rem 1.05rem;
+}
+
+.protocol-metric-value,
+.protocol-window-control { display: grid; gap: 0.35rem; }
+.protocol-metric-value span,
+.protocol-window-control > span { color: #aeb8d6; font-size: 0.72rem; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; }
+.protocol-metric-value strong { color: #c4b5fd; font-size: 1.55rem; }
+.protocol-window-control input { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; color: #eef2ff; font: inherit; font-weight: 700; min-height: 42px; outline: 0; padding: 0 0.85rem; }
+.protocol-window-control input:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16); }
+
+@media (max-width: 700px) {
+  .protocol-controls { align-items: stretch; grid-template-columns: 1fr; }
+  .protocol-in-zone-metrics { grid-template-columns: 1fr; }
+}
+
 .chart-surface {
   margin: 0 1.05rem 1.05rem;
   min-height: 420px;

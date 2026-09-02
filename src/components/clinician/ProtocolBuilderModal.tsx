@@ -39,7 +39,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.08,
     sensitivity: 'balanced',
     sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala'],
     clinicalNotes: 'Target TBR < 1.85 at Fz midline. High efficacy for sustained concentration and reduced impulsivity on Muse S Athena.',
   },
   {
@@ -72,7 +72,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.5,
     sensitivity: 'high',
     sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'media-mode'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'media-mode', 'eeg-mandala'],
     clinicalNotes: 'Reinforces motor inhibition pathways ("active mind, still body"). Reduces motor tic latency.',
   },
   {
@@ -99,7 +99,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.6,
     sensitivity: 'balanced',
     sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
     clinicalNotes: 'Upregulates dominant posterior alpha rhythm to dissolve rumination and induce physiological equanimity.',
   },
   {
@@ -126,7 +126,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.5,
     sensitivity: 'low',
     sessionDurationMinutes: 30,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'soundscape-mode', 'breath-weave', 'mandala'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'soundscape-mode', 'breath-weave', 'mandala', 'eeg-mandala'],
     clinicalNotes: 'Facilitates restorative crossover states where theta power temporarily surpasses posterior alpha.',
   },
   {
@@ -153,7 +153,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.5,
     sensitivity: 'balanced',
     sessionDurationMinutes: 20,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'tidal-garden', 'mandala'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'tidal-garden', 'mandala', 'eeg-mandala'],
     clinicalNotes: 'Direct inhibition of hyper-vigilant beta rhythms for rapid sympathetic nervous system down-regulation.',
   },
 ];

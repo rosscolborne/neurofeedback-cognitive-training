@@ -11,7 +11,7 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { EducationHub } from './EducationHub';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Camera, LogOut, Trash2, FileText, VolumeX, Volume2 } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2 } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 
@@ -271,6 +271,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 { id: 'media-mode', title: 'Media Mode', icon: Tv, desc: 'Watch videos with neuro-luminosity modulation', badge: 'Streaming', gradient: 'linear-gradient(135deg, #E4B87C22, #C4A35A22)', researchUrl: 'https://doi.org/10.1007/s10484-016-9324-4' },
                 { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural soundscapes for eyes-closed training', badge: 'Audio', gradient: 'linear-gradient(135deg, #5C8C4622, #7B68AE22)', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
                 { id: 'mandala', title: 'Mandala Breathing', icon: CircleDot, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
+                { id: 'eeg-mandala', title: 'Generative Mandella', icon: Flower2, desc: 'A growing ornamental record of your neurofeedback session', badge: 'Visual', gradient: 'linear-gradient(135deg, #8B9D8333, #C66B3D33)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
               ].map(exp => {
                 const Icon = exp.icon;
                 return (

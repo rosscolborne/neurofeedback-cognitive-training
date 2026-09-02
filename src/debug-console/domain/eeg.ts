@@ -95,6 +95,8 @@ export interface SignalFeatures {
   rawMetrics?: Record<string, number>;
   baselineRelativeMetrics?: Record<string, number>;
   interhemisphericCoherence?: number | null;
+  inZone?: boolean;
+  inZoneAvailable?: boolean;
 }
 
 /** Training's baseline-relative attention score -- mirrors
