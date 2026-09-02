@@ -12,6 +12,7 @@ import { RhythmLockGame } from '../experiences/RhythmLockGame';
 import { MediaModePlayer } from '../experiences/MediaModePlayer';
 import { SoundscapePlayer } from '../experiences/SoundscapePlayer';
 import { MandalaBreathing } from '../experiences/MandalaBreathing';
+import { EegMandalaCanvas } from '../experiences/EegMandalaCanvas';
 import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
 import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
@@ -67,6 +68,12 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
     benefit: 'Facilitates transition into flow states and deep mindfulness practices.',
     instructions: 'Focus on the center of the mandala. Let your breath guide the geometry. The pattern completes as you achieve inner stillness.',
   },
+  'eeg-mandala': {
+    title: 'EEG Mandala',
+    mechanism: 'Maps EEG state to ornamental character while recent target-zone performance controls drawing precision.',
+    benefit: 'Creates an enduring visual history in which regulated periods produce cleaner, richer radial ornament.',
+    instructions: 'Watch the mandala grow from the center. Settle into your target state; each new curve records the quality of that moment.',
+  },
   'immersive-3d': {
     title: 'Generative XR',
     mechanism: 'Translates real-time coherence metrics into dynamic 3D spatial particle systems.',
@@ -87,7 +94,7 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
   }
 };
 
-const RECENT_IN_ZONE_WINDOW_SECONDS = 30;
+const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
 
 interface SessionRunnerProps {
   client: ClientProfile;
@@ -214,7 +221,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegDataRef.current = data;
       setEegData(data);
 
-      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
+      // Recent in-zone is a live trailing metric. Calibration observations are
+      // valid EEG feedback too, so begin its window as soon as fit is accepted
+      // rather than holding the display and experience feedback for one minute.
+      if (!isPausedRef.current && isFitAccepted) {
         const observations = inZoneObservationsRef.current;
         observations.push({
           timestamp: data.timestamp,
@@ -702,6 +712,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           {selectedExperience === 'mandala' && (
             <MandalaBreathing eegData={eegData} isPaused={isPaused} />
           )}
+          {selectedExperience === 'eeg-mandala' && (
+            <EegMandalaCanvas
+              eegData={eegData}
+              recentInZonePercent={recentInZonePercent}
+              isPaused={isPaused}
+            />
+          )}
           {selectedExperience === 'immersive-3d' && (
             <GenerativeWebXRCanvas eegData={eegData} />
           )}
@@ -746,7 +763,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone (30s)</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone ({RECENT_IN_ZONE_WINDOW_SECONDS}s)</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
               {recentInZonePercent != null ? `${recentInZonePercent}%` : '--'}
             </div>
