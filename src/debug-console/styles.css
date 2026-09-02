@@ -541,6 +541,7 @@ h2 {
 .protocol-controls select option { background: #111827; color: #eef2ff; }
 .protocol-controls input:focus,
 .protocol-controls select:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16); }
+.protocol-reset-control { display: grid; gap: 0.45rem; }
 .protocol-controls small { color: #9aa6c5; font-size: 0.75rem; }
 .protocol-reset-button { white-space: nowrap; }
 

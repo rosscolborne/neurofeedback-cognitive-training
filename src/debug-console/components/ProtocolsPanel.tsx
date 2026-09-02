@@ -51,12 +51,14 @@ export function ProtocolsPanel({
             onChange={(event) => onThresholdChange(event.target.value)}
             aria-describedby="protocol-threshold-default"
           />
-          <small id="protocol-threshold-default">Default: {defaultThreshold}</small>
         </label>
-        <button className="secondary-button protocol-reset-button" onClick={onResetThreshold}>
-          <RotateCcw aria-hidden="true" />
-          Reset to default
-        </button>
+        <div className="protocol-reset-control">
+          <small id="protocol-threshold-default">Default: {defaultThreshold}</small>
+          <button className="secondary-button protocol-reset-button" onClick={onResetThreshold}>
+            <RotateCcw aria-hidden="true" />
+            Reset to default
+          </button>
+        </div>
       </div>
     </section>
   );
