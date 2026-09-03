@@ -649,7 +649,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <SkylineDriftCanvas
               eegData={eegData}
               assignedProtocol={client.assignedProtocol}
-              recentInZonePercent={recentInZonePercent}
+              recentInZonePercent={inZonePercent}
               isPaused={isPaused}
             />
           )}
