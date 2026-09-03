@@ -1,6 +1,8 @@
 /**
  * BrainFlow Service Client — v0.5.0
- * Connects to the local FastAPI brainflow_service (http://127.0.0.1:8000)
+ * Connects to the configured FastAPI brainflow_service. Local development
+ * defaults to http://127.0.0.1:8000; deployed builds must set
+ * VITE_BRAINFLOW_SERVICE_URL to the hosted service (for example, Render).
  *
  * Primary flow for Web Bluetooth front-ends:
  *   1. POST /headset-fit/sessions → fitSessionId
@@ -76,6 +78,10 @@ export interface BrainFlowDeviceItem {
 
 // Only scalp electrodes — never AUX channels (per Ross's guidance)
 const SCALP_CHANNEL_IDS = ['TP9', 'AF7', 'AF8', 'TP10'];
+// Render's free instances can take several seconds to wake after idling. A
+// short health-check timeout incorrectly reports a healthy configured service
+// as unavailable before it has had a chance to start.
+const HEALTH_CHECK_TIMEOUT_MS = 60_000;
 
 // ─── Service Class ──────────────────────────────────────────────────────────
 
@@ -86,11 +92,25 @@ class BrainFlowService {
   private activeEventSource: EventSource | null = null;
 
   constructor() {
-    this.baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BRAINFLOW_SERVICE_URL) || 'http://127.0.0.1:8000';
+    const configuredUrl = typeof import.meta !== 'undefined'
+      ? import.meta.env?.VITE_BRAINFLOW_SERVICE_URL
+      : undefined;
+    // Loopback is a convenient development default, but it must never be
+    // baked into a deployed build: a remote page would then silently depend
+    // on a service running on the visitor's own computer.
+    this.baseUrl = configuredUrl || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '');
   }
 
   public getBaseUrl(): string {
     return this.baseUrl;
+  }
+
+  /**
+   * A production bundle has no implicit backend URL. This prevents a deployed
+   * app from accidentally treating its own Vercel origin as the EEG service.
+   */
+  public hasConfiguredService(): boolean {
+    return this.baseUrl.length > 0;
   }
 
   public setBaseUrl(url: string) {
@@ -115,9 +135,7 @@ class BrainFlowService {
     if (!response.ok) throw new Error('Unable to reset metric calibration.');
   }
 
-  /**
-   * Healthcheck against local BrainFlow service
-   */
+  /** Health-check the configured BrainFlow service before starting a session. */
   public async checkHealth(): Promise<boolean> {
     const now = Date.now();
     if (now - this.lastHealthCheck < 2000 && this.isOnline) {
@@ -127,13 +145,16 @@ class BrainFlowService {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
-
-      const res = await fetch(`${this.baseUrl}/health`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       this.isOnline = res.ok;
       return this.isOnline;
@@ -193,6 +214,8 @@ class BrainFlowService {
     fitSessionId: string,
     samples: number[][],
     sampleRateHz = 256,
+    protocol = 'theta-beta-ratio',
+    threshold = 1.85,
   ): Promise<FitWindowResponse | null> {
     if (!samples || samples.length === 0) return null;
 
@@ -200,27 +223,41 @@ class BrainFlowService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-      const res = await fetch(
-        `${this.baseUrl}/headset-fit/sessions/${fitSessionId}/analyze-window`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sampleRateHz,
-            samples,
-            channelIds: SCALP_CHANNEL_IDS,
-          }),
-          signal: controller.signal,
-        },
-      );
-      clearTimeout(timeoutId);
+      let res: Response;
+      try {
+        res = await fetch(
+          `${this.baseUrl}/headset-fit/sessions/${fitSessionId}/analyze-window`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sampleRateHz,
+              samples,
+              channelIds: SCALP_CHANNEL_IDS,
+              protocol,
+              threshold,
+            }),
+            signal: controller.signal,
+          },
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error('[EEG analysis] API error', {
+          status: res.status,
+          statusText: res.statusText,
+          body: await res.text(),
+        });
+        return null;
+      }
 
       const data: FitWindowResponse = await res.json();
       this.isOnline = true;
       return data;
-    } catch {
+    } catch (error) {
+      console.error('[EEG analysis] request failed', error);
       return null;
     }
   }
@@ -299,6 +336,19 @@ class BrainFlowService {
     }
 
     return await res.json();
+  }
+
+  public async updateSessionProtocol(sessionId: string, protocol: string, threshold: number): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/sessions/${sessionId}/protocol`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protocol, threshold }),
+      });
+    } catch {
+      // The local service may be offline; the browser feedback path still
+      // applies the new settings immediately.
+    }
   }
 
   /**

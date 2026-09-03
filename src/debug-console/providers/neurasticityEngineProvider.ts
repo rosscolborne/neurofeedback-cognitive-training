@@ -127,7 +127,7 @@ function toFeatures(point: EEGDataPoint): SignalFeatures {
       relative: {},
       ratios: point.bandRatios,
       windowSeconds: 2,
-      method: "brainflow_welch_psd",
+      method: scores?.method === "browser_dsp" ? "custom_goertzel" : "brainflow_welch_psd",
     },
     mindfulnessScore: scores?.mindfulnessScore ?? null,
     restfulnessScore: scores?.restfulnessScore ?? null,
@@ -145,6 +145,8 @@ function toFeatures(point: EEGDataPoint): SignalFeatures {
     calibrationRequired: point.calibrationRequired,
     rawMetrics: point.rawMetrics,
     baselineRelativeMetrics: point.baselineRelativeMetrics,
+    inZone: point.inZone,
+    inZoneAvailable: point.inZoneAvailable,
   };
 }
 

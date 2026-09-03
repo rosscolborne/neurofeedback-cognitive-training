@@ -15,6 +15,7 @@ export type ExperienceType =
   | 'media-mode'
   | 'soundscape-mode'
   | 'mandala'
+  | 'eeg-mandala'
   | 'immersive-3d'
   | 'generative-music'
   | 'narrative-story';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bluetooth, CheckCircle2 } from 'lucide-react';
 import { eegEngine } from '../../services/eegEngine';
@@ -13,14 +13,14 @@ export const HardwareSetup: React.FC = () => {
     setConnecting(true);
     setError('');
     try {
-      const res = await eegEngine.connectMuseAthenaBrainflow();
+      const res = await eegEngine.connectMuseBluetooth();
       if (res.success) {
         setConnected(true);
         setTimeout(() => {
           navigate('/');
         }, 1500);
       } else {
-        setError('Connection failed. Make sure your headband is powered on.');
+        setError(res.error || 'Connection failed. Make sure your headband is powered on.');
       }
     } catch (err: any) {
       setError(err.message || 'Connection failed.');
@@ -28,17 +28,6 @@ export const HardwareSetup: React.FC = () => {
       setConnecting(false);
     }
   };
-
-  // Auto-trigger BLE pairing on mount so users don't have to tap manually
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!connected && !connecting) {
-        handleConnect();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div style={{
@@ -68,7 +57,7 @@ export const HardwareSetup: React.FC = () => {
       <p style={{ color: 'var(--text-secondary)', marginBottom: '40px', textAlign: 'center', maxWidth: '300px' }}>
         {connected 
           ? 'You are all set to start your first session.'
-          : 'Turn on your Muse Athena headset. BrainFlow will connect to it from the local acquisition service.'}
+          : 'Turn on your Muse Athena headset, then select Connect Now to choose it over Bluetooth.'}
       </p>
 
       {error && (

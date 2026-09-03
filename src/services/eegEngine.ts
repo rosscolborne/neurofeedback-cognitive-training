@@ -1,10 +1,15 @@
 import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample, IndividualBaselineModel } from '../types';
-import { brainflowService, BrainFlowFeatures } from './brainflowService';
+import { getDefaultProtocolThreshold } from './protocols';
+import { brainflowService } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
 import { AthenaWasmDecoder, BleTransport } from '@elata-biosciences/eeg-web-ble';
 import { initEegWasm, type HeadbandFrameV1 } from '@elata-biosciences/eeg-web';
 import eegWasmUrl from '@elata-biosciences/eeg-web/wasm/eeg_wasm_bg.wasm?url';
+
+// Muse's EEG data service contains the 273e0001–273e0006 control and signal
+// characteristics. It is also the service advertised during device discovery.
+const MUSE_EEG_SERVICE_UUID = '0000fe8d-0000-1000-8000-00805f9b34fb';
 
 export class EEGEngine {
   private isRunning = false;
@@ -30,7 +35,7 @@ export class EEGEngine {
   private brainflowUnsubscribe: (() => void) | null = null;
 
   public deviceName: string | null = null;
-  public batteryLevel = 92;
+  public batteryLevel: number | null = null;
   public packetsReceivedCount = 0;
   
   // Real-time raw signal storage buffers (256 samples = 1 sec at 256Hz)
@@ -45,6 +50,10 @@ export class EEGEngine {
   // Server-side fit state from brainflow_service
   public serverFitState: ServerFitState | null = null;
   private fitSessionId: string | null = null;
+  private bluetoothConnectionGeneration = 0;
+  private isStartingFitSession = false;
+  private hostedAnalysisFailures = 0;
+  private lastAnalysisDiagnosticAt = 0;
 
   // Channel quality — driven exclusively by server-side fit assessment
   public channelQuality: MuseChannelQuality = {
@@ -69,6 +78,7 @@ export class EEGEngine {
   private latestBaselineRelativeMetrics: Record<string, number> = {};
   private latestInterhemisphericCoherence: number | null = null;
   private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null } | null = null;
+  private localFitStableSince: number | null = null;
 
   private gattServer: any = null;
   private activeCharacteristics: any[] = [];
@@ -126,35 +136,31 @@ export class EEGEngine {
 
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
-    if (threshold !== undefined) {
-      this.targetThreshold = threshold;
-    } else {
-      switch (protocol) {
-        case 'theta-beta-ratio':
-          this.targetThreshold = 1.85;
-          break;
-        case 'smr-enhancement':
-          this.targetThreshold = 7.5;
-          break;
-        case 'alpha-enhancement':
-          this.targetThreshold = 11.0;
-          break;
-        case 'alpha-theta-crossover':
-          this.targetThreshold = 1.0;
-          break;
-        case 'beta-downtraining':
-          this.targetThreshold = 14.0;
-          break;
-      }
-    }
+    this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
+    this.syncProtocolToBrainflowSession();
   }
 
   public setThreshold(threshold: number) {
     this.targetThreshold = threshold;
+    this.syncProtocolToBrainflowSession();
   }
 
   public getThreshold(): number {
     return this.targetThreshold;
+  }
+
+  public getProtocol(): ProtocolType {
+    return this.currentProtocol;
+  }
+
+  private syncProtocolToBrainflowSession() {
+    if (this.brainflowSessionId) {
+      void brainflowService.updateSessionProtocol(
+        this.brainflowSessionId,
+        this.currentProtocol,
+        this.targetThreshold,
+      );
+    }
   }
 
   public async startMetricCalibration(metrics?: string[]): Promise<void> {
@@ -186,9 +192,13 @@ export class EEGEngine {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Trigger periodic brainflow_service analysis if hardware is streaming
-      if (this.isHardwareConnected && this.fitSessionId && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 400) {
-        this.dispatchServerAnalysis(now);
+      // Bluetooth acquisition remains in the browser, but BrainFlow is the
+      // only metric source. Raw windows are sent to the hosted service; do
+      // not substitute browser-derived metrics when that service is absent.
+      if (this.isHardwareConnected && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 400) {
+        if (this.fitSessionId) {
+          this.dispatchServerAnalysis(now);
+        }
       }
 
       const point = this.generateSample(dt);
@@ -205,28 +215,27 @@ export class EEGEngine {
   }
 
   /**
-   * Connect to real Muse 2 or Muse S Headband via standard Web Bluetooth GATT.
-   * Also creates a server-side fit session for scoring via brainflow_service.
+   * Connect to real Muse 2 or Muse S Headband via Web Bluetooth (or the
+   * Capacitor BLE bridge on native builds). The browser owns this connection;
+   * the hosted BrainFlow service is required for all metrics.
    */
   public async connectMuseBluetooth(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
     if (!Capacitor.isNativePlatform() && !('bluetooth' in navigator)) {
       this.isHardwareConnected = false;
       return { success: false, error: 'Web Bluetooth is not supported on this browser (Chrome / Edge recommended).' };
     }
+    if (!brainflowService.hasConfiguredService()) {
+      return { success: false, error: 'A hosted BrainFlow service URL is required before connecting a headset.' };
+    }
+    if (!(await brainflowService.checkHealth())) {
+      return { success: false, error: `Hosted BrainFlow service is unavailable at ${brainflowService.getBaseUrl()}.` };
+    }
 
     try {
-      // Start server-side fit session first — required for all scoring
-      try {
-        this.fitSessionId = await brainflowService.startFitSession();
-      } catch (err: any) {
-        return { success: false, error: `brainflow_service unavailable: ${err?.message || 'Cannot connect to http://127.0.0.1:8000'}` };
-      }
-
       // Use the same supported Muse Athena decoder as eeg_demo in a browser.
-      // The backend's Bluetooth fit thresholds are calibrated for these
-      // normalized samples, not for hand-decoded BLE packets.
       if (!Capacitor.isNativePlatform()) {
         await this.connectMuseBluetoothInBrowser();
+        await this.startHostedBluetoothAnalysis();
         return { success: true, deviceName: this.deviceName || undefined };
       }
 
@@ -236,7 +245,7 @@ export class EEGEngine {
       if (Capacitor.isNativePlatform()) {
         await BleClient.initialize({ androidNeverForLocation: true });
         const bleDevice = await BleClient.requestDevice({
-          services: ['0000fe8d-0000-1000-8000-00805f9b34fb'],
+          services: [MUSE_EEG_SERVICE_UUID],
         });
         device = { id: bleDevice.deviceId, name: bleDevice.name };
         
@@ -244,11 +253,122 @@ export class EEGEngine {
           this.disconnectHardware();
         });
 
+        const athenaEegChar = '273e0013-4c4d-454d-96be-f03bac821358';
+        const athenaOtherChar = '273e0014-4c4d-454d-96be-f03bac821358';
+        let isAthenaProfile = false;
+
+        // This is intentionally logged before subscribing so an iOS device
+        // whose Muse firmware uses a different profile can be identified from
+        // the Xcode console without guessing UUIDs.
+        try {
+          const services = await BleClient.getServices(device.id);
+          console.info('[EEG BLE] discovered GATT profile', services.map((service) => ({
+            service: service.uuid,
+            characteristics: service.characteristics.map((characteristic) => ({
+              uuid: characteristic.uuid,
+              properties: characteristic.properties,
+            })),
+          })));
+          isAthenaProfile = services.some((service) => {
+            const characteristicUuids = service.characteristics.map((characteristic) => characteristic.uuid.toLowerCase());
+            return characteristicUuids.includes(athenaEegChar) && characteristicUuids.includes(athenaOtherChar);
+          });
+        } catch (error) {
+          console.error('[EEG BLE] unable to read discovered GATT profile', error);
+        }
+
         this.isHardwareConnected = true;
+        this.isDemoMode = false;
         this.deviceName = device.name || 'Muse Headband';
         this.gattServer = { connected: true, deviceId: device.id };
 
-        const eegService = '0000fe8d-0000-1000-8000-00805f9b34fb';
+        const eegService = MUSE_EEG_SERVICE_UUID;
+        if (isAthenaProfile) {
+          // Muse S Athena multiplexes all eight EEG channels through 273e0013.
+          // Decode those packets with the same WASM decoder used in the working
+          // browser transport, then retain only the four scalp electrodes.
+          await initEegWasm(eegWasmUrl);
+          const athenaDecoder = new AthenaWasmDecoder();
+          athenaDecoder.set_use_device_timestamps(true);
+          athenaDecoder.set_clock_kind('windowed');
+          athenaDecoder.set_reorder_window_ms(0);
+
+          const ingestAthenaPacket = (value: DataView) => {
+            this.packetsReceivedCount++;
+            if (this.packetsReceivedCount <= 3) {
+              console.info('[EEG BLE] Athena packet received', {
+                packet: this.packetsReceivedCount,
+                bytes: value.byteLength,
+              });
+            }
+            try {
+              const output = athenaDecoder.decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+              const channels = output.eeg_channel_count;
+              const samples = output.eeg_samples;
+              for (let index = 0; index + channels <= samples.length && channels >= 4; index += channels) {
+                this.rawBuffers.tp9.push(samples[index]);
+                this.rawBuffers.af7.push(samples[index + 1]);
+                this.rawBuffers.af8.push(samples[index + 2]);
+                this.rawBuffers.tp10.push(samples[index + 3]);
+              }
+              for (const channel of Object.keys(this.rawBuffers) as Array<keyof MuseChannelQuality>) {
+                if (this.rawBuffers[channel].length > this.maxBufferSize) {
+                  this.rawBuffers[channel] = this.rawBuffers[channel].slice(-this.maxBufferSize);
+                }
+              }
+              output.free();
+            } catch (error) {
+              console.error('[EEG BLE] Athena packet decode failed', error);
+            }
+            if (this.packetsReceivedCount % 100 === 0) {
+              console.info('[EEG BLE]', {
+                protocol: 'athena',
+                packets: this.packetsReceivedCount,
+                tp9: this.rawBuffers.tp9.length,
+                af7: this.rawBuffers.af7.length,
+                af8: this.rawBuffers.af8.length,
+                tp10: this.rawBuffers.tp10.length,
+              });
+            }
+          };
+
+          // Athena's control endpoint is notify-capable. The reference Muse
+          // transport enables it before streaming; without that subscription
+          // some firmware revisions accept commands but do not begin sending.
+          await BleClient.startNotifications(
+            device.id,
+            eegService,
+            '273e0001-4c4d-454d-96be-f03bac821358',
+            () => console.info('[EEG BLE] Athena control notification received'),
+          );
+          await BleClient.startNotifications(device.id, eegService, athenaEegChar, ingestAthenaPacket);
+          await BleClient.startNotifications(device.id, eegService, athenaOtherChar, ingestAthenaPacket);
+
+          const sendAthenaCommand = async (command: string) => {
+            const bytes = new Uint8Array(command.length + 2);
+            bytes[0] = command.length + 1;
+            for (let index = 0; index < command.length; index++) bytes[index + 1] = command.charCodeAt(index);
+            bytes[bytes.length - 1] = 0x0a;
+            await BleClient.writeWithoutResponse(
+              device.id,
+              eegService,
+              '273e0001-4c4d-454d-96be-f03bac821358',
+              new DataView(bytes.buffer),
+            );
+          };
+          const pause = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+          for (const [command, delay] of [
+            ['v6', 200], ['s', 200], ['h', 200], ['p1041', 200], ['s', 200], ['dc001', 50], ['dc001', 100], ['s', 0],
+          ] as const) {
+            await sendAthenaCommand(command);
+            if (delay > 0) await pause(delay);
+          }
+
+          console.info('[EEG BLE] Athena streaming started');
+          await this.startHostedBluetoothAnalysis();
+          return { success: true, deviceName: this.deviceName || undefined };
+        }
+
         const channelUUIDs: Record<keyof MuseChannelQuality, string> = {
           tp9: '273e0003-4c4d-454d-96be-f03bac821358',
           af7: '273e0004-4c4d-454d-96be-f03bac821358',
@@ -265,6 +385,15 @@ export class EEGEngine {
               (value) => {
                 this.packetsReceivedCount++;
                 this.parseChannelPacket(channel as keyof MuseChannelQuality, value);
+                if (this.packetsReceivedCount % 100 === 0) {
+                  console.info('[EEG BLE]', {
+                    packets: this.packetsReceivedCount,
+                    tp9: this.rawBuffers.tp9.length,
+                    af7: this.rawBuffers.af7.length,
+                    af8: this.rawBuffers.af8.length,
+                    tp10: this.rawBuffers.tp10.length,
+                  });
+                }
               }
             );
           } catch (err) {
@@ -289,6 +418,7 @@ export class EEGEngine {
           this.batteryLevel = val.getUint8(0);
         } catch (e) {}
 
+        await this.startHostedBluetoothAnalysis();
         return { success: true, deviceName: this.deviceName || undefined };
       }
 
@@ -298,6 +428,7 @@ export class EEGEngine {
 
       this.gattServer = await device.gatt.connect();
       this.isHardwareConnected = true;
+      this.isDemoMode = false;
       this.deviceName = device.name || 'Muse Headband';
 
       // Disconnection listener
@@ -305,7 +436,7 @@ export class EEGEngine {
         this.disconnectHardware();
       });
 
-      const eegService = await this.gattServer.getPrimaryService('0000fe8d-0000-1000-8000-00805f9b34fb');
+      const eegService = await this.gattServer.getPrimaryService(MUSE_EEG_SERVICE_UUID);
 
       // Muse EEG Characteristic UUIDs for TP9, AF7, AF8, and TP10 (scalp electrodes only — no AUX)
       const channelUUIDs: Record<keyof MuseChannelQuality, string> = {
@@ -358,15 +489,10 @@ export class EEGEngine {
         this.batteryLevel = val.getUint8(0);
       } catch (e) {}
 
+      await this.startHostedBluetoothAnalysis();
       return { success: true, deviceName: this.deviceName || undefined };
     } catch (err: any) {
-      // Clean up the fit session if BLE pairing fails
-      if (this.fitSessionId) {
-        brainflowService.stopFitSession(this.fitSessionId);
-        this.fitSessionId = null;
-      }
-      this.isHardwareConnected = false;
-      this.resetState();
+      this.disconnectHardware();
       return { success: false, error: err?.message || 'Connection failed' };
     }
   }
@@ -396,8 +522,42 @@ export class EEGEngine {
     await transport.connect();
     const board = transport.getBoardInfo() as { device_name?: string } | null;
     this.isHardwareConnected = true;
+    this.isDemoMode = false;
     this.deviceName = board?.device_name || 'Muse Athena';
     await transport.start();
+  }
+
+  /**
+   * Start the remote analysis session after, never before, the user's browser
+   * has connected to the headband. A session is required: metrics must never
+   * fall back to estimates produced outside BrainFlow.
+   */
+  private async startHostedBluetoothAnalysis(): Promise<void> {
+    if (!brainflowService.hasConfiguredService()) {
+      throw new Error('A hosted BrainFlow service URL is required before connecting a headset.');
+    }
+    if (this.fitSessionId) return;
+    if (this.isStartingFitSession) {
+      throw new Error('Hosted BrainFlow analysis is already starting.');
+    }
+
+    const connectionGeneration = ++this.bluetoothConnectionGeneration;
+    this.isStartingFitSession = true;
+    this.hostedAnalysisFailures = 0;
+    try {
+      const fitSessionId = await brainflowService.startFitSession();
+      // The user may have disconnected or begun a new connection while the
+      // hosted service was waking up. Do not attach that stale session.
+      if (!this.isHardwareConnected || connectionGeneration !== this.bluetoothConnectionGeneration) {
+        void brainflowService.stopFitSession(fitSessionId);
+        throw new Error('Headset connection changed before hosted BrainFlow analysis started.');
+      }
+      this.fitSessionId = fitSessionId;
+    } finally {
+      if (connectionGeneration === this.bluetoothConnectionGeneration) {
+        this.isStartingFitSession = false;
+      }
+    }
   }
 
   private ingestDecodedMuseFrame(frame: HeadbandFrameV1) {
@@ -451,6 +611,7 @@ export class EEGEngine {
       this.brainflowSessionId = session.sessionId;
       this.isBrainflowActive = true;
       this.isHardwareConnected = true;
+      this.isDemoMode = false;
       this.deviceName = session.deviceInfo?.label || 'BrainFlow Board';
 
       this.brainflowUnsubscribe = brainflowService.streamSession(
@@ -535,6 +696,10 @@ export class EEGEngine {
   }
 
   public disconnectHardware() {
+    // Invalidates an in-flight hosted-session request as well as active ones.
+    this.bluetoothConnectionGeneration++;
+    this.isStartingFitSession = false;
+    this.hostedAnalysisFailures = 0;
     if (this.webBluetoothTransport) {
       const transport = this.webBluetoothTransport;
       this.webBluetoothTransport = null;
@@ -571,6 +736,7 @@ export class EEGEngine {
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
+    this.localFitStableSince = null;
     this.serverFitState = null;
     this.resetState();
   }
@@ -583,6 +749,7 @@ export class EEGEngine {
       tp10: 'poor',
     };
     this.rawBuffers = { tp9: [], af7: [], af8: [], tp10: [] };
+    this.localFitStableSince = null;
   }
 
   /**
@@ -698,6 +865,327 @@ export class EEGEngine {
   }
 
   /**
+   * Browser-side analysis for the Web Bluetooth path. This intentionally
+   * mirrors the Bluetooth-specific fit thresholds in brainflow_service, but
+   * never contacts it. That keeps pairing, fit validation, band telemetry and
+   * protocol feedback usable from a static Vercel deployment.
+   */
+  private runBrowserAnalysis(now: number) {
+    const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
+    const minLen = Math.min(...channels.map(channel => this.rawBuffers[channel].length));
+    if (minLen < 64) return;
+
+    this.isAnalyzingBrainflow = true;
+    this.lastBrainflowAnalysisTime = now;
+
+    try {
+      const windowSize = Math.min(minLen, 512);
+      const windows = Object.fromEntries(
+        channels.map(channel => [channel, this.rawBuffers[channel].slice(-windowSize)]),
+      ) as Record<keyof MuseChannelQuality, number[]>;
+
+      this.updateBrowserFit(windows, now);
+      const bands = this.calculateBrowserBands(windows);
+      this.latestServerBands = bands;
+      this.latestServerBandAvailability = {
+        delta: true,
+        theta: true,
+        alpha: true,
+        smr: true,
+        beta: true,
+        gamma: true,
+      };
+
+      const ratio = (numerator: number, denominator: number) => numerator / Math.max(1e-9, denominator);
+      const thetaBeta = ratio(bands.theta, bands.beta);
+      this.latestServerRatios = {
+        thetaBeta,
+        betaTheta: ratio(bands.beta, bands.theta),
+        alphaTheta: ratio(bands.alpha, bands.theta),
+        thetaAlpha: ratio(bands.theta, bands.alpha),
+        smrTheta: ratio(bands.smr, bands.theta),
+        thetaAlphaBeta: ratio(bands.theta, bands.alpha + bands.beta),
+        alphaBeta: ratio(bands.alpha, bands.beta),
+        betaAlpha: ratio(bands.beta, bands.alpha),
+        arousal: ratio(bands.beta + bands.gamma, bands.alpha + bands.theta),
+        valence: ratio(bands.alpha, bands.theta + bands.beta),
+        betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
+      };
+      this.latestInterhemisphericCoherence = this.calculateBrowserCoherence(windows);
+      this.updateBrowserDerivedMetrics();
+      this.latestTrainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
+    } finally {
+      this.isAnalyzingBrainflow = false;
+    }
+  }
+
+  private updateBrowserFit(
+    windows: Record<keyof MuseChannelQuality, number[]>,
+    now: number,
+  ) {
+    const labels: Record<keyof MuseChannelQuality, string> = {
+      tp9: 'TP9 (Left Ear)',
+      af7: 'AF7 (Left Forehead)',
+      af8: 'AF8 (Right Forehead)',
+      tp10: 'TP10 (Right Ear)',
+    };
+    const channels = (Object.keys(windows) as Array<keyof MuseChannelQuality>).map(channel => {
+      const values = windows[channel].filter(Number.isFinite);
+      const count = values.length;
+      const mean = count ? values.reduce((sum, value) => sum + value, 0) / count : 0;
+      const squareMean = count ? values.reduce((sum, value) => sum + value * value, 0) / count : 0;
+      const variance = count ? values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / count : 0;
+      const rmsUv = Math.sqrt(squareMean);
+      const stdDevUv = Math.sqrt(variance);
+      const ordered = [...values].sort((a, b) => a - b);
+      const percentile = (fraction: number) => ordered[Math.floor(Math.max(0, ordered.length - 1) * fraction)] ?? 0;
+      const peakToPeakUv = percentile(0.95) - percentile(0.05);
+      let totalStepUv = 0;
+      let maxStepUv = 0;
+      for (let index = 1; index < count; index++) {
+        const step = Math.abs(values[index] - values[index - 1]);
+        totalStepUv += step;
+        maxStepUv = Math.max(maxStepUv, step);
+      }
+      const meanStepUv = totalStepUv / Math.max(1, count - 1);
+      const maxAbsUv = values.reduce((maximum, value) => Math.max(maximum, Math.abs(value)), 0);
+      const clippedFraction = count
+        ? values.filter(value => Math.abs(value) > 100000).length / count
+        : 1;
+
+      let state: 'good' | 'adjusting' | 'poor';
+      if (count < 16) {
+        state = 'adjusting';
+      } else if (rmsUv < 0.35 || stdDevUv < 0.25 || maxAbsUv > 100000 || clippedFraction > 0.3) {
+        state = 'poor';
+      } else if (
+        rmsUv > 20000 ||
+        maxStepUv > 6500 ||
+        stdDevUv > 320 ||
+        peakToPeakUv > 850 ||
+        meanStepUv > 300 ||
+        maxStepUv > 700
+      ) {
+        state = 'adjusting';
+      } else {
+        state = 'good';
+      }
+
+      this.channelQuality[channel] = state === 'adjusting' ? 'fair' : state;
+      return {
+        channel: { id: channel, label: labels[channel] },
+        state,
+        rmsUv,
+      };
+    });
+
+    const good = channels.filter(channel => channel.state === 'good');
+    const poor = channels.filter(channel => channel.state === 'poor');
+    const adjusting = channels.filter(channel => channel.state === 'adjusting');
+    const enoughGood = good.length >= 2 && good.length / channels.length >= 0.5;
+    const allFlat = channels.every(channel => {
+      const values = windows[channel.channel.id as keyof MuseChannelQuality];
+      const mean = values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+      const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / Math.max(1, values.length);
+      return Math.sqrt(variance) < 0.25;
+    });
+    const worn = enoughGood && !allFlat;
+    const excessiveArtifact = channels.some(channel => {
+      const values = windows[channel.channel.id as keyof MuseChannelQuality];
+      return values.slice(1).some((value, index) => Math.abs(value - values[index]) > 9750);
+    });
+    const acceptable = worn && poor.length / channels.length <= 0.5 && !excessiveArtifact;
+
+    if (acceptable) {
+      this.localFitStableSince ??= now;
+    } else {
+      this.localFitStableSince = null;
+    }
+    const ready = acceptable && this.localFitStableSince !== null && now - this.localFitStableSince >= 3500;
+    const blockers: string[] = [];
+    if (!worn) blockers.push(good.length ? `Need stable signal on more channels (${good.length}/${channels.length} good).` : 'Check headset fit.');
+    if (poor.length) blockers.push(`Check headset fit near ${poor[0].channel.label}.`);
+    if (adjusting.length) blockers.push(`Stabilize ${adjusting[0].channel.label}.`);
+    if (excessiveArtifact) blockers.push('Excessive noise or movement.');
+
+    this.serverFitState = {
+      state: ready ? 'ready' : acceptable ? 'good' : poor.length / channels.length > 0.5 ? 'poor' : 'adjusting',
+      ready,
+      worn,
+      blockers: ready ? [] : blockers,
+      channels,
+    };
+  }
+
+  private calculateBrowserBands(windows: Record<keyof MuseChannelQuality, number[]>): BandPowers {
+    const sampleRate = 256;
+    const sampleCount = Math.min(...Object.values(windows).map(values => values.length));
+    const signal = Array.from({ length: sampleCount }, (_, index) => (
+      windows.tp9[index] + windows.af7[index] + windows.af8[index] + windows.tp10[index]
+    ) / 4);
+    const mean = signal.reduce((sum, value) => sum + value, 0) / sampleCount;
+    const windowed = signal.map((value, index) => (
+      (value - mean) * 0.5 * (1 - Math.cos((2 * Math.PI * index) / Math.max(1, sampleCount - 1)))
+    ));
+    const binWidth = sampleRate / sampleCount;
+
+    const amplitude = (lowHz: number, highHz: number) => {
+      let power = 0;
+      let bins = 0;
+      for (let bin = 1; bin < sampleCount / 2; bin++) {
+        const frequency = bin * binWidth;
+        if (frequency < lowHz || frequency >= highHz) continue;
+        let real = 0;
+        let imaginary = 0;
+        for (let index = 0; index < sampleCount; index++) {
+          const angle = (2 * Math.PI * bin * index) / sampleCount;
+          real += windowed[index] * Math.cos(angle);
+          imaginary -= windowed[index] * Math.sin(angle);
+        }
+        power += real * real + imaginary * imaginary;
+        bins++;
+      }
+      return bins ? (2 * Math.sqrt(power / bins)) / sampleCount : 0;
+    };
+
+    return {
+      delta: amplitude(1, 4),
+      theta: amplitude(4, 8),
+      alpha: amplitude(8, 12),
+      smr: amplitude(12, 15),
+      beta: amplitude(15, 30),
+      gamma: amplitude(30, 45),
+    };
+  }
+
+  /** A frequency-domain AF7↔AF8 / TP9↔TP10 coherence estimate in 4–30 Hz. */
+  private calculateBrowserCoherence(windows: Record<keyof MuseChannelQuality, number[]>): number | null {
+    const sampleCount = Math.min(...Object.values(windows).map(values => values.length));
+    if (sampleCount < 64) return null;
+    const sampleRate = 256;
+    const coherenceForPair = (left: number[], right: number[]) => {
+      const leftMean = left.reduce((sum, value) => sum + value, 0) / sampleCount;
+      const rightMean = right.reduce((sum, value) => sum + value, 0) / sampleCount;
+      let crossReal = 0;
+      let crossImaginary = 0;
+      let leftPower = 0;
+      let rightPower = 0;
+      for (let bin = 1; bin < sampleCount / 2; bin++) {
+        const frequency = (bin * sampleRate) / sampleCount;
+        if (frequency < 4 || frequency > 30) continue;
+        let leftReal = 0;
+        let leftImaginary = 0;
+        let rightReal = 0;
+        let rightImaginary = 0;
+        for (let index = 0; index < sampleCount; index++) {
+          const weight = 0.5 * (1 - Math.cos((2 * Math.PI * index) / Math.max(1, sampleCount - 1)));
+          const angle = (2 * Math.PI * bin * index) / sampleCount;
+          const cosine = Math.cos(angle);
+          const sine = Math.sin(angle);
+          const leftValue = (left[index] - leftMean) * weight;
+          const rightValue = (right[index] - rightMean) * weight;
+          leftReal += leftValue * cosine;
+          leftImaginary -= leftValue * sine;
+          rightReal += rightValue * cosine;
+          rightImaginary -= rightValue * sine;
+        }
+        crossReal += leftReal * rightReal + leftImaginary * rightImaginary;
+        crossImaginary += leftImaginary * rightReal - leftReal * rightImaginary;
+        leftPower += leftReal * leftReal + leftImaginary * leftImaginary;
+        rightPower += rightReal * rightReal + rightImaginary * rightImaginary;
+      }
+      const denominator = leftPower * rightPower;
+      return denominator > 0
+        ? Math.max(0, Math.min(1, (crossReal * crossReal + crossImaginary * crossImaginary) / denominator))
+        : null;
+    };
+    const values = [
+      coherenceForPair(windows.af7.slice(-sampleCount), windows.af8.slice(-sampleCount)),
+      coherenceForPair(windows.tp9.slice(-sampleCount), windows.tp10.slice(-sampleCount)),
+    ].filter((value): value is number => value !== null);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  }
+
+  /**
+   * Populate the console's shared metric contract from browser-computed
+   * bands. These are deterministic band-power proxies, not BrainFlow's
+   * pretrained classifiers, and are marked `browser_dsp` on the data point.
+   */
+  private updateBrowserDerivedMetrics() {
+    const ratios = this.latestServerRatios;
+    const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+    const mapRatioToAxis = (value: number) => value > 0 && Number.isFinite(value)
+      ? clamp(Math.tanh(Math.log2(value) / 2.5), -1, 1)
+      : 0;
+    const valence = mapRatioToAxis(ratios.valence);
+    const arousal = mapRatioToAxis(ratios.arousal);
+    const confidenceFactor = this.serverFitState?.ready ? 1 : this.serverFitState?.state === 'good' ? 0.75 : 0.45;
+    const confidence = clamp(Math.hypot(valence, arousal) * confidenceFactor, 0, 1);
+    const mindfulness = clamp(50 + 25 * valence - 20 * arousal, 0, 100);
+    const restfulness = clamp(50 + 35 * valence - 30 * arousal, 0, 100);
+    const emotionLabel = Math.hypot(valence, arousal) < 0.18
+      ? 'Neutral'
+      : arousal > 0.35 && valence >= 0 ? 'Excited'
+      : arousal > 0.35 ? 'Tense'
+      : valence > 0.25 ? 'Relaxed'
+      : valence < -0.25 ? 'Bored'
+      : 'Neutral';
+
+    this.latestBrainFlowScores = {
+      mindfulnessScore: Math.round(mindfulness),
+      restfulnessScore: Math.round(restfulness),
+      valence,
+      arousal,
+      emotionLabel,
+      method: 'browser_dsp',
+    };
+    this.latestRawMetrics = {
+      mindfulness: Math.round(mindfulness),
+      restfulness: Math.round(restfulness),
+      valence,
+      arousal,
+      confidence,
+      ...(this.latestInterhemisphericCoherence === null ? {} : { ihc: this.latestInterhemisphericCoherence }),
+      ...Object.fromEntries(Object.entries(ratios).map(([name, value]) => [`ratio:${name}`, value])),
+    };
+    this.latestBaselineRelativeMetrics = {};
+  }
+
+  private calculateBrowserFeedback(bands: BandPowers, thetaBeta: number) {
+    let metric = thetaBeta;
+    let inZone = false;
+    let zoneScore = 0;
+    switch (this.currentProtocol) {
+      case 'theta-beta-ratio':
+        inZone = metric <= this.targetThreshold;
+        zoneScore = 1 - (metric - this.targetThreshold) / 1.5;
+        break;
+      case 'smr-enhancement':
+        metric = bands.smr;
+        inZone = metric >= this.targetThreshold;
+        zoneScore = (metric - this.targetThreshold + 1.5) / 3;
+        break;
+      case 'alpha-enhancement':
+      case 'individualized-upper-alpha':
+        metric = bands.alpha;
+        inZone = metric >= this.targetThreshold;
+        zoneScore = (metric - this.targetThreshold + 2) / 4;
+        break;
+      case 'alpha-theta-crossover':
+        metric = bands.theta / Math.max(1e-9, bands.alpha);
+        inZone = metric >= this.targetThreshold;
+        zoneScore = (metric - this.targetThreshold + 0.5) / 1.5;
+        break;
+      case 'beta-downtraining':
+        metric = bands.beta;
+        inZone = metric <= this.targetThreshold;
+        zoneScore = 1 - (metric - this.targetThreshold) / 5;
+        break;
+    }
+    return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)) };
+  }
+
+  /**
    * Send the latest sample window to brainflow_service for full fit assessment, quality scoring,
    * and band powers.
    * 
@@ -710,6 +1198,20 @@ export class EEGEngine {
     const tp10 = this.rawBuffers.tp10;
 
     const minLen = Math.min(tp9.length, af7.length, af8.length, tp10.length);
+    const diagnosticNow = Date.now();
+    if (diagnosticNow - this.lastAnalysisDiagnosticAt >= 1000) {
+      this.lastAnalysisDiagnosticAt = diagnosticNow;
+      console.info('[EEG analysis]', {
+        minLen,
+        fitSessionId: this.fitSessionId,
+        buffers: {
+          tp9: tp9.length,
+          af7: af7.length,
+          af8: af8.length,
+          tp10: tp10.length,
+        },
+      });
+    }
     // Interhemispheric coherence is a cross-spectral estimate. It needs at
     // least two 1-second segments, so keep a two-second window rather than
     // sending the one-second window used by the other band metrics.
@@ -732,9 +1234,16 @@ export class EEGEngine {
     this.lastBrainflowAnalysisTime = now;
 
     try {
-      const response = await brainflowService.analyzeFitWindow(this.fitSessionId, samples, 256);
+      const response = await brainflowService.analyzeFitWindow(
+        this.fitSessionId,
+        samples,
+        256,
+        this.currentProtocol,
+        this.targetThreshold,
+      );
 
       if (response) {
+        this.hostedAnalysisFailures = 0;
         // Update scores from server features
         if (response.features) {
           const f = response.features;
@@ -786,13 +1295,33 @@ export class EEGEngine {
             baselineReady: response.training.baselineReady ?? false,
           };
         }
-
+      } else {
+        this.handleHostedAnalysisFailure();
       }
     } catch {
-      // Server analysis failed — scores remain stale
+      this.handleHostedAnalysisFailure();
     } finally {
       this.isAnalyzingBrainflow = false;
     }
+  }
+
+  /** Stop presenting metrics as soon as hosted BrainFlow analysis is unavailable. */
+  private handleHostedAnalysisFailure() {
+    this.hostedAnalysisFailures++;
+    this.latestBrainFlowScores = null;
+    this.latestTrainingMetric = null;
+    this.latestServerBands = null;
+    this.latestServerBandAvailability = {};
+    this.latestServerRatios = {};
+    this.latestInterhemisphericCoherence = null;
+    this.latestTrainingFeedback = null;
+    if (this.hostedAnalysisFailures < 3 || !this.fitSessionId) return;
+
+    const unavailableSessionId = this.fitSessionId;
+    this.fitSessionId = null;
+    this.hostedAnalysisFailures = 0;
+    void brainflowService.stopFitSession(unavailableSessionId);
+    console.warn('Hosted BrainFlow analysis stopped responding; EEG metrics are unavailable.');
   }
 
   /**
@@ -835,6 +1364,11 @@ export class EEGEngine {
   private generateSample(dt: number): EEGDataPoint {
     let bands: BandPowers;
     let bandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
+    let bandRatios = this.latestServerRatios;
+    let trainingFeedback = this.latestTrainingFeedback;
+    let brainFlowScores = this.latestBrainFlowScores;
+    let trainingMetric = this.latestTrainingMetric;
+    let sampleInterhemisphericCoherence = this.latestInterhemisphericCoherence;
     let rawSignal = 0;
 
     if (this.isHardwareConnected) {
@@ -902,15 +1436,6 @@ export class EEGEngine {
         this.userFocus += (targetFocus - this.userFocus) * (dt * 1.8);
         this.userCalm += (targetCalm - this.userCalm) * (dt * 1.8);
 
-        this.latestBrainFlowScores = {
-          mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
-          restfulnessScore: Math.round(this.userCalm),
-          valence: (this.userCalm - 50) / 50,
-          arousal: (this.userFocus - 50) / 50,
-          emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
-          method: 'brainflow_welch_psd',
-        };
-        this.latestTrainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
       }
 
       const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
@@ -944,6 +1469,39 @@ export class EEGEngine {
         delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true,
       };
 
+      // Demo metrics are deliberately sample-local. Never write them into the
+      // shared fields consumed by a connected headset, where they could remain
+      // visible while the first real analysis window is being collected.
+      const ratio = (numerator: number, denominator: number) => numerator / Math.max(1e-9, denominator);
+      const thetaBeta = ratio(bands.theta, bands.beta);
+      bandRatios = {
+        thetaBeta,
+        betaTheta: ratio(bands.beta, bands.theta),
+        alphaTheta: ratio(bands.alpha, bands.theta),
+        thetaAlpha: ratio(bands.theta, bands.alpha),
+        smrTheta: ratio(bands.smr, bands.theta),
+        thetaAlphaBeta: ratio(bands.theta, bands.alpha + bands.beta),
+        alphaBeta: ratio(bands.alpha, bands.beta),
+        betaAlpha: ratio(bands.beta, bands.alpha),
+        arousal: ratio(bands.beta + bands.gamma, bands.alpha + bands.theta),
+        valence: ratio(bands.alpha, bands.theta + bands.beta),
+        betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
+      };
+      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
+      brainFlowScores = {
+        mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
+        restfulnessScore: Math.round(this.userCalm),
+        valence: (this.userCalm - 50) / 50,
+        arousal: (this.userFocus - 50) / 50,
+        emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
+        method: 'brainflow_welch_psd',
+      };
+      // The simulator has no electrode spectra to correlate, but it still
+      // needs to exercise the normal coherence field consumed by training
+      // experiences. Keep this deterministic and physiologically bounded.
+      sampleInterhemisphericCoherence = Math.max(0, Math.min(1, .25 + calmNorm * .5 + focusNorm * .2));
+      trainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
+
       rawSignal =
         slowDrift +
         Math.sin(this.phaseAngle * 2) * (delta * 0.4) +
@@ -958,12 +1516,11 @@ export class EEGEngine {
       rawSignal = 0;
     }
 
-    const feedback = this.latestTrainingFeedback;
-    const thetaBetaRatioAvailable = feedback?.ratio != null;
-    const thetaBetaRatio = feedback?.ratio ?? 0;
-    const inZoneAvailable = feedback?.inZone != null;
-    const inZone = feedback?.inZone ?? false;
-    const zoneScore = feedback?.zoneScore ?? 0;
+    const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
+    const thetaBetaRatio = trainingFeedback?.ratio ?? 0;
+    const inZoneAvailable = trainingFeedback?.inZone != null;
+    const inZone = trainingFeedback?.inZone ?? false;
+    const zoneScore = trainingFeedback?.zoneScore ?? 0;
     
     /*switch (this.currentProtocol) {
       case 'theta-beta-ratio':
@@ -1019,9 +1576,10 @@ export class EEGEngine {
         break;
     }*/
 
-    // This value comes from the server's cross-spectral AF7↔AF8 / TP9↔TP10
-    // calculation. Do not replace unavailable coherence with a band-power proxy.
-    const interhemisphericCoherence = this.latestInterhemisphericCoherence;
+    // Hardware values come from the server's cross-spectral AF7↔AF8 /
+    // TP9↔TP10 calculation. Simulator values above exist only to exercise the
+    // same public data field; hardware never falls back to a power proxy.
+    const interhemisphericCoherence = sampleInterhemisphericCoherence;
     const coherenceAvailable = interhemisphericCoherence !== null;
     const coherence = coherenceAvailable
       ? Math.round(interhemisphericCoherence * 100)
@@ -1032,7 +1590,7 @@ export class EEGEngine {
     let overallQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected' = 'excellent';
     if (!this.isHardwareConnected && !this.isDemoMode) {
       overallQuality = 'disconnected';
-    } else if (this.isDemoMode) {
+    } else if (!this.isHardwareConnected && this.isDemoMode) {
       overallQuality = 'good';
     } else if (this.serverFitState) {
       // Use server's overall assessment
@@ -1060,7 +1618,7 @@ export class EEGEngine {
       rawSignal: Math.round(rawSignal * 10) / 10,
       bands,
       bandAvailability,
-      bandRatios: { ...this.latestServerRatios },
+      bandRatios: { ...bandRatios },
       calibrationStatus: this.latestMetricCalibration.status,
       calibrationProgress: this.latestMetricCalibration.progress,
       calibrationRequired: this.latestMetricCalibration.required,
@@ -1075,13 +1633,17 @@ export class EEGEngine {
       zoneScore,
       signalQuality: overallQuality,
       channelQuality: this.channelQuality,
-      batteryLevel: this.batteryLevel,
+      batteryLevel: this.isDemoMode && !this.isHardwareConnected
+        ? 92
+        : this.batteryLevel ?? undefined,
       artifacts: {
         blink: this.isHardwareConnected ? (this.rawBuffers.af7.slice(-10).some(v => Math.abs(v) > 120)) : (Math.random() < 0.01),
-        clench: this.jawClenched || (this.isHardwareConnected && (this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200))),
+        clench: this.isHardwareConnected
+          ? this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200)
+          : this.jawClenched,
       },
-      brainflowScores: this.latestBrainFlowScores || undefined,
-      trainingMetric: this.latestTrainingMetric || undefined,
+      brainflowScores: brainFlowScores || undefined,
+      trainingMetric: trainingMetric || undefined,
       isCalibrating: this.isCalibrating,
     };
   }

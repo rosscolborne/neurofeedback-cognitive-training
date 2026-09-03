@@ -15,8 +15,8 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
   const [pairError, setPairError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Start the engine tick loop so dispatchServerAnalysis fires
-    // and brainflow_service can assess channel quality
+    // Start the engine tick loop so the active provider (browser Bluetooth
+    // or an explicitly selected backend) can assess channel quality.
     eegEngine.start(100);
 
     const unsubscribe = eegEngine.subscribe((_data: EEGDataPoint) => {
@@ -33,7 +33,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
   const handlePair = async () => {
     setIsPairing(true);
     setPairError(null);
-    const res = await eegEngine.connectMuseAthenaBrainflow();
+    const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     if (!res.success) {
       setPairError(res.error || 'Muse Athena connection failed');
@@ -64,7 +64,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
     }
   };
 
-  // Server-driven readiness: use the fit session's `ready` flag
+  // Readiness comes from the active fit analyzer.
   const isReady = fitState?.ready === true || eegEngine.isDemoMode;
 
   return (

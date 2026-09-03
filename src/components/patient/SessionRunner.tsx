@@ -3,6 +3,7 @@ import { ClientProfile, EEGDataPoint, ExperienceType, SessionPhase, SessionRecor
 import { eegEngine } from '../../services/eegEngine';
 import { AdaptiveDifficultyEngine, AdaptiveAdjustmentLog } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
+import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
 import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
 import { BreathWeaveCanvas } from '../experiences/BreathWeaveCanvas';
@@ -11,6 +12,7 @@ import { RhythmLockGame } from '../experiences/RhythmLockGame';
 import { MediaModePlayer } from '../experiences/MediaModePlayer';
 import { SoundscapePlayer } from '../experiences/SoundscapePlayer';
 import { MandalaBreathing } from '../experiences/MandalaBreathing';
+import { EegMandalaCanvas } from '../experiences/EegMandalaCanvas';
 import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
 import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
@@ -66,6 +68,12 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
     benefit: 'Facilitates transition into flow states and deep mindfulness practices.',
     instructions: 'Focus on the center of the mandala. Let your breath guide the geometry. The pattern completes as you achieve inner stillness.',
   },
+  'eeg-mandala': {
+    title: 'Generative Mandella',
+    mechanism: 'Maps EEG state to ornamental character while recent target-zone performance controls drawing precision.',
+    benefit: 'Creates an enduring visual history in which regulated periods produce cleaner, richer radial ornament.',
+    instructions: 'Watch the mandala grow from the center. Settle into your target state; each new curve records the quality of that moment.',
+  },
   'immersive-3d': {
     title: 'Generative XR',
     mechanism: 'Translates real-time coherence metrics into dynamic 3D spatial particle systems.',
@@ -86,6 +94,15 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
   }
 };
 
+const DEMO_STATES = [
+  { id: 'focus', label: 'Focus' },
+  { id: 'drift', label: 'Drift' },
+  { id: 'recovery', label: 'Recovery' },
+  { id: 'calm', label: 'Calm' },
+] as const;
+
+type DemoState = (typeof DEMO_STATES)[number]['id'];
+const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
 interface SessionRunnerProps {
   client: ClientProfile;
   selectedExperience: ExperienceType;
@@ -108,6 +125,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
+  const [demoState, setDemoState] = useState<DemoState | null>(
+    eegEngine.demoState === 'auto' ? null : eegEngine.demoState,
+  );
 
   // Timers (in seconds)
   // Standard duration: 25 mins total (60s calib, 120s warmup, 1140s training, 120s cooldown, 60s debrief)
@@ -131,11 +151,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     trainingCount: 0,
   });
   const eegDataRef = useRef<EEGDataPoint | null>(null);
+  const inZoneObservationsRef = useRef<InZoneObservation[]>([]);
+  const [recentInZonePercent, setRecentInZonePercent] = useState<number | null>(null);
   const isPausedRef = useRef(isPaused);
   const phaseRef = useRef(phase);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
+    if (isPaused) {
+      // A pause is not measured training time. Start a fresh trailing window
+      // on resume so the preceding state cannot span the pause.
+      inZoneObservationsRef.current = [];
+      setRecentInZonePercent(null);
+    }
   }, [isPaused]);
 
   useEffect(() => {
@@ -203,6 +231,25 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegDataRef.current = data;
       setEegData(data);
 
+      // Recent in-zone is a live trailing metric. Calibration observations are
+      // valid EEG feedback too, so begin its window as soon as fit is accepted
+      // rather than holding the display and experience feedback for one minute.
+      if (!isPausedRef.current && isFitAccepted) {
+        const observations = inZoneObservationsRef.current;
+        observations.push({
+          timestamp: data.timestamp,
+          inZone: data.inZone,
+          available: data.inZoneAvailable,
+        });
+        const oldestTimestamp = data.timestamp - (RECENT_IN_ZONE_WINDOW_SECONDS + 5) * 1_000;
+        while (observations.length > 1 && observations[1].timestamp < oldestTimestamp) {
+          observations.shift();
+        }
+        setRecentInZonePercent(
+          calculateRecentInZonePercent(observations, data.timestamp, RECENT_IN_ZONE_WINDOW_SECONDS).percent,
+        );
+      }
+
       // The training score owns its own 24-window baseline. The app leaves
       // the other derived metrics raw unless a future view explicitly opts a
       // metric into the service's per-metric calibration.
@@ -244,7 +291,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         }
 
         // Feed adaptive difficulty engine during Core Training
-        if (phaseRef.current === 'training') {
+        if (phaseRef.current === 'training' && data.inZoneAvailable) {
           const result = adaptiveEngineRef.current.addSample(data.inZone);
           if (result.adjusted && result.log) {
             eegEngine.setThreshold(result.log.newThreshold);
@@ -338,7 +385,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const handleConnectHardware = async () => {
     setIsPairing(true);
-    const res = await eegEngine.connectMuseAthenaBrainflow();
+    const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     forceUpdate({});
     if (res.success) {
@@ -349,6 +396,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const handleStartDemoMode = () => {
     eegEngine.isDemoMode = true;
     eegEngine.setSimulatedState('auto');
+    setDemoState(null);
     setIsFitAccepted(true);
     setIsSessionStarted(true);
     setPhase('training');
@@ -680,6 +728,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           {selectedExperience === 'mandala' && (
             <MandalaBreathing eegData={eegData} isPaused={isPaused} />
           )}
+          {selectedExperience === 'eeg-mandala' && (
+            <EegMandalaCanvas
+              eegData={eegData}
+              recentInZonePercent={recentInZonePercent}
+              isPaused={isPaused}
+            />
+          )}
           {selectedExperience === 'immersive-3d' && (
             <GenerativeWebXRCanvas eegData={eegData} />
           )}
@@ -690,6 +745,46 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <NarrativeTherapyMode eegData={eegData} />
           )}
         </div>
+
+        {eegEngine.isDemoMode && (
+          <section
+            aria-label="Demo state controls"
+            className="card-patient-recessed"
+            style={{ padding: '8px 10px', flexShrink: 0 }}
+          >
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '6px' }}>
+              Demo state
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '6px' }}>
+              {DEMO_STATES.map((state) => {
+                const isActive = demoState === state.id;
+                return (
+                  <button
+                    key={state.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      eegEngine.setSimulatedState(state.id);
+                      setDemoState(state.id);
+                    }}
+                    style={{
+                      border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      background: isActive ? 'var(--brand-primary)' : 'var(--surface-patient-card)',
+                      color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
+                      padding: '7px 4px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {state.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Live Monospace EEG Telemetry Panel */}
         <div
@@ -724,9 +819,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone %</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone ({RECENT_IN_ZONE_WINDOW_SECONDS}s)</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {inZonePercent != null ? `${inZonePercent}%` : '--'}
+              {recentInZonePercent != null ? `${recentInZonePercent}%` : '--'}
             </div>
           </div>
         </div>

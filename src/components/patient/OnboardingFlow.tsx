@@ -22,14 +22,14 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
   const handlePairHeadband = async () => {
     setIsPairing(true);
     setPairingError(null);
-    const res = await eegEngine.connectMuseAthenaBrainflow();
+    const res = await eegEngine.connectMuseBluetooth();
     setIsPairing(false);
     if (res.success) {
       setIsPaired(true);
       setPairedDeviceName(res.deviceName || 'Muse Headband (4-Ch Active)');
       setShowFitModal(true);
     } else {
-      setPairingError(res.error || 'Could not connect to Muse Athena through BrainFlow. Please try again.');
+      setPairingError(res.error || 'Could not connect to Muse Athena over Bluetooth. Please try again.');
     }
   };
 

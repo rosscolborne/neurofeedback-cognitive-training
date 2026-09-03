@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import time
 from typing import Literal
 
@@ -52,6 +51,11 @@ class StartSessionResponse(BaseModel):
     session_id: str = Field(alias="sessionId")
     state: Literal["connected"]
     device_info: dict = Field(alias="deviceInfo")
+
+
+class ProtocolConfigurationRequest(BaseModel):
+    protocol: str
+    threshold: float
 
 
 class AnalyzeWindowRequest(BaseModel):
@@ -119,23 +123,26 @@ app = FastAPI(title="Neurasticity BrainFlow Service")
 store = SessionStore()
 analysis_session_store = AnalysisSessionStore()
 
-# Additional origins (comma-separated) that may call this service, on top of
-# the bundled app's own localhost dev ports. Set this so a different
-# front-end -- served from another host/port -- can reach the API, e.g.:
-#   EEG_BRAINFLOW_CORS_ORIGINS=https://my-other-frontend.example.com
-_extra_cors_origins = [
-    origin.strip()
-    for origin in os.environ.get("EEG_BRAINFLOW_CORS_ORIGINS", "").split(",")
-    if origin.strip()
-]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # This API uses no browser cookies or authorization headers, so credentials
+    # are unnecessary. Leaving them disabled makes the public Render API usable
+    # from the Vercel frontend with a wildcard origin.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    """A human-friendly landing response for the public Render service URL."""
+    return {
+        "service": "Neurasticity BrainFlow Service",
+        "status": "ok",
+        "health": "/health",
+    }
 
 
 @app.get("/health")
@@ -425,6 +432,17 @@ async def stream_session(session_id: str) -> StreamingResponse:
 def stop_session(session_id: str) -> dict[str, str]:
     store.stop(session_id)
     return {"state": "disconnected"}
+
+
+@app.put("/sessions/{session_id}/protocol")
+def update_session_protocol(
+    session_id: str, request: ProtocolConfigurationRequest,
+) -> dict[str, float | str]:
+    """Apply Debug Console protocol changes to a running BrainFlow session."""
+    session = _get_session_or_404(session_id)
+    session.protocol = request.protocol
+    session.threshold = request.threshold
+    return {"protocol": session.protocol, "threshold": session.threshold}
 
 
 @app.post("/sessions/{session_id}/metrics/calibration")

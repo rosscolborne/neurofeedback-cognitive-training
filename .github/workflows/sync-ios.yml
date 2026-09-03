@@ -1,0 +1,73 @@
+name: Sync iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-ios:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          VITE_BRAINFLOW_SERVICE_URL=https://neurasticity-brainflow.onrender.com
+          VITE_FIREBASE_API_KEY=AIzaSyC1dgTlWEo6ZRdz1XGQqzPN0FNFDGyd1rw
+          VITE_FIREBASE_AUTH_DOMAIN=brainwell-327dc.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID=brainwell-327dc
+          VITE_FIREBASE_STORAGE_BUCKET=brainwell-327dc.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID=814671644395
+          VITE_FIREBASE_APP_ID=1:814671644395:ios:77b594b07593c2eaa1a0ae
+          EOF
+
+      - name: Run sync:ios
+        run: npm run sync:ios
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git add -A
+          git commit -m "chore: auto-sync iOS build"
+          git push origin main
+
+      - name: Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sync-output
+          path: ios/
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "❌ iOS sync failed"
+          exit 1
