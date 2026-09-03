@@ -100,6 +100,7 @@ interface CachedGradients {
   mountainBack: CanvasGradient;
   mountainMid: CanvasGradient;
   mountainFront: CanvasGradient;
+  craft: CanvasGradient;
 }
 
 export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
@@ -241,12 +242,18 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
     mountainFront.addColorStop(0, theme.mountainFront);
     mountainFront.addColorStop(1, '#000000');
 
+    const craft = ctx.createLinearGradient(-26, -22, 38, 22);
+    craft.addColorStop(0, theme.craftPalette[0]);
+    craft.addColorStop(0.5, theme.craftPalette[1]);
+    craft.addColorStop(1, theme.craftPalette[2]);
+
     cachedGradientsRef.current = {
       sky,
       river,
       mountainBack,
       mountainMid,
       mountainFront,
+      craft,
     };
   };
 
@@ -575,23 +582,56 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
         ctx.restore();
       }
 
-      // Glider (Aerodynamic Sci-Fi Craft with banking roll)
+      // Wingtip Vapor Trails (Rendered in screen space)
       const gliderScreenX = width * 0.5;
-      ctx.save();
-      ctx.translate(gliderScreenX, gliderScreenY);
-      ctx.rotate(s.gliderPitch * 0.35 + s.gliderRoll * 0.5);
+      const craftAngle = s.gliderPitch * 0.35 + s.gliderRoll * 0.5;
+      const cosA = Math.cos(craftAngle);
+      const sinA = Math.sin(craftAngle);
+      const portX = gliderScreenX + (-26 * cosA - (-22) * sinA);
+      const portY = gliderScreenY + (-26 * sinA + (-22) * cosA);
+      const stbdX = gliderScreenX + (-26 * cosA - 22 * sinA);
+      const stbdY = gliderScreenY + (-26 * sinA + 22 * cosA);
 
-      // Wingtip Vapor Trails
       if (!isPaused) {
         vaporTrailsRef.current.unshift({
-          lx: gliderScreenX - 28,
-          ly: gliderScreenY - 18,
-          rx: gliderScreenX + 28,
-          ry: gliderScreenY - 18,
-          alpha: s.hyperDriftActive ? 0.9 : 0.45,
+          lx: portX,
+          ly: portY,
+          rx: stbdX,
+          ry: stbdY,
+          alpha: s.hyperDriftActive ? 0.9 : (s.multiplier >= 2 ? 0.6 : 0.3),
         });
-        if (vaporTrailsRef.current.length > 18) vaporTrailsRef.current.pop();
+        if (vaporTrailsRef.current.length > 20) vaporTrailsRef.current.pop();
       }
+
+      // Draw glowing vapor trails connecting previous wing positions
+      if (vaporTrailsRef.current.length > 1) {
+        ctx.save();
+        const trailColor = s.hyperDriftActive ? '#FF007F' : activeTheme.ringColor;
+        ctx.strokeStyle = trailColor;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ['l', 'r'].forEach((side) => {
+          ctx.beginPath();
+          for (let i = 0; i < vaporTrailsRef.current.length; i++) {
+            const p = vaporTrailsRef.current[i];
+            const px = side === 'l' ? p.lx : p.rx;
+            const py = (side === 'l' ? p.ly : p.ry) + i * 1.2;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          const baseAlpha = s.hyperDriftActive ? 0.8 : (s.multiplier >= 2 ? 0.5 : 0.22);
+          ctx.globalAlpha = baseAlpha;
+          ctx.lineWidth = s.hyperDriftActive ? 3.5 : (s.multiplier >= 2 ? 2.5 : 1.2);
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+
+      // Glider (Aerodynamic Sci-Fi Craft with banking roll)
+      ctx.save();
+      ctx.translate(gliderScreenX, gliderScreenY);
+      ctx.rotate(craftAngle);
 
       // Glider Fuselage & Wings
       ctx.beginPath();
@@ -601,12 +641,8 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       ctx.lineTo(-26, 22);    // Starboard wingtip
       ctx.closePath();
 
-      // Two-tone gradient lighting
-      const craftGrad = ctx.createLinearGradient(-26, -22, 38, 22);
-      craftGrad.addColorStop(0, activeTheme.craftPalette[0]);
-      craftGrad.addColorStop(0.5, activeTheme.craftPalette[1]);
-      craftGrad.addColorStop(1, activeTheme.craftPalette[2]);
-      ctx.fillStyle = craftGrad;
+      // Two-tone gradient lighting from cached gradient
+      ctx.fillStyle = gradients ? gradients.craft : activeTheme.craftPalette[0];
       ctx.fill();
 
       // Wing facet lines
