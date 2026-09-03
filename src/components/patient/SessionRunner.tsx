@@ -646,7 +646,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <main style={{ flex: 1, minHeight: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
         <div style={{ flex: 1, minHeight: 0, borderRadius: 'var(--radius-lg)', overflow: 'hidden', position: 'relative' }}>
           {selectedExperience === 'skyline-drift' && (
-            <SkylineDriftCanvas eegData={eegData} isPaused={isPaused} />
+            <SkylineDriftCanvas
+              eegData={eegData}
+              assignedProtocol={client.assignedProtocol}
+              recentInZonePercent={recentInZonePercent}
+              isPaused={isPaused}
+            />
           )}
           {selectedExperience === 'tidal-garden' && (
             <TidalGardenCanvas 
