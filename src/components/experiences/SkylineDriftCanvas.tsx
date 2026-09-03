@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import type { EEGDataPoint, ProtocolType } from '../../types';
 import { audioEngine } from '../../services/audioEngine';
-import { Compass, Target, Zap, Shield } from 'lucide-react';
+import { Compass, Target, Zap, Shield, Wind, Sparkles } from 'lucide-react';
 import {
   computeTargetElevation,
   isAutopilotActive,
@@ -10,12 +10,20 @@ import {
   processRingPass,
   processRingMiss,
   processHyperDriftExpiry,
+  computeSkyAtmosphere,
+  spawnNextLandmark,
+  updateCompanionDynamics,
+  isWaterSkimming,
+  processThermalUpdraft,
 } from './skyline/skylineGameLogic';
 import type {
   BiomeTheme,
   SkylineRing,
   SkylineParticle,
   SkylineGameState,
+  SkylineLandmark,
+  SpiritCompanion,
+  WaterRipple,
 } from './skyline/skylineTypes';
 
 export interface SkylineDriftProps {
@@ -28,13 +36,13 @@ export interface SkylineDriftProps {
 
 const BIOME_THEMES: BiomeTheme[] = [
   {
-    id: 'Alpine Meadows',
-    label: 'Alpine Meadows',
+    id: 'Alpine Odyssey',
+    label: 'Alpine Odyssey',
     skyTop: '#D4B2A7',
     skyMid: '#F5E4D7',
     skyBot: '#FAF7F2',
     mountain: '#A88D7F',
-    river: 'rgba(232, 150, 122, 0.4)',
+    river: 'rgba(232, 150, 122, 0.45)',
     ringColor: '#E8967A',
     craftPalette: ['#FFFFFF', '#F5D4C7', '#E8967A'],
     particleColor: 'rgba(255, 255, 255, 0.85)',
@@ -63,30 +71,13 @@ const BIOME_THEMES: BiomeTheme[] = [
     craftPalette: ['#FFFFFF', '#C5E8F7', '#68D8D6'],
     particleColor: 'rgba(255, 255, 255, 0.85)',
   },
-  {
-    id: 'Cyber Neon',
-    label: 'Cyber Synthwave',
-    skyTop: '#2C1B4D',
-    skyMid: '#7B3B8C',
-    skyBot: '#1A0B2E',
-    mountain: '#0D0221',
-    river: 'rgba(0, 240, 255, 0.3)',
-    ringColor: '#00FFFF',
-    craftPalette: ['#00FFFF', '#FF007F', '#7B3B8C'],
-    particleColor: '#FF007F',
-  },
 ];
-
-interface CachedGradients {
-  sky: CanvasGradient;
-  craft: CanvasGradient;
-}
 
 export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
   eegData,
   assignedProtocol = 'alpha-enhancement', // Default to relaxation protocol
   recentInZonePercent,
-  biome: initialBiome = 'Alpine Meadows',
+  biome: initialBiome = 'Alpine Odyssey',
   isPaused = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -100,6 +91,8 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
     ringsCleared: number;
     autopilotActive: boolean;
     hyperDriftActive: boolean;
+    distanceTraveled: number;
+    atmosphereName: string;
   }>({
     score: 0,
     streak: 0,
@@ -107,6 +100,8 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
     ringsCleared: 0,
     autopilotActive: false,
     hyperDriftActive: false,
+    distanceTraveled: 0,
+    atmosphereName: 'Alpine Dawn',
   });
 
   // Game state & simulation refs
@@ -126,14 +121,30 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
     speed: 1.0,
     shockwaveRadius: null,
     autopilotActive: false,
+    distanceTraveled: 0,
+    timeOfDay: 0.05, // Starts at gentle morning dawn
+    isSkimmingWater: false,
   });
 
   const worldOffsetRef = useRef(0);
   const ringsRef = useRef<SkylineRing[]>([]);
   const particlesRef = useRef<SkylineParticle[]>([]);
-  const cachedGradientsRef = useRef<CachedGradients | null>(null);
+  const landmarksRef = useRef<SkylineLandmark[]>([]);
+  const ripplesRef = useRef<WaterRipple[]>([]);
+  const companionRef = useRef<SpiritCompanion>({
+    active: false,
+    x: 100,
+    y: 0.45,
+    z: 180,
+    targetX: 100,
+    targetY: 0.45,
+    wingPhase: 0,
+    alpha: 0,
+    leadDistance: 45,
+  });
+
   const eegDataRef = useRef<EEGDataPoint | null>(null);
-  eegDataRef.current = eegData; // Sync on every render — no useEffect dependency needed
+  eegDataRef.current = eegData;
   const lastHudUpdateRef = useRef(0);
 
   const activeTheme = useMemo(
@@ -141,7 +152,7 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
     [activeBiome]
   );
 
-  // Initialize game objects (rings, atmospheric cloud motes)
+  // Initialize rings, particles, and clean up audio on unmount
   useEffect(() => {
     // 6 floating altitude rings in depth
     ringsRef.current = Array.from({ length: 6 }, (_, i) => ({
@@ -151,9 +162,10 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       radius: 42,
       passed: false,
       pulsePhase: Math.random() * Math.PI * 2,
+      isUpdraft: i % 4 === 0, // Occasional thermal updraft ring
     }));
 
-    // 50 ambient 3D particles (peaceful floating cloud motes)
+    // 50 ambient 3D particles (peaceful floating cloud & star motes)
     particlesRef.current = Array.from({ length: 50 }, () => ({
       x: (Math.random() - 0.5) * 850,
       y: (Math.random() - 0.5) * 420,
@@ -171,26 +183,9 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
 
     return () => {
       audioEngine.stopFlightWind();
+      audioEngine.stopAmbientFlowLayers();
     };
   }, []);
-
-  // Pre-generate and cache gradients on resize / theme change
-  const updateCachedGradients = (ctx: CanvasRenderingContext2D, width: number, height: number, theme: BiomeTheme) => {
-    const sky = ctx.createLinearGradient(0, 0, 0, height);
-    sky.addColorStop(0, theme.skyTop);
-    sky.addColorStop(0.5, theme.skyMid);
-    sky.addColorStop(1, theme.skyBot);
-
-    const craft = ctx.createLinearGradient(-24, -19, 34, 19);
-    craft.addColorStop(0, theme.craftPalette[0]);
-    craft.addColorStop(0.5, theme.craftPalette[1]);
-    craft.addColorStop(1, theme.craftPalette[2]);
-
-    cachedGradientsRef.current = {
-      sky,
-      craft,
-    };
-  };
 
   // Main Canvas Render Loop
   useEffect(() => {
@@ -205,12 +200,11 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
     const handleResize = () => {
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2.5); // Cap DPR at 2.5 for mobile perf
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5); // Cap DPR for mobile perf
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
-      updateCachedGradients(ctx, rect.width, rect.height, activeTheme);
     };
 
     handleResize();
@@ -223,21 +217,17 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       const rect = canvas.getBoundingClientRect();
       const width = rect.width;
       const height = rect.height;
-
-      if (!cachedGradientsRef.current) {
-        updateCachedGradients(ctx, width, height, activeTheme);
-      }
+      const fov = 350;
 
       const s = stateRef.current;
 
       // 1. NEUROFEEDBACK DRIVEN DYNAMICS
       const currentEEG = eegDataRef.current;
+      const rawZoneScore = currentEEG ? (currentEEG.zoneScore ?? (currentEEG.inZone ? 1.0 : 0.45)) : 0.5;
+      const inZone = currentEEG ? (currentEEG.inZone ?? rawZoneScore >= 0.6) : false;
+
       if (currentEEG) {
-        const rawZoneScore = currentEEG.zoneScore ?? (currentEEG.inZone ? 1.0 : 0.45);
-        const inZone = currentEEG.inZone ?? rawZoneScore >= 0.6;
-
         s.autopilotActive = isAutopilotActive(currentEEG);
-
         const targetElevation = computeTargetElevation(rawZoneScore);
 
         if (s.autopilotActive) {
@@ -249,18 +239,38 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
 
         const targetSpeed = computeBaseSpeed(rawZoneScore, s.hyperDriftActive);
         s.speed += (targetSpeed - s.speed) * 0.05;
-
-        if (!isPaused) {
-          audioEngine.updateFlightWind(s.speed, inZone);
-        }
       }
 
       if (!isPaused) {
         s.gliderY += (s.gliderTargetY - s.gliderY) * 0.05;
         s.gliderRoll = Math.sin(time * 0.002) * 0.12; // Gentle aerodynamic roll
         worldOffsetRef.current += dt * 75 * s.speed;
+        s.distanceTraveled += dt * 36 * s.speed;
 
-        // Hyper-Drift timer countdown
+        // Continuous Day/Night Odyssey: complete cycle every ~4.5 minutes
+        s.timeOfDay = (s.timeOfDay + dt * 0.0037) % 1.0;
+
+        // Audio modulation
+        audioEngine.updateFlightWind(s.speed, inZone);
+        audioEngine.updateAmbientFlowLayers(s.multiplier, inZone);
+
+        // Water skimming detection
+        s.isSkimmingWater = isWaterSkimming(s.gliderY);
+        audioEngine.updateWaterSkimSound(s.isSkimmingWater);
+
+        // Spawn ripples when skimming the river
+        if (s.isSkimmingWater && Math.random() < 0.35) {
+          ripplesRef.current.push({
+            x: width * 0.5 + (Math.random() - 0.5) * 40,
+            y: height * 0.90,
+            z: 90,
+            radius: 4,
+            maxRadius: 36,
+            alpha: 0.65,
+          });
+        }
+
+        // Hyper-Drift countdown
         if (s.hyperDriftActive) {
           s.hyperDriftTimeLeft -= dt;
           if (s.hyperDriftTimeLeft <= 0) {
@@ -270,22 +280,69 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
             s.multiplier = expiry.newMultiplier;
           }
         }
+
+        // Procedural Landmark Milestones (every ~600m)
+        const nextLandmark = spawnNextLandmark(s.distanceTraveled);
+        if (nextLandmark && !landmarksRef.current.some(l => l.kind === nextLandmark && l.z > 800)) {
+          landmarksRef.current.push({
+            kind: nextLandmark,
+            x: 0,
+            y: nextLandmark === 'arch' ? 0.72 : nextLandmark === 'waterfall' ? 0.62 : 0.78,
+            z: 1650,
+            scale: 1.0,
+            passed: false,
+            rotation: 0,
+          });
+        }
+
+        // Companion crane dynamics (joins in flow or when multiplier >= 2)
+        const gliderScreenCoord = { x: width * 0.5, y: height * (0.2 + s.gliderY * 0.55) };
+        companionRef.current = updateCompanionDynamics(
+          companionRef.current,
+          gliderScreenCoord,
+          inZone || s.multiplier >= 2,
+          dt
+        );
       }
 
       // ==========================================
-      // 2. RENDERING PIPELINE (Original Minimalist Aesthetic)
+      // 2. ATMOSPHERIC ODYSSEY RENDERING
       // ==========================================
+      const atmo = computeSkyAtmosphere(s.timeOfDay);
 
-      // Background Sky Gradient (Cached)
-      const gradients = cachedGradientsRef.current;
-      ctx.fillStyle = gradients ? gradients.sky : activeTheme.skyMid;
+      // Smooth Sky Gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+      skyGrad.addColorStop(0, atmo.skyTop);
+      skyGrad.addColorStop(0.55, atmo.skyMid);
+      skyGrad.addColorStop(1, atmo.skyBot);
+      ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Distant Procedural Watercolor Mountains (3 Parallax Layers with subtle alpha)
+      // Celestial Orb (Sun or Moon)
+      const sunX = width * atmo.sunPos.x;
+      const sunY = height * atmo.sunPos.y;
+      ctx.save();
+      const sunGrad = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, 55);
+      sunGrad.addColorStop(0, atmo.isNight ? 'rgba(235, 235, 255, 0.95)' : 'rgba(255, 250, 240, 0.95)');
+      sunGrad.addColorStop(0.35, atmo.isNight ? 'rgba(180, 195, 255, 0.35)' : 'rgba(255, 220, 180, 0.35)');
+      sunGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = sunGrad;
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 55, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sharp celestial disc
+      ctx.fillStyle = atmo.isNight ? '#F0F3FF' : '#FFFDF5';
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, atmo.isNight ? 12 : 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Distant Procedural Watercolor Mountains (3 Parallax Layers)
       const layers = [
-        { speed: 0.1, heightScale: 0.45, yBase: height * 0.55, freq: 0.003, alpha: 0.4 },
-        { speed: 0.25, heightScale: 0.35, yBase: height * 0.68, freq: 0.006, alpha: 0.65 },
-        { speed: 0.5, heightScale: 0.25, yBase: height * 0.82, freq: 0.01, alpha: 0.95 },
+        { speed: 0.10, heightScale: 0.45, yBase: height * 0.55, freq: 0.003, color: atmo.mountainFar, alpha: 0.45 },
+        { speed: 0.25, heightScale: 0.35, yBase: height * 0.68, freq: 0.006, color: atmo.mountainMid, alpha: 0.70 },
+        { speed: 0.50, heightScale: 0.25, yBase: height * 0.82, freq: 0.010, color: atmo.mountainNear, alpha: 0.95 },
       ];
 
       layers.forEach((layer) => {
@@ -301,22 +358,103 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
           ctx.lineTo(x, y);
         }
         ctx.lineTo(width, height);
-        ctx.fillStyle = activeTheme.mountain;
+        ctx.fillStyle = layer.color;
         ctx.globalAlpha = layer.alpha;
         ctx.fill();
         ctx.globalAlpha = 1.0;
       });
 
-      // Soft Horizon River Valley at base
+      // Horizon River Valley
       const riverY = height * 0.92;
-      ctx.fillStyle = activeTheme.river;
+      ctx.fillStyle = atmo.river;
       ctx.beginPath();
       ctx.ellipse(width * 0.5, riverY, width * 0.65, height * 0.09, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Floating 3D Air / Cloud Motes
-      ctx.fillStyle = activeTheme.particleColor;
-      const fov = 350;
+      // Procedural Landmarks (Ancient Arch, Waterfall, Turbines)
+      landmarksRef.current.forEach((lm) => {
+        if (!isPaused) {
+          lm.z -= dt * 140 * s.speed;
+          if (lm.rotation != null) lm.rotation += dt * 1.4;
+        }
+
+        if (lm.z > 15) {
+          const scale = fov / (fov + lm.z);
+          const projX = width * 0.5 + lm.x * scale;
+          const projY = height * lm.y;
+
+          ctx.save();
+          if (lm.kind === 'arch') {
+            // Minimalist colossal stone archway
+            const archW = 160 * scale * 2.4;
+            const archH = 220 * scale * 2.4;
+            ctx.fillStyle = atmo.mountainNear;
+            ctx.globalAlpha = Math.min(1.0, scale * 3.0);
+
+            // Left pillar
+            ctx.fillRect(projX - archW * 0.5, projY - archH, archW * 0.22, archH);
+            // Right pillar
+            ctx.fillRect(projX + archW * 0.28, projY - archH, archW * 0.22, archH);
+            // Curved top lintel
+            ctx.beginPath();
+            ctx.arc(projX, projY - archH + archW * 0.2, archW * 0.5, Math.PI, 0, false);
+            ctx.lineWidth = archW * 0.24;
+            ctx.strokeStyle = atmo.mountainNear;
+            ctx.stroke();
+          } else if (lm.kind === 'waterfall') {
+            // Shimmering mountain waterfall stream
+            const streamW = 28 * scale * 2.2;
+            const streamH = 140 * scale * 2.2;
+            ctx.fillStyle = 'rgba(230, 245, 255, 0.75)';
+            ctx.fillRect(projX - streamW * 0.5, projY - streamH, streamW, streamH);
+          } else if (lm.kind === 'turbines') {
+            // White minimalist wind turbines
+            const mastH = 110 * scale * 2.2;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = Math.max(1.5, 3 * scale);
+            ctx.beginPath();
+            ctx.moveTo(projX, projY);
+            ctx.lineTo(projX, projY - mastH);
+            ctx.stroke();
+
+            // 3 rotating blades
+            const rot = lm.rotation || 0;
+            const bladeLen = 45 * scale * 2.2;
+            for (let b = 0; b < 3; b++) {
+              const angle = rot + (b * Math.PI * 2) / 3;
+              ctx.beginPath();
+              ctx.moveTo(projX, projY - mastH);
+              ctx.lineTo(projX + Math.cos(angle) * bladeLen, projY - mastH + Math.sin(angle) * bladeLen);
+              ctx.stroke();
+            }
+          }
+          ctx.restore();
+        }
+      });
+      landmarksRef.current = landmarksRef.current.filter((lm) => lm.z > 15);
+
+      // Water Ripples (When skimming river)
+      ripplesRef.current.forEach((rip) => {
+        if (!isPaused) {
+          rip.radius += dt * 42;
+          rip.alpha -= dt * 0.75;
+          rip.z -= dt * 140 * s.speed;
+        }
+        if (rip.alpha > 0 && rip.z > 10) {
+          const scale = fov / (fov + rip.z);
+          ctx.save();
+          ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, rip.alpha)})`;
+          ctx.lineWidth = 1.8 * scale;
+          ctx.beginPath();
+          ctx.ellipse(rip.x, rip.y, rip.radius * scale, rip.radius * 0.28 * scale, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+      ripplesRef.current = ripplesRef.current.filter((rip) => rip.alpha > 0 && rip.z > 10);
+
+      // Ambient 3D Cloud & Star Motes
+      ctx.fillStyle = atmo.isNight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(255, 255, 255, 0.65)';
       particlesRef.current.forEach((p) => {
         if (!isPaused) {
           p.z -= dt * 240 * s.speed;
@@ -332,12 +470,12 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
 
         if (projX >= 0 && projX <= width && projY >= 0 && projY <= height) {
           ctx.beginPath();
-          ctx.arc(projX, projY, p.size * scale * 2.5, 0, Math.PI * 2);
+          ctx.arc(projX, projY, p.size * scale * 2.2, 0, Math.PI * 2);
           ctx.fill();
         }
       });
 
-      // Floating Altitude Checkpoint Rings (Minimal, clean, elegant)
+      // Floating Altitude Checkpoint Rings (with Updraft visual)
       const gliderScreenY = height * (0.2 + s.gliderY * 0.55);
 
       ringsRef.current.forEach((ring) => {
@@ -352,6 +490,7 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
             ring.z = 1350;
             ring.y = 0.25 + Math.random() * 0.45;
             ring.passed = false;
+            ring.isUpdraft = ring.y >= 0.55 && Math.random() < 0.4;
           }
         }
 
@@ -363,9 +502,28 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
 
           if (projRadius > 2) {
             ctx.save();
+
+            // Updraft thermal rising vapor indicators
+            if (ring.isUpdraft && !ring.passed) {
+              ctx.strokeStyle = 'rgba(245, 180, 120, 0.45)';
+              ctx.lineWidth = 1.2;
+              for (let v = -1; v <= 1; v++) {
+                ctx.beginPath();
+                const vx = projX + v * projRadius * 0.45;
+                const vy = projY - Math.sin(time * 0.005 + v) * 15;
+                ctx.moveTo(vx, vy + 20);
+                ctx.lineTo(vx, vy - 25);
+                ctx.stroke();
+              }
+            }
+
             ctx.beginPath();
             ctx.ellipse(projX, projY, projRadius, projRadius * 0.4, 0, 0, Math.PI * 2);
-            ctx.strokeStyle = ring.passed ? '#10B981' : activeTheme.ringColor;
+            ctx.strokeStyle = ring.passed
+              ? '#10B981'
+              : ring.isUpdraft
+              ? '#F59E0B'
+              : atmo.ringColor;
             ctx.lineWidth = Math.max(1.5, 3 * scale);
             ctx.stroke();
 
@@ -380,6 +538,12 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
                 s.streak = result.newStreak;
                 s.multiplier = result.newMultiplier;
                 if (s.streak > s.maxStreak) s.maxStreak = s.streak;
+
+                // If thermal updraft, apply upward lift
+                if (ring.isUpdraft) {
+                  s.gliderTargetY = processThermalUpdraft(s.gliderTargetY);
+                  audioEngine.playUpdraftWhoosh();
+                }
 
                 if (result.triggerHyperDrift) {
                   s.hyperDriftActive = true;
@@ -396,7 +560,53 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
         }
       });
 
-      // Glider (Paper Plane / Minimalist Aerodynamic Craft)
+      // ─── Spirit Companion (Origami Crane in Flow) ───────────────────
+      const companion = companionRef.current;
+      if (companion.alpha > 0.05) {
+        ctx.save();
+        ctx.translate(companion.x, companion.y);
+        ctx.globalAlpha = companion.alpha;
+
+        const flap = Math.sin(companion.wingPhase) * 12;
+
+        // Origami crane body & wings
+        ctx.fillStyle = '#FFFFFF';
+        ctx.strokeStyle = 'rgba(220, 220, 230, 0.8)';
+        ctx.lineWidth = 1.0;
+
+        // Left wing
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-14, -10 - flap);
+        ctx.lineTo(-4, -2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Right wing
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(14, -10 - flap);
+        ctx.lineTo(4, -2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Origami body & beak
+        ctx.fillStyle = '#F5D4C7';
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(-3, 6);
+        ctx.lineTo(0, 10);
+        ctx.lineTo(3, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      // ─── Glider (Paper Plane) ───────────────────────────────────────
       const gliderScreenX = width * 0.5;
       const craftAngle = s.gliderPitch * 0.35 + s.gliderRoll * 0.4;
 
@@ -404,23 +614,20 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       ctx.translate(gliderScreenX, gliderScreenY);
       ctx.rotate(craftAngle);
 
-      // Trailing wingtip vapor trails (gentle, elegant)
-      const zoneScore = currentEEG ? (currentEEG.zoneScore ?? (currentEEG.inZone ? 1.0 : 0.0)) : 0.5;
-      if (zoneScore > 0.08) {
+      // Trailing wingtip vapor trails
+      if (rawZoneScore > 0.08) {
         ctx.beginPath();
         const trailLen = 45 + (s.multiplier > 1 ? s.multiplier * 18 : 0);
         ctx.moveTo(-24, -19);
         ctx.lineTo(-24 - trailLen, -21);
         ctx.moveTo(-24, 19);
         ctx.lineTo(-24 - trailLen, 21);
-        ctx.strokeStyle = activeTheme.id === 'Cyber Neon'
-          ? `rgba(0, 255, 255, ${0.85 * zoneScore})`
-          : `rgba(232, 150, 122, ${0.8 * zoneScore})`;
+        ctx.strokeStyle = `rgba(232, 150, 122, ${0.85 * rawZoneScore})`;
         ctx.lineWidth = s.multiplier >= 2 ? 2.5 : 1.8;
         ctx.stroke();
       }
 
-      // Paper plane body with smooth pastel gradient
+      // Paper plane body
       ctx.beginPath();
       ctx.moveTo(34, 0);       // Nose
       ctx.lineTo(-24, -19);   // Left wingtip
@@ -428,9 +635,14 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       ctx.lineTo(-24, 19);    // Right wingtip
       ctx.closePath();
 
-      ctx.fillStyle = gradients ? gradients.craft : activeTheme.craftPalette[0];
+      const craftGrad = ctx.createLinearGradient(-24, -19, 34, 19);
+      craftGrad.addColorStop(0, '#FFFFFF');
+      craftGrad.addColorStop(0.5, '#F5D4C7');
+      craftGrad.addColorStop(1, activeTheme.craftPalette[2]);
+
+      ctx.fillStyle = craftGrad;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
@@ -454,6 +666,8 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
           ringsCleared: s.ringsCleared,
           autopilotActive: s.autopilotActive,
           hyperDriftActive: s.hyperDriftActive,
+          distanceTraveled: Math.floor(s.distanceTraveled),
+          atmosphereName: atmo.name,
         });
       }
 
@@ -465,6 +679,7 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
       audioEngine.stopFlightWind();
+      audioEngine.stopAmbientFlowLayers();
     };
   }, [activeTheme, isPaused]);
 
@@ -493,7 +708,7 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
           pointerEvents: 'none',
         }}
       >
-        {/* Biome Badge */}
+        {/* Biome & Time-of-Day Badge */}
         <div
           style={{
             background: 'rgba(255, 255, 255, 0.88)',
@@ -511,7 +726,28 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
           }}
         >
           <Compass size={14} color={activeTheme.ringColor} />
-          <span>{activeTheme.label}</span>
+          <span>{hudState.atmosphereName}</span>
+        </div>
+
+        {/* Distance Traveled Meter */}
+        <div
+          style={{
+            background: 'rgba(255, 255, 255, 0.88)',
+            backdropFilter: 'blur(8px)',
+            padding: '5px 10px',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+          }}
+        >
+          <Wind size={13} color="var(--brand-primary)" />
+          <span>{hudState.distanceTraveled.toLocaleString()} m</span>
         </div>
 
         {/* Rings Cleared Badge */}
@@ -531,11 +767,11 @@ export const SkylineDriftCanvas: React.FC<SkylineDriftProps> = ({
             }}
           >
             <Target size={13} />
-            <span>{hudState.ringsCleared} Rings</span>
+            <span>{hudState.ringsCleared}</span>
           </div>
         )}
 
-        {/* Subtle Flow State Pill */}
+        {/* Flow State Pill */}
         {hudState.multiplier > 1 && (
           <div
             style={{

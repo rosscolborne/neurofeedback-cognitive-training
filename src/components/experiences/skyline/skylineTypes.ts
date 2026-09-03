@@ -5,6 +5,7 @@ export interface SkylineRing {
   radius: number;
   passed: boolean;
   pulsePhase: number;
+  isUpdraft?: boolean; // Thermal updraft ring in low valley
 }
 
 export interface ZenShard {
@@ -15,7 +16,15 @@ export interface ZenShard {
   sparklePhase: number;
 }
 
-export type ParticleKind = 'star' | 'cloud' | 'speedline' | 'ring-burst' | 'shard-spark' | 'vapor-trail';
+export type ParticleKind =
+  | 'star'
+  | 'cloud'
+  | 'speedline'
+  | 'ring-burst'
+  | 'shard-spark'
+  | 'vapor-trail'
+  | 'water-spray'
+  | 'thermal-vapor';
 
 export interface SkylineParticle {
   x: number;
@@ -30,6 +39,54 @@ export interface SkylineParticle {
   life: number;
   maxLife: number;
   kind: ParticleKind;
+}
+
+export interface WaterRipple {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  maxRadius: number;
+  alpha: number;
+}
+
+export type SkylineLandmarkKind = 'arch' | 'waterfall' | 'turbines';
+
+export interface SkylineLandmark {
+  kind: SkylineLandmarkKind;
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+  passed: boolean;
+  rotation?: number;
+}
+
+export interface SpiritCompanion {
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  targetX: number;
+  targetY: number;
+  wingPhase: number;
+  alpha: number;
+  leadDistance: number;
+}
+
+export interface SkyAtmosphere {
+  skyTop: string;
+  skyMid: string;
+  skyBot: string;
+  mountainFar: string;
+  mountainMid: string;
+  mountainNear: string;
+  river: string;
+  ringColor: string;
+  name: string;
+  sunPos: { x: number; y: number };
+  isNight: boolean;
+  ambientLight: number; // 0.2 (night) to 1.0 (noon)
 }
 
 export interface BiomeTheme {
@@ -61,4 +118,7 @@ export interface SkylineGameState {
   speed: number;
   shockwaveRadius: number | null;
   autopilotActive: boolean;
+  distanceTraveled: number;
+  timeOfDay: number; // 0.0 (Dawn) -> 0.25 (Noon) -> 0.5 (Sunset) -> 0.75 (Twilight) -> 1.0 (Dawn)
+  isSkimmingWater: boolean;
 }
