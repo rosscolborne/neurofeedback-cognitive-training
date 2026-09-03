@@ -1,24 +1,16 @@
 import type { EEGDataPoint } from '../../../types';
-import type { SkyAtmosphere, SkylineLandmarkKind, SpiritCompanion } from './skylineTypes';
+import type { SkyAtmosphere, SkylineLandmarkKind, FlockBird } from './skylineTypes';
 
 /**
- * Pure game state machine functions extracted from SkylineDriftCanvas.
- * All neurofeedback-driven flight mechanics live here so they can be
- * unit-tested without a Canvas or AudioContext.
+ * Pure game state machine functions for Skyline Drift.
+ * Manages neurofeedback elevation mapping, continuous flow progression,
+ * atmospheric day/night interpolation, and modality dynamics.
  */
 
 /** Maps protocol-generic zoneScore (0.0–1.0) to canvas Y elevation. */
 export function computeTargetElevation(zoneScore: number): number {
   // 1.0 → 0.22 (stratosphere), 0.0 → 0.80 (valley floor)
   return 0.80 - zoneScore * 0.58;
-}
-
-/** Derives flow multiplier tier from current ring streak. */
-export function calculateMultiplier(streak: number): 1 | 2 | 3 | 4 {
-  if (streak >= 10) return 4;
-  if (streak >= 5) return 3;
-  if (streak >= 3) return 2;
-  return 1;
 }
 
 /** Determines if gyroscopic autopilot should engage based on EEG artifacts. */
@@ -31,66 +23,6 @@ export function isAutopilotActive(eegData: EEGDataPoint | null): boolean {
   );
 }
 
-export interface RingPassResult {
-  newStreak: number;
-  newMultiplier: 1 | 2 | 3 | 4;
-  scoreAwarded: number;
-  triggerHyperDrift: boolean;
-}
-
-/**
- * Process a successful ring pass-through. Returns the updated streak,
- * multiplier, score awarded, and whether to trigger Hyper-Drift.
- */
-export function processRingPass(
-  currentStreak: number,
-  hyperDriftActive: boolean,
-): RingPassResult {
-  const newStreak = currentStreak + 1;
-  const newMultiplier = calculateMultiplier(newStreak);
-  const triggerHyperDrift = newStreak >= 10 && !hyperDriftActive;
-
-  return {
-    newStreak,
-    newMultiplier,
-    scoreAwarded: 100 * newMultiplier,
-    triggerHyperDrift,
-  };
-}
-
-export interface RingMissResult {
-  newStreak: number;
-  newMultiplier: 1 | 2 | 3 | 4;
-}
-
-/**
- * Process a ring miss (ring recycled without being passed through).
- * Resets streak and drops multiplier back to 1x — the operant
- * conditioning "risk" that makes maintaining a streak engaging.
- */
-export function processRingMiss(): RingMissResult {
-  return { newStreak: 0, newMultiplier: 1 };
-}
-
-export interface HyperDriftExpiryResult {
-  newStreak: number;
-  newMultiplier: 1 | 2 | 3 | 4;
-  hyperDriftActive: false;
-}
-
-/**
- * Process Hyper-Drift timer expiry. Resets streak and multiplier
- * to create a clean new reward cycle rather than re-triggering
- * infinitely while streak remains >= 10.
- */
-export function processHyperDriftExpiry(): HyperDriftExpiryResult {
-  return {
-    newStreak: 0,
-    newMultiplier: 1,
-    hyperDriftActive: false,
-  };
-}
-
 /** Compute base flight speed from zoneScore and hyper-drift state. */
 export function computeBaseSpeed(zoneScore: number, hyperDriftActive: boolean): number {
   const base = 0.85 + zoneScore * 0.85;
@@ -100,6 +32,60 @@ export function computeBaseSpeed(zoneScore: number, hyperDriftActive: boolean): 
 /** Apply autopilot dampening to glider pitch (exponential decay). */
 export function dampenPitch(currentPitch: number): number {
   return currentPitch * 0.88;
+}
+
+// ---------------------------------------------------------------------------
+// Continuous Flow & Multiplier State Machine (Replaces Circle Rings)
+// ---------------------------------------------------------------------------
+
+export interface FlowProgressionResult {
+  newInZoneSeconds: number;
+  multiplier: 1 | 2 | 3 | 4;
+  triggerHyperDrift: boolean;
+  scoreGained: number;
+}
+
+/**
+ * Updates continuous time-in-zone. Replaces artificial rings with
+ * organic, meditative flow progression. Sustaining focus smoothly
+ * elevates flow multiplier (1x -> 2x -> 3x -> 4x).
+ */
+export function updateFlowProgression(
+  currentInZoneSeconds: number,
+  dt: number,
+  inZone: boolean,
+  hyperDriftActive: boolean,
+): FlowProgressionResult {
+  let newInZoneSeconds = currentInZoneSeconds;
+  let triggerHyperDrift = false;
+
+  if (inZone) {
+    newInZoneSeconds += dt;
+    if (newInZoneSeconds >= 12 && !hyperDriftActive) {
+      triggerHyperDrift = true;
+    }
+  } else {
+    // Gentle decay when out of zone — never abrupt or jarring
+    newInZoneSeconds = Math.max(0, newInZoneSeconds - dt * 1.2);
+  }
+
+  let multiplier: 1 | 2 | 3 | 4 = 1;
+  if (hyperDriftActive || newInZoneSeconds >= 12) {
+    multiplier = 4;
+  } else if (newInZoneSeconds >= 7) {
+    multiplier = 3;
+  } else if (newInZoneSeconds >= 3) {
+    multiplier = 2;
+  }
+
+  const scoreGained = inZone ? Math.round(dt * 50 * multiplier) : 0;
+
+  return {
+    newInZoneSeconds,
+    multiplier,
+    triggerHyperDrift,
+    scoreGained,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +126,7 @@ interface PaletteFrame {
   mountainMid: string;
   mountainNear: string;
   river: string;
-  ringColor: string;
+  streamColor: string;
   sunX: number;
   sunY: number;
   isNight: boolean;
@@ -149,7 +135,6 @@ interface PaletteFrame {
 
 const SKY_PHASES: PaletteFrame[] = [
   {
-    // 0.00: Alpine Dawn (Soft Rose & Cream Mist)
     name: 'Alpine Dawn',
     skyTop: '#D4B2A7',
     skyMid: '#F5E4D7',
@@ -158,14 +143,13 @@ const SKY_PHASES: PaletteFrame[] = [
     mountainMid: '#BFA498',
     mountainNear: '#A88D7F',
     river: 'rgba(232, 150, 122, 0.45)',
-    ringColor: '#E8967A',
+    streamColor: 'rgba(232, 150, 122, 0.45)',
     sunX: 0.18,
     sunY: 0.55,
     isNight: false,
     ambientLight: 0.85,
   },
   {
-    // 0.25: High Alpine Noon (Crisp Azure & Sunlit Peaks)
     name: 'Alpine Noon',
     skyTop: '#9FBCC8',
     skyMid: '#DEEBF0',
@@ -174,14 +158,13 @@ const SKY_PHASES: PaletteFrame[] = [
     mountainMid: '#869CA5',
     mountainNear: '#6F858F',
     river: 'rgba(110, 172, 194, 0.55)',
-    ringColor: '#6EACC2',
+    streamColor: 'rgba(110, 172, 194, 0.50)',
     sunX: 0.50,
     sunY: 0.18,
     isNight: false,
     ambientLight: 1.0,
   },
   {
-    // 0.50: Golden Canyon Sunset (Amber & Terracotta)
     name: 'Golden Hour',
     skyTop: '#D97D64',
     skyMid: '#F4B886',
@@ -190,14 +173,13 @@ const SKY_PHASES: PaletteFrame[] = [
     mountainMid: '#B46C56',
     mountainNear: '#9B5441',
     river: 'rgba(240, 140, 90, 0.5)',
-    ringColor: '#E27D60',
+    streamColor: 'rgba(240, 140, 90, 0.55)',
     sunX: 0.82,
     sunY: 0.58,
     isNight: false,
     ambientLight: 0.88,
   },
   {
-    // 0.75: Twilight Starlight (Violet & Moonlit Snow)
     name: 'Violet Twilight',
     skyTop: '#2C2E43',
     skyMid: '#514D6B',
@@ -206,7 +188,7 @@ const SKY_PHASES: PaletteFrame[] = [
     mountainMid: '#312F44',
     mountainNear: '#222130',
     river: 'rgba(160, 180, 240, 0.35)',
-    ringColor: '#9C98DC',
+    streamColor: 'rgba(180, 175, 235, 0.45)',
     sunX: 0.88,
     sunY: 0.22,
     isNight: true,
@@ -215,7 +197,7 @@ const SKY_PHASES: PaletteFrame[] = [
 ];
 
 /**
- * Computes smooth atmospheric palette interpolated across continuous timeOfDay (0.0 to 1.0).
+ * Computes smooth atmospheric palette across continuous timeOfDay (0.0 to 1.0).
  */
 export function computeSkyAtmosphere(timeOfDay: number): SkyAtmosphere {
   const normTime = ((timeOfDay % 1) + 1) % 1;
@@ -235,8 +217,8 @@ export function computeSkyAtmosphere(timeOfDay: number): SkyAtmosphere {
     mountainFar: lerpColor(p1.mountainFar, p2.mountainFar, t),
     mountainMid: lerpColor(p1.mountainMid, p2.mountainMid, t),
     mountainNear: lerpColor(p1.mountainNear, p2.mountainNear, t),
-    river: p1.river, // Preserved alpha river string
-    ringColor: lerpColor(p1.ringColor, p2.ringColor, t),
+    river: p1.river,
+    streamColor: p1.streamColor,
     sunPos: {
       x: p1.sunX + (p2.sunX - p1.sunX) * t,
       y: p1.sunY + (p2.sunY - p1.sunY) * t,
@@ -250,68 +232,68 @@ export function computeSkyAtmosphere(timeOfDay: number): SkyAtmosphere {
 // Procedural Landmarks & Milestones
 // ---------------------------------------------------------------------------
 
-/**
- * Determines landmark spawning cadence along flight distance.
- * Returns landmark kind if a landmark milestone threshold is crossed.
- */
 export function spawnNextLandmark(distanceTraveled: number): SkylineLandmarkKind | null {
   const cycle = distanceTraveled % 1800;
-  // Trigger landmark windows within +/- 8 meters of milestones
   if (cycle >= 400 && cycle < 415) return 'arch';
   if (cycle >= 1000 && cycle < 1015) return 'waterfall';
   if (cycle >= 1550 && cycle < 1565) return 'turbines';
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Spirit Companion & Water Surface Physics
-// ---------------------------------------------------------------------------
-
-/**
- * Updates companion crane aerodynamics. Flies in formation during flow (inZone),
- * and leads ahead smoothly toward thermal lift when out of zone.
- */
-export function updateCompanionDynamics(
-  companion: SpiritCompanion,
-  gliderPos: { x: number; y: number },
-  inZone: boolean,
-  dt: number,
-): SpiritCompanion {
-  const targetAlpha = inZone ? 0.92 : 0.40;
-  const newAlpha = companion.alpha + (targetAlpha - companion.alpha) * Math.min(1, dt * 2.0);
-
-  // When in-zone: tight formation just behind and above glider wingtip
-  // When out-of-zone: glides ahead to lead the way to next thermal pocket
-  const targetX = inZone ? gliderPos.x + 44 : gliderPos.x + 85;
-  const targetY = inZone ? gliderPos.y - 0.05 : gliderPos.y - 0.12;
-
-  const newX = companion.x + (targetX - companion.x) * Math.min(1, dt * 2.5);
-  const newY = companion.y + (targetY - companion.y) * Math.min(1, dt * 2.0);
-
-  // Breathing-cadence wing flap tempo (~0.16Hz = 6 second cycle)
-  const newWingPhase = companion.wingPhase + dt * (inZone ? 1.6 : 1.0);
-
-  return {
-    ...companion,
-    x: newX,
-    y: newY,
-    alpha: newAlpha,
-    wingPhase: newWingPhase,
-    active: true,
-  };
-}
-
-/**
- * Detects if glider is skimming inches above the river surface.
- */
 export function isWaterSkimming(gliderY: number): boolean {
   return gliderY >= 0.72;
 }
 
+// ---------------------------------------------------------------------------
+// Spirit Flock Geometry (Mode 2)
+// ---------------------------------------------------------------------------
+
 /**
- * Applies thermal updraft lift to glider elevation when an updraft ring is cleared.
+ * Calculates V-formation flock offsets based on active flock count (1 to 7 birds).
  */
-export function processThermalUpdraft(currentY: number): number {
-  // Boost glider toward 0.38 altitude
-  return Math.max(0.24, currentY - 0.18);
+export function calculateFlockOffsets(flockCount: number): FlockBird[] {
+  const formationOffsets = [
+    { offsetX: -42, offsetY: -14, offsetZ: 35, scale: 0.85 },  // Left wing 1
+    { offsetX: 42, offsetY: -14, offsetZ: 35, scale: 0.85 },   // Right wing 1
+    { offsetX: -82, offsetY: -28, offsetZ: 75, scale: 0.75 },  // Left wing 2
+    { offsetX: 82, offsetY: -28, offsetZ: 75, scale: 0.75 },   // Right wing 2
+    { offsetX: -120, offsetY: -42, offsetZ: 115, scale: 0.65 }, // Left wing 3
+    { offsetX: 120, offsetY: -42, offsetZ: 115, scale: 0.65 },  // Right wing 3
+    { offsetX: 0, offsetY: -52, offsetZ: 135, scale: 0.60 },    // Rear apex
+  ];
+
+  return formationOffsets.slice(0, Math.min(flockCount, formationOffsets.length)).map((f, i) => ({
+    id: i,
+    offsetX: f.offsetX,
+    offsetY: f.offsetY,
+    offsetZ: f.offsetZ,
+    wingPhase: (i * 0.45) % (Math.PI * 2),
+    alpha: 0.9,
+    scale: f.scale,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Wind Stream Ribbon Geometry (Mode 1)
+// ---------------------------------------------------------------------------
+
+export interface StreamNode {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Computes flowing thermal wind stream spine coordinates in 3D.
+ */
+export function computeStreamNodes(time: number, targetY: number): StreamNode[] {
+  const nodes: StreamNode[] = [];
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const z = 80 + i * 140;
+    const waveX = Math.sin(time * 0.0018 + i * 0.5) * 65;
+    const waveY = targetY + Math.cos(time * 0.0014 + i * 0.4) * 0.06;
+    nodes.push({ x: waveX, y: waveY, z });
+  }
+  return nodes;
 }

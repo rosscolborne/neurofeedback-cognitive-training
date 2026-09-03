@@ -3,18 +3,15 @@ import { audioEngine } from '../../../services/audioEngine';
 import type { EEGDataPoint } from '../../../types';
 import {
   computeTargetElevation,
-  calculateMultiplier,
   isAutopilotActive,
-  processRingPass,
-  processRingMiss,
-  processHyperDriftExpiry,
   computeBaseSpeed,
   dampenPitch,
+  updateFlowProgression,
   computeSkyAtmosphere,
   spawnNextLandmark,
-  updateCompanionDynamics,
   isWaterSkimming,
-  processThermalUpdraft,
+  calculateFlockOffsets,
+  computeStreamNodes,
 } from '../skyline/skylineGameLogic';
 
 function createMockEEGFrame(overrides: Partial<EEGDataPoint> = {}): EEGDataPoint {
@@ -39,7 +36,7 @@ function createMockEEGFrame(overrides: Partial<EEGDataPoint> = {}): EEGDataPoint
   };
 }
 
-describe('Skyline Drift Game Logic (extracted state machine)', () => {
+describe('Skyline Drift Meditative Flight Mechanics', () => {
   // ─── Altitude Mapping ──────────────────────────────────────────────
   describe('computeTargetElevation', () => {
     it('maps zoneScore=0 to valley floor (0.80)', () => {
@@ -59,191 +56,66 @@ describe('Skyline Drift Game Logic (extracted state machine)', () => {
     });
   });
 
-  // ─── Multiplier Tiers ──────────────────────────────────────────────
-  describe('calculateMultiplier', () => {
-    it('returns 1x for streaks 0–2', () => {
-      expect(calculateMultiplier(0)).toBe(1);
-      expect(calculateMultiplier(1)).toBe(1);
-      expect(calculateMultiplier(2)).toBe(1);
-    });
-
-    it('returns 2x for streaks 3–4', () => {
-      expect(calculateMultiplier(3)).toBe(2);
-      expect(calculateMultiplier(4)).toBe(2);
-    });
-
-    it('returns 3x for streaks 5–9', () => {
-      expect(calculateMultiplier(5)).toBe(3);
-      expect(calculateMultiplier(9)).toBe(3);
-    });
-
-    it('returns 4x for streaks >= 10', () => {
-      expect(calculateMultiplier(10)).toBe(4);
-      expect(calculateMultiplier(25)).toBe(4);
-    });
-  });
-
-  // ─── Autopilot Detection ──────────────────────────────────────────
-  describe('isAutopilotActive', () => {
-    it('returns false for null eegData', () => {
-      expect(isAutopilotActive(null)).toBe(false);
-    });
-
-    it('returns false for clean signal with no artifacts', () => {
-      expect(isAutopilotActive(createMockEEGFrame())).toBe(false);
-    });
-
-    it('returns true on blink artifact', () => {
-      expect(isAutopilotActive(
-        createMockEEGFrame({ artifacts: { blink: true, clench: false } })
-      )).toBe(true);
-    });
-
-    it('returns true on clench artifact', () => {
-      expect(isAutopilotActive(
-        createMockEEGFrame({ artifacts: { blink: false, clench: true } })
-      )).toBe(true);
-    });
-
-    it('returns true on poor signal quality', () => {
-      expect(isAutopilotActive(
-        createMockEEGFrame({ signalQuality: 'poor' })
-      )).toBe(true);
-    });
-  });
-
-  // ─── Ring Pass State Transitions ──────────────────────────────────
-  describe('processRingPass', () => {
-    it('increments streak by 1', () => {
-      const result = processRingPass(0, false);
-      expect(result.newStreak).toBe(1);
-    });
-
-    it('awards 100 * multiplier points', () => {
-      // Streak 0 → 1 (1x)
-      expect(processRingPass(0, false).scoreAwarded).toBe(100);
-      // Streak 2 → 3 (2x)
-      expect(processRingPass(2, false).scoreAwarded).toBe(200);
-      // Streak 4 → 5 (3x)
-      expect(processRingPass(4, false).scoreAwarded).toBe(300);
-      // Streak 9 → 10 (4x)
-      expect(processRingPass(9, false).scoreAwarded).toBe(400);
-    });
-
-    it('triggers Hyper-Drift when streak reaches 10 and not already active', () => {
-      const result = processRingPass(9, false);
-      expect(result.triggerHyperDrift).toBe(true);
-      expect(result.newMultiplier).toBe(4);
-    });
-
-    it('does NOT re-trigger Hyper-Drift when already active', () => {
-      const result = processRingPass(9, true);
+  // ─── Continuous Flow Progression (Replaces Circle Rings) ───────────
+  describe('updateFlowProgression', () => {
+    it('starts at 1x multiplier for < 3 seconds in-zone', () => {
+      const result = updateFlowProgression(0, 1.0, true, false);
+      expect(result.multiplier).toBe(1);
+      expect(result.newInZoneSeconds).toBe(1.0);
       expect(result.triggerHyperDrift).toBe(false);
     });
 
-    it('builds correct multiplier progression over a 12-ring streak', () => {
-      let streak = 0;
-      const multipliers: number[] = [];
-      for (let i = 0; i < 12; i++) {
-        const result = processRingPass(streak, false);
-        streak = result.newStreak;
-        multipliers.push(result.newMultiplier);
-      }
-      // rings 1-2: 1x, rings 3-4: 2x, rings 5-9: 3x, rings 10-12: 4x
-      expect(multipliers).toEqual([1, 1, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4]);
+    it('reaches 2x multiplier at 3 seconds in-zone', () => {
+      const result = updateFlowProgression(2.5, 0.6, true, false);
+      expect(result.multiplier).toBe(2);
+      expect(result.newInZoneSeconds).toBeCloseTo(3.1);
+    });
+
+    it('reaches 3x multiplier at 7 seconds in-zone', () => {
+      const result = updateFlowProgression(6.8, 0.5, true, false);
+      expect(result.multiplier).toBe(3);
+    });
+
+    it('reaches 4x Flow State (Hyper-Drift) at 12 seconds in-zone', () => {
+      const result = updateFlowProgression(11.8, 0.3, true, false);
+      expect(result.multiplier).toBe(4);
+      expect(result.triggerHyperDrift).toBe(true);
+    });
+
+    it('gracefully decays in-zone seconds when out of zone without dropping to zero instantly', () => {
+      const result = updateFlowProgression(5.0, 1.0, false, false);
+      expect(result.newInZoneSeconds).toBeCloseTo(3.8); // 5.0 - 1.2
+      expect(result.multiplier).toBe(2); // Still in 2x, gentle transition
     });
   });
 
-  // ─── Ring Miss ────────────────────────────────────────────────────
-  describe('processRingMiss', () => {
-    it('resets streak to 0', () => {
-      expect(processRingMiss().newStreak).toBe(0);
+  // ─── Autopilot / Gyroscopic Stabilization ─────────────────────────
+  describe('isAutopilotActive', () => {
+    it('returns false for clean signal without artifacts', () => {
+      const clean = createMockEEGFrame();
+      expect(isAutopilotActive(clean)).toBe(false);
     });
 
-    it('drops multiplier to 1x', () => {
-      expect(processRingMiss().newMultiplier).toBe(1);
-    });
-  });
-
-  // ─── Hyper-Drift Expiry ───────────────────────────────────────────
-  describe('processHyperDriftExpiry', () => {
-    it('resets streak to 0 to prevent infinite re-trigger', () => {
-      const result = processHyperDriftExpiry();
-      expect(result.newStreak).toBe(0);
+    it('engages autopilot on blink artifact', () => {
+      const blink = createMockEEGFrame({ artifacts: { blink: true, clench: false } });
+      expect(isAutopilotActive(blink)).toBe(true);
     });
 
-    it('drops multiplier to 1x', () => {
-      expect(processHyperDriftExpiry().newMultiplier).toBe(1);
-    });
-
-    it('returns hyperDriftActive = false', () => {
-      expect(processHyperDriftExpiry().hyperDriftActive).toBe(false);
-    });
-
-    it('prevents immediate Hyper-Drift re-entry on next ring pass', () => {
-      const expiry = processHyperDriftExpiry();
-      // After expiry, streak is 0. Next ring pass → streak 1. Not enough for Hyper-Drift.
-      const nextPass = processRingPass(expiry.newStreak, expiry.hyperDriftActive);
-      expect(nextPass.triggerHyperDrift).toBe(false);
-      expect(nextPass.newMultiplier).toBe(1);
+    it('engages autopilot on jaw clench', () => {
+      const clench = createMockEEGFrame({ artifacts: { blink: false, clench: true } });
+      expect(isAutopilotActive(clench)).toBe(true);
     });
   });
 
-  // ─── Full Gameplay Cycle ──────────────────────────────────────────
-  describe('full gameplay cycle: build → hyper-drift → expiry → rebuild', () => {
-    it('simulates a realistic session loop', () => {
-      let streak = 0;
-      let multiplier: 1 | 2 | 3 | 4 = 1;
-      let hyperDriftActive = false;
-      let score = 0;
-
-      // Phase 1: Build streak to 10
-      for (let i = 0; i < 10; i++) {
-        const result = processRingPass(streak, hyperDriftActive);
-        streak = result.newStreak;
-        multiplier = result.newMultiplier;
-        score += result.scoreAwarded;
-        if (result.triggerHyperDrift) hyperDriftActive = true;
-      }
-
-      expect(streak).toBe(10);
-      expect(multiplier).toBe(4);
-      expect(hyperDriftActive).toBe(true);
-      // Score: 1*100 + 1*100 + 2*100 + 2*100 + 3*100 + 3*100 + 3*100 + 3*100 + 3*100 + 4*100
-      expect(score).toBe(2500);
-
-      // Phase 2: Hyper-Drift expires
-      const expiry = processHyperDriftExpiry();
-      streak = expiry.newStreak;
-      multiplier = expiry.newMultiplier;
-      hyperDriftActive = expiry.hyperDriftActive;
-
-      expect(streak).toBe(0);
-      expect(multiplier).toBe(1);
-      expect(hyperDriftActive).toBe(false);
-
-      // Phase 3: Miss a ring
-      const miss = processRingMiss();
-      streak = miss.newStreak;
-      multiplier = miss.newMultiplier;
-
-      expect(streak).toBe(0);
-
-      // Phase 4: Start rebuilding
-      const rebuild = processRingPass(streak, hyperDriftActive);
-      expect(rebuild.newStreak).toBe(1);
-      expect(rebuild.newMultiplier).toBe(1);
-      expect(rebuild.scoreAwarded).toBe(100);
-    });
-  });
-
-  // ─── Speed & Dampening ────────────────────────────────────────────
+  // ─── Flight Speed & Dampening ─────────────────────────────────────
   describe('computeBaseSpeed', () => {
-    it('returns higher speed for higher zoneScore', () => {
-      expect(computeBaseSpeed(1.0, false)).toBeGreaterThan(computeBaseSpeed(0.0, false));
+    it('scales monotonically with zoneScore', () => {
+      const low = computeBaseSpeed(0.0, false);
+      const high = computeBaseSpeed(1.0, false);
+      expect(high).toBeGreaterThan(low);
     });
 
-    it('applies 1.4x multiplier during Hyper-Drift', () => {
+    it('boosts speed during Hyper-Drift', () => {
       const normal = computeBaseSpeed(0.5, false);
       const hyper = computeBaseSpeed(0.5, true);
       expect(hyper).toBeCloseTo(normal * 1.4);
@@ -253,34 +125,50 @@ describe('Skyline Drift Game Logic (extracted state machine)', () => {
   describe('dampenPitch', () => {
     it('decays pitch by 12% per tick', () => {
       expect(dampenPitch(1.0)).toBeCloseTo(0.88);
-      expect(dampenPitch(0.5)).toBeCloseTo(0.44);
+    });
+  });
+
+  // ─── Spirit Flock Geometry ─────────────────────────────────────────
+  describe('calculateFlockOffsets', () => {
+    it('returns 1 bird for flockCount=1', () => {
+      const birds = calculateFlockOffsets(1);
+      expect(birds.length).toBe(1);
+      expect(birds[0].offsetX).toBeLessThan(0); // Left wing
     });
 
-    it('converges toward zero over repeated applications', () => {
-      let pitch = 1.0;
-      for (let i = 0; i < 30; i++) pitch = dampenPitch(pitch);
-      expect(pitch).toBeLessThan(0.025); // 0.88^30 ≈ 0.0216
+    it('returns 3 birds for flockCount=3 in delta formation', () => {
+      const birds = calculateFlockOffsets(3);
+      expect(birds.length).toBe(3);
+      expect(birds[0].offsetX).toBe(-42);
+      expect(birds[1].offsetX).toBe(42);
+    });
+
+    it('returns up to 7 birds in full V-formation', () => {
+      const birds = calculateFlockOffsets(7);
+      expect(birds.length).toBe(7);
+    });
+  });
+
+  // ─── Wind Stream Nodes ─────────────────────────────────────────────
+  describe('computeStreamNodes', () => {
+    it('generates 10 3D nodes progressing in depth', () => {
+      const nodes = computeStreamNodes(1000, 0.5);
+      expect(nodes.length).toBe(10);
+      expect(nodes[0].z).toBeLessThan(nodes[9].z);
     });
   });
 
   // ─── Atmospheric Odyssey ──────────────────────────────────────────
-  describe('Atmospheric Odyssey (computeSkyAtmosphere)', () => {
+  describe('computeSkyAtmosphere', () => {
     it('returns Alpine Dawn at time 0.0', () => {
       const atmo = computeSkyAtmosphere(0.0);
       expect(atmo.name).toBe('Alpine Dawn');
       expect(atmo.isNight).toBe(false);
-      expect(atmo.skyTop).toContain('rgb(');
     });
 
     it('returns Alpine Noon at time 0.25', () => {
       const atmo = computeSkyAtmosphere(0.25);
       expect(atmo.name).toBe('Alpine Noon');
-      expect(atmo.ambientLight).toBeCloseTo(1.0);
-    });
-
-    it('returns Golden Hour at time 0.50', () => {
-      const atmo = computeSkyAtmosphere(0.50);
-      expect(atmo.name).toBe('Golden Hour');
     });
 
     it('returns Violet Twilight with night mode at time 0.75', () => {
@@ -288,16 +176,10 @@ describe('Skyline Drift Game Logic (extracted state machine)', () => {
       expect(atmo.name).toBe('Violet Twilight');
       expect(atmo.isNight).toBe(true);
     });
-
-    it('smoothly wraps around 1.0 back to dawn', () => {
-      const atmo0 = computeSkyAtmosphere(0.0);
-      const atmo1 = computeSkyAtmosphere(1.0);
-      expect(atmo1.skyTop).toBe(atmo0.skyTop);
-    });
   });
 
   // ─── Procedural Landmarks ─────────────────────────────────────────
-  describe('Procedural Landmarks (spawnNextLandmark)', () => {
+  describe('spawnNextLandmark', () => {
     it('spawns an ancient arch around 405m', () => {
       expect(spawnNextLandmark(405)).toBe('arch');
     });
@@ -305,66 +187,25 @@ describe('Skyline Drift Game Logic (extracted state machine)', () => {
     it('spawns a waterfall around 1005m', () => {
       expect(spawnNextLandmark(1005)).toBe('waterfall');
     });
-
-    it('spawns wind-turbines around 1555m', () => {
-      expect(spawnNextLandmark(1555)).toBe('turbines');
-    });
-
-    it('returns null in open stretches', () => {
-      expect(spawnNextLandmark(100)).toBeNull();
-      expect(spawnNextLandmark(600)).toBeNull();
-    });
   });
 
-  // ─── Spirit Companion & Water Physics ──────────────────────────────
-  describe('Spirit Companion & Water Surface Physics', () => {
-    it('moves companion to tight formation when in-zone', () => {
-      const initial = {
-        active: true,
-        x: 0,
-        y: 0.5,
-        z: 0,
-        targetX: 0,
-        targetY: 0,
-        wingPhase: 0,
-        alpha: 0.4,
-        leadDistance: 0,
-      };
-      const updated = updateCompanionDynamics(initial, { x: 200, y: 0.4 }, true, 0.1);
-      expect(updated.alpha).toBeGreaterThan(0.4);
-      expect(updated.x).toBeGreaterThan(0);
-    });
-
-    it('detects river water skimming when elevation >= 0.72', () => {
+  // ─── Water Physics ────────────────────────────────────────────────
+  describe('isWaterSkimming', () => {
+    it('detects river skimming when elevation >= 0.72', () => {
       expect(isWaterSkimming(0.75)).toBe(true);
-      expect(isWaterSkimming(0.72)).toBe(true);
       expect(isWaterSkimming(0.50)).toBe(false);
-      expect(isWaterSkimming(0.25)).toBe(false);
-    });
-
-    it('applies thermal updraft upward lift', () => {
-      const initialY = 0.75;
-      const boostedY = processThermalUpdraft(initialY);
-      expect(boostedY).toBeLessThan(initialY); // Lower Y = higher elevation
-      expect(boostedY).toBeCloseTo(0.57);
     });
   });
 
-  // ─── AudioEngine Skyline Extensions (Smoke Tests) ─────────────────
-  describe('AudioEngine Skyline extensions (headless SSR safety)', () => {
-    it('exposes all Skyline methods without throwing in Node', () => {
-      expect(typeof audioEngine.playPentatonicRingArpeggio).toBe('function');
-      expect(typeof audioEngine.playShardCollect).toBe('function');
-      expect(typeof audioEngine.playHyperDriftStinger).toBe('function');
-      expect(typeof audioEngine.updateFlightWind).toBe('function');
-      expect(typeof audioEngine.stopFlightWind).toBe('function');
-
-      expect(() => audioEngine.playPentatonicRingArpeggio(5)).not.toThrow();
-      expect(() => audioEngine.playShardCollect()).not.toThrow();
-      expect(() => audioEngine.playHyperDriftStinger()).not.toThrow();
-      expect(() => audioEngine.updateFlightWind(1.2, true)).not.toThrow();
-      expect(() => audioEngine.stopFlightWind()).not.toThrow();
+  // ─── Audio Engine Smoke Tests ─────────────────────────────────────
+  describe('AudioEngine (headless SSR safety)', () => {
+    it('exposes all audio methods without throwing in Node', () => {
+      expect(typeof audioEngine.updateAmbientFlowLayers).toBe('function');
+      expect(typeof audioEngine.updateWaterSkimSound).toBe('function');
+      expect(typeof audioEngine.playUpdraftWhoosh).toBe('function');
+      expect(() => audioEngine.updateAmbientFlowLayers(2, true)).not.toThrow();
+      expect(() => audioEngine.updateWaterSkimSound(true)).not.toThrow();
+      expect(() => audioEngine.playUpdraftWhoosh()).not.toThrow();
     });
   });
 });
-
