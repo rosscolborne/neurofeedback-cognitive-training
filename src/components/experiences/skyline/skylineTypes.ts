@@ -38,15 +38,11 @@ export interface BiomeTheme {
   skyTop: string;
   skyMid: string;
   skyBot: string;
-  mountainBack: string;
-  mountainMid: string;
-  mountainFront: string;
+  mountain: string;
   river: string;
   ringColor: string;
-  ringGlow: string;
-  shardColor: string;
   craftPalette: [string, string, string]; // Nose, Body, Tail
-  starAlpha: number;
+  particleColor: string;
 }
 
 export interface SkylineGameState {
