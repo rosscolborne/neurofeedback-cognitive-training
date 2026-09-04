@@ -8,7 +8,7 @@ const ACTION_CODE_SETTINGS: ActionCodeSettings = {
   url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
   handleCodeInApp: true,
   iOS: {
-    bundleId: 'com.brainswell.app',
+    bundleId: 'com.waveable.app',
   },
 };
 
