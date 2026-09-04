@@ -105,6 +105,23 @@ class AudioEngine {
     }
   }
 
+  // Play a short tactile blip or knock tone (e.g. chess piece move, button click, haptic chime)
+  public playBlip(freq = 440) {
+    this.initContext();
+    if (!this.ctx || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  }
+
   /**
    * Skyline Drift: ascending major pentatonic scale chimes as consecutive rings are cleared in-zone.
    * Streaks build an uplifting musical motif (C4, D4, E4, G4, A4, C5, D5, E5, G5, A5, C6).

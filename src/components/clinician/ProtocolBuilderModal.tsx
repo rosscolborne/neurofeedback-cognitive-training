@@ -39,7 +39,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.08,
     sensitivity: 'balanced',
     sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit'],
     clinicalNotes: 'Target TBR < 1.85 at Fz midline. High efficacy for sustained concentration and reduced impulsivity on Muse S Athena.',
   },
   {
@@ -72,7 +72,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     adaptiveStep: 0.5,
     sensitivity: 'high',
     sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'media-mode', 'eeg-mandala'],
+    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'media-mode', 'eeg-mandala', 'neuro-gambit'],
     clinicalNotes: 'Reinforces motor inhibition pathways ("active mind, still body"). Reduces motor tic latency.',
   },
   {

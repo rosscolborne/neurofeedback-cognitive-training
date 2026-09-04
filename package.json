@@ -37,6 +37,7 @@
     "@react-three/fiber": "^9.7.0",
     "@react-three/xr": "^6.6.30",
     "canvas-confetti": "^1.9.4",
+    "chess.js": "^1.4.0",
     "firebase": "^12.18.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.33.0",

@@ -97,7 +97,8 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
       'media-mode',
       'soundscape-mode',
       'mandala',
-      'eeg-mandala'
+      'eeg-mandala',
+      'neuro-gambit'
     ],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 0,
@@ -128,7 +129,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'ADHD (Inattentive)',
     status: 'active',
     assignedProtocol: 'theta-beta-ratio',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 14,
     currentStreak: 5,
@@ -229,7 +230,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Peak Performance',
     status: 'active',
     assignedProtocol: 'smr-enhancement',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'eeg-mandala'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'eeg-mandala', 'neuro-gambit'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 18,
     currentStreak: 8,
