@@ -260,6 +260,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
               {[
+                { id: 'neuro-gambit', title: 'NeuroGambit', icon: Crown, desc: 'Chess tactical calculation, impulse gating & tilt reset', badge: 'NEW • Chess', gradient: 'linear-gradient(135deg, rgba(232, 150, 122, 0.25), rgba(92, 140, 70, 0.25))', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
                 { id: 'immersive-3d', title: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', badge: 'VR', gradient: 'linear-gradient(135deg, #7B68AE22, #E8967A22)', researchUrl: 'https://doi.org/10.3389/fnhum.2019.00210' },
                 { id: 'generative-music', title: 'Generative Music', icon: Music, desc: 'Brain-generated melody, synth & rhythm', badge: 'Music', gradient: 'linear-gradient(135deg, #4A90D922, #5C8C4622)', researchUrl: 'https://doi.org/10.1016/s0031-9384(97)00436-8' },
                 { id: 'narrative-story', title: 'Graphic Novel', icon: BookOpen, desc: 'Biometric driven narrative therapy', badge: 'Narrative', gradient: 'linear-gradient(135deg, #E8967A22, #C4A35A22)', researchUrl: 'https://doi.org/10.1145/1978942.1978958' },
@@ -272,7 +273,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural soundscapes for eyes-closed training', badge: 'Audio', gradient: 'linear-gradient(135deg, #5C8C4622, #7B68AE22)', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
                 { id: 'mandala', title: 'Mandala Breathing', icon: CircleDot, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
                 { id: 'eeg-mandala', title: 'Generative Mandella', icon: Flower2, desc: 'A growing ornamental record of your neurofeedback session', badge: 'Visual', gradient: 'linear-gradient(135deg, #8B9D8333, #C66B3D33)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
-                { id: 'neuro-gambit', title: 'NeuroGambit', icon: Crown, desc: 'Chess tactical calculation, impulse gating & tilt reset', badge: 'Chess', gradient: 'linear-gradient(135deg, #E8967A22, #5C8C4622)', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
               ].map(exp => {
                 const Icon = exp.icon;
                 return (

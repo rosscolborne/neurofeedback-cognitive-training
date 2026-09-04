@@ -151,7 +151,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               scrollbarWidth: 'none',
             }}
           >
-            {client.allowedExperiences.map(exp => {
+            {[...client.allowedExperiences]
+              .sort((a, b) => (a === 'neuro-gambit' ? -1 : b === 'neuro-gambit' ? 1 : 0))
+              .map(exp => {
               const Icon = EXPERIENCES_META[exp].icon;
               return (
                 <button
