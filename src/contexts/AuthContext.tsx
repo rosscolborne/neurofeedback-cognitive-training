@@ -163,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
         handleCodeInApp: true,
         iOS: {
-          bundleId: 'com.brainswell.app',
+          bundleId: 'com.waveable.app',
         },
       });
     } catch (err) {
