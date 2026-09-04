@@ -97,7 +97,8 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
       'media-mode',
       'soundscape-mode',
       'mandala',
-      'eeg-mandala'
+      'eeg-mandala',
+      'neuro-gambit'
     ],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 0,
@@ -128,7 +129,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'ADHD (Inattentive)',
     status: 'active',
     assignedProtocol: 'theta-beta-ratio',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 14,
     currentStreak: 5,
@@ -173,7 +174,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Generalized Anxiety',
     status: 'active',
     assignedProtocol: 'alpha-enhancement',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
+    allowedExperiences: ['neuro-gambit', 'immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
     prescribedSessionsPerWeek: 3,
     completedSessionsCount: 9,
     currentStreak: 3,
@@ -201,7 +202,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Stress / Insomnia',
     status: 'paused',
     assignedProtocol: 'beta-downtraining',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
+    allowedExperiences: ['neuro-gambit', 'immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
     prescribedSessionsPerWeek: 3,
     completedSessionsCount: 6,
     currentStreak: 0,
@@ -229,7 +230,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Peak Performance',
     status: 'active',
     assignedProtocol: 'smr-enhancement',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'eeg-mandala'],
+    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'eeg-mandala', 'neuro-gambit'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 18,
     currentStreak: 8,
@@ -559,6 +560,9 @@ class StorageEngine {
           client.allowedExperiences = client.allowedExperiences.map((e: any) =>
             e === 'spatial-audio' ? 'generative-music' : e
           );
+          if (!client.allowedExperiences.includes('neuro-gambit')) {
+            client.allowedExperiences.push('neuro-gambit');
+          }
         }
         return client;
       }
@@ -589,6 +593,9 @@ class StorageEngine {
           client.allowedExperiences = client.allowedExperiences.map((e: any) =>
             e === 'spatial-audio' ? 'generative-music' : e
           );
+          if (!client.allowedExperiences.includes('neuro-gambit')) {
+            client.allowedExperiences.push('neuro-gambit');
+          }
         }
         return client;
       });
@@ -654,6 +661,9 @@ class StorageEngine {
             existing.allowedExperiences = existing.allowedExperiences.map((e: any) =>
               e === 'spatial-audio' ? 'generative-music' : e
             );
+            if (!existing.allowedExperiences.includes('neuro-gambit')) {
+              existing.allowedExperiences.push('neuro-gambit');
+            }
           }
           if (!existing.name && user.displayName) {
             existing.name = user.displayName

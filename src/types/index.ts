@@ -18,7 +18,8 @@ export type ExperienceType =
   | 'eeg-mandala'
   | 'immersive-3d'
   | 'generative-music'
-  | 'narrative-story';
+  | 'narrative-story'
+  | 'neuro-gambit';
 
 export type SessionPhase = 'calibration' | 'warmup' | 'training' | 'cooldown' | 'debrief';
 

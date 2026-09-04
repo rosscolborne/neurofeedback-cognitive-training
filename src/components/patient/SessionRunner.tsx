@@ -16,6 +16,7 @@ import { EegMandalaCanvas } from '../experiences/EegMandalaCanvas';
 import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
 import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
+import { NeuroGambitExperience } from '../experiences/NeuroGambitExperience';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { Play, Pause, Wifi, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, Brain } from 'lucide-react';
 
@@ -91,6 +92,12 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
     mechanism: 'Advances narrative progression only when target EEG thresholds are sustained.',
     benefit: 'Enhances emotional resilience and cognitive reframing by rewarding regulated states with story resolution.',
     instructions: 'Follow the story. The narrative will pause if you become overly stressed or distracted. Breathe to continue the journey.',
+  },
+  'neuro-gambit': {
+    title: 'NeuroGambit',
+    mechanism: 'Tracks Frontal Midline Theta (AF7/AF8) for deep calculation, down-trains Frontal High-Beta under clock stress, and conditions Temporoparietal Alpha (TP9/TP10) for post-blunder recovery.',
+    benefit: 'Eliminates impulsive blitz blunders, halts post-blunder tilt cascades, and trains deep tactical stamina under tournament clock pressure.',
+    instructions: 'Hold your candidate piece for 1.2s to commit the move. Stay calm under clock pressure to slow the timer. When blundering, use the 4s/6s pacer to reset your baseline.',
   }
 };
 
@@ -694,7 +701,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <main style={{ flex: 1, minHeight: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
         <div style={{ flex: 1, minHeight: 0, borderRadius: 'var(--radius-lg)', overflow: 'hidden', position: 'relative' }}>
           {selectedExperience === 'skyline-drift' && (
-            <SkylineDriftCanvas eegData={eegData} isPaused={isPaused} />
+            <SkylineDriftCanvas
+              eegData={eegData}
+              assignedProtocol={client.assignedProtocol}
+              recentInZonePercent={inZonePercent}
+              isPaused={isPaused}
+            />
           )}
           {selectedExperience === 'tidal-garden' && (
             <TidalGardenCanvas 
@@ -738,6 +750,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           )}
           {selectedExperience === 'narrative-story' && (
             <NarrativeTherapyMode eegData={eegData} />
+          )}
+          {selectedExperience === 'neuro-gambit' && (
+            <NeuroGambitExperience eegData={eegData} isPaused={isPaused} />
           )}
         </div>
 

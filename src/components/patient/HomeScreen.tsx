@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ClientProfile, ExperienceType } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
-import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, ChevronRight as ScrollHint } from 'lucide-react';
+import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, ChevronRight as ScrollHint, Crown } from 'lucide-react';
 
 interface HomeScreenProps {
   client: ClientProfile;
@@ -22,6 +22,7 @@ const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ 
   'immersive-3d': { name: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', tag: 'VR' },
   'generative-music': { name: 'Generative Music', icon: Music, desc: 'Brain-state-driven melody, synthesis & rhythm — your EEG creates the music', tag: 'Music' },
   'narrative-story': { name: 'Contemplative Reading', icon: BookOpen, desc: 'Calm mindfulness reflections guided by neurofeedback therapy', tag: 'Reading' },
+  'neuro-gambit': { name: 'NeuroGambit', icon: Crown, desc: 'Tactical chess calculation, impulse gating & post-blunder tilt reset', tag: 'Chess' },
 };
 
 function getGreeting(): string {
@@ -150,7 +151,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               scrollbarWidth: 'none',
             }}
           >
-            {client.allowedExperiences.map(exp => {
+            {[...client.allowedExperiences]
+              .sort((a, b) => (a === 'neuro-gambit' ? -1 : b === 'neuro-gambit' ? 1 : 0))
+              .map(exp => {
               const Icon = EXPERIENCES_META[exp].icon;
               return (
                 <button
