@@ -1,6 +1,30 @@
-export type SkylineFlightMode = 'wind-stream' | 'spirit-flock' | 'living-canvas';
+export interface SkylineRing {
+  x: number;
+  y: number; // 0.18 to 0.82 normalized elevation
+  z: number; // 30 to 1400 depth
+  radius: number;
+  passed: boolean;
+  pulsePhase: number;
+  isUpdraft?: boolean; // Thermal updraft ring in low valley
+}
 
-export type ParticleKind = 'cloud' | 'star' | 'speedline' | 'vapor-trail' | 'water-spray';
+export interface ZenShard {
+  x: number;
+  y: number;
+  z: number;
+  collected: boolean;
+  sparklePhase: number;
+}
+
+export type ParticleKind =
+  | 'star'
+  | 'cloud'
+  | 'speedline'
+  | 'ring-burst'
+  | 'shard-spark'
+  | 'vapor-trail'
+  | 'water-spray'
+  | 'thermal-vapor';
 
 export interface SkylineParticle {
   x: number;
@@ -15,38 +39,6 @@ export interface SkylineParticle {
   life: number;
   maxLife: number;
   kind: ParticleKind;
-}
-
-export interface DriftingPetal {
-  x: number;
-  y: number;
-  z: number;
-  size: number;
-  color: string;
-  rotation: number;
-  collected: boolean;
-}
-
-export interface FlockBird {
-  id: number;
-  offsetX: number;
-  offsetY: number;
-  offsetZ: number;
-  wingPhase: number;
-  alpha: number;
-  scale: number;
-}
-
-export interface BloomObject {
-  id: number;
-  x: number;
-  y: number;
-  z: number;
-  type: 'flower' | 'lantern';
-  scale: number;
-  alpha: number;
-  color: string;
-  bloomed: boolean;
 }
 
 export interface WaterRipple {
@@ -70,6 +62,18 @@ export interface SkylineLandmark {
   rotation?: number;
 }
 
+export interface SpiritCompanion {
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  targetX: number;
+  targetY: number;
+  wingPhase: number;
+  alpha: number;
+  leadDistance: number;
+}
+
 export interface SkyAtmosphere {
   skyTop: string;
   skyMid: string;
@@ -78,11 +82,24 @@ export interface SkyAtmosphere {
   mountainMid: string;
   mountainNear: string;
   river: string;
-  streamColor: string;
+  ringColor: string;
   name: string;
   sunPos: { x: number; y: number };
   isNight: boolean;
   ambientLight: number; // 0.2 (night) to 1.0 (noon)
+}
+
+export interface BiomeTheme {
+  id: string;
+  label: string;
+  skyTop: string;
+  skyMid: string;
+  skyBot: string;
+  mountain: string;
+  river: string;
+  ringColor: string;
+  craftPalette: [string, string, string]; // Nose, Body, Tail
+  particleColor: string;
 }
 
 export interface SkylineGameState {
@@ -90,10 +107,8 @@ export interface SkylineGameState {
   streak: number;
   maxStreak: number;
   multiplier: 1 | 2 | 3 | 4;
-  inZoneContinuousSeconds: number;
-  petalsCollected: number;
-  flockCount: number;
-  bloomsAwakened: number;
+  ringsCleared: number;
+  shardsCollected: number;
   hyperDriftActive: boolean;
   hyperDriftTimeLeft: number;
   gliderY: number;
@@ -101,9 +116,9 @@ export interface SkylineGameState {
   gliderPitch: number;
   gliderRoll: number;
   speed: number;
+  shockwaveRadius: number | null;
   autopilotActive: boolean;
   distanceTraveled: number;
   timeOfDay: number; // 0.0 (Dawn) -> 0.25 (Noon) -> 0.5 (Sunset) -> 0.75 (Twilight) -> 1.0 (Dawn)
   isSkimmingWater: boolean;
-  flightMode: SkylineFlightMode;
 }
