@@ -10,11 +10,6 @@ class AudioEngine {
   private flightWindGain: GainNode | null = null;
   private flightWindFilter: BiquadFilterNode | null = null;
   private flightWindSource: AudioBufferSourceNode | null = null;
-  private ambientDroneGain: GainNode | null = null;
-  private ambientChordsGain: GainNode | null = null;
-  private waterSkimGain: GainNode | null = null;
-  private waterSkimSource: AudioBufferSourceNode | null = null;
-  private ambientDroneVoices: OscillatorNode[] = [];
 
   private initContext() {
     if (typeof window === 'undefined') return;
@@ -287,171 +282,6 @@ class AudioEngine {
     }
   }
 
-  /**
-   * Skyline Drift: dynamically crossfades generative ambient harmony layers
-   * based on the player's neurofeedback streak multiplier (1x, 2x, 3x, 4x) and inZone status.
-   */
-  public updateAmbientFlowLayers(multiplier: 1 | 2 | 3 | 4, inZone: boolean) {
-    this.initContext();
-    if (!this.ctx || !this.masterGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-
-    // Lazily initialize base 432Hz grounding root drone (C3 + G3 fifth)
-    if (!this.ambientDroneGain) {
-      this.ambientDroneGain = this.ctx.createGain();
-      this.ambientDroneGain.gain.setValueAtTime(0.0001, now);
-      this.ambientDroneGain.connect(this.masterGain);
-
-      const rootFilter = this.ctx.createBiquadFilter();
-      rootFilter.type = 'lowpass';
-      rootFilter.frequency.setValueAtTime(450, now);
-      rootFilter.connect(this.ambientDroneGain);
-
-      const rootFreqs = [130.81, 196.00]; // C3, G3 (pure fifth)
-      rootFreqs.forEach((freq, idx) => {
-        if (!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        osc.type = idx === 0 ? 'sine' : 'triangle';
-        osc.frequency.setValueAtTime(freq, now);
-        osc.detune.setValueAtTime(idx === 0 ? -1.5 : 1.5, now);
-        osc.connect(rootFilter);
-        osc.start(now);
-        this.ambientDroneVoices.push(osc);
-      });
-    }
-
-    // Drone target volume: gentle background anchor (always active during session)
-    const droneTarget = inZone ? 0.10 : 0.05;
-    this.ambientDroneGain.gain.setTargetAtTime(droneTarget, now, 0.8);
-
-    // Chords layer: Rhodes/electric-piano warm pads for 2x, 3x, 4x flow
-    if (!this.ambientChordsGain) {
-      this.ambientChordsGain = this.ctx.createGain();
-      this.ambientChordsGain.gain.setValueAtTime(0.0001, now);
-      this.ambientChordsGain.connect(this.masterGain);
-    }
-
-    // Scale harmony volume with multiplier: 1x = silent, 2x = 0.06, 3x = 0.11, 4x = 0.16
-    const chordsTarget = multiplier === 1 ? 0.0001 : 0.04 + multiplier * 0.03;
-    this.ambientChordsGain.gain.setTargetAtTime(chordsTarget, now, 0.6);
-  }
-
-  /**
-   * Skyline Drift: gentle upward warm air sweep when catching a thermal updraft.
-   */
-  public playUpdraftWhoosh() {
-    this.initContext();
-    if (!this.ctx || !this.masterGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * 1.2;
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.4;
-    }
-
-    const source = this.ctx.createBufferSource();
-    source.buffer = noiseBuffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(280, now);
-    filter.frequency.exponentialRampToValueAtTime(950, now + 0.9);
-    filter.Q.setValueAtTime(2.2, now);
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(0.12, now + 0.2);
-    gain.gain.exponentialRampToValueAtTime(0.00001, now + 1.2);
-
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-
-    source.start(now);
-    source.stop(now + 1.25);
-  }
-
-  /**
-   * Skyline Drift: soft water ripple & rush audio when skimming inches above the river.
-   */
-  public updateWaterSkimSound(isSkimming: boolean) {
-    this.initContext();
-    if (!this.ctx || !this.masterGain) return;
-
-    const now = this.ctx.currentTime;
-
-    if (!isSkimming || this.isMuted) {
-      if (this.waterSkimGain) {
-        this.waterSkimGain.gain.setTargetAtTime(0, now, 0.2);
-      }
-      return;
-    }
-
-    if (!this.waterSkimSource) {
-      const bufferSize = this.ctx.sampleRate * 1.5;
-      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-      const data = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * 0.25;
-      }
-
-      this.waterSkimSource = this.ctx.createBufferSource();
-      this.waterSkimSource.buffer = noiseBuffer;
-      this.waterSkimSource.loop = true;
-
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(750, now);
-
-      this.waterSkimGain = this.ctx.createGain();
-      this.waterSkimGain.gain.setValueAtTime(0.0001, now);
-
-      this.waterSkimSource.connect(filter);
-      filter.connect(this.waterSkimGain);
-      this.waterSkimGain.connect(this.masterGain);
-
-      this.waterSkimSource.start();
-    }
-
-    if (this.waterSkimGain) {
-      this.waterSkimGain.gain.setTargetAtTime(0.08, now, 0.15);
-    }
-  }
-
-  public stopAmbientFlowLayers() {
-    if (this.ambientDroneGain && this.ctx) {
-      this.ambientDroneGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
-    }
-    if (this.ambientChordsGain && this.ctx) {
-      this.ambientChordsGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
-    }
-    this.ambientDroneVoices.forEach(v => {
-      try {
-        v.stop();
-        v.disconnect();
-      } catch (e) {}
-    });
-    this.ambientDroneVoices = [];
-    this.ambientDroneGain = null;
-    this.ambientChordsGain = null;
-
-    if (this.waterSkimGain && this.ctx) {
-      this.waterSkimGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
-    }
-    if (this.waterSkimSource) {
-      try {
-        this.waterSkimSource.stop();
-        this.waterSkimSource.disconnect();
-      } catch (e) {}
-      this.waterSkimSource = null;
-      this.waterSkimGain = null;
-    }
-  }
-
-
   // Play a rich, soothing meditative Tibetan singing bowl chime (432Hz solfeggio harmonic)
   public playMeditativeIntroChime() {
     this.initContext();
@@ -633,7 +463,6 @@ class AudioEngine {
       this.noiseNode = null;
     }
     this.stopFlightWind();
-    this.stopAmbientFlowLayers();
     this.isPlaying = false;
     this.currentMode = 'silent';
   }

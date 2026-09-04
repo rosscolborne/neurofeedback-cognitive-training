@@ -10,11 +10,6 @@ import {
   processHyperDriftExpiry,
   computeBaseSpeed,
   dampenPitch,
-  computeSkyAtmosphere,
-  spawnNextLandmark,
-  updateCompanionDynamics,
-  isWaterSkimming,
-  processThermalUpdraft,
 } from '../skyline/skylineGameLogic';
 
 function createMockEEGFrame(overrides: Partial<EEGDataPoint> = {}): EEGDataPoint {
@@ -263,93 +258,6 @@ describe('Skyline Drift Game Logic (extracted state machine)', () => {
     });
   });
 
-  // ─── Atmospheric Odyssey ──────────────────────────────────────────
-  describe('Atmospheric Odyssey (computeSkyAtmosphere)', () => {
-    it('returns Alpine Dawn at time 0.0', () => {
-      const atmo = computeSkyAtmosphere(0.0);
-      expect(atmo.name).toBe('Alpine Dawn');
-      expect(atmo.isNight).toBe(false);
-      expect(atmo.skyTop).toContain('rgb(');
-    });
-
-    it('returns Alpine Noon at time 0.25', () => {
-      const atmo = computeSkyAtmosphere(0.25);
-      expect(atmo.name).toBe('Alpine Noon');
-      expect(atmo.ambientLight).toBeCloseTo(1.0);
-    });
-
-    it('returns Golden Hour at time 0.50', () => {
-      const atmo = computeSkyAtmosphere(0.50);
-      expect(atmo.name).toBe('Golden Hour');
-    });
-
-    it('returns Violet Twilight with night mode at time 0.75', () => {
-      const atmo = computeSkyAtmosphere(0.75);
-      expect(atmo.name).toBe('Violet Twilight');
-      expect(atmo.isNight).toBe(true);
-    });
-
-    it('smoothly wraps around 1.0 back to dawn', () => {
-      const atmo0 = computeSkyAtmosphere(0.0);
-      const atmo1 = computeSkyAtmosphere(1.0);
-      expect(atmo1.skyTop).toBe(atmo0.skyTop);
-    });
-  });
-
-  // ─── Procedural Landmarks ─────────────────────────────────────────
-  describe('Procedural Landmarks (spawnNextLandmark)', () => {
-    it('spawns an ancient arch around 405m', () => {
-      expect(spawnNextLandmark(405)).toBe('arch');
-    });
-
-    it('spawns a waterfall around 1005m', () => {
-      expect(spawnNextLandmark(1005)).toBe('waterfall');
-    });
-
-    it('spawns wind-turbines around 1555m', () => {
-      expect(spawnNextLandmark(1555)).toBe('turbines');
-    });
-
-    it('returns null in open stretches', () => {
-      expect(spawnNextLandmark(100)).toBeNull();
-      expect(spawnNextLandmark(600)).toBeNull();
-    });
-  });
-
-  // ─── Spirit Companion & Water Physics ──────────────────────────────
-  describe('Spirit Companion & Water Surface Physics', () => {
-    it('moves companion to tight formation when in-zone', () => {
-      const initial = {
-        active: true,
-        x: 0,
-        y: 0.5,
-        z: 0,
-        targetX: 0,
-        targetY: 0,
-        wingPhase: 0,
-        alpha: 0.4,
-        leadDistance: 0,
-      };
-      const updated = updateCompanionDynamics(initial, { x: 200, y: 0.4 }, true, 0.1);
-      expect(updated.alpha).toBeGreaterThan(0.4);
-      expect(updated.x).toBeGreaterThan(0);
-    });
-
-    it('detects river water skimming when elevation >= 0.72', () => {
-      expect(isWaterSkimming(0.75)).toBe(true);
-      expect(isWaterSkimming(0.72)).toBe(true);
-      expect(isWaterSkimming(0.50)).toBe(false);
-      expect(isWaterSkimming(0.25)).toBe(false);
-    });
-
-    it('applies thermal updraft upward lift', () => {
-      const initialY = 0.75;
-      const boostedY = processThermalUpdraft(initialY);
-      expect(boostedY).toBeLessThan(initialY); // Lower Y = higher elevation
-      expect(boostedY).toBeCloseTo(0.57);
-    });
-  });
-
   // ─── AudioEngine Skyline Extensions (Smoke Tests) ─────────────────
   describe('AudioEngine Skyline extensions (headless SSR safety)', () => {
     it('exposes all Skyline methods without throwing in Node', () => {
@@ -367,4 +275,3 @@ describe('Skyline Drift Game Logic (extracted state machine)', () => {
     });
   });
 });
-
