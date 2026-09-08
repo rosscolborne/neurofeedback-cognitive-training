@@ -153,6 +153,10 @@ export class EEGEngine {
     return this.currentProtocol;
   }
 
+  public getLatestBands(): BandPowers | null {
+    return this.latestServerBands ? { ...this.latestServerBands } : null;
+  }
+
   private syncProtocolToBrainflowSession() {
     if (this.brainflowSessionId) {
       void brainflowService.updateSessionProtocol(
