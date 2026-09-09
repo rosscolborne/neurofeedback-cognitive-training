@@ -33,7 +33,14 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
     }
   }, [eegData]);
 
+  const onBaselineReadyRef = useRef(onBaselineReady);
+  onBaselineReadyRef.current = onBaselineReady;
+  const hasFinishedRef = useRef(false);
+
   const finishCalibration = useCallback(() => {
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+
     const s = samplesRef.current;
     const calcMeanStd = (arr: number[], fallbackMean: number) => {
       if (arr.length < 5) return { mean: fallbackMean, std: 1.2 };
@@ -58,8 +65,8 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
       isReady: true,
     };
 
-    onBaselineReady(baseline);
-  }, [onBaselineReady]);
+    onBaselineReadyRef.current(baseline);
+  }, []);
 
   useEffect(() => {
     const startTime = Date.now();
@@ -74,7 +81,7 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
     }, 100);
 
     return () => clearInterval(interval);
-  }, [finishCalibration]);
+  }, [durationSeconds, finishCalibration]);
 
   const progress = Math.min(1.0, secondsElapsed / durationSeconds);
   const remaining = Math.max(0, Math.ceil(durationSeconds - secondsElapsed));

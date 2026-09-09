@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { EEGDataPoint } from '../../types';
+import { eegEngine } from '../../services/eegEngine';
 import { NeuroGambitTrack, NeuroGambitBaseline, NGIScore } from './types';
 import { toBrainStateEvent, createDefaultBaseline } from './services/eegAdapter';
 import { useNeuroGambitEngine } from './hooks/useNeuroGambitEngine';
@@ -23,9 +24,33 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
   onComplete,
 }) => {
   const [selectedTrack, setSelectedTrack] = useState<NeuroGambitTrack>('composed-tactics');
-  const [baseline, setBaseline] = useState<NeuroGambitBaseline | null>(null);
-  const [showCalibration, setShowCalibration] = useState<boolean>(true);
+  const [baseline, setBaseline] = useState<NeuroGambitBaseline | null>(() => {
+    if (eegEngine.individualBaselineModel) {
+      return {
+        thetaMean: 6.2,
+        thetaStd: 1.2,
+        highBetaMean: 4.8,
+        highBetaStd: 1.1,
+        alphaMean: 7.2,
+        alphaStd: 1.3,
+        calibratedAt: Date.now(),
+        isReady: true,
+      };
+    }
+    return null;
+  });
+  const [showCalibration, setShowCalibration] = useState<boolean>(() => !eegEngine.individualBaselineModel);
   const [completedSummary, setCompletedSummary] = useState<NGIScore | null>(null);
+
+  const handleBaselineReady = useCallback((calibrated: NeuroGambitBaseline) => {
+    setBaseline(calibrated);
+    setShowCalibration(false);
+  }, []);
+
+  const handleSkipCalibration = useCallback(() => {
+    setBaseline(createDefaultBaseline());
+    setShowCalibration(false);
+  }, []);
 
   // Convert raw EEG data point to clean BrainStateEvent
   const brainState = useMemo(() => {
@@ -109,14 +134,8 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
       {showCalibration && (
         <BaselineCalibrationModal
           eegData={eegData}
-          onBaselineReady={(calibrated) => {
-            setBaseline(calibrated);
-            setShowCalibration(false);
-          }}
-          onSkip={() => {
-            setBaseline(createDefaultBaseline());
-            setShowCalibration(false);
-          }}
+          onBaselineReady={handleBaselineReady}
+          onSkip={handleSkipCalibration}
         />
       )}
 
