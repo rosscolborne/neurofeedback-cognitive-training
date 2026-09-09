@@ -1,8 +1,4 @@
-"""Pure valence/arousal proxy helpers.
-
-The MetricCalculator supplies already-smoothed band powers, so these scores
-never receive a second output-level smoothing pass.
-"""
+"""Pure valence/arousal proxy helpers for raw per-window band powers."""
 from __future__ import annotations
 
 import math

@@ -735,7 +735,7 @@ export const HardwareSetup: React.FC = () => {
             >
               {focusBetaSpikeSeen ? <CheckCircle2 size={16} color="#CA8A04" /> : <Brain size={16} color="#C4A35A" />}
               <div>
-                <div style={{ fontWeight: 600 }}>4. Multiply 17 × 14</div>
+                <div style={{ fontWeight: 600 }}>4. Mental Calculation (e.g. 7 × 8 or 12 + 19)</div>
                 <div style={{ fontSize: '10px', color: 'var(--text-tertiary, #8C8578)' }}>
                   {focusBetaSpikeSeen ? 'Beta activation verified' : 'Watch Beta ripple'}
                 </div>
@@ -883,10 +883,10 @@ export const HardwareSetup: React.FC = () => {
               <Brain size={14} /> STAGE 2: FOCUS DYNAMIC RANGE
             </div>
             <h2 className="font-display" style={{ fontSize: '28px', fontWeight: 400, margin: '0 0 6px' }}>
-              Count backward from 50 by 3s
+              Count backward from 30 by 3s
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary, #6B6560)' }}>
-              50... 47... 44... ({countdown}s remaining)
+              30... 27... 24... ({countdown}s remaining)
             </p>
           </div>
 

@@ -1,13 +1,16 @@
+from brainflow_service.affective_state import compute_affective_state
 from brainflow_service.metrics import BrainFlowScoreSmoother, MetricCalculator, MetricInput, compute_band_ratios, compute_protocol_feedback, normalize_brainflow_score, smooth_ema
 
 
-def test_band_derived_ratios_use_smoothed_bands() -> None:
+def test_derived_metrics_use_independent_output_smoothing() -> None:
     calculator = MetricCalculator(smoothing_alpha=.5)
     calculator.push(MetricInput({"theta": 8, "alpha": 4, "smr": 4, "beta": 4, "gamma": 1}, None, None, None, "theta-beta-ratio", 1.85, True))
     snapshot = calculator.push(MetricInput({"theta": 4, "alpha": 8, "smr": 8, "beta": 8, "gamma": 1}, None, None, None, "theta-beta-ratio", 1.85, True))
     assert snapshot.absolute_bands["theta"] == 6
     assert snapshot.absolute_bands["beta"] == 6
-    assert snapshot.ratios["thetaBeta"] == 1
+    # Raw ratios are 2.0 then 0.5, so the output EMA is 1.25. This must not
+    # be recomputed from the separately-smoothed theta and beta values (1.0).
+    assert snapshot.ratios["thetaBeta"] == 1.25
     assert sum(snapshot.relative_bands.values()) == 1
 
 
@@ -22,6 +25,22 @@ def test_brainflow_scores_are_output_smoothed_and_resettable() -> None:
     assert smoother.push(0, 0).mindfulness_score == 50
     smoother.reset()
     assert smoother.push(.2, .2).mindfulness_score == 20
+
+
+def test_affective_outputs_and_coherence_use_independent_output_smoothing() -> None:
+    calculator = MetricCalculator(smoothing_alpha=.5)
+    first_bands = {"theta": 4, "alpha": 8, "smr": 4, "beta": 4, "gamma": 4}
+    second_bands = {"theta": 4, "alpha": 4, "smr": 4, "beta": 8, "gamma": 8}
+    calculator.push(MetricInput(first_bands, .2, None, None, "theta-beta-ratio", 1.85, True))
+    snapshot = calculator.push(MetricInput(second_bands, .6, None, None, "theta-beta-ratio", 1.85, True))
+
+    first_affective = compute_affective_state(first_bands)
+    second_affective = compute_affective_state(second_bands)
+    assert first_affective is not None and second_affective is not None
+    assert snapshot.affective_state is not None
+    assert snapshot.interhemispheric_coherence == .4
+    assert snapshot.affective_state.valence == (first_affective.valence + second_affective.valence) / 2
+    assert snapshot.affective_state.arousal == (first_affective.arousal + second_affective.arousal) / 2
 
 
 def test_protocol_feedback_names_the_actual_metric() -> None:

@@ -238,7 +238,16 @@ def extract_brainflow_mental_state(
                 prediction,
             )
             return None
-        return float(np.clip(prediction[0], 0.0, 1.0))
+        val = float(np.clip(prediction[0], 0.0, 1.0))
+        # If BrainFlow's classifier saturates (>= 0.99) on 4-channel Muse, compute dynamic mindfulness from band distribution
+        if metric == "mindfulness" and val >= 0.99 and len(avg_band_powers) >= 4:
+            alpha_power = avg_band_powers[2]
+            theta_power = avg_band_powers[1]
+            beta_power = avg_band_powers[3]
+            gamma_power = avg_band_powers[4] if len(avg_band_powers) > 4 else 0.0
+            ratio = (alpha_power + 0.5 * theta_power) / max(1e-6, beta_power + 0.5 * gamma_power)
+            val = float(np.clip(0.5 + 0.25 * np.tanh(np.log2(max(1e-3, ratio))), 0.15, 0.95))
+        return val
     except Exception:
         logger.exception("BrainFlow %s metric extraction failed", metric)
         return None

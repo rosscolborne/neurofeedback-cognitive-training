@@ -15,8 +15,8 @@ describe('Muse BLE Pipeline End-to-End Simulation', () => {
     // 3. Start simulated 20-byte Bluetooth packets (10 Hz alpha wave, 30 uV amplitude)
     const stopSim = eegEngine.simulateMuseBluetoothPackets(2500, 10, 30);
 
-    // 4. Wait for packets to populate rawBuffers (need >= 64 samples)
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // 4. Wait for packets to populate rawBuffers (need >= 512 samples for coherence analysis)
+    await new Promise((resolve) => setTimeout(resolve, 2200));
 
     const buffers = (eegEngine as any).rawBuffers;
     expect(buffers.tp9.length).toBeGreaterThan(64);

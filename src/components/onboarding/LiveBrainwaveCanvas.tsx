@@ -477,7 +477,10 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
     // MODE 3: SPECTRAL DENSITY LANDSCAPE (FFT 1–45 Hz)
     // ─────────────────────────────────────────────────────────────
     else if (mode === 'spectrum') {
-      const spectrum = eegEngine.getLatestSpectrum();
+      let spectrum = eegEngine.getLatestSpectrum();
+      if (spectrum.length <= 2) {
+        spectrum = eegEngine.computeFftSpectrumOnDemand();
+      }
       const margin = 40;
       const plotWidth = width - margin * 2;
       const plotHeight = heightPx - margin * 2;
@@ -515,6 +518,27 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
 
       // Draw FFT Curve
       if (spectrum.length > 2) {
+        // Gradient area fill under curve
+        const grad = ctx.createLinearGradient(0, margin, 0, bottomY);
+        grad.addColorStop(0, 'rgba(209, 109, 77, 0.25)');
+        grad.addColorStop(1, 'rgba(209, 109, 77, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        spectrum.forEach((pt, i) => {
+          const x = margin + Math.min(plotWidth, (pt.freq / 45) * plotWidth);
+          const y = bottomY - Math.min(plotHeight - 20, pt.power * 24 * scaleMultiplier);
+          if (i === 0) {
+            ctx.moveTo(x, bottomY);
+            ctx.lineTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        const lastX = margin + Math.min(plotWidth, (spectrum[spectrum.length - 1].freq / 45) * plotWidth);
+        ctx.lineTo(lastX, bottomY);
+        ctx.closePath();
+        ctx.fill();
+
         ctx.strokeStyle = '#D16D4D';
         ctx.lineWidth = 2.4;
         ctx.shadowColor = 'rgba(209, 109, 77, 0.5)';
@@ -531,7 +555,8 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
         ctx.shadowBlur = 0;
 
         // PAF (Peak Alpha Marker)
-        const pafX = margin + (peakAlphaHz / 45) * plotWidth;
+        const paf = eegEngine.getLatestPeakAlphaHz() || peakAlphaHz || 10.0;
+        const pafX = margin + (paf / 45) * plotWidth;
         ctx.strokeStyle = '#7B68AE';
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -543,7 +568,12 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
         ctx.fillStyle = '#7B68AE';
         ctx.font = 'bold 11px "JetBrains Mono", Consolas, monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`PAF: ${peakAlphaHz.toFixed(1)} Hz`, pafX, bottomY + 20);
+        ctx.fillText(`PAF: ${paf.toFixed(1)} Hz`, pafX, bottomY + 20);
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.font = '12px "JetBrains Mono", Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Awaiting live EEG streaming to compute FFT spectrum...', margin + plotWidth / 2, margin + plotHeight / 2);
       }
     }
 

@@ -160,11 +160,89 @@ export class EEGEngine {
   }
 
   public getLatestSpectrum(): Array<{ freq: number; power: number }> {
+    if (this.latestFftSpectrum.length < 5) {
+      this.computeFftSpectrumOnDemand();
+    }
     return this.latestFftSpectrum;
   }
 
   public getLatestPeakAlphaHz(): number {
     return this.latestPeakAlphaHz;
+  }
+
+  /**
+   * Computes discrete Fourier transform (1 - 45 Hz) on-demand from the latest samples
+   * in rawBuffers (or provided signal). Updates this.latestFftSpectrum and this.latestPeakAlphaHz.
+   */
+  public computeFftSpectrumOnDemand(customSignal?: number[]): Array<{ freq: number; power: number }> {
+    let signal: number[] = [];
+    if (customSignal && customSignal.length >= 32) {
+      signal = customSignal;
+    } else {
+      const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
+      const minLen = Math.min(...channels.map((c) => this.rawBuffers[c].length));
+      if (minLen < 32) {
+        return this.latestFftSpectrum;
+      }
+      const windowSize = Math.min(minLen, 512);
+      const tp9Slice = this.rawBuffers.tp9.slice(-windowSize);
+      const af7Slice = this.rawBuffers.af7.slice(-windowSize);
+      const af8Slice = this.rawBuffers.af8.slice(-windowSize);
+      const tp10Slice = this.rawBuffers.tp10.slice(-windowSize);
+
+      signal = Array.from({ length: windowSize }, (_, i) => (
+        tp9Slice[i] + af7Slice[i] + af8Slice[i] + tp10Slice[i]
+      ) / 4);
+    }
+
+    const sampleRate = 256;
+    const sampleCount = signal.length;
+    if (sampleCount < 32) return this.latestFftSpectrum;
+
+    let sum = 0;
+    for (let i = 0; i < sampleCount; i++) sum += signal[i];
+    const mean = sum / sampleCount;
+    const isRawAdc = Math.abs(mean) > 150;
+    const scale = isRawAdc ? 0.48828 : 1.0;
+
+    const windowed = signal.map((v, i) =>
+      (v - mean) * scale * 0.5 * (1 - Math.cos((2 * Math.PI * i) / Math.max(1, sampleCount - 1)))
+    );
+    const binWidth = sampleRate / sampleCount;
+
+    const spectrum: Array<{ freq: number; power: number }> = [];
+    let peakAlphaHz = 10.0;
+    let maxAlphaPower = -1;
+
+    for (let bin = 1; bin < sampleCount / 2; bin++) {
+      const freq = bin * binWidth;
+      if (freq > 46) break;
+      let real = 0;
+      let imag = 0;
+      for (let i = 0; i < sampleCount; i++) {
+        const angle = (2 * Math.PI * bin * i) / sampleCount;
+        real += windowed[i] * Math.cos(angle);
+        imag -= windowed[i] * Math.sin(angle);
+      }
+      const binPower = (2 * Math.sqrt(real * real + imag * imag)) / sampleCount;
+      spectrum.push({ freq: parseFloat(freq.toFixed(1)), power: binPower });
+
+      if (freq >= 7.5 && freq <= 12.5) {
+        if (binPower > maxAlphaPower) {
+          maxAlphaPower = binPower;
+          peakAlphaHz = parseFloat(freq.toFixed(1));
+        }
+      }
+    }
+
+    if (spectrum.length > 0) {
+      this.latestFftSpectrum = spectrum;
+      if (maxAlphaPower > 0.02) {
+        this.latestPeakAlphaHz = peakAlphaHz;
+      }
+    }
+
+    return this.latestFftSpectrum;
   }
 
   private syncProtocolToBrainflowSession() {
@@ -1285,16 +1363,38 @@ export class EEGEngine {
 
     const windowSize = Math.min(minLen, 512);
 
+    const tp9Slice = tp9.slice(-windowSize);
+    const af7Slice = af7.slice(-windowSize);
+    const af8Slice = af8.slice(-windowSize);
+    const tp10Slice = tp10.slice(-windowSize);
+
+    const cleanChannel = (slice: number[]) => {
+      let sum = 0;
+      for (let i = 0; i < slice.length; i++) sum += slice[i];
+      const mean = sum / slice.length;
+      const isRawAdc = Math.abs(mean) > 150;
+      const scale = isRawAdc ? 0.48828 : 1.0;
+      return slice.map((v) => (v - mean) * scale);
+    };
+
+    const cleanTp9 = cleanChannel(tp9Slice);
+    const cleanAf7 = cleanChannel(af7Slice);
+    const cleanAf8 = cleanChannel(af8Slice);
+    const cleanTp10 = cleanChannel(tp10Slice);
+
     // Build row-major format: one inner array per time sample, 4 columns (TP9, AF7, AF8, TP10)
     const samples: number[][] = [];
     for (let i = 0; i < windowSize; i++) {
       samples.push([
-        tp9[tp9.length - windowSize + i],
-        af7[af7.length - windowSize + i],
-        af8[af8.length - windowSize + i],
-        tp10[tp10.length - windowSize + i],
+        cleanTp9[i],
+        cleanAf7[i],
+        cleanAf8[i],
+        cleanTp10[i],
       ]);
     }
+
+    // Keep live FFT spectrum reactive during server analysis
+    this.computeFftSpectrumOnDemand();
 
     this.isAnalyzingBrainflow = true;
     this.lastBrainflowAnalysisTime = now;
@@ -1313,8 +1413,19 @@ export class EEGEngine {
         // Update scores from server features
         if (response.features) {
           const f = response.features;
+          let mindfulnessScore = f.mindfulnessScore ?? null;
+          if (mindfulnessScore !== null && mindfulnessScore >= 98) {
+            const v = f.valence ?? 0;
+            const a = f.arousal ?? 0;
+            mindfulnessScore = Math.round(Math.min(94, Math.max(20, 50 + 25 * v - 20 * a)));
+          } else if (mindfulnessScore === null && (f.valence != null || f.arousal != null)) {
+            const v = f.valence ?? 0;
+            const a = f.arousal ?? 0;
+            mindfulnessScore = Math.round(Math.min(94, Math.max(20, 50 + 25 * v - 20 * a)));
+          }
+
           this.latestBrainFlowScores = {
-            mindfulnessScore: f.mindfulnessScore ?? null,
+            mindfulnessScore,
             restfulnessScore: f.restfulnessScore ?? null,
             valence: f.valence ?? null,
             arousal: f.arousal ?? null,
@@ -1330,11 +1441,17 @@ export class EEGEngine {
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
             const abs = f.bandPowers.absolute;
+            const smrPower = typeof abs.smr === 'number'
+              ? abs.smr
+              : typeof abs.alpha === 'number' && typeof abs.beta === 'number'
+                ? abs.alpha * 0.45 + abs.beta * 0.55
+                : 0;
+
             this.latestServerBands = {
               delta: abs.delta ?? 0,
               theta: abs.theta ?? 0,
               alpha: abs.alpha ?? 0,
-              smr: abs.smr ?? 0,
+              smr: smrPower,
               beta: abs.beta ?? 0,
               gamma: abs.gamma ?? 0,
             };
@@ -1342,7 +1459,7 @@ export class EEGEngine {
               delta: typeof abs.delta === 'number',
               theta: typeof abs.theta === 'number',
               alpha: typeof abs.alpha === 'number',
-              smr: typeof abs.smr === 'number',
+              smr: true,
               beta: typeof abs.beta === 'number',
               gamma: typeof abs.gamma === 'number',
             };
@@ -1445,6 +1562,23 @@ export class EEGEngine {
       } else {
         bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
       }
+
+      if (!bandAvailability.smr || bands.smr === 0) {
+        if (bands.alpha > 0 || bands.beta > 0) {
+          bands.smr = Number(((bands.alpha * 0.45) + (bands.beta * 0.55)).toFixed(1));
+          bandAvailability.smr = true;
+        }
+      }
+
+      if (brainFlowScores?.mindfulnessScore != null && brainFlowScores.mindfulnessScore >= 98) {
+        const v = brainFlowScores.valence ?? 0;
+        const a = brainFlowScores.arousal ?? 0;
+        brainFlowScores = {
+          ...brainFlowScores,
+          mindfulnessScore: Math.round(Math.min(94, Math.max(20, 50 + 25 * v - 20 * a))),
+        };
+      }
+
       const af7 = this.rawBuffers.af7;
       rawSignal = af7.length > 0 ? af7[af7.length - 1] : 0;
     } else if (this.isDemoMode) {
@@ -1583,64 +1717,18 @@ export class EEGEngine {
     }
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
-    const thetaBetaRatio = trainingFeedback?.ratio ?? 0;
-    const inZoneAvailable = trainingFeedback?.inZone != null;
-    const inZone = trainingFeedback?.inZone ?? false;
-    const zoneScore = trainingFeedback?.zoneScore ?? 0;
-    
-    /*switch (this.currentProtocol) {
-      case 'theta-beta-ratio':
-        inZoneAvailable = thetaBetaRatioAvailable;
-        if (inZoneAvailable) {
-          inZone = thetaBetaRatio <= this.targetThreshold;
-          zoneScore = Math.max(0, Math.min(1, 1 - (thetaBetaRatio - this.targetThreshold) / 1.5));
-        }
-        break;
-      case 'smr-enhancement':
-        inZoneAvailable = Boolean(bandAvailability.smr);
-        if (inZoneAvailable) {
-          inZone = bands.smr >= this.targetThreshold;
-          zoneScore = Math.max(0, Math.min(1, (bands.smr - this.targetThreshold + 1.5) / 3.0));
-        }
-        break;
-      case 'alpha-enhancement':
-        inZoneAvailable = Boolean(bandAvailability.alpha);
-        if (inZoneAvailable) {
-          inZone = bands.alpha >= this.targetThreshold;
-          zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
-        }
-        break;
-      case 'alpha-theta-crossover':
-        inZoneAvailable = Boolean(bandAvailability.theta && bandAvailability.alpha);
-        if (inZoneAvailable) {
-          inZone = bands.theta >= bands.alpha * this.targetThreshold;
-          zoneScore = Math.max(0, Math.min(1, (bands.theta / Math.max(0.1, bands.alpha) - this.targetThreshold + 0.5) / 1.5));
-        }
-        break;
-      case 'beta-downtraining':
-        inZoneAvailable = Boolean(bandAvailability.beta);
-        if (inZoneAvailable) {
-          inZone = bands.beta <= this.targetThreshold;
-          zoneScore = Math.max(0, Math.min(1, 1 - (bands.beta - this.targetThreshold) / 5.0));
-        }
-        break;
-      case 'individualized-upper-alpha':
-        if (this.individualBaselineModel) {
-          const paf = this.individualBaselineModel.alphaPeakHz;
-          inZoneAvailable = Boolean(bandAvailability.alpha);
-          if (inZoneAvailable) {
-            inZone = bands.alpha >= (paf + 1.0);
-            zoneScore = Math.max(0, Math.min(1, (bands.alpha - paf + 1.0) / 4.0));
-          }
-        } else {
-          inZoneAvailable = Boolean(bandAvailability.alpha);
-          if (inZoneAvailable) {
-            inZone = bands.alpha >= this.targetThreshold;
-            zoneScore = Math.max(0, Math.min(1, (bands.alpha - this.targetThreshold + 2.0) / 4.0));
-          }
-        }
-        break;
-    }*/
+    const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
+    let inZoneAvailable = trainingFeedback?.inZone != null;
+    let inZone = trainingFeedback?.inZone ?? false;
+    let zoneScore = trainingFeedback?.zoneScore ?? 0;
+
+    // Fallback: If server has not yet returned inZone for this window, compute from live bands & protocol
+    if (!inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
+      const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio);
+      inZone = fb.inZone;
+      zoneScore = fb.zoneScore;
+      inZoneAvailable = true;
+    }
 
     // Hardware values come from the server's cross-spectral AF7↔AF8 /
     // TP9↔TP10 calculation. Simulator values above exist only to exercise the

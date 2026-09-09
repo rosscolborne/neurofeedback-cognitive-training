@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .affective_state import AffectiveState, FitQualityHint, compute_affective_state
+from .affective_state import AffectiveState, FitQualityHint, classify_affective_state, compute_affective_state
 
 DEFAULT_SMOOTHING_ALPHA = 0.05
 
@@ -130,21 +130,27 @@ def calibration_percentile(
     return 50.0 * (1.0 + math.erf(z_score / math.sqrt(2.0)))
 
 
-class BandPowerSmoother:
-    """EMA history for absolute PSD band powers, scoped to one device session."""
+class OutputMetricSmoother:
+    """Independent EMA histories for published numeric EEG metrics."""
     def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
         self._alpha = smoothing_alpha
-        self._bands: dict[str, float] = {}
+        self._values: dict[str, float] = {}
 
     def reset(self) -> None:
-        self._bands.clear()
+        self._values.clear()
 
-    def push(self, bands: dict[str, float]) -> dict[str, float]:
+    def push(self, key: str, value: float | None) -> float | None:
+        if value is None or not math.isfinite(value):
+            return None
+        self._values[key] = smooth_ema(self._values.get(key), value, self._alpha)
+        return self._values[key]
+
+    def push_mapping(self, namespace: str, values: dict[str, float]) -> dict[str, float]:
         result: dict[str, float] = {}
-        for name, value in bands.items():
-            if math.isfinite(value):
-                self._bands[name] = smooth_ema(self._bands.get(name), max(0.0, value), self._alpha)
-                result[name] = self._bands[name]
+        for name, value in values.items():
+            smoothed = self.push(f"{namespace}:{name}", value)
+            if smoothed is not None:
+                result[name] = smoothed
         return result
 
 
@@ -173,16 +179,13 @@ class BrainFlowScoreSmoother:
 class MetricCalculator:
     """Calculates every product metric for one live EEG connection."""
     def __init__(self, smoothing_alpha: float = DEFAULT_SMOOTHING_ALPHA) -> None:
-        self._bands = BandPowerSmoother(smoothing_alpha)
+        self._outputs = OutputMetricSmoother(smoothing_alpha)
         self._brainflow = BrainFlowScoreSmoother(smoothing_alpha)
         self._calibration = MetricCalibration()
-        self._coherence: float | None = None
-        self._alpha = smoothing_alpha
 
     def reset(self) -> None:
-        self._bands.reset()
+        self._outputs.reset()
         self._brainflow.reset()
-        self._coherence = None
         self._calibration.reset()
 
     def start_calibration(self, metric_names: set[str] | None = None) -> None:
@@ -192,14 +195,26 @@ class MetricCalculator:
         self._calibration.reset()
 
     def push(self, metric_input: MetricInput) -> MetricSnapshot:
-        absolute = self._bands.push(metric_input.absolute_bands)
-        relative, ratios = compute_relative_band_powers(absolute), compute_band_ratios(absolute)
-        coherence = self._push_coherence(metric_input.interhemispheric_coherence)
+        # Derive every metric from this window's raw PSD values first. Each
+        # published output then keeps its own EMA history, so a ratio is not
+        # accidentally turned into a ratio of separately-smoothed inputs.
+        raw_absolute = {
+            name: max(0.0, value)
+            for name, value in metric_input.absolute_bands.items()
+            if math.isfinite(value)
+        }
+        raw_relative = compute_relative_band_powers(raw_absolute)
+        raw_ratios = compute_band_ratios(raw_absolute)
+        absolute = self._outputs.push_mapping("band", raw_absolute)
+        relative = self._outputs.push_mapping("relative", raw_relative)
+        ratios = self._outputs.push_mapping("ratio", raw_ratios)
+        coherence = self._outputs.push("ihc", metric_input.interhemispheric_coherence)
         # Do not display or feed an artifact-contaminated prediction into the
         # EMA history; raw model outputs remain available separately for
         # diagnostics in the transport payload.
         brainflow_scores = self._brainflow.push(metric_input.raw_mindfulness, metric_input.raw_restfulness) if metric_input.reliable else BrainFlowScores(None, None)
-        affective = compute_affective_state(absolute, metric_input.fit) if metric_input.reliable else None
+        raw_affective = compute_affective_state(raw_absolute, metric_input.fit) if metric_input.reliable else None
+        affective = self._push_affective(raw_affective)
         feedback = compute_protocol_feedback(absolute, ratios, metric_input.protocol, metric_input.threshold) if metric_input.reliable else ProtocolFeedback(None, None, None, None)
         raw_display = _display_values(brainflow_scores, affective, coherence, ratios) if metric_input.reliable else {}
         display = self._calibration.apply(raw_display) if metric_input.reliable else {}
@@ -215,11 +230,20 @@ class MetricCalculator:
                 affective = AffectiveState(display.get("valence", affective.valence), display.get("arousal", affective.arousal), affective.label, display.get("confidence", affective.confidence))
         return MetricSnapshot(absolute, relative, ratios, brainflow_scores, affective, coherence, feedback, self._calibration.status, self._calibration.progress, self._calibration.required, raw_display, baseline_relative)
 
-    def _push_coherence(self, value: float | None) -> float | None:
-        if value is None or not math.isfinite(value):
+    def _push_affective(self, raw: AffectiveState | None) -> AffectiveState | None:
+        if raw is None:
             return None
-        self._coherence = smooth_ema(self._coherence, value, self._alpha)
-        return self._coherence
+        valence = self._outputs.push("affective:valence", raw.valence)
+        arousal = self._outputs.push("affective:arousal", raw.arousal)
+        confidence = self._outputs.push("affective:confidence", raw.confidence)
+        if valence is None or arousal is None or confidence is None:
+            return None
+        return AffectiveState(
+            valence,
+            arousal,
+            classify_affective_state(valence, arousal),
+            confidence,
+        )
 
 
 def _display_values(scores: BrainFlowScores, affective: AffectiveState | None, coherence: float | None, ratios: dict[str, float]) -> dict[str, float]:

@@ -241,7 +241,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       // Recent in-zone is a live trailing metric. Calibration observations are
       // valid EEG feedback too, so begin its window as soon as fit is accepted
       // rather than holding the display and experience feedback for one minute.
-      if (!isPausedRef.current && isFitAccepted) {
+      if (!isPausedRef.current && (isFitAccepted || eegEngine.isHardwareConnected || eegEngine.isDemoMode)) {
         const observations = inZoneObservationsRef.current;
         observations.push({
           timestamp: data.timestamp,
@@ -824,14 +824,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>SMR (12-15Hz)</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-smr)' }}>
-              {eegData?.bandAvailability.smr ? eegData.bands.smr.toFixed(1) + ' µV' : '--'}
+              {eegData?.bands?.smr && eegData.bands.smr > 0 ? eegData.bands.smr.toFixed(1) + ' µV' : (eegData?.bandAvailability?.smr ? eegData.bands.smr.toFixed(1) + ' µV' : '--')}
             </div>
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone ({RECENT_IN_ZONE_WINDOW_SECONDS}s)</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {recentInZonePercent != null ? `${recentInZonePercent}%` : '--'}
+              {recentInZonePercent != null ? `${recentInZonePercent}%` : (eegData?.inZoneAvailable ? (eegData.inZone ? '100%' : '0%') : '--')}
             </div>
           </div>
         </div>
