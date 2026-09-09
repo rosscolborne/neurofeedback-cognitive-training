@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { eegEngine } from '../../services/eegEngine';
 import { EEGDataPoint, MuseChannelQuality, BandPowers } from '../../types';
-import { Activity, Waves, BarChart2, ZoomIn, Eye, Sparkles } from 'lucide-react';
+import { Activity, Waves, BarChart2 } from 'lucide-react';
 
 export type CanvasViewMode = 'bands' | 'raw' | 'spectrum';
 
@@ -13,12 +13,6 @@ interface LiveBrainwaveCanvasProps {
   onClenchDetected?: () => void;
   isCalibratingEyesClosed?: boolean;
   isCalibratingFocus?: boolean;
-}
-
-interface ArtifactBanner {
-  type: 'blink' | 'clench';
-  label: string;
-  time: number;
 }
 
 const RAW_CHANNELS: Array<{
@@ -95,8 +89,9 @@ function applyBandpassFilter(samples: number[], lowCut: number, highCut: number,
 
 /**
  * Extracts clean AC microvolts from a channel buffer with zero DC skin offset.
+ * Default windowSize is 768 samples (3.0s at 256 Hz) for calm, medical-grade sweep.
  */
-function extractChannelAcSlice(channelKey: keyof MuseChannelQuality, windowSize = 256): number[] {
+function extractChannelAcSlice(channelKey: keyof MuseChannelQuality, windowSize = 768): number[] {
   const buf = eegEngine.rawBuffers[channelKey] || [];
   if (buf.length === 0) return [];
   const samplesToTake = Math.min(buf.length, windowSize);
@@ -111,6 +106,7 @@ function extractChannelAcSlice(channelKey: keyof MuseChannelQuality, windowSize 
 
   return rawSlice.map((v) => (v - mean) * scale);
 }
+
 
 const BAND_CHANNELS: Array<{
   key: keyof BandPowers;
@@ -198,7 +194,7 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
 
   const [mode, setMode] = useState<CanvasViewMode>(initialMode);
   const [scaleMultiplier, setScaleMultiplier] = useState<number>(1);
-  const [activeArtifact, setActiveArtifact] = useState<ArtifactBanner | null>(null);
+  const [timeWindowSec, setTimeWindowSec] = useState<number>(3); // 3.0s default calm, readable sweep
 
   const [channelQuality, setChannelQuality] = useState<MuseChannelQuality>({
     tp9: 'poor',
@@ -221,7 +217,6 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
   const lastBlinkRef = useRef(0);
   const lastClenchRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
-  const phaseRef = useRef<number>(0);
 
   // Subscribe to real EEG updates
   useEffect(() => {
@@ -240,25 +235,15 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
 
       const now = performance.now();
 
-      // Real physical Blink Detection
+      // Silent biological blink detection for step progression
       if (data.artifacts?.blink && now - lastBlinkRef.current > 1200) {
         lastBlinkRef.current = now;
-        setActiveArtifact({
-          type: 'blink',
-          label: '⚡ Frontal Blink Artifact Detected (AF7 / AF8)',
-          time: now,
-        });
         onBlinkDetected?.();
       }
 
-      // Real physical Jaw Clench EMG Detection
+      // Silent biological jaw clench EMG detection for step progression
       if (data.artifacts?.clench && now - lastClenchRef.current > 1200) {
         lastClenchRef.current = now;
-        setActiveArtifact({
-          type: 'clench',
-          label: '⚡ Temporalis EMG Clench Detected (TP9 / TP10)',
-          time: now,
-        });
         onClenchDetected?.();
       }
     });
@@ -295,7 +280,7 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
       ctx.stroke();
     }
 
-    phaseRef.current += 0.05;
+    const windowSize = Math.round(timeWindowSec * 256);
 
     // ─────────────────────────────────────────────────────────────
     // MODE 1: ALL FREQUENCY BANDS (Delta, Theta, Alpha, SMR, Beta, Gamma)
@@ -305,7 +290,7 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
       const trackHeight = heightPx / BAND_CHANNELS.length;
 
       // Extract physical AC signals across active electrodes
-      const chSlices = RAW_CHANNELS.map((ch) => extractChannelAcSlice(ch.key, 256));
+      const chSlices = RAW_CHANNELS.map((ch) => extractChannelAcSlice(ch.key, windowSize));
       const maxLen = Math.max(0, ...chSlices.map((s) => s.length));
       const compositeAc: number[] = new Array(maxLen).fill(0);
 
@@ -411,7 +396,7 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
 
       RAW_CHANNELS.forEach((ch, idx) => {
         const centerY = trackHeight * idx + trackHeight / 2;
-        const acSlice = extractChannelAcSlice(ch.key, 256);
+        const acSlice = extractChannelAcSlice(ch.key, windowSize);
 
         // Divider
         ctx.strokeStyle = 'rgba(232, 150, 122, 0.08)';
@@ -565,7 +550,7 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
     ctx.restore();
 
     animationFrameRef.current = requestAnimationFrame(renderCanvas);
-  }, [mode, channelQuality, latestBands, peakAlphaHz, scaleMultiplier, isCalibratingEyesClosed, isCalibratingFocus]);
+  }, [mode, channelQuality, latestBands, peakAlphaHz, scaleMultiplier, timeWindowSec, isCalibratingEyesClosed, isCalibratingFocus]);
 
   // Handle Resize
   useEffect(() => {
@@ -596,13 +581,6 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
       }
     };
   }, [renderCanvas]);
-
-  // Clear artifact badge
-  useEffect(() => {
-    if (!activeArtifact) return;
-    const timeout = setTimeout(() => setActiveArtifact(null), 2400);
-    return () => clearTimeout(timeout);
-  }, [activeArtifact]);
 
   return (
     <div
@@ -699,68 +677,65 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
             </button>
           </div>
 
-          {/* Scale Multiplier */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-mono, monospace)' }}>
-              GAIN:
-            </span>
-            {[1, 2, 4].map((mult) => (
-              <button
-                key={mult}
-                onClick={() => setScaleMultiplier(mult)}
-                style={{
-                  background: scaleMultiplier === mult ? 'rgba(232, 150, 122, 0.3)' : 'rgba(255, 255, 255, 0.06)',
-                  color: scaleMultiplier === mult ? '#FFFFFF' : 'rgba(255, 255, 255, 0.6)',
-                  border: `1px solid ${scaleMultiplier === mult ? 'rgba(232, 150, 122, 0.5)' : 'transparent'}`,
-                  borderRadius: '4px',
-                  padding: '3px 7px',
-                  fontSize: '11px',
-                  fontFamily: 'var(--font-mono, monospace)',
-                  cursor: 'pointer',
-                }}
-              >
-                {mult}x
-              </button>
-            ))}
+          {/* Controls: Sweep Window & Scale Multiplier */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Sweep Duration */}
+            {mode !== 'spectrum' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-mono, monospace)' }}>
+                  SWEEP:
+                </span>
+                {[2, 3, 5].map((sec) => (
+                  <button
+                    key={sec}
+                    onClick={() => setTimeWindowSec(sec)}
+                    style={{
+                      background: timeWindowSec === sec ? 'rgba(232, 150, 122, 0.3)' : 'rgba(255, 255, 255, 0.06)',
+                      color: timeWindowSec === sec ? '#FFFFFF' : 'rgba(255, 255, 255, 0.6)',
+                      border: `1px solid ${timeWindowSec === sec ? 'rgba(232, 150, 122, 0.5)' : 'transparent'}`,
+                      borderRadius: '4px',
+                      padding: '3px 7px',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono, monospace)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {sec}s
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Scale Multiplier */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-mono, monospace)' }}>
+                GAIN:
+              </span>
+              {[1, 2, 4].map((mult) => (
+                <button
+                  key={mult}
+                  onClick={() => setScaleMultiplier(mult)}
+                  style={{
+                    background: scaleMultiplier === mult ? 'rgba(232, 150, 122, 0.3)' : 'rgba(255, 255, 255, 0.06)',
+                    color: scaleMultiplier === mult ? '#FFFFFF' : 'rgba(255, 255, 255, 0.6)',
+                    border: `1px solid ${scaleMultiplier === mult ? 'rgba(232, 150, 122, 0.5)' : 'transparent'}`,
+                    borderRadius: '4px',
+                    padding: '3px 7px',
+                    fontSize: '11px',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mult}x
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       {/* Canvas Viewport */}
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: `${height}px` }} />
-
-      {/* Real-Time Biological Artifact Banner */}
-      {activeArtifact && (
-        <div
-          style={{
-            position: 'absolute',
-            top: allowModeSwitching ? '52px' : '12px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background:
-              activeArtifact.type === 'blink'
-                ? 'rgba(232, 150, 122, 0.95)'
-                : 'rgba(196, 163, 90, 0.95)',
-            color: '#FFFFFF',
-            padding: '6px 14px',
-            borderRadius: '9999px',
-            fontSize: '12px',
-            fontWeight: 600,
-            fontFamily: '"DM Sans", -apple-system, sans-serif',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-            animation: 'fadeIn 0.2s ease-out',
-            pointerEvents: 'none',
-            whiteSpace: 'nowrap',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            backdropFilter: 'blur(8px)',
-            zIndex: 20,
-          }}
-        >
-          {activeArtifact.label}
-        </div>
-      )}
     </div>
   );
 };

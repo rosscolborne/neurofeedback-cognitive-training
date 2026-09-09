@@ -45,7 +45,7 @@ export class EEGEngine {
     af8: [],
     tp10: [],
   };
-  private maxBufferSize = 512; // 2 seconds of buffer
+  private maxBufferSize = 1536; // 6 seconds of buffer at 256 Hz
 
   // Server-side fit state from brainflow_service
   public serverFitState: ServerFitState | null = null;
