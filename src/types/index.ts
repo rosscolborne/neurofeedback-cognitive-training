@@ -112,6 +112,12 @@ export interface IndividualBaselineModel {
   alphaPeakHz: number;
   oneOverFSlope: number;
   lastCalibratedAt: string;
+  thetaMean?: number;
+  thetaStd?: number;
+  betaMean?: number;
+  betaStd?: number;
+  alphaMean?: number;
+  alphaStd?: number;
 }
 
 export interface ProtocolTemplate {

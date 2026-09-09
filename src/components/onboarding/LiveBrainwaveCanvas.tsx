@@ -58,10 +58,66 @@ const RAW_CHANNELS: Array<{
   },
 ];
 
+/**
+ * 2nd-order IIR Biquad Bandpass Filter for 256 Hz sampling rate.
+ * Directly extracts genuine biological oscillations from raw electrode microvolts.
+ */
+function applyBandpassFilter(samples: number[], lowCut: number, highCut: number, sampleRate = 256): number[] {
+  if (samples.length < 4) return samples;
+  const centerFreq = (lowCut + highCut) / 2;
+  const bandwidth = Math.max(1.0, highCut - lowCut);
+  const omega = (2 * Math.PI * centerFreq) / sampleRate;
+  const q = Math.max(0.5, centerFreq / bandwidth);
+  const alpha = Math.sin(omega) / (2 * q);
+
+  const b0 = alpha;
+  const b1 = 0;
+  const b2 = -alpha;
+  const a0 = 1 + alpha;
+  const a1 = -2 * Math.cos(omega);
+  const a2 = 1 - alpha;
+
+  const out = new Float32Array(samples.length);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+
+  for (let i = 0; i < samples.length; i++) {
+    const x0 = samples[i];
+    const y0 = (b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+    out[i] = y0;
+    x2 = x1;
+    x1 = x0;
+    y2 = y1;
+    y1 = y0;
+  }
+
+  return Array.from(out);
+}
+
+/**
+ * Extracts clean AC microvolts from a channel buffer with zero DC skin offset.
+ */
+function extractChannelAcSlice(channelKey: keyof MuseChannelQuality, windowSize = 256): number[] {
+  const buf = eegEngine.rawBuffers[channelKey] || [];
+  if (buf.length === 0) return [];
+  const samplesToTake = Math.min(buf.length, windowSize);
+  const rawSlice = buf.slice(buf.length - samplesToTake);
+
+  let sum = 0;
+  for (let i = 0; i < rawSlice.length; i++) sum += rawSlice[i];
+  const mean = sum / rawSlice.length;
+  // If mean > 150, values are 12-bit ADC integers (~700-3000), so scale deviation by 0.48828 uV/count
+  const isRawAdc = Math.abs(mean) > 150;
+  const scale = isRawAdc ? 0.48828 : 1.0;
+
+  return rawSlice.map((v) => (v - mean) * scale);
+}
+
 const BAND_CHANNELS: Array<{
   key: keyof BandPowers;
   name: string;
   range: string;
+  lowCut: number;
+  highCut: number;
   freqCenter: number;
   stateDesc: string;
   color: string;
@@ -70,6 +126,8 @@ const BAND_CHANNELS: Array<{
     key: 'delta',
     name: 'Delta',
     range: '0.5 – 4 Hz',
+    lowCut: 0.5,
+    highCut: 4.0,
     freqCenter: 2.2,
     stateDesc: 'Restorative & Deep Rest',
     color: '#4A90D9',
@@ -78,6 +136,8 @@ const BAND_CHANNELS: Array<{
     key: 'theta',
     name: 'Theta',
     range: '4 – 8 Hz',
+    lowCut: 4.0,
+    highCut: 8.0,
     freqCenter: 6.0,
     stateDesc: 'Intuition & Deep Meditation',
     color: '#E8967A',
@@ -86,6 +146,8 @@ const BAND_CHANNELS: Array<{
     key: 'alpha',
     name: 'Alpha',
     range: '8 – 12 Hz',
+    lowCut: 8.0,
+    highCut: 12.0,
     freqCenter: 10.0,
     stateDesc: 'Calm Alertness (Surges Eyes-Closed)',
     color: '#7B68AE',
@@ -94,6 +156,8 @@ const BAND_CHANNELS: Array<{
     key: 'smr',
     name: 'SMR',
     range: '12 – 15 Hz',
+    lowCut: 12.0,
+    highCut: 15.0,
     freqCenter: 13.5,
     stateDesc: 'Motor Stillness & Sensorimotor Rhythm',
     color: '#5C8C46',
@@ -102,6 +166,8 @@ const BAND_CHANNELS: Array<{
     key: 'beta',
     name: 'Beta',
     range: '15 – 30 Hz',
+    lowCut: 15.0,
+    highCut: 30.0,
     freqCenter: 21.0,
     stateDesc: 'Active Thinking & Focus (Math / Processing)',
     color: '#C4A35A',
@@ -110,6 +176,8 @@ const BAND_CHANNELS: Array<{
     key: 'gamma',
     name: 'Gamma',
     range: '30 – 45 Hz',
+    lowCut: 30.0,
+    highCut: 45.0,
     freqCenter: 36.0,
     stateDesc: 'Multi-Modal Cognitive Binding',
     color: '#3A78C0',
@@ -118,7 +186,7 @@ const BAND_CHANNELS: Array<{
 
 export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
   height = 460,
-  initialMode = 'bands',
+  initialMode = 'raw',
   allowModeSwitching = true,
   onBlinkDetected,
   onClenchDetected,
@@ -231,14 +299,33 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
 
     // ─────────────────────────────────────────────────────────────
     // MODE 1: ALL FREQUENCY BANDS (Delta, Theta, Alpha, SMR, Beta, Gamma)
+    // Real DSP Bandpass Decompositions (Zero Synthetic Sine Waves)
     // ─────────────────────────────────────────────────────────────
     if (mode === 'bands') {
       const trackHeight = heightPx / BAND_CHANNELS.length;
 
+      // Extract physical AC signals across active electrodes
+      const chSlices = RAW_CHANNELS.map((ch) => extractChannelAcSlice(ch.key, 256));
+      const maxLen = Math.max(0, ...chSlices.map((s) => s.length));
+      const compositeAc: number[] = new Array(maxLen).fill(0);
+
+      if (maxLen > 0) {
+        for (let i = 0; i < maxLen; i++) {
+          let sum = 0;
+          let count = 0;
+          for (const slice of chSlices) {
+            if (i < slice.length) {
+              sum += slice[i];
+              count++;
+            }
+          }
+          compositeAc[i] = count > 0 ? sum / count : 0;
+        }
+      }
+
       BAND_CHANNELS.forEach((band, idx) => {
         const centerY = trackHeight * idx + trackHeight / 2;
         const rawPower = latestBands[band.key] || 0;
-        const amplitude = rawPower * scaleMultiplier * 14;
 
         const isHighlight =
           (band.key === 'alpha' && isCalibratingEyesClosed) ||
@@ -278,7 +365,7 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
         ctx.fillStyle = band.color;
         ctx.fillRect(width - 16 - meterWidth, centerY + 4, fillWidth, 4);
 
-        // Oscillating Waveform Trace
+        // Real Filtered Biological Oscillations Trace (Pure DSP)
         const startX = 135;
         const endX = width - 90;
         const waveWidth = endX - startX;
@@ -290,16 +377,25 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
 
-        ctx.beginPath();
-        const steps = 140;
-        for (let i = 0; i <= steps; i++) {
-          const x = startX + (i / steps) * waveWidth;
-          const freq = band.key === 'alpha' ? peakAlphaHz : band.freqCenter;
-          const t = (i / steps) * (freq * 0.4) - phaseRef.current * (freq * 0.15);
-          const y = centerY + Math.sin(t * Math.PI * 2) * Math.max(2, amplitude);
+        // Filter the raw composite electrode microvolts into this specific band
+        const filtered = applyBandpassFilter(compositeAc, band.lowCut, band.highCut);
+        const bandScale = (trackHeight / 45) * scaleMultiplier;
+        const maxBandDeflection = trackHeight * 0.42;
 
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+        ctx.beginPath();
+        if (filtered.length > 1) {
+          for (let i = 0; i < filtered.length; i++) {
+            const x = startX + (i / (filtered.length - 1)) * waveWidth;
+            const clamped = Math.max(-maxBandDeflection, Math.min(maxBandDeflection, filtered[i] * bandScale));
+            const y = centerY - clamped;
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+        } else {
+          // Zero line if waiting for hardware packets
+          ctx.moveTo(startX, centerY);
+          ctx.lineTo(endX, centerY);
         }
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -308,13 +404,14 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
 
     // ─────────────────────────────────────────────────────────────
     // MODE 2: RAW ELECTRODES (TP9, AF7, AF8, TP10 256Hz Streams)
+    // True Biological Microvolt Oscilloscope (Centered with Zero DC Offset)
     // ─────────────────────────────────────────────────────────────
     else if (mode === 'raw') {
       const trackHeight = heightPx / RAW_CHANNELS.length;
 
       RAW_CHANNELS.forEach((ch, idx) => {
         const centerY = trackHeight * idx + trackHeight / 2;
-        const buffer = eegEngine.rawBuffers[ch.key] || [];
+        const acSlice = extractChannelAcSlice(ch.key, 256);
 
         // Divider
         ctx.strokeStyle = 'rgba(232, 150, 122, 0.08)';
@@ -344,21 +441,18 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
         ctx.font = '10px "DM Sans", -apple-system, sans-serif';
         ctx.fillText(ch.label.split(' ')[0], 28, centerY + 8);
 
-        // Voltage Value Right
-        const lastVal = buffer.length > 0 ? buffer[buffer.length - 1] : 0;
-        const uV = (lastVal - 2048) * 0.48828;
+        // Voltage Value Right: Real instantaneous AC potential
+        const lastVal = acSlice.length > 0 ? acSlice[acSlice.length - 1] : 0;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.font = '11px "JetBrains Mono", Consolas, monospace';
         ctx.textAlign = 'right';
-        ctx.fillText(`${uV >= 0 ? '+' : ''}${uV.toFixed(1)} μV`, width - 16, centerY);
+        ctx.fillText(`${lastVal >= 0 ? '+' : ''}${lastVal.toFixed(1)} μV`, width - 16, centerY);
 
-        // Raw Voltage Wave
-        if (buffer.length > 1) {
+        // Raw Voltage Wave: Physically bounded and centered in track
+        if (acSlice.length > 1) {
           const traceStartX = 90;
           const traceEndX = width - 75;
           const traceWidth = traceEndX - traceStartX;
-          const samplesToDraw = Math.min(buffer.length, 256);
-          const startIndex = buffer.length - samplesToDraw;
 
           ctx.shadowColor = ch.glowColor;
           ctx.shadowBlur = 6;
@@ -367,22 +461,32 @@ export const LiveBrainwaveCanvas: React.FC<LiveBrainwaveCanvasProps> = ({
           ctx.lineJoin = 'round';
           ctx.lineCap = 'round';
 
+          const scale = (trackHeight / 85) * scaleMultiplier;
+          const maxDeflection = trackHeight * 0.44;
+
           ctx.beginPath();
-          for (let i = 0; i < samplesToDraw; i++) {
-            const sample = buffer[startIndex + i];
-            const normalized = (sample - 2048) * 0.48828;
-            const scale = (trackHeight / 110) * scaleMultiplier;
-            const x = traceStartX + (i / (samplesToDraw - 1)) * traceWidth;
-            const y = centerY - normalized * scale;
+          for (let i = 0; i < acSlice.length; i++) {
+            const acUv = acSlice[i];
+            const clamped = Math.max(-maxDeflection, Math.min(maxDeflection, acUv * scale));
+            const x = traceStartX + (i / (acSlice.length - 1)) * traceWidth;
+            const y = centerY - clamped;
 
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
           }
           ctx.stroke();
           ctx.shadowBlur = 0;
+        } else {
+          // Zero line if waiting for packets
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+          ctx.beginPath();
+          ctx.moveTo(90, centerY);
+          ctx.lineTo(width - 75, centerY);
+          ctx.stroke();
         }
       });
     }
+
 
     // ─────────────────────────────────────────────────────────────
     // MODE 3: SPECTRAL DENSITY LANDSCAPE (FFT 1–45 Hz)

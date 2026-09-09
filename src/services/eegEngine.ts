@@ -1702,12 +1702,37 @@ export class EEGEngine {
       batteryLevel: this.isDemoMode && !this.isHardwareConnected
         ? 92
         : this.batteryLevel ?? undefined,
-      artifacts: {
-        blink: this.isHardwareConnected ? (this.rawBuffers.af7.slice(-10).some(v => Math.abs(v) > 120)) : (Math.random() < 0.01),
-        clench: this.isHardwareConnected
-          ? this.rawBuffers.tp9.slice(-10).some(v => Math.abs(v) > 200)
-          : this.jawClenched,
-      },
+      artifacts: (() => {
+        if (!this.isHardwareConnected) {
+          return { blink: false, clench: false };
+        }
+        const getAcDev = (channelKey: keyof MuseChannelQuality) => {
+          const buf = this.rawBuffers[channelKey];
+          if (!buf || buf.length < 10) return 0;
+          const slice = buf.slice(-30);
+          let sum = 0;
+          for (let i = 0; i < slice.length; i++) sum += slice[i];
+          const mean = sum / slice.length;
+          const isRawAdc = Math.abs(mean) > 150;
+          const scale = isRawAdc ? 0.48828 : 1.0;
+          let maxDev = 0;
+          for (let i = slice.length - 8; i < slice.length; i++) {
+            if (i >= 0) {
+              const dev = Math.abs((slice[i] - mean) * scale);
+              if (dev > maxDev) maxDev = dev;
+            }
+          }
+          return maxDev;
+        };
+
+        const frontalDev = Math.max(getAcDev('af7'), getAcDev('af8'));
+        const temporalDev = Math.max(getAcDev('tp9'), getAcDev('tp10'));
+
+        return {
+          blink: frontalDev > 85,
+          clench: temporalDev > 140,
+        };
+      })(),
       brainflowScores: brainFlowScores || undefined,
       trainingMetric: trainingMetric || undefined,
       isCalibrating: this.isCalibrating,

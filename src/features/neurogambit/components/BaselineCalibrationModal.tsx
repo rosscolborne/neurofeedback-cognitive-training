@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { EEGDataPoint } from '../../../types';
 import { NeuroGambitBaseline } from '../types';
+import { eegEngine } from '../../../services/eegEngine';
 import { Brain, ShieldCheck } from 'lucide-react';
 
 interface BaselineCalibrationModalProps {
@@ -42,17 +43,17 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
     hasFinishedRef.current = true;
 
     const s = samplesRef.current;
-    const calcMeanStd = (arr: number[], fallbackMean: number) => {
-      if (arr.length < 5) return { mean: fallbackMean, std: 1.2 };
+    const calcMeanStd = (arr: number[]) => {
+      if (arr.length === 0) return { mean: 0, std: 0.1 };
       const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
       const variance = arr.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / arr.length;
       const std = Math.sqrt(variance);
-      return { mean: Number(mean.toFixed(2)), std: Math.max(0.6, Number(std.toFixed(2))) };
+      return { mean: Number(mean.toFixed(2)), std: Math.max(0.1, Number(std.toFixed(2))) };
     };
 
-    const thetaStat = calcMeanStd(s.theta, 6.5);
-    const betaStat = calcMeanStd(s.beta, 5.0);
-    const alphaStat = calcMeanStd(s.alpha, 7.0);
+    const thetaStat = calcMeanStd(s.theta);
+    const betaStat = calcMeanStd(s.beta);
+    const alphaStat = calcMeanStd(s.alpha);
 
     const baseline: NeuroGambitBaseline = {
       thetaMean: thetaStat.mean,
@@ -63,6 +64,18 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
       alphaStd: alphaStat.std,
       calibratedAt: Date.now(),
       isReady: true,
+    };
+
+    eegEngine.individualBaselineModel = {
+      alphaPeakHz: eegEngine.getLatestPeakAlphaHz() || 10.0,
+      oneOverFSlope: 1.0,
+      lastCalibratedAt: new Date().toISOString(),
+      thetaMean: thetaStat.mean,
+      thetaStd: thetaStat.std,
+      betaMean: betaStat.mean,
+      betaStd: betaStat.std,
+      alphaMean: alphaStat.mean,
+      alphaStd: alphaStat.std,
     };
 
     onBaselineReadyRef.current(baseline);

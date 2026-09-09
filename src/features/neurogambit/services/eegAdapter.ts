@@ -3,12 +3,12 @@ import { BrainStateEvent, NeuroGambitBaseline } from '../types';
 
 export function createDefaultBaseline(): NeuroGambitBaseline {
   return {
-    thetaMean: 6.5,
-    thetaStd: 1.5,
-    highBetaMean: 5.0,
-    highBetaStd: 1.2,
-    alphaMean: 7.0,
-    alphaStd: 1.5,
+    thetaMean: 0,
+    thetaStd: 1.0,
+    highBetaMean: 0,
+    highBetaStd: 1.0,
+    alphaMean: 0,
+    alphaStd: 1.0,
     calibratedAt: Date.now(),
     isReady: false,
   };
@@ -21,9 +21,9 @@ export function toBrainStateEvent(
   if (!eegData) {
     return {
       timestamp: Date.now(),
-      frontalTheta: 6.5,
-      frontalHighBeta: 5.0,
-      tpAlpha: 7.0,
+      frontalTheta: 0,
+      frontalHighBeta: 0,
+      tpAlpha: 0,
       normalizedComposure: 1.0,
       isClenching: false,
       isBlinking: false,

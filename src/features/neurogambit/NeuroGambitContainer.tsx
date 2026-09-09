@@ -25,21 +25,25 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
 }) => {
   const [selectedTrack, setSelectedTrack] = useState<NeuroGambitTrack>('composed-tactics');
   const [baseline, setBaseline] = useState<NeuroGambitBaseline | null>(() => {
-    if (eegEngine.individualBaselineModel) {
+    const model = eegEngine.individualBaselineModel;
+    if (model && model.thetaMean !== undefined && model.betaMean !== undefined) {
       return {
-        thetaMean: 6.2,
-        thetaStd: 1.2,
-        highBetaMean: 4.8,
-        highBetaStd: 1.1,
-        alphaMean: 7.2,
-        alphaStd: 1.3,
-        calibratedAt: Date.now(),
+        thetaMean: model.thetaMean,
+        thetaStd: model.thetaStd ?? 1.0,
+        highBetaMean: model.betaMean,
+        highBetaStd: model.betaStd ?? 1.0,
+        alphaMean: model.alphaMean ?? 7.0,
+        alphaStd: model.alphaStd ?? 1.0,
+        calibratedAt: new Date(model.lastCalibratedAt).getTime(),
         isReady: true,
       };
     }
     return null;
   });
-  const [showCalibration, setShowCalibration] = useState<boolean>(() => !eegEngine.individualBaselineModel);
+  const [showCalibration, setShowCalibration] = useState<boolean>(() => {
+    const model = eegEngine.individualBaselineModel;
+    return !(model && model.thetaMean !== undefined && model.betaMean !== undefined);
+  });
   const [completedSummary, setCompletedSummary] = useState<NGIScore | null>(null);
 
   const handleBaselineReady = useCallback((calibrated: NeuroGambitBaseline) => {

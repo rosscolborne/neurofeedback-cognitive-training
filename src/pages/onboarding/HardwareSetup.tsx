@@ -48,6 +48,7 @@ export const HardwareSetup: React.FC = () => {
 
   // Calibration Tracking (strictly accumulating real measured samples)
   const [countdown, setCountdown] = useState(20);
+  const restingThetaSamplesRef = useRef<number[]>([]);
   const restingAlphaSamplesRef = useRef<number[]>([]);
   const restingBetaSamplesRef = useRef<number[]>([]);
   const eyesClosedAlphaSamplesRef = useRef<number[]>([]);
@@ -80,10 +81,12 @@ export const HardwareSetup: React.FC = () => {
 
       // Track resting baseline during playground
       if (step === 'playground' && data.bands) {
+        if (data.bands.theta > 0) restingThetaSamplesRef.current.push(data.bands.theta);
         if (data.bands.alpha > 0) restingAlphaSamplesRef.current.push(data.bands.alpha);
         if (data.bands.beta > 0) restingBetaSamplesRef.current.push(data.bands.beta);
 
         // Keep last 60 samples (~3 seconds)
+        if (restingThetaSamplesRef.current.length > 60) restingThetaSamplesRef.current.shift();
         if (restingAlphaSamplesRef.current.length > 60) restingAlphaSamplesRef.current.shift();
         if (restingBetaSamplesRef.current.length > 60) restingBetaSamplesRef.current.shift();
 
@@ -256,15 +259,15 @@ export const HardwareSetup: React.FC = () => {
     const measuredDynamicRange =
       avgRestingBeta > 0 ? parseFloat((avgFocusBeta / avgRestingBeta).toFixed(1)) : 1.0;
 
-    // 4. Real Signal Purity
+    // 4. Real Signal Purity (True measured percentage, no fake floors)
     const goodCount = Object.values(channelQuality).filter((q) => q === 'good').length;
     const measuredPurity = Math.round((goodCount / 4) * 100);
 
     setFinalMetrics({
       alphaPeakHz: realPaf,
       alphaReactivityPercent: measuredReactivity,
-      cognitiveDynamicRange: Math.max(1.0, measuredDynamicRange),
-      signalPurityPercent: Math.max(75, measuredPurity),
+      cognitiveDynamicRange: Math.max(0.5, measuredDynamicRange),
+      signalPurityPercent: Math.max(0, Math.min(100, measuredPurity)),
     });
 
     try {
@@ -278,10 +281,53 @@ export const HardwareSetup: React.FC = () => {
   const handleSaveNeuralImprint = async () => {
     setSavingBaseline(true);
     try {
+      const getStats = (arr: number[]) => {
+        if (arr.length === 0) return { mean: 0, std: 0.1 };
+        const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const variance = arr.reduce((acc, val) => acc + Math.pow(val - m, 2), 0) / arr.length;
+        return { mean: Number(m.toFixed(2)), std: Math.max(0.1, Number(Math.sqrt(variance).toFixed(2))) };
+      };
+
+      const thetaStats = getStats(restingThetaSamplesRef.current);
+      const alphaStats = getStats(
+        eyesClosedAlphaSamplesRef.current.length > 0
+          ? eyesClosedAlphaSamplesRef.current
+          : restingAlphaSamplesRef.current
+      );
+      const betaStats = getStats(
+        focusBetaSamplesRef.current.length > 0
+          ? focusBetaSamplesRef.current
+          : restingBetaSamplesRef.current
+      );
+
+      // Compute authentic 1/f spectral slope from live spectrum
+      const spectrum = eegEngine.getLatestSpectrum();
+      let slope = 1.0;
+      if (spectrum.length >= 8) {
+        const validPoints = spectrum
+          .filter((pt) => pt.freq >= 2 && pt.freq <= 35 && pt.power > 0)
+          .map((pt) => ({ x: Math.log(pt.freq), y: Math.log(pt.power) }));
+        if (validPoints.length > 4) {
+          const n = validPoints.length;
+          const sumX = validPoints.reduce((s, p) => s + p.x, 0);
+          const sumY = validPoints.reduce((s, p) => s + p.y, 0);
+          const sumXY = validPoints.reduce((s, p) => s + p.x * p.y, 0);
+          const sumXX = validPoints.reduce((s, p) => s + p.x * p.x, 0);
+          const calcSlope = (n * sumXY - sumX * sumY) / Math.max(1e-6, n * sumXX - sumX * sumX);
+          slope = Math.min(2.5, Math.max(0.5, Math.abs(calcSlope)));
+        }
+      }
+
       eegEngine.individualBaselineModel = {
         alphaPeakHz: finalMetrics.alphaPeakHz,
-        oneOverFSlope: 1.1,
+        oneOverFSlope: Number(slope.toFixed(2)),
         lastCalibratedAt: new Date().toISOString(),
+        thetaMean: thetaStats.mean,
+        thetaStd: thetaStats.std,
+        betaMean: betaStats.mean,
+        betaStd: betaStats.std,
+        alphaMean: alphaStats.mean,
+        alphaStd: alphaStats.std,
       };
 
       if (user) {
@@ -548,7 +594,7 @@ export const HardwareSetup: React.FC = () => {
             })}
           </div>
 
-          <LiveBrainwaveCanvas height={280} initialMode="raw" allowModeSwitching={false} />
+          <LiveBrainwaveCanvas height={340} initialMode="raw" allowModeSwitching={true} />
 
           <button
             onClick={handleProceedToPlayground}
@@ -700,7 +746,7 @@ export const HardwareSetup: React.FC = () => {
           {/* Full Interactive Live Multi-Mode Canvas */}
           <LiveBrainwaveCanvas
             height={380}
-            initialMode="bands"
+            initialMode="raw"
             allowModeSwitching={true}
             onBlinkDetected={handleBlinkDetected}
             onClenchDetected={handleClenchDetected}
