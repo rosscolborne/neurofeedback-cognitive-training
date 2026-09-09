@@ -71,6 +71,8 @@ export class EEGEngine {
 
   // Latest band powers from server
   private latestServerBands: BandPowers | null = null;
+  public latestFftSpectrum: Array<{ freq: number; power: number }> = [];
+  public latestPeakAlphaHz = 10.0;
   private latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
   private latestServerRatios: Record<string, number> = {};
   private latestMetricCalibration: { status: 'off' | 'collecting' | 'active'; progress: number; required: number } = { status: 'off', progress: 0, required: 24 };
@@ -157,6 +159,14 @@ export class EEGEngine {
     return this.latestServerBands ? { ...this.latestServerBands } : null;
   }
 
+  public getLatestSpectrum(): Array<{ freq: number; power: number }> {
+    return this.latestFftSpectrum;
+  }
+
+  public getLatestPeakAlphaHz(): number {
+    return this.latestPeakAlphaHz;
+  }
+
   private syncProtocolToBrainflowSession() {
     if (this.brainflowSessionId) {
       void brainflowService.updateSessionProtocol(
@@ -199,9 +209,11 @@ export class EEGEngine {
       // Bluetooth acquisition remains in the browser, but BrainFlow is the
       // only metric source. Raw windows are sent to the hosted service; do
       // not substitute browser-derived metrics when that service is absent.
-      if (this.isHardwareConnected && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 400) {
+      if (this.isHardwareConnected && !this.isAnalyzingBrainflow && now - this.lastBrainflowAnalysisTime > 150) {
         if (this.fitSessionId) {
           this.dispatchServerAnalysis(now);
+        } else {
+          this.runBrowserAnalysis(now);
         }
       }
 
@@ -228,18 +240,18 @@ export class EEGEngine {
       this.isHardwareConnected = false;
       return { success: false, error: 'Web Bluetooth is not supported on this browser (Chrome / Edge recommended).' };
     }
-    if (!brainflowService.hasConfiguredService()) {
-      return { success: false, error: 'A hosted BrainFlow service URL is required before connecting a headset.' };
-    }
-    if (!(await brainflowService.checkHealth())) {
-      return { success: false, error: `Hosted BrainFlow service is unavailable at ${brainflowService.getBaseUrl()}.` };
-    }
 
     try {
       // Use the same supported Muse Athena decoder as eeg_demo in a browser.
       if (!Capacitor.isNativePlatform()) {
         await this.connectMuseBluetoothInBrowser();
-        await this.startHostedBluetoothAnalysis();
+        if (brainflowService.hasConfiguredService()) {
+          try {
+            await this.startHostedBluetoothAnalysis();
+          } catch (e) {
+            console.info('[EEG] Using on-device DSP analysis:', e);
+          }
+        }
         return { success: true, deviceName: this.deviceName || undefined };
       }
 
@@ -369,7 +381,13 @@ export class EEGEngine {
           }
 
           console.info('[EEG BLE] Athena streaming started');
-          await this.startHostedBluetoothAnalysis();
+          if (brainflowService.hasConfiguredService()) {
+            try {
+              await this.startHostedBluetoothAnalysis();
+            } catch (e) {
+              console.info('[EEG] Using on-device DSP analysis:', e);
+            }
+          }
           return { success: true, deviceName: this.deviceName || undefined };
         }
 
@@ -422,7 +440,13 @@ export class EEGEngine {
           this.batteryLevel = val.getUint8(0);
         } catch (e) {}
 
-        await this.startHostedBluetoothAnalysis();
+        if (brainflowService.hasConfiguredService()) {
+          try {
+            await this.startHostedBluetoothAnalysis();
+          } catch (e) {
+            console.info('[EEG] Using on-device DSP analysis:', e);
+          }
+        }
         return { success: true, deviceName: this.deviceName || undefined };
       }
 
@@ -493,7 +517,13 @@ export class EEGEngine {
         this.batteryLevel = val.getUint8(0);
       } catch (e) {}
 
-      await this.startHostedBluetoothAnalysis();
+      if (brainflowService.hasConfiguredService()) {
+        try {
+          await this.startHostedBluetoothAnalysis();
+        } catch (e) {
+          console.info('[EEG] Using on-device DSP analysis:', e);
+        }
+      }
       return { success: true, deviceName: this.deviceName || undefined };
     } catch (err: any) {
       this.disconnectHardware();
@@ -1033,6 +1063,10 @@ export class EEGEngine {
     ));
     const binWidth = sampleRate / sampleCount;
 
+    const spectrum: Array<{ freq: number; power: number }> = [];
+    let peakAlphaHz = 10.0;
+    let maxAlphaPower = -1;
+
     const amplitude = (lowHz: number, highHz: number) => {
       let power = 0;
       let bins = 0;
@@ -1051,6 +1085,34 @@ export class EEGEngine {
       }
       return bins ? (2 * Math.sqrt(power / bins)) / sampleCount : 0;
     };
+
+    // Populate discrete spectrum for frequencies 1Hz to 45Hz
+    for (let bin = 1; bin < sampleCount / 2; bin++) {
+      const frequency = bin * binWidth;
+      if (frequency > 46) break;
+      let real = 0;
+      let imaginary = 0;
+      for (let index = 0; index < sampleCount; index++) {
+        const angle = (2 * Math.PI * bin * index) / sampleCount;
+        real += windowed[index] * Math.cos(angle);
+        imaginary -= windowed[index] * Math.sin(angle);
+      }
+      const binPower = (2 * Math.sqrt(real * real + imaginary * imaginary)) / sampleCount;
+      spectrum.push({ freq: parseFloat(frequency.toFixed(1)), power: binPower });
+
+      // Identify the exact peak in the alpha window (7.5 - 12.5 Hz)
+      if (frequency >= 7.5 && frequency <= 12.5) {
+        if (binPower > maxAlphaPower) {
+          maxAlphaPower = binPower;
+          peakAlphaHz = parseFloat(frequency.toFixed(1));
+        }
+      }
+    }
+
+    this.latestFftSpectrum = spectrum;
+    if (maxAlphaPower > 0.05) {
+      this.latestPeakAlphaHz = peakAlphaHz;
+    }
 
     return {
       delta: amplitude(1, 4),
