@@ -890,7 +890,6 @@ class StorageEngine {
       session.id
     );
     const useMemory =
-      session.isDemo ||
       session.patientId.startsWith('demo-') ||
       auth.currentUser?.uid === 'demo-clinician' ||
       !auth.currentUser;

@@ -113,7 +113,7 @@ const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
 interface SessionRunnerProps {
   client: ClientProfile;
   selectedExperience: ExperienceType;
-  onComplete: (summary: SessionRecord) => void;
+  onComplete: (summary: SessionRecord) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -127,6 +127,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [eegData, setEegData] = useState<EEGDataPoint | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isFitAccepted, setIsFitAccepted] = useState(eegEngine.isDemoMode);
   const [isSessionStarted, setIsSessionStarted] = useState(eegEngine.isDemoMode);
   const [showFitModal, setShowFitModal] = useState(false);
@@ -186,7 +188,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     }
   }, []);
 
-  const finishSession = React.useCallback(() => {
+  const finishSession = React.useCallback(async () => {
+    if (isSavingSession) return;
+    setIsSavingSession(true);
+    setSaveError(null);
+
     const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
     const acc = bandAccumulatorRef.current;
@@ -219,15 +225,22 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
       adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
       finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
+      isDemo: eegEngine.isDemoMode,
       averageTrainingScore: bfAcc.trainingCount > 0 ? Math.round(bfAcc.training / bfAcc.trainingCount) : null,
       averageMindfulness: bfAcc.mindfulnessCount > 0 ? Math.round(bfAcc.mindfulness / bfAcc.mindfulnessCount) : undefined,
       averageValence: bfAcc.valenceCount > 0 ? Math.round((bfAcc.valence / bfAcc.valenceCount) * 100) / 100 : undefined,
       averageArousal: bfAcc.arousalCount > 0 ? Math.round((bfAcc.arousal / bfAcc.arousalCount) * 100) / 100 : undefined,
     };
 
-    audioEngine.playChime('complete');
-    onComplete(summary);
-  }, [client.assignedProtocol, client.id, client.name, inZoneMeasuredSeconds, inZoneSeconds, onComplete, selectedExperience, totalSecondsElapsed]);
+    try {
+      await onComplete(summary);
+      audioEngine.playChime('complete');
+    } catch (error) {
+      console.error('Failed to save completed session:', error);
+      setSaveError("We couldn't save this session. Check your connection and try again.");
+      setIsSavingSession(false);
+    }
+  }, [client.assignedProtocol, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isSavingSession, onComplete, selectedExperience, totalSecondsElapsed]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {
@@ -987,12 +1000,46 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               You have trained for {formatTime(totalSecondsElapsed)} with {Math.floor(inZoneSeconds)}s in optimal neural zone.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button onClick={finishSession} className="btn btn-primary" style={{ width: '100%' }}>
-                Yes, Save Progress & View Summary
+              <button
+                onClick={() => void finishSession()}
+                disabled={isSavingSession}
+                className="btn btn-primary"
+                style={{ width: '100%', opacity: isSavingSession ? 0.7 : 1 }}
+              >
+                {isSavingSession ? 'Saving Session...' : 'Yes, Save Progress & View Summary'}
               </button>
-              <button onClick={() => setShowEndConfirm(false)} className="btn btn-ghost" style={{ width: '100%' }}>
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                disabled={isSavingSession}
+                className="btn btn-secondary"
+                style={{ width: '100%' }}
+              >
                 Continue Training
               </button>
+              <button
+                onClick={onCancel}
+                disabled={isSavingSession}
+                className="btn btn-ghost"
+                style={{ width: '100%', color: '#D32F2F' }}
+              >
+                Exit Without Saving
+              </button>
+              {saveError && (
+                <div
+                  role="alert"
+                  style={{
+                    color: '#D32F2F',
+                    background: '#FF4C4C15',
+                    border: '1px solid rgba(211, 47, 47, 0.2)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '10px 12px',
+                    fontSize: '13px',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {saveError}
+                </div>
+              )}
             </div>
           </div>
         </div>

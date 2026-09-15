@@ -160,6 +160,36 @@ describe('idempotent compatibility session saves', () => {
   });
 });
 
+describe('authenticated simulator session persistence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.auth.currentUser = { uid: 'patient-1' };
+  });
+
+  it('persists a demo-mode training session for a real patient instead of routing it to demo memory', async () => {
+    const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ exists: () => false })
+          .mockResolvedValueOnce({ exists: () => false }),
+        set: vi.fn((ref, payload) => writes.push({ ref, payload })),
+      })
+    );
+    const session = {
+      ...sessionDocument('simulated-session', 'patient-1').data(),
+      isDemo: true,
+      clinicianId: undefined,
+      clinicId: 'self-guided',
+    };
+
+    await expect(storageEngine.createSession(session)).resolves.toMatchObject({ created: true });
+    expect(firestore.runTransaction).toHaveBeenCalledOnce();
+    expect(writes[0]?.ref).toEqual({ type: 'doc', path: 'sessions', id: 'simulated-session' });
+    expect(writes[0]?.payload).toMatchObject({ isDemo: true, patientId: 'patient-1' });
+  });
+});
+
 describe('write authorization safeguards', () => {
   beforeEach(() => {
     vi.clearAllMocks();

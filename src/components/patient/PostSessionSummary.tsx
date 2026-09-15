@@ -6,7 +6,6 @@ import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
 interface PostSessionSummaryProps {
   session: SessionRecord;
   onViewProgress: () => void;
-  onDone: () => void;
 }
 
 const MOODS: Array<{ value: 1 | 2 | 3 | 4 | 5; label: string; score: string }> = [
@@ -20,17 +19,29 @@ const MOODS: Array<{ value: 1 | 2 | 3 | 4 | 5; label: string; score: string }> =
 export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
   session,
   onViewProgress,
-  onDone,
 }) => {
   const [selectedMood, setSelectedMood] = useState<1 | 2 | 3 | 4 | 5 | undefined>(session.moodRating || 4);
   const [patientNotes, setPatientNotes] = useState(session.patientNotes || '');
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    session.moodRating = selectedMood;
-    session.patientNotes = patientNotes;
-    await storageEngine.saveSession(session);
-    setIsSaved(true);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await storageEngine.saveSession({
+        ...session,
+        moodRating: selectedMood,
+        patientNotes,
+      });
+      setIsSaved(true);
+    } catch (error) {
+      console.error('Failed to save session notes:', error);
+      setSaveError("We couldn't save your notes. Check your connection and try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatDuration = (secs: number) => {
@@ -274,19 +285,34 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
       }}>
         <button
           onClick={handleSave}
+          disabled={isSaving}
           className="btn btn-secondary"
-          style={{ flex: 1 }}
+          style={{ flex: 1, opacity: isSaving ? 0.7 : 1 }}
         >
-          {isSaved ? 'Saved ✓' : 'Save Notes'}
+          {isSaving ? 'Saving...' : isSaved ? 'Saved ✓' : 'Save Notes'}
         </button>
         <button
           onClick={onViewProgress}
+          disabled={isSaving}
           className="btn btn-primary"
-          style={{ flex: 1.5 }}
+          style={{ flex: 1.5, opacity: isSaving ? 0.7 : 1 }}
         >
           View Progress <ArrowRight size={16} />
         </button>
       </div>
+      {saveError && (
+        <div
+          role="alert"
+          style={{
+            margin: '0 20px calc(12px + env(safe-area-inset-bottom, 0px))',
+            color: '#D32F2F',
+            fontSize: '13px',
+            textAlign: 'center',
+          }}
+        >
+          {saveError}
+        </div>
+      )}
     </div>
   );
 };

@@ -74,16 +74,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   const handleSessionComplete = async (session: SessionRecord) => {
-    setActiveSessionExp(null);
     await storageEngine.saveSession(session);
-    const updatedClient: ClientProfile = {
-      ...client,
-      completedSessionsCount: (client.completedSessionsCount || 0) + 1,
-      lastSessionDate: 'Today',
-      currentStreak: (client.currentStreak || 0) + 1,
-    };
-    await storageEngine.saveClient(updatedClient);
-    onUpdateClient(updatedClient);
+    const persistedClient = await storageEngine.getClient(client.id);
+    if (persistedClient) onUpdateClient(persistedClient);
+    setActiveSessionExp(null);
     setCompletedSession(session);
   };
 
@@ -164,7 +158,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           setCompletedSession(null);
           setActiveTab('progress');
         }}
-        onDone={() => setCompletedSession(null)}
       />
     );
   }
