@@ -119,5 +119,42 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAuthenticated();
     }
+
+    // Production tenant records. Practitioner IDs are Firebase user IDs until
+    // role claims are introduced by the authentication backend.
+    match /clinics/{clinicId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.practitionerIds.hasAny([request.auth.uid]);
+      allow update: if isAuthenticated() &&
+        resource.data.practitionerIds.hasAny([request.auth.uid]);
+      allow delete: if false;
+    }
+
+    match /practitioners/{practitionerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /deviceAssignments/{patientId} {
+      allow read: if isAuthenticated() && (
+        patientId == request.auth.uid || resource.data.assignedByUserId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        patientId == request.auth.uid || request.resource.data.assignedByUserId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        patientId == request.auth.uid || resource.data.assignedByUserId == request.auth.uid
+      );
+      allow delete: if false;
+    }
+
+    match /protocolCatalog/{protocolId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && request.resource.data.clinicId == request.auth.uid;
+      allow delete: if false;
+    }
   }
 }

@@ -197,6 +197,7 @@ export interface DeviceAssignment {
   assignedAt?: PersistedTimestamp;
   unassignedAt?: PersistedTimestamp | null;
   capability?: DeviceCapability;
+  assignedByUserId?: string;
 }
 
 export interface PractitionerCredential {
