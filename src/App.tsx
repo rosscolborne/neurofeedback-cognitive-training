@@ -12,7 +12,6 @@ import { useAuth } from './contexts/AuthContext';
 import { Welcome } from './pages/onboarding/Welcome';
 import { SignUp } from './pages/onboarding/SignUp';
 import { Login } from './pages/onboarding/Login';
-import { VerifyEmail } from './pages/onboarding/VerifyEmail';
 import { RoleSelection } from './pages/onboarding/RoleSelection';
 import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
@@ -269,11 +268,6 @@ export function App() {
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
             <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        ) : !user.emailVerified ? (
-          <>
-            <Route path="/welcome" element={<Welcome />} />
-            <Route path="*" element={<VerifyEmail />} />
           </>
         ) : (
           <>

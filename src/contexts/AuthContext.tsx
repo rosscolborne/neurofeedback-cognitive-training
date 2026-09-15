@@ -4,7 +4,6 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendEmailVerification,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -156,19 +155,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setUser(cred.user);
     setRole(null);
-    
-    // Send email verification with action code settings
-    try {
-      await sendEmailVerification(cred.user, {
-        url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
-        handleCodeInApp: true,
-        iOS: {
-          bundleId: 'com.waveable.app',
-        },
-      });
-    } catch (err) {
-      console.warn('Failed to send verification email:', err);
-    }
 
     try {
       await setDoc(doc(db, 'users', cred.user.uid), {
