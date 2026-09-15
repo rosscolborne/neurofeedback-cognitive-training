@@ -7,7 +7,6 @@ import {
   MilestoneBadge,
   SessionRecord,
   CalendarAppointment,
-  ExperienceType,
   SessionCreateResult,
   SessionNotesPatch,
   SessionQueryScope,
@@ -851,10 +850,15 @@ class StorageEngine {
    * omitting it is clinician-scoped, which fixes cohort reports for real users.
    */
   public async getSessions(clientId?: string): Promise<SessionRecord[]> {
-    if (clientId) return this.getSessionsFor({ role: 'patient', patientId: clientId });
-    const clinicianId = auth.currentUser?.uid;
-    if (!clinicianId) return [];
-    return this.getSessionsFor({ role: 'clinician', clinicianId });
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) return [];
+    if (clientId === currentUserId) {
+      return this.getSessionsFor({ role: 'patient', patientId: clientId });
+    }
+    if (clientId) {
+      return this.getSessionsFor({ role: 'clinician', clinicianId: currentUserId, patientId: clientId });
+    }
+    return this.getSessionsFor({ role: 'clinician', clinicianId: currentUserId });
   }
 
   public async createSession(session: SessionRecord): Promise<SessionCreateResult> {
@@ -949,11 +953,26 @@ class StorageEngine {
     }
     if (!auth.currentUser) return;
 
-    await setDoc(
-      doc(db, 'sessions', sessionId),
-      { ...notePatch, updatedAt: serverTimestamp() },
-      { merge: true }
-    );
+    const sessionRef = doc(db, 'sessions', sessionId);
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(sessionRef);
+      if (!snapshot.exists()) throw new Error(`Session ${sessionId} does not exist`);
+
+      const session = readSessionRecord(snapshot.data(), snapshot.id);
+      const currentUserId = auth.currentUser?.uid;
+      const isPatient = session.patientId === currentUserId;
+      const isClinician = session.clinicianId === currentUserId || session.clinicId === currentUserId;
+      if (!isPatient && !isClinician) throw new Error('Not authorized to update this session');
+
+      const authorizedPatch = isPatient
+        ? removeUndefined({ patientNotes: notePatch.patientNotes, moodRating: notePatch.moodRating })
+        : removeUndefined({ clinicianNotes: notePatch.clinicianNotes });
+      transaction.set(
+        sessionRef,
+        { ...authorizedPatch, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    });
   }
 
   /**
