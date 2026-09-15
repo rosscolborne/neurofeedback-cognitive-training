@@ -11,6 +11,43 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function clinicExists(clinicId) {
+      return clinicId != null &&
+        exists(/databases/$(database)/documents/clinics/$(clinicId));
+    }
+
+    function isClinicMember(clinicId) {
+      return isAuthenticated() && clinicExists(clinicId) &&
+        get(/databases/$(database)/documents/clinics/$(clinicId))
+          .data.get('practitionerIds', []).hasAny([request.auth.uid]);
+    }
+
+    function patientExists(patientId) {
+      return patientId != null &&
+        exists(/databases/$(database)/documents/clients/$(patientId));
+    }
+
+    function isPatientClinician(patientId) {
+      return isAuthenticated() && patientExists(patientId) && (
+        get(/databases/$(database)/documents/clients/$(patientId)).data.get('clinicianId', null) == request.auth.uid ||
+        get(/databases/$(database)/documents/clients/$(patientId)).data.get('linkedClinicianCode', null) == request.auth.uid
+      );
+    }
+
+    function isPatientInClinic(patientId, clinicId) {
+      return patientExists(patientId) &&
+        get(/databases/$(database)/documents/clients/$(patientId)).data.get('clinicId', null) == clinicId;
+    }
+
+    function isClinicPatient(clinicId) {
+      return isAuthenticated() && isPatientInClinic(request.auth.uid, clinicId);
+    }
+
+    function isSessionProvider(session) {
+      return isPatientClinician(session.patientId) ||
+        (isClinicMember(session.clinicId) && isPatientInClinic(session.patientId, session.clinicId));
+    }
+
     // User profiles (users/{userId})
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -21,24 +58,31 @@ service cloud.firestore {
     match /clients/{clientId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == clientId ||
-        resource.data.linkedClinicianCode == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid
+        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
+        resource.data.get('clinicianId', null) == request.auth.uid ||
+        isClinicMember(resource.data.get('clinicId', null))
       );
       allow create: if isAuthenticated() && (
         request.auth.uid == clientId ||
         request.resource.data.id == request.auth.uid ||
-        request.resource.data.linkedClinicianCode == request.auth.uid ||
-        request.resource.data.clinicianId == request.auth.uid
+        request.resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
+        request.resource.data.get('clinicianId', null) == request.auth.uid
       );
       allow update: if isAuthenticated() && (
         request.auth.uid == clientId ||
-        resource.data.linkedClinicianCode == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid
+        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
+        resource.data.get('clinicianId', null) == request.auth.uid ||
+        (
+          isClinicMember(resource.data.get('clinicId', null)) &&
+          request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+          request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) &&
+          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null)
+        )
       );
       allow delete: if isAuthenticated() && (
         request.auth.uid == clientId ||
-        resource.data.linkedClinicianCode == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid
+        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
+        resource.data.get('clinicianId', null) == request.auth.uid
       );
     }
 
@@ -46,23 +90,49 @@ service cloud.firestore {
     match /sessions/{sessionId} {
       allow read: if isAuthenticated() && (
         resource.data.patientId == request.auth.uid ||
-        resource.data.clinicId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid
+        isSessionProvider(resource.data)
       );
       allow create: if isAuthenticated() && (
         request.resource.data.patientId == request.auth.uid ||
-        request.resource.data.clinicId == request.auth.uid ||
-        request.resource.data.clinicianId == request.auth.uid
+        isSessionProvider(request.resource.data)
       );
-      allow update: if isAuthenticated() && (
-        resource.data.patientId == request.auth.uid ||
-        resource.data.clinicId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid
+      allow update: if isAuthenticated() &&
+        request.resource.data.patientId == resource.data.patientId &&
+        request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+        request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) && (
+          (
+            resource.data.patientId == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['patientNotes', 'moodRating', 'updatedAt'])
+          ) || (
+            isSessionProvider(resource.data) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['clinicianNotes', 'updatedAt'])
+          )
+        );
+      allow delete: if false;
+    }
+
+    // A device assignment belongs to the patient named by its document ID.
+    // Patients may manage their own assignment; clinicians must own the client.
+    match /deviceAssignments/{patientId} {
+      allow read: if isAuthenticated() && (
+        patientId == request.auth.uid || isPatientClinician(patientId)
       );
+      allow create: if isAuthenticated() &&
+        request.resource.data.patientId == patientId &&
+        request.resource.data.assignedByUserId == request.auth.uid && (
+          patientId == request.auth.uid || isPatientClinician(patientId)
+        );
+      allow update: if isAuthenticated() &&
+        resource.data.patientId == patientId &&
+        request.resource.data.patientId == resource.data.patientId &&
+        request.resource.data.assignedByUserId == resource.data.assignedByUserId &&
+        request.resource.data.assignedAt == resource.data.assignedAt && (
+          patientId == request.auth.uid || isPatientClinician(patientId)
+        );
       allow delete: if isAuthenticated() && (
-        resource.data.patientId == request.auth.uid ||
-        resource.data.clinicId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid
+        patientId == request.auth.uid || isPatientClinician(patientId)
       );
     }
 
@@ -123,37 +193,37 @@ service cloud.firestore {
     // Production tenant records. Practitioner IDs are Firebase user IDs until
     // role claims are introduced by the authentication backend.
     match /clinics/{clinicId} {
-      allow read: if isAuthenticated();
+      allow read: if isClinicMember(clinicId) || isClinicPatient(clinicId);
       allow create: if isAuthenticated() &&
         request.resource.data.practitionerIds.hasAny([request.auth.uid]);
       allow update: if isAuthenticated() &&
-        resource.data.practitionerIds.hasAny([request.auth.uid]);
+        resource.data.practitionerIds.hasAny([request.auth.uid]) &&
+        request.resource.data.practitionerIds == resource.data.practitionerIds;
       allow delete: if false;
     }
 
     match /practitioners/{practitionerId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow delete: if false;
-    }
-
-    match /deviceAssignments/{patientId} {
       allow read: if isAuthenticated() && (
-        patientId == request.auth.uid || resource.data.assignedByUserId == request.auth.uid
+        resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)
       );
-      allow create: if isAuthenticated() && (
-        patientId == request.auth.uid || request.resource.data.assignedByUserId == request.auth.uid
-      );
-      allow update: if isAuthenticated() && (
-        patientId == request.auth.uid || resource.data.assignedByUserId == request.auth.uid
-      );
+      allow create: if isAuthenticated() &&
+        practitionerId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        isClinicMember(request.resource.data.clinicId);
+      allow update: if isAuthenticated() &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.clinicId == resource.data.clinicId && (
+          resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)
+        );
       allow delete: if false;
     }
 
     match /protocolCatalog/{protocolId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && request.resource.data.clinicId == request.auth.uid;
+      allow create: if isAuthenticated() && isClinicMember(request.resource.data.clinicId);
+      allow update: if isAuthenticated() &&
+        request.resource.data.clinicId == resource.data.clinicId &&
+        isClinicMember(resource.data.clinicId);
       allow delete: if false;
     }
   }

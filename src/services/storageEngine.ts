@@ -633,8 +633,23 @@ class StorageEngine {
     );
   }
 
+  private async canManagePatient(patientId: string): Promise<boolean> {
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) return false;
+    if (currentUserId === patientId) return true;
+
+    try {
+      const patient = await getDoc(doc(db, 'clients', patientId));
+      if (!patient.exists()) return false;
+      const profile = readClientProfile(patient.data(), patient.id);
+      return profile.clinicianId === currentUserId || profile.linkedClinicianCode === currentUserId;
+    } catch {
+      return false;
+    }
+  }
+
   public async getDeviceAssignment(patientId: string): Promise<DeviceAssignment | null> {
-    if (!auth.currentUser || patientId.startsWith('demo-')) return null;
+    if (patientId.startsWith('demo-') || !(await this.canManagePatient(patientId))) return null;
     const snapshot = await getDoc(doc(db, 'deviceAssignments', patientId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<DeviceAssignment>;
@@ -643,13 +658,21 @@ class StorageEngine {
   }
 
   public async saveDeviceAssignment(assignment: DeviceAssignment): Promise<void> {
-    if (!auth.currentUser || assignment.patientId.startsWith('demo-')) return;
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId || assignment.patientId.startsWith('demo-')) return;
+    if (!(await this.canManagePatient(assignment.patientId))) {
+      throw new Error('Not authorized to manage this patient device assignment');
+    }
+
+    const assignmentRef = doc(db, 'deviceAssignments', assignment.patientId);
+    const existing = await getDoc(assignmentRef);
+    const existingData = existing.exists() ? (existing.data() as Partial<DeviceAssignment>) : null;
     await setDoc(
-      doc(db, 'deviceAssignments', assignment.patientId),
+      assignmentRef,
       removeUndefined({
         ...assignment,
-        assignedByUserId: assignment.assignedByUserId ?? auth.currentUser.uid,
-        assignedAt: assignment.assignedAt ?? serverTimestamp(),
+        assignedByUserId: existingData?.assignedByUserId ?? currentUserId,
+        assignedAt: existingData?.assignedAt ?? assignment.assignedAt ?? serverTimestamp(),
       }),
       { merge: true }
     );
@@ -887,6 +910,22 @@ class StorageEngine {
       return { created: true, session: normalizedSession };
     }
 
+    const currentUserId = auth.currentUser?.uid;
+    let authorized = currentUserId === session.patientId || (await this.canManagePatient(session.patientId));
+    if (!authorized && session.clinicId) {
+      const [clinic, patient] = await Promise.all([
+        this.getClinic(session.clinicId),
+        getDoc(doc(db, 'clients', session.patientId)),
+      ]);
+      authorized = Boolean(
+        currentUserId &&
+        clinic?.practitionerIds.includes(currentUserId) &&
+        patient.exists() &&
+        readClientProfile(patient.data(), patient.id).clinicId === session.clinicId
+      );
+    }
+    if (!authorized) throw new Error('Not authorized to create a session for this patient');
+
     const sessionRef = doc(db, 'sessions', session.id);
     const clientRef = doc(db, 'clients', session.patientId);
     return runTransaction(db, async (transaction) => {
@@ -961,8 +1000,23 @@ class StorageEngine {
       const session = readSessionRecord(snapshot.data(), snapshot.id);
       const currentUserId = auth.currentUser?.uid;
       const isPatient = session.patientId === currentUserId;
-      const isClinician = session.clinicianId === currentUserId || session.clinicId === currentUserId;
-      if (!isPatient && !isClinician) throw new Error('Not authorized to update this session');
+      let isProvider = false;
+      if (!isPatient && currentUserId) {
+        const patient = await transaction.get(doc(db, 'clients', session.patientId));
+        if (patient.exists()) {
+          const profile = readClientProfile(patient.data(), patient.id);
+          isProvider =
+            profile.clinicianId === currentUserId || profile.linkedClinicianCode === currentUserId;
+          if (!isProvider && session.clinicId && profile.clinicId === session.clinicId) {
+            const clinic = await transaction.get(doc(db, 'clinics', session.clinicId));
+            const practitionerIds = clinic.exists()
+              ? (clinic.data() as Partial<ClinicProfile>).practitionerIds
+              : undefined;
+            isProvider = Array.isArray(practitionerIds) && practitionerIds.includes(currentUserId);
+          }
+        }
+      }
+      if (!isPatient && !isProvider) throw new Error('Not authorized to update this session');
 
       const authorizedPatch = isPatient
         ? removeUndefined({ patientNotes: notePatch.patientNotes, moodRating: notePatch.moodRating })
