@@ -7,6 +7,13 @@ import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
 import {
+  assessQeegRecord,
+  deriveLearningScorePoints,
+  deriveSessionBandRows,
+  finiteMetric,
+  formatSigned,
+} from './clinicalDetailMetrics';
+import {
   ArrowLeft,
   Send,
   Settings2,
@@ -14,8 +21,6 @@ import {
   Upload,
   Brain,
   FileText,
-  Play,
-  Pause,
 } from 'lucide-react';
 
 interface ClientDetailViewProps {
@@ -37,14 +42,22 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
   const [showBrainMapUpload, setShowBrainMapUpload] = useState(false);
 
-  // Live telemetry interactive simulator state
-  const [isStreaming, setIsStreaming] = useState(true);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [sessionsState, setSessionsState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     let isMounted = true;
+    setSessionsState('loading');
     storageEngine.getSessions(client.id).then((data) => {
-      if (isMounted) setSessions(data);
+      if (isMounted) {
+        setSessions(data);
+        setSessionsState('ready');
+      }
+    }).catch(() => {
+      if (isMounted) {
+        setSessions([]);
+        setSessionsState('error');
+      }
     });
     return () => {
       isMounted = false;
@@ -75,24 +88,13 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     onUpdateClient(updated);
   };
 
-  // Generate dynamic PSD data from sessions or fallback
-  const psdGroups = sessions.length > 0
-    ? sessions.slice(0, 4).reverse().map((s, idx) => ({
-        label: `Session ${idx + 1} (${s.date.split(',')[0]})`,
-        delta: s.averageBands?.delta || 12,
-        theta: s.averageBands?.theta || 8,
-        alpha: s.averageBands?.alpha || 11,
-        beta: s.averageBands?.beta || 9,
-      }))
-    : [
-        {
-          label: 'Baseline QEEG',
-          delta: client.brainMaps?.[0]?.zScores ? 20 + client.brainMaps[0].zScores.temporalDelta * 10 : 25,
-          theta: client.brainMaps?.[0]?.zScores ? 35 + client.brainMaps[0].zScores.frontalTheta * 15 : 45,
-          alpha: client.brainMaps?.[0]?.zScores ? 30 + client.brainMaps[0].zScores.occipitalAlpha * 10 : 30,
-          beta: client.brainMaps?.[0]?.zScores ? 25 + client.brainMaps[0].zScores.centralBeta * 10 : 28,
-        },
-      ];
+  const psdRows = deriveSessionBandRows(sessions);
+  const psdGroups = psdRows.filter((row) => row.bands != null);
+  const invalidPsdRows = psdRows.filter((row) => row.issue);
+  const psdMaximum = Math.max(1, ...psdGroups.flatMap((row) => Object.values(row.bands!)));
+  const psdAxisMaximum = Math.ceil(psdMaximum / 10) * 10 || 1;
+  const psdAxisValues = [0, 0.25, 0.5, 0.75, 1].map((fraction) => psdAxisMaximum * fraction);
+  const learningScores = deriveLearningScorePoints(sessions);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -112,7 +114,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             className="btn btn-ghost"
             style={{ border: '1px solid var(--border-default)', fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <Upload size={14} /> Import QEEG
+            <Upload size={14} /> Add Manual QEEG Record
           </button>
           <button
             onClick={handleDownloadPDF}
@@ -158,7 +160,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition} • Protocol: <strong>{client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong> • Hardware: <strong>Muse S (Athena) 4-Ch</strong>
+              {client.condition} • Protocol: <strong>{client.assignedProtocol ? client.assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
             </div>
           </div>
         </div>
@@ -186,8 +188,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         {[
           { id: 'eeg', label: 'EEG Overview & Spectral PSD' },
           { id: 'protocol', label: 'Protocol Settings' },
-          { id: 'brainmaps', label: `In-Clinic Brain Maps (${client.brainMaps?.length || 0})` },
-          { id: 'telemetry', label: 'Live Telemetry & Athena Fit' },
+          { id: 'brainmaps', label: `QEEG Records (${client.brainMaps?.length || 0})` },
+          { id: 'telemetry', label: 'Live Telemetry' },
           { id: 'sessions', label: `Session Logs (${sessions.length})` },
         ].map((tab) => (
           <button
@@ -222,7 +224,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   Spectral Power Distribution (µV²) Across Sessions
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Extracted from Muse S Athena biosensors (AF7/AF8 Frontal, TP9/TP10 Posterior)
+                  Persisted session band-power values. No QEEG transform or missing-value substitution is applied.
                 </p>
               </div>
 
@@ -247,15 +249,20 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </div>
             </div>
 
-            {/* Dynamic Grouped Bar Chart */}
-            <div className="chart-touch-container" style={{ width: '100%', height: '220px' }}>
+            {sessionsState === 'loading' ? (
+              <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading recorded sessions…</div>
+            ) : sessionsState === 'error' ? (
+              <div role="alert" style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session measurements could not be loaded.</div>
+            ) : psdGroups.length === 0 ? (
+              <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>No complete persisted band-power measurements are available.</div>
+            ) : <div className="chart-touch-container" style={{ width: '100%', height: '220px' }}>
               <svg viewBox="0 0 700 240" style={{ width: '100%', minWidth: '420px', height: '100%' }}>
-                {[0, 20, 40, 60, 80].map((val) => {
-                  const y = 200 - val * 2.2;
+                {psdAxisValues.map((val) => {
+                  const y = 200 - (val / psdAxisMaximum) * 176;
                   return (
                     <g key={val}>
                       <text x="25" y={y + 4} fill="var(--text-tertiary)" fontSize="10" textAnchor="end" fontFamily="var(--font-mono)">
-                        {val}
+                        {Number.isInteger(val) ? val : val.toFixed(1)}
                       </text>
                       <line x1="35" y1={y} x2="680" y2={y} stroke="var(--border-subtle)" strokeWidth="1" />
                     </g>
@@ -265,12 +272,13 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 {psdGroups.map((group, gIdx) => {
                   const groupX = 65 + gIdx * 155;
                   const barWidth = 24;
+                  const bands = group.bands!;
                   return (
-                    <g key={group.label}>
-                      <rect x={groupX} y={200 - Math.min(80, group.delta) * 2.2} width={barWidth} height={Math.min(80, group.delta) * 2.2} fill="var(--chart-delta)" rx="2" />
-                      <rect x={groupX + 28} y={200 - Math.min(80, group.theta) * 2.2} width={barWidth} height={Math.min(80, group.theta) * 2.2} fill="var(--chart-theta)" rx="2" />
-                      <rect x={groupX + 56} y={200 - Math.min(80, group.alpha) * 2.2} width={barWidth} height={Math.min(80, group.alpha) * 2.2} fill="var(--chart-alpha)" rx="2" />
-                      <rect x={groupX + 84} y={200 - Math.min(80, group.beta) * 2.2} width={barWidth} height={Math.min(80, group.beta) * 2.2} fill="var(--chart-beta)" rx="2" />
+                    <g key={group.id}>
+                      <rect x={groupX} y={200 - (bands.delta / psdAxisMaximum) * 176} width={barWidth} height={(bands.delta / psdAxisMaximum) * 176} fill="var(--chart-delta)" rx="2"><title>{`Delta: ${bands.delta}`}</title></rect>
+                      <rect x={groupX + 28} y={200 - (bands.theta / psdAxisMaximum) * 176} width={barWidth} height={(bands.theta / psdAxisMaximum) * 176} fill="var(--chart-theta)" rx="2"><title>{`Theta: ${bands.theta}`}</title></rect>
+                      <rect x={groupX + 56} y={200 - (bands.alpha / psdAxisMaximum) * 176} width={barWidth} height={(bands.alpha / psdAxisMaximum) * 176} fill="var(--chart-alpha)" rx="2"><title>{`Alpha: ${bands.alpha}`}</title></rect>
+                      <rect x={groupX + 84} y={200 - (bands.beta / psdAxisMaximum) * 176} width={barWidth} height={(bands.beta / psdAxisMaximum) * 176} fill="var(--chart-beta)" rx="2"><title>{`Beta: ${bands.beta}`}</title></rect>
                       <text x={groupX + 54} y="222" fill="var(--text-secondary)" fontSize="11" textAnchor="middle" fontWeight="500">
                         {group.label}
                       </text>
@@ -278,7 +286,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   );
                 })}
               </svg>
-            </div>
+            </div>}
+            {invalidPsdRows.length > 0 && sessionsState === 'ready' && (
+              <div role="status" style={{ marginTop: '8px', color: 'var(--status-alert)', fontSize: '11px' }}>
+                {invalidPsdRows.length} session{invalidPsdRows.length === 1 ? '' : 's'} omitted because persisted band data is partial or malformed.
+              </div>
+            )}
             
             {/* Learning Curve Chart */}
             <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
@@ -288,12 +301,14 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                     Self-Regulation Learning Curve
                   </h3>
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Tracking physiological learning rate vs. baseline across sessions (Score 0-100)
+                    Persisted learning-rate scores only (0–100). Missing scores are not estimated.
                   </p>
                 </div>
               </div>
               
-              <div className="chart-touch-container" style={{ width: '100%', height: '160px' }}>
+              {learningScores.points.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>No persisted learning-rate scores are available.</div>
+              ) : <div className="chart-touch-container" style={{ width: '100%', height: '160px' }}>
                 <svg viewBox="0 0 700 160" style={{ width: '100%', minWidth: '420px', height: '100%' }}>
                   {[0, 25, 50, 75, 100].map((val) => {
                     const y = 140 - val * 1.2;
@@ -309,21 +324,23 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   
                   {/* Line Path */}
                   <path
-                    d={`M 65 ${sessions.length > 0 ? 140 - (sessions[0].learningRateScore || 50) * 1.2 : 140 - 50 * 1.2} ` + 
-                       sessions.slice(1).map((s, idx) => `L ${65 + (idx + 1) * 100} ${140 - (s.learningRateScore || 50) * 1.2}`).join(' ')}
+                    d={learningScores.points.map((point, idx) => `${idx === 0 ? 'M' : 'L'} ${65 + idx * 100} ${140 - point.value * 1.2}`).join(' ')}
                     fill="none"
                     stroke="var(--brand-primary)"
                     strokeWidth="3"
                   />
                   
                   {/* Points */}
-                  {sessions.length > 0 ? sessions.map((s, idx) => (
-                    <circle key={s.id} cx={65 + idx * 100} cy={140 - (s.learningRateScore || 50) * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
-                  )) : (
-                    <circle cx="65" cy={140 - 50 * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
-                  )}
+                  {learningScores.points.map((point, idx) => (
+                    <circle key={point.id} cx={65 + idx * 100} cy={140 - point.value * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
+                  ))}
                 </svg>
-              </div>
+              </div>}
+              {learningScores.invalidCount > 0 && (
+                <div role="status" style={{ color: 'var(--status-alert)', fontSize: '11px' }}>
+                  {learningScores.invalidCount} session{learningScores.invalidCount === 1 ? '' : 's'} omitted because the score is missing or invalid.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -341,7 +358,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {client.customProtocolConfig && <>Evidence-Based Protocol: <strong>{client.customProtocolConfig.name}</strong> • </>}
-                10-20 Site: <strong>{client.customProtocolConfig?.montageSite || 'Fz / Cz'}</strong> • Muse S Athena Mapping: <strong>{client.customProtocolConfig?.museChannelMapping || 'AF7 / AF8 Frontal (Derived Fz)'}</strong>
+                10-20 Site: <strong>{client.customProtocolConfig?.montageSite || 'Unavailable'}</strong> • Channel mapping: <strong>{client.customProtocolConfig?.museChannelMapping || 'Unavailable'}</strong>
               </p>
             </div>
             <button onClick={() => setShowProtocolBuilder(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '6px 12px' }}>
@@ -350,7 +367,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           </div>
 
           <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, padding: '12px 14px' }}>
-            <strong>Clinical Rationale:</strong> {client.customProtocolConfig?.clinicalNotes || 'Frontal midline electrode feedback to suppress slow theta bursts and sustain high-frequency beta focus for ADHD inattentive condition.'}
+            <strong>Clinical notes:</strong> {client.customProtocolConfig?.clinicalNotes || 'Unavailable — no notes are stored with this assignment.'}
           </div>
         </div>
       )}
@@ -362,17 +379,19 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>In-Clinic QEEG Brain Maps</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                19-channel quantitative EEG baseline data imported from clinical visitations.
+                Manually entered values from a validated clinical source. Neurasticity does not calculate normative transforms here.
               </p>
             </div>
             <button onClick={() => setShowBrainMapUpload(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Upload size={13} /> Upload Map
+              <Upload size={13} /> Add Manual Record
             </button>
           </div>
 
           {client.brainMaps && client.brainMaps.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {client.brainMaps.map((bm) => (
+              {client.brainMaps.map((bm) => {
+                const assessment = assessQeegRecord(bm);
+                return (
                 <div
                   key={bm.id}
                   style={{
@@ -385,120 +404,96 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Brain size={16} color="var(--brand-primary)" />
-                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{bm.deviceSource}</span>
+                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{bm.deviceSource || 'Source unavailable'}</span>
                     </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Imported {bm.uploadDate}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Recorded {bm.recordingDate || 'date unavailable'}</span>
                   </div>
+
+                  {assessment.status !== 'complete' && (
+                    <div role="status" style={{ marginTop: '10px', fontSize: '11px', color: 'var(--status-alert)' }}>
+                      {assessment.status === 'malformed' ? 'Malformed record' : 'Partial record'}: {assessment.issues.join('; ')}.
+                    </div>
+                  )}
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', margin: '12px 0' }}>
                     <div className="card-clinician" style={{ padding: '8px 10px' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Frontal Theta (Z)</div>
-                      <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: bm.zScores.frontalTheta > 2 ? 'var(--status-alert)' : 'var(--status-active)' }}>
-                        Z = +{bm.zScores.frontalTheta}
+                      <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700 }}>
+                        {assessment.zScores.frontalTheta == null ? 'Unavailable' : `Z = ${formatSigned(assessment.zScores.frontalTheta)}`}
                       </div>
                     </div>
                     <div className="card-clinician" style={{ padding: '8px 10px' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Central Beta (Z)</div>
                       <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700 }}>
-                        Z = {bm.zScores.centralBeta >= 0 ? `+${bm.zScores.centralBeta}` : bm.zScores.centralBeta}
+                        {assessment.zScores.centralBeta == null ? 'Unavailable' : `Z = ${formatSigned(assessment.zScores.centralBeta)}`}
                       </div>
                     </div>
                     <div className="card-clinician" style={{ padding: '8px 10px' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Occipital Alpha (Z)</div>
                       <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700 }}>
-                        Z = {bm.zScores.occipitalAlpha >= 0 ? `+${bm.zScores.occipitalAlpha}` : bm.zScores.occipitalAlpha}
+                        {assessment.zScores.occipitalAlpha == null ? 'Unavailable' : `Z = ${formatSigned(assessment.zScores.occipitalAlpha)}`}
+                      </div>
+                    </div>
+                    <div className="card-clinician" style={{ padding: '8px 10px' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Temporal Delta (Z)</div>
+                      <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700 }}>
+                        {assessment.zScores.temporalDelta == null ? 'Unavailable' : `Z = ${formatSigned(assessment.zScores.temporalDelta)}`}
+                      </div>
+                    </div>
+                    <div className="card-clinician" style={{ padding: '8px 10px' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Sensorimotor SMR (Z)</div>
+                      <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700 }}>
+                        {assessment.zScores.sensorimotorSMR == null ? 'Unavailable' : `Z = ${formatSigned(assessment.zScores.sensorimotorSMR)}`}
                       </div>
                     </div>
                     <div className="card-clinician" style={{ padding: '8px 10px' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Alpha Peak (IAF)</div>
                       <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--chart-alpha)' }}>
-                        {bm.dominantAlphaPeakHz} Hz
+                        {assessment.dominantAlphaPeakHz == null ? 'Unavailable' : `${assessment.dominantAlphaPeakHz} Hz`}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                    <strong>Technician Notes:</strong> {bm.technicianNotes}
+                    <strong>Technician notes:</strong> {bm.technicianNotes || 'Unavailable'}
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           ) : (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-              No in-clinic brain maps uploaded yet. Click "Upload Map" to import an EDF or QEEG report.
+              No QEEG measurements have been entered for this patient.
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 4: LIVE TELEMETRY & ATHENA FIT */}
+      {/* TAB 4: LIVE TELEMETRY */}
       {activeTab === 'telemetry' && (
         <div className="card-clinician" style={{ padding: '20px 16px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Live EEG Telemetry</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Not connected — no active patient telemetry source is available in this clinician view.
+            </p>
+          </div>
+
+          <div className="card-patient-recessed" role="status" style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
             <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                Muse S (Athena) 4-Channel Live EEG Telemetry
-              </h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Real-time biosensing telemetry with 256 Hz delta ADC sampling
-              </p>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Connection</div>
+              <div style={{ fontSize: '13px', fontWeight: 700 }}>Not connected</div>
             </div>
-
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button
-                onClick={() => setIsStreaming(!isStreaming)}
-                className="btn btn-dense"
-                style={{ fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                {isStreaming ? <Pause size={13} /> : <Play size={13} />}
-                {isStreaming ? 'Pause Stream' : 'Resume Stream'}
-              </button>
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Assigned device</div>
+              <div style={{ fontSize: '13px', fontWeight: 700 }}>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</div>
             </div>
-          </div>
-
-          {/* 4-Channel Sensor Quality Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
-            {[
-              { id: 'TP9', name: 'TP9 (Left Ear)', state: 'Good Contact (12 kΩ)', color: 'var(--status-active)' },
-              { id: 'AF7', name: 'AF7 (Left Forehead)', state: 'Good Contact (8 kΩ)', color: 'var(--status-active)' },
-              { id: 'AF8', name: 'AF8 (Right Forehead)', state: 'Good Contact (9 kΩ)', color: 'var(--status-active)' },
-              { id: 'TP10', name: 'TP10 (Right Ear)', state: 'Good Contact (14 kΩ)', color: 'var(--status-active)' },
-            ].map((ch) => (
-              <div key={ch.id} className="card-patient-recessed" style={{ padding: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700 }}>{ch.id}</span>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: ch.color }} />
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{ch.name}</div>
-                <div style={{ fontSize: '10px', color: ch.color, fontWeight: 600, marginTop: '2px' }}>{ch.state}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Live Waveform Canvas / SVG */}
-          <div
-            style={{
-              width: '100%',
-              height: '160px',
-              backgroundColor: '#1A1A1A',
-              borderRadius: 'var(--radius-md)',
-              position: 'relative',
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg viewBox="0 0 500 120" style={{ width: '100%', height: '100%' }}>
-              <path
-                d={isStreaming ? 'M 0 60 Q 30 20, 60 60 T 120 60 T 180 30 T 240 90 T 300 50 T 360 70 T 420 40 T 500 60' : 'M 0 60 L 500 60'}
-                fill="none"
-                stroke={brand.primaryAccent || '#E8967A'}
-                strokeWidth="2.5"
-              />
-            </svg>
-            <div style={{ position: 'absolute', top: 8, right: 10, color: '#FFFFFF', fontSize: '10px', fontFamily: 'var(--font-mono)' }}>
-              256 Hz • BLE GATT Connected • Zero Packet Loss
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Contact / impedance</div>
+              <div style={{ fontSize: '13px', fontWeight: 700 }}>Unavailable</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Waveform / sample rate / packet loss</div>
+              <div style={{ fontSize: '13px', fontWeight: 700 }}>Unavailable</div>
             </div>
           </div>
         </div>
@@ -514,7 +509,11 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             </button>
           </div>
 
-          {sessions.length > 0 ? (
+          {sessionsState === 'loading' ? (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading session logs…</div>
+          ) : sessionsState === 'error' ? (
+            <div role="alert" style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session logs could not be loaded.</div>
+          ) : sessions.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {sessions.map((s) => (
                 <div
@@ -533,10 +532,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 >
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '13px' }}>
-                      {s.date} • {s.experience.replace(/-/g, ' ').toUpperCase()}
+                      {s.date || 'Date unavailable'} • {s.experience ? s.experience.replace(/-/g, ' ').toUpperCase() : 'EXPERIENCE UNAVAILABLE'}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {Math.round(s.durationSeconds / 60)} min | In-Zone: {s.timeInZonePercent}% | Peak Focus: {s.peakFocusScore} | Coherence: {s.averageCoherence == null ? '--' : `${s.averageCoherence}%`}
+                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} | In-Zone: {finiteMetric(s.timeInZonePercent, '%')} | Peak Focus: {finiteMetric(s.peakFocusScore)} | Coherence: {finiteMetric(s.averageCoherence, '%')}
                     </div>
                     {s.clinicianNotes && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
