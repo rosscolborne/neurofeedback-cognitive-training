@@ -1,8 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ClinicBrandConfig } from '../../types';
-import { BRAND_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM } from '../../services/brandEngine';
+import { BRAND_COLOR_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM, getOnPrimaryColor, isValidHexColor } from '../../services/brandEngine';
+import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
+import { errorMessage } from '../../services/clinicSettingsState';
 import { BrandLogo } from './BrandLogo';
-import { X, Check, Upload, Image as ImageIcon, ShieldCheck, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, Upload, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface ClinicCustomizerModalProps {
   currentBrand: ClinicBrandConfig;
@@ -19,30 +21,63 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
   const [tagline, setTagline] = useState(currentBrand.tagline);
   const [accentColor, setAccentColor] = useState(currentBrand.primaryAccent);
   const [logoUrl, setLogoUrl] = useState(currentBrand.logoUrl);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Compute live contrast audit against white card and patient base
-  const contrastOnWhite = calculateContrast(accentColor, '#FFFFFF');
-  const contrastOnBase = calculateContrast(accentColor, '#F8F7F4');
-  const textOnAccentContrast = calculateContrast('#FFFFFF', accentColor);
+  useEffect(() => {
+    let active = true;
+    clinicSettingsRepository.load().then((snapshot) => {
+      if (!active) return;
+      if (snapshot.brand) {
+        setClinicName(snapshot.brand.name);
+        setTagline(snapshot.brand.tagline);
+        setAccentColor(snapshot.brand.primaryAccent);
+        setLogoUrl(snapshot.brand.logoUrl);
+        applyBrandToDOM(snapshot.brand);
+      } else if (snapshot.clinic?.name) {
+        setClinicName(snapshot.clinic.name);
+      } else {
+        setClinicName('');
+      }
+      setStatusMessage(snapshot.brandSource === 'legacy-local' ? 'A matching local theme was found. Save to sync it to this clinic.' : '');
+      setLoadState('ready');
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setLoadState('error');
+      setStatusMessage(errorMessage(error, 'Clinic branding could not be loaded.'));
+    });
+    return () => { active = false; };
+  }, []);
 
-  const handleApplyPreset = (preset: ClinicBrandConfig) => {
-    setClinicName(preset.name);
-    setTagline(preset.tagline);
-    setAccentColor(preset.primaryAccent);
-    setLogoUrl(preset.logoUrl);
-    applyBrandToDOM(preset);
+  // Compute live contrast audit against white card and patient base
+  const auditedAccent = isValidHexColor(accentColor) ? accentColor : currentBrand.primaryAccent;
+  const contrastOnWhite = calculateContrast(auditedAccent, '#FFFFFF');
+  const textOnAccentContrast = calculateContrast(getOnPrimaryColor(auditedAccent), auditedAccent);
+
+  const handleApplyPreset = (accent: string) => {
+    setAccentColor(accent);
+    if (clinicName.trim()) applyBrandToDOM(createBrandPalette(accent, clinicName, logoUrl));
   };
 
   const handleColorChange = (hex: string) => {
     setAccentColor(hex);
-    const temp = createBrandPalette(hex, clinicName, logoUrl);
-    applyBrandToDOM(temp);
+    if (isValidHexColor(hex) && clinicName.trim()) applyBrandToDOM(createBrandPalette(hex, clinicName, logoUrl));
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!['image/svg+xml', 'image/png', 'image/webp'].includes(file.type)) {
+      setStatusMessage('Choose an SVG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > 500_000) {
+      setStatusMessage('Logo files must be 500 KB or smaller so the clinic record can be saved.');
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -53,10 +88,24 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
-    const finalBrand = createBrandPalette(accentColor, clinicName, logoUrl);
-    finalBrand.tagline = tagline;
-    onSave(finalBrand);
+  const handleSave = async () => {
+    setSaveState('saving');
+    setStatusMessage('');
+    try {
+      const finalBrand = createBrandPalette(accentColor, clinicName, logoUrl);
+      finalBrand.tagline = tagline.trim();
+      const savedBrand = await clinicSettingsRepository.saveBrand(finalBrand);
+      applyBrandToDOM(savedBrand);
+      onSave(savedBrand);
+      onClose();
+    } catch (error) {
+      setSaveState('error');
+      setStatusMessage(errorMessage(error, 'Clinic branding could not be saved. Try again.'));
+    }
+  };
+
+  const handleClose = () => {
+    applyBrandToDOM(currentBrand);
     onClose();
   };
 
@@ -100,24 +149,27 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
               Configure your clinic identity, custom logo, and primary accent palette with live WCAG AA contrast validation.
             </p>
           </div>
-          <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }}>
+          <button onClick={handleClose} className="btn btn-ghost" style={{ padding: '6px' }} aria-label="Close clinic branding customizer">
             <X size={18} />
           </button>
         </div>
 
-        {/* Preset Clinic Brands */}
+        {statusMessage && <div role={loadState === 'error' || saveState === 'error' ? 'alert' : 'status'} style={{ padding: '9px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-recessed)', color: loadState === 'error' || saveState === 'error' ? 'var(--status-alert)' : 'var(--text-secondary)', fontSize: '12px' }}>{statusMessage}</div>}
+
+        {/* Color-only presets intentionally preserve the authenticated clinic identity. */}
         <div>
           <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
-            Curated Clinic Brand Themes
+            Color presets
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-            {BRAND_PRESETS.map(p => (
+            {BRAND_COLOR_PRESETS.map(p => (
               <button
-                key={p.clinicId}
-                onClick={() => handleApplyPreset(p)}
+                key={p.id}
+                onClick={() => handleApplyPreset(p.accent)}
+                disabled={loadState !== 'ready' || saveState === 'saving'}
                 style={{
                   background: 'var(--surface-clinician-base)',
-                  border: accentColor === p.primaryAccent ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
+                  border: accentColor === p.accent ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
                   borderRadius: 'var(--radius-sm)',
                   padding: '10px 12px',
                   display: 'flex',
@@ -128,10 +180,10 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
                   transition: 'border-color 0.15s ease',
                 }}
               >
-                <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: p.primaryAccent }} />
+                <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: p.accent }} />
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{p.primaryAccent}</div>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{p.label}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{p.accent}</div>
                 </div>
               </button>
             ))}
@@ -147,6 +199,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
             <input
               type="text"
               value={clinicName}
+              disabled={loadState !== 'ready' || saveState === 'saving'}
               onChange={e => setClinicName(e.target.value)}
               style={{
                 width: '100%',
@@ -166,6 +219,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
             <input
               type="text"
               value={tagline}
+              disabled={loadState !== 'ready' || saveState === 'saving'}
               onChange={e => setTagline(e.target.value)}
               style={{
                 width: '100%',
@@ -209,7 +263,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/svg+xml,image/png,image/webp"
                 style={{ display: 'none' }}
                 onChange={handleLogoUpload}
               />
@@ -248,7 +302,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <input
               type="color"
-              value={accentColor}
+              value={auditedAccent}
               onChange={e => handleColorChange(e.target.value)}
               style={{
                 width: '48px',
@@ -310,10 +364,10 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-          <button onClick={handleSave} className="btn btn-dense" style={{ flex: 1, padding: '12px' }}>
-            Save & Apply Custom Clinic Branding
+          <button onClick={() => void handleSave()} disabled={loadState !== 'ready' || saveState === 'saving'} className="btn btn-dense" style={{ flex: 1, padding: '12px' }}>
+            {saveState === 'saving' ? 'Saving…' : 'Save and apply clinic branding'}
           </button>
-          <button onClick={onClose} className="btn btn-ghost" style={{ flex: 1 }}>
+          <button onClick={handleClose} disabled={saveState === 'saving'} className="btn btn-ghost" style={{ flex: 1 }}>
             Cancel
           </button>
         </div>

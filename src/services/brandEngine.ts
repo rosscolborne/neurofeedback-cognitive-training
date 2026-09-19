@@ -8,7 +8,18 @@ export interface ContrastResult {
   passesAAANormal: boolean;
 }
 
+export interface BrandColorPreset {
+  id: string;
+  label: string;
+  accent: string;
+}
+
+export const isValidHexColor = (value: string): boolean => /^#[0-9a-f]{6}$/i.test(value.trim());
+
 export function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  if (!isValidHexColor(hex) && !/^#[0-9a-f]{3}$/i.test(hex.trim())) {
+    throw new Error('Enter a valid hexadecimal color such as #D16D4D.');
+  }
   let cleanHex = hex.replace('#', '').trim();
   if (cleanHex.length === 3) {
     cleanHex = cleanHex.split('').map(c => c + c).join('');
@@ -52,6 +63,12 @@ export function calculateContrast(hex1: string, hex2: string): ContrastResult {
   };
 }
 
+export function getOnPrimaryColor(accentHex: string): '#FFFFFF' | '#1A1A1A' {
+  return calculateContrast('#FFFFFF', accentHex).ratio >= calculateContrast('#1A1A1A', accentHex).ratio
+    ? '#FFFFFF'
+    : '#1A1A1A';
+}
+
 export function adjustColorBrightness(hex: string, percent: number): string {
   const { r, g, b } = hexToRgb(hex);
   const factor = 1 + percent / 100;
@@ -59,11 +76,12 @@ export function adjustColorBrightness(hex: string, percent: number): string {
 }
 
 export function createBrandPalette(accentHex: string, clinicName = 'Waveable', logoUrl = '/app-logo.png'): ClinicBrandConfig {
+  if (!isValidHexColor(accentHex)) throw new Error('Enter a six-digit hexadecimal accent color.');
+  if (!clinicName.trim()) throw new Error('Clinic display name is required.');
   const { r, g, b } = hexToRgb(accentHex);
-  const lum = getRelativeLuminance(r, g, b);
   
   // Decide best text on accent (white vs deep ink)
-  const onPrimary = lum > 0.45 ? '#1A1A1A' : '#FFFFFF';
+  const onPrimary = getOnPrimaryColor(accentHex);
   
   // Create hover (12% darker) and subtle tint (88% lighter)
   const primaryHover = adjustColorBrightness(accentHex, -15);
@@ -75,8 +93,8 @@ export function createBrandPalette(accentHex: string, clinicName = 'Waveable', l
   const primarySubtle = rgbToHex(subtleR, subtleG, subtleB);
 
   return {
-    clinicId: clinicName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-    name: clinicName,
+    clinicId: clinicName.trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
+    name: clinicName.trim(),
     tagline: 'Neurofeedback & Cognitive Training Suite',
     logoUrl: logoUrl || '/app-logo.png',
     primaryAccent: accentHex,
@@ -105,62 +123,15 @@ export const BRAND_PRESETS: ClinicBrandConfig[] = [
     typographyStyle: 'editorial-serif',
     createdAt: '2026-08-20T00:00:00Z',
   },
-  {
-    clinicId: 'evolve-brain-training',
-    name: 'Evolve Brain Training',
-    tagline: 'Personalized Neurofeedback & Focus Therapy',
-    logoUrl: '/app-logo.png',
-    primaryAccent: '#E8967A', // Soft Warm Coral
-    primaryHover: '#D4805E',
-    primarySubtle: '#FDF0EB',
-    onPrimary: '#FFFFFF',
-    patientBaseSurface: '#F8F7F4',
-    clinicianBaseSurface: '#FAFAFA',
-    typographyStyle: 'editorial-serif',
-    createdAt: '2026-08-20T00:00:00Z',
-  },
-  {
-    clinicId: 'apex-neuro',
-    name: 'Apex Neuro Institute',
-    tagline: 'Executive Focus & Cognitive Optimization',
-    logoUrl: 'waves-amber',
-    primaryAccent: '#E4894E', // Warm Terracotta / Amber
-    primaryHover: '#C86E35',
-    primarySubtle: '#FCF3EB',
-    onPrimary: '#FFFFFF',
-    patientBaseSurface: '#FAF8F5',
-    clinicianBaseSurface: '#F8F9FA',
-    typographyStyle: 'modern-sans',
-    createdAt: '2026-08-20T00:00:00Z',
-  },
-  {
-    clinicId: 'serenity-mind-clinic',
-    name: 'Serenity Mind Clinic',
-    tagline: 'Anxiety Relief & Calming Alpha Conditioning',
-    logoUrl: 'lotus-lavender',
-    primaryAccent: '#9E7CA6', // Muted Dusty Lavender
-    primaryHover: '#85618D',
-    primarySubtle: '#F6F0F8',
-    onPrimary: '#FFFFFF',
-    patientBaseSurface: '#F9F7FA',
-    clinicianBaseSurface: '#FAFAFC',
-    typographyStyle: 'editorial-serif',
-    createdAt: '2026-08-20T00:00:00Z',
-  },
-  {
-    clinicId: 'komorebi-biofeedback',
-    name: 'Komorebi Biofeedback',
-    tagline: 'Mindfulness & Neural Synchrony',
-    logoUrl: 'sun-gold',
-    primaryAccent: '#C49B45', // Warm Antique Ochre Gold
-    primaryHover: '#A8802E',
-    primarySubtle: '#FBF6EA',
-    onPrimary: '#FFFFFF',
-    patientBaseSurface: '#FAF7F1',
-    clinicianBaseSurface: '#FAFAFA',
-    typographyStyle: 'editorial-serif',
-    createdAt: '2026-08-20T00:00:00Z',
-  },
+];
+
+/** Color-only choices: applying one never substitutes a fabricated clinic identity. */
+export const BRAND_COLOR_PRESETS: BrandColorPreset[] = [
+  { id: 'terracotta', label: 'Warm terracotta', accent: '#D16D4D' },
+  { id: 'soft-coral', label: 'Soft coral', accent: '#E8967A' },
+  { id: 'amber', label: 'Warm amber', accent: '#E4894E' },
+  { id: 'lavender', label: 'Muted lavender', accent: '#9E7CA6' },
+  { id: 'ochre', label: 'Antique ochre', accent: '#C49B45' },
 ];
 
 export function applyBrandToDOM(brand: ClinicBrandConfig) {
