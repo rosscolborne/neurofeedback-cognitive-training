@@ -412,7 +412,7 @@ export interface PatientInvitation {
   updatedAt?: PersistedTimestamp;
   acceptedAt?: PersistedTimestamp;
   expiresAt?: PersistedTimestamp;
-  /** Deterministic clinician + normalized-email claim used to prevent concurrent duplicate invites. */
+  /** Normalized email key under patientInvitationClaims/{clinicianId}/emails. */
   uniquenessClaimId?: string;
   schemaVersion: number;
 }

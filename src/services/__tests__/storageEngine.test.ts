@@ -18,7 +18,11 @@ const firestore = vi.hoisted(() => ({
 vi.mock('../firebase', () => ({ auth: state.auth, db: { name: 'test-db' } }));
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => ({ type: 'collection', path }),
-  doc: (_db: unknown, path: string, id: string) => ({ type: 'doc', path, id }),
+  doc: (_db: unknown, ...segments: string[]) => ({
+    type: 'doc',
+    path: segments.slice(0, -1).join('/'),
+    id: segments.at(-1),
+  }),
   where: (field: string, op: string, value: string) => ({ field, op, value }),
   query: (source: unknown, ...constraints: unknown[]) => ({ source, constraints }),
   ...firestore,
@@ -245,13 +249,13 @@ describe('patient invitation linking', () => {
 
     expect(invitation.id).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
     expect(invitation).toMatchObject({ clinicianId: 'clinician-1', patientEmail: 'patient@one.example', status: 'pending' });
-    expect(invitation.uniquenessClaimId).toBe('clinician-1__patient@one.example');
+    expect(invitation.uniquenessClaimId).toBe('patient@one.example');
     expect(writes).toContainEqual({
       ref: { type: 'doc', path: 'patientInvitations', id: invitation.id },
       payload: expect.objectContaining({ patientEmail: 'patient@one.example', status: 'pending', expiresAt: expect.any(Date) }),
     });
     expect(writes).toContainEqual({
-      ref: { type: 'doc', path: 'patientInvitationClaims', id: invitation.uniquenessClaimId },
+      ref: { type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: invitation.uniquenessClaimId },
       payload: expect.objectContaining({ patientEmail: 'patient@one.example', invitationId: invitation.id }),
     });
   });
@@ -296,6 +300,34 @@ describe('patient invitation linking', () => {
     expect(writes).toHaveLength(2);
   });
 
+  it('isolates claim paths for clinician/email pairs that collide under flat delimiter concatenation', async () => {
+    const claimRefs: unknown[] = [];
+    firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValue({ exists: () => false }),
+        set: vi.fn((ref: { path?: string }) => {
+          if (ref.path?.startsWith('patientInvitationClaims/')) claimRefs.push(ref);
+        }),
+      })
+    );
+
+    state.auth.currentUser = { uid: 'alpha', email: 'clinician-a@example.com' };
+    await storageEngine.createPatientInvitation({
+      clinicianName: 'A', patientName: 'Patient', patientEmail: 'beta__gamma@example.com',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    });
+    state.auth.currentUser = { uid: 'alpha__beta', email: 'clinician-b@example.com' };
+    await storageEngine.createPatientInvitation({
+      clinicianName: 'B', patientName: 'Patient', patientEmail: 'gamma@example.com',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    });
+
+    expect(claimRefs).toEqual([
+      { type: 'doc', path: 'patientInvitationClaims/alpha/emails', id: 'beta__gamma@example.com' },
+      { type: 'doc', path: 'patientInvitationClaims/alpha__beta/emails', id: 'gamma@example.com' },
+    ]);
+  });
+
   it('atomically links the real patient profile and accepts the invitation', async () => {
     state.auth.currentUser = { uid: 'patient-1', email: 'Patient@Example.COM' };
     const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
@@ -324,7 +356,7 @@ describe('patient invitation linking', () => {
     expect(linked).toMatchObject({ id: 'patient-1', clinicianId: 'clinician-1', acceptedInvitationId: 'ABCD-EFGH-JKLM' });
     expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1' }) });
     expect(writes[1]).toMatchObject({ ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' }, payload: expect.objectContaining({ status: 'accepted', patientId: 'patient-1' }) });
-    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims', id: 'claim-1' }]);
+    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
   });
 
   it('atomically cancels an owned invitation and releases its uniqueness claim', async () => {
@@ -346,7 +378,7 @@ describe('patient invitation linking', () => {
       ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' },
       payload: expect.objectContaining({ status: 'cancelled' }),
     });
-    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims', id: 'claim-1' }]);
+    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
   });
 
   it('refuses an invitation addressed to a different account email', async () => {
@@ -443,6 +475,22 @@ describe('patient invitation linking', () => {
 
     const roster = await storageEngine.getClients();
     expect(roster.map((entry) => entry.id)).toEqual(['patient-1', 'patient-2']);
+    const legacyQuery = firestore.getDocs.mock.calls[1][0] as { constraints: Array<{ field: string; value: unknown }> };
+    expect(legacyQuery.constraints).toContainEqual({ field: 'linkedClinicianCode', op: '==', value: 'clinician-1' });
+    expect(legacyQuery.constraints).toContainEqual({ field: 'clinicianId', op: '==', value: null });
+  });
+
+  it('keeps canonical roster results when the separately constrained legacy query is denied', async () => {
+    const canonical = {
+      id: 'patient-1', data: () => ({ ...createBlankProfile('patient-1', 'one@example.com'), clinicianId: 'clinician-1' }),
+    };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [canonical] })
+      .mockRejectedValueOnce({ code: 'permission-denied' });
+
+    await expect(storageEngine.getClients()).resolves.toEqual([
+      expect.objectContaining({ id: 'patient-1', clinicianId: 'clinician-1' }),
+    ]);
   });
 
   it('denies a legacy-field clinician when a different canonical clinician exists', async () => {

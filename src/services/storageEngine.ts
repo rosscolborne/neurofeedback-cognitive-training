@@ -64,8 +64,8 @@ const createInvitationCode = (): string => {
 
 const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 const INVITATION_CODE_PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
-const createInvitationClaimId = (clinicianId: string, normalizedEmail: string): string =>
-  `${clinicianId}__${normalizedEmail}`;
+const getInvitationClaimRef = (clinicianId: string, normalizedEmail: string) =>
+  doc(db, 'patientInvitationClaims', clinicianId, 'emails', normalizedEmail);
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {
@@ -726,21 +726,38 @@ class StorageEngine {
       return [];
     }
 
+    const owned = new Map<string, ClientProfile>();
     try {
-      const [canonical, legacy] = await Promise.all([
-        getDocs(query(collection(db, 'clients'), where('clinicianId', '==', activeClinicianId))),
-        getDocs(query(collection(db, 'clients'), where('linkedClinicianCode', '==', activeClinicianId))),
-      ]);
-      const owned = new Map<string, ClientProfile>();
-      [...canonical.docs, ...legacy.docs].forEach((entry) => {
+      const canonical = await getDocs(
+        query(collection(db, 'clients'), where('clinicianId', '==', activeClinicianId))
+      );
+      canonical.docs.forEach((entry) => {
         const profile = readClientProfile(entry.data(), entry.id);
         if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
       });
-      return [...owned.values()];
     } catch (err) {
-      console.warn('Failed to fetch clients from Firestore:', err);
-      return [];
+      console.warn('Failed to fetch canonical clients from Firestore:', err);
     }
+
+    // Firestore rules are not post-query filters. The explicit null constraint
+    // makes this legacy query provably exclude split-brain documents. Documents
+    // where clinicianId is missing remain directly readable by legacy ownership,
+    // but require a trusted migration to set canonical clinicianId (preferred) or
+    // explicit null before they can be enumerated in a roster query.
+    try {
+      const legacy = await getDocs(query(
+        collection(db, 'clients'),
+        where('linkedClinicianCode', '==', activeClinicianId),
+        where('clinicianId', '==', null)
+      ));
+      legacy.docs.forEach((entry) => {
+        const profile = readClientProfile(entry.data(), entry.id);
+        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+      });
+    } catch (err) {
+      console.warn('Failed to fetch legacy clients from Firestore:', err);
+    }
+    return [...owned.values()];
   }
 
   public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
@@ -761,7 +778,7 @@ class StorageEngine {
     }
 
     const now = Date.now();
-    const uniquenessClaimId = createInvitationClaimId(clinician.uid, patientEmail);
+    const uniquenessClaimId = patientEmail;
 
     const invitation: PatientInvitation = {
       id: createInvitationCode(),
@@ -782,7 +799,7 @@ class StorageEngine {
     };
 
     const invitationRef = doc(db, 'patientInvitations', invitation.id);
-    const claimRef = doc(db, 'patientInvitationClaims', uniquenessClaimId);
+    const claimRef = getInvitationClaimRef(clinician.uid, uniquenessClaimId);
     await runTransaction(db, async (transaction) => {
       const claimSnapshot = await transaction.get(claimRef);
       if (claimSnapshot.exists()) {
@@ -836,7 +853,7 @@ class StorageEngine {
 
       transaction.set(invitationRef, { status: 'cancelled', updatedAt: serverTimestamp() }, { merge: true });
       if (invitation.uniquenessClaimId) {
-        transaction.delete(doc(db, 'patientInvitationClaims', invitation.uniquenessClaimId));
+        transaction.delete(getInvitationClaimRef(invitation.clinicianId, invitation.uniquenessClaimId));
       }
     });
   }
@@ -936,7 +953,7 @@ class StorageEngine {
           { merge: true }
         );
         if (invitation.uniquenessClaimId) {
-          transaction.delete(doc(db, 'patientInvitationClaims', invitation.uniquenessClaimId));
+          transaction.delete(getInvitationClaimRef(invitation.clinicianId, invitation.uniquenessClaimId));
         }
         return linkedClient;
       });

@@ -60,6 +60,12 @@ describe('Firestore authorization rule contract', () => {
     expect(clientsBlock).not.toContain("resource.data.get('linkedClinicianCode', null) == request.auth.uid ||");
   });
 
+  it('makes legacy list queries provable only for explicit-null canonical ownership', () => {
+    expect(rules).toContain("patient.get('clinicianId', null) == null");
+    expect(rules).toContain("patient.get('linkedClinicianCode', null) == request.auth.uid");
+    expect(rules).not.toContain("patient.get('linkedClinicianCode', null) == request.auth.uid ||");
+  });
+
   it('prevents self-links and freezes clinic tenancy', () => {
     expect(rules).toContain('resource.data.clinicianId != request.auth.uid');
     expect(rules).toContain("request.resource.data.get('clinicianId', null) != request.auth.uid");
@@ -68,10 +74,11 @@ describe('Firestore authorization rule contract', () => {
   });
 
   it('uses an atomic normalized-email uniqueness claim and releases it on terminal transitions', () => {
-    expect(rules).toContain('match /patientInvitationClaims/{claimId}');
+    expect(rules).toContain('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}');
     expect(rules).toContain('function matchesPendingInvitation()');
-    expect(rules).toContain("invitation.get('uniquenessClaimId', null) == claimId");
-    expect(rules).toContain("claimId == request.auth.uid + '__' + request.resource.data.patientEmail");
+    expect(rules).toContain("invitation.get('uniquenessClaimId', null) == emailKey");
+    expect(rules).toContain('clinicianId == request.auth.uid');
+    expect(rules).toContain('emailKey == request.resource.data.patientEmail');
     expect(rules).toContain('function uniquenessReleased()');
     expect(rules).toContain('resource.data.expiresAt <= request.time');
   });

@@ -82,7 +82,7 @@ service cloud.firestore {
       function uniquenessReleased() {
         let claimId = resource.data.get('uniquenessClaimId', null);
         return claimId == null ||
-          !existsAfter(/databases/$(database)/documents/patientInvitationClaims/$(claimId));
+          !existsAfter(/databases/$(database)/documents/patientInvitationClaims/$(resource.data.clinicianId)/emails/$(claimId));
       }
 
       allow create: if isClinician() &&
@@ -96,11 +96,11 @@ service cloud.firestore {
         request.resource.data.patientEmail != request.auth.token.email.lower() &&
         request.resource.data.patientName is string &&
         request.resource.data.uniquenessClaimId is string &&
-        request.resource.data.uniquenessClaimId == request.auth.uid + '__' + request.resource.data.patientEmail &&
+        request.resource.data.uniquenessClaimId == request.resource.data.patientEmail &&
         request.resource.data.expiresAt is timestamp &&
         request.resource.data.expiresAt > request.time &&
         request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
-        getAfter(/databases/$(database)/documents/patientInvitationClaims/$(request.resource.data.uniquenessClaimId))
+        getAfter(/databases/$(database)/documents/patientInvitationClaims/$(request.auth.uid)/emails/$(request.resource.data.uniquenessClaimId))
           .data.get('invitationId', null) == invitationId;
       allow read: if isAuthenticated() && (
         resource.data.clinicianId == request.auth.uid || isInvitedPatient()
@@ -134,19 +134,22 @@ service cloud.firestore {
 
     // One live claim exists for each clinician + normalized patient email.
     // It is created atomically with an invitation and released on cancel/accept.
-    match /patientInvitationClaims/{claimId} {
+    match /patientInvitationClaims/{clinicianId}/emails/{emailKey} {
       function matchesPendingInvitation() {
         let invitation = getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.invitationId)).data;
         return invitation.get('status', null) == 'pending' &&
           invitation.get('clinicianId', null) == request.auth.uid &&
           invitation.get('patientEmail', null) == request.resource.data.patientEmail &&
           invitation.get('expiresAt', null) == request.resource.data.expiresAt &&
-          invitation.get('uniquenessClaimId', null) == claimId;
+          invitation.get('uniquenessClaimId', null) == emailKey;
       }
 
-      allow read: if isAuthenticated() && resource.data.clinicianId == request.auth.uid;
+      allow read: if isAuthenticated() &&
+        clinicianId == request.auth.uid &&
+        resource.data.clinicianId == request.auth.uid;
       allow create: if isClinician() &&
-        claimId == request.auth.uid + '__' + request.resource.data.patientEmail &&
+        clinicianId == request.auth.uid &&
+        emailKey == request.resource.data.patientEmail &&
         request.resource.data.clinicianId == request.auth.uid &&
         request.resource.data.patientEmail is string &&
         request.resource.data.patientEmail == request.resource.data.patientEmail.lower() &&
@@ -156,7 +159,8 @@ service cloud.firestore {
         request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
         matchesPendingInvitation();
       allow update: if isClinician() &&
-        claimId == request.auth.uid + '__' + request.resource.data.patientEmail &&
+        clinicianId == request.auth.uid &&
+        emailKey == request.resource.data.patientEmail &&
         resource.data.clinicianId == request.auth.uid &&
         resource.data.expiresAt <= request.time &&
         request.resource.data.clinicianId == request.auth.uid &&
