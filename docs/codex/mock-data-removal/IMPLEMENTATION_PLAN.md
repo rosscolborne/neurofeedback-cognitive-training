@@ -353,7 +353,7 @@ independent workstream immediately when a slot opens.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** IMPLEMENTED
+- **Status:** MERGED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
@@ -363,7 +363,8 @@ independent workstream immediately when a slot opens.
   `1a36f5923387ab72e3050a73243dc633673fc53b`,
   `5fcb1bf3a0d22016e98375b6437aacbe2e99ef6f`,
   `82e3e86d466087670366f5f64aed3c98a4f49fb5`,
-  `c2bc9eb6014feaad46e73f885b6527dbbf8202b4`
+  `c2bc9eb6014feaad46e73f885b6527dbbf8202b4`; merged by
+  `c8255492b71a3c85215d9f9b124aa8d77c4ea4be`
 - **Owned files:** `src/components/clinician/ClientDetailView.tsx`,
   `src/components/clinician/BrainMapUploadModal.tsx`, new isolated brain-map and
   clinical-metric helpers/tests.
@@ -392,7 +393,9 @@ independent workstream immediately when a slot opens.
   write, gated learning/count evidence states, tolerated valid legacy dates, and
   strengthened handler/display tests. Focused tests passed 18/18 and full tests
   passed 125/125. A final review finding for impossible normalized legacy dates was
-  fixed with explicit format/component validation; re-review is pending.
+  fixed with explicit format/component validation; final re-review passed without
+  findings and the branch merged. Integrated focused tests passed 18/18. Central
+  append/error/provenance wiring is still required before full manual testing.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -646,6 +649,9 @@ independent workstream immediately when a slot opens.
   independent security re-review.
 - **2026-09-19:** C1 fixed its final legacy-date parser finding at `c2bc9eb`; 18/18
   focused and 125/125 full tests passed before final re-review.
+- **2026-09-19:** C1 final review passed without findings and merged into
+  `fill-in-mocked-data` via `c825549`; integrated focused tests passed 18/18. Its
+  central append/error/provenance dependencies remain open integration work.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
