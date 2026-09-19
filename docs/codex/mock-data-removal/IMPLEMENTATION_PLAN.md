@@ -301,13 +301,15 @@ independent workstream immediately when a slot opens.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** MERGED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
 - **Final commit:** `1a632bf62bf88536023ad8687444092c69703d0e`,
   `fb2e48a4c221e7d8705170e1f047cb7f7afb82c9`,
-  `fdb5e84c7d4a4b579abbddd6be7089e04d7361f3`
+  `fdb5e84c7d4a4b579abbddd6be7089e04d7361f3`,
+  `b825919a824f8a7bd0d57cc619ca2c7f011f4301`; merged by
+  `fcce66c4565bc04e04bd71e2191222bbc5aafe8d`
 - **Owned files:** `src/components/patient/HomeScreen.tsx`,
   `src/components/patient/ProgressHistory.tsx`, a new isolated patient-metrics
   helper and its tests. Do not edit shared storage/types without approval.
@@ -336,8 +338,9 @@ independent workstream immediately when a slot opens.
   re-review cleared the original findings but found session evidence still rendered
   as negative/empty during loading and error states. The final owned display-state
   fix completed with 13 focused and 120 full tests passing; re-review passed with a
-  low finding that CSV export must share the resolved-state boundary. That final
-  owned polish fix is in progress.
+  low finding that CSV export must share the resolved-state boundary. The final
+  fix passed independent review with no findings and merged into the integration
+  branch. Integrated focused tests passed (14/14).
   The shared read-error contract remains reserved for the orchestrator and must
   reject failures while successful empty queries resolve `[]`.
 
@@ -616,6 +619,10 @@ independent workstream immediately when a slot opens.
   focused and 127/127 full tests passing, and entered re-review. P1 review passed
   with one low export-state finding sent for repair. C1 re-review required one more
   owned fix round for stale-write removal and truthful session/QEEG legacy states.
+- **2026-09-19:** P1's export-state fix at `b825919` passed independent review
+  without findings. P1 merged into `fill-in-mocked-data` via `fcce66c`; integrated
+  focused tests passed 14/14. The central session-read error contract remains an
+  integration dependency before manual failure-state testing.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
