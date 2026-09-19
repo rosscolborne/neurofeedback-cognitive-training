@@ -260,12 +260,13 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
 - **Final commit:** `7dc01823cdee79e127fe18a0f70a8804d20da385`,
-  `b78fa36452ba25732059e382fc50b1991967241b`
+  `b78fa36452ba25732059e382fc50b1991967241b`,
+  `fe194ba9baf32290e3761bc4f3a3954a2b9586d5`
 - **Owned files:** relationship/invitation sections of `firestore.rules`,
   `src/services/storageEngine.ts`, `src/services/dataMappers.ts`, and
   `src/types/index.ts`; `src/components/clinician/ClientRosterView.tsx`;
@@ -299,8 +300,11 @@ independent workstream immediately when a slot opens.
   concurrent duplicate invitations, and visible lifecycle errors. First fixes
   completed with 55/55 focused and 127/127 full tests passing. Re-review found the
   legacy roster query incompatible with canonical-precedence rules and a
-  delimiter-collision risk in deterministic claim IDs; follow-up fixes are in
-  progress.
+  delimiter-collision risk in deterministic claim IDs. Follow-up fixes use a
+  rules-provable explicit-null legacy query with independent canonical retrieval
+  and collision-free nested claim paths. Focused tests passed 58/58 and full tests
+  passed 130/130; re-review is pending. Missing-field legacy records require a
+  trusted canonical/null backfill before they can be safely enumerated.
 
 ### P1 — Patient Progress Authenticity
 
@@ -358,7 +362,8 @@ independent workstream immediately when a slot opens.
   `ba9369a41c33e40351dd77758c9cc92ba8df2aa5`,
   `1a36f5923387ab72e3050a73243dc633673fc53b`,
   `5fcb1bf3a0d22016e98375b6437aacbe2e99ef6f`,
-  `82e3e86d466087670366f5f64aed3c98a4f49fb5`
+  `82e3e86d466087670366f5f64aed3c98a4f49fb5`,
+  `c2bc9eb6014feaad46e73f885b6527dbbf8202b4`
 - **Owned files:** `src/components/clinician/ClientDetailView.tsx`,
   `src/components/clinician/BrainMapUploadModal.tsx`, new isolated brain-map and
   clinical-metric helpers/tests.
@@ -386,7 +391,8 @@ independent workstream immediately when a slot opens.
   dependencies. Second-round owned fixes eliminated the redundant stale profile
   write, gated learning/count evidence states, tolerated valid legacy dates, and
   strengthened handler/display tests. Focused tests passed 18/18 and full tests
-  passed 125/125; re-review is pending.
+  passed 125/125. A final review finding for impossible normalized legacy dates was
+  fixed with explicit format/component validation; re-review is pending.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -635,6 +641,11 @@ independent workstream immediately when a slot opens.
   and returned the stream to IN PROGRESS. C1 completed its second owned fix round at
   `5fcb1bf` and `82e3e86`, with 18/18 focused and 125/125 full tests passing, then
   re-entered independent review.
+- **2026-09-19:** R1 fixed the legacy list-query and claim-key blockers at
+  `fe194ba`, with 58/58 focused and 130/130 full tests passing, and entered another
+  independent security re-review.
+- **2026-09-19:** C1 fixed its final legacy-date parser finding at `c2bc9eb`; 18/18
+  focused and 125/125 full tests passed before final re-review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
