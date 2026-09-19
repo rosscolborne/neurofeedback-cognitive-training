@@ -18,7 +18,7 @@ import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 
 export function App() {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, logout } = useAuth();
   
   const [brand, setBrand] = useState<ClinicBrandConfig>(() => storageEngine.getBrandConfig());
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -307,6 +307,7 @@ export function App() {
               ) : (
                 <ClinicianShell
                   brand={brand}
+                  clinicianLabel={user?.displayName || user?.email || undefined}
                   clients={clients}
                   messages={messages}
                   appointments={appointments}
@@ -319,6 +320,7 @@ export function App() {
                   onClearDemoData={handleClearDemoData}
                   onResetDemoData={handleResetDemoData}
                   onOpenRebrand={() => setShowRebrandModal(true)}
+                  onLogout={logout}
                 />
               )
             } />
