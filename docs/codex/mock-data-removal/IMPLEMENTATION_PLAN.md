@@ -531,9 +531,8 @@ independent workstream immediately when a slot opens.
   must never masquerade as live connection state.
 - Protocol runtime support may be narrower than the assignment UI. Unsupported
   values must be called out rather than silently ignored.
-- Local `fill-in-mocked-data` had no tracking branch at last reconciliation; the
-  orchestrator must verify/publish the intended remote branch before collaboration
-  or opening the final merge request.
+- `fill-in-mocked-data` was published to `origin/fill-in-mocked-data` and configured
+  to track it when the first implementation wave started.
 
 ## Project log
 
@@ -542,6 +541,9 @@ independent workstream immediately when a slot opens.
   `8bab4b8`; the foundation history was present; no downstream worktrees or remote
   `fill-in-mocked-data` branch existed. First-wave R1, P1, and C1 started from the
   same recorded integration base, limited by the four-slot orchestration capacity.
+- **2026-09-19:** Published `fill-in-mocked-data` as
+  `origin/fill-in-mocked-data` and configured the local integration branch to track
+  it. No change was made to `main`.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
