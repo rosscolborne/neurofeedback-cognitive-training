@@ -49,8 +49,8 @@ const STORAGE_KEYS = {
   CURRENT_CLIENT_ID: 'waveable_current_client_id',
 };
 
-// Invitation addresses are stored and compared case-normalized. Firestore rules
-// still require the Firebase Auth token's canonical email to match exactly.
+// Invitation addresses are stored case-normalized. Firestore rules lowercase
+// the Firebase Auth token email before comparing it with the stored address.
 // Invitations do not require an existing patient document: the account/profile
 // may be created later, and acceptance links that authenticated profile.
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
