@@ -87,6 +87,8 @@ export function assessQeegRecord(map: QEEGBrainMap): QeegRecordAssessment {
     ? map.dominantAlphaPeakHz
     : null;
   if (dominantAlphaPeakHz == null) issues.push('dominant alpha peak is missing or invalid');
+  if (typeof map.deviceSource !== 'string' || !map.deviceSource.trim()) issues.push('acquisition source is missing');
+  if (typeof map.recordingDate !== 'string' || !map.recordingDate.trim()) issues.push('recording date is missing');
 
   const presentCount = Object.keys(zScores).length + (dominantAlphaPeakHz == null ? 0 : 1);
   return {

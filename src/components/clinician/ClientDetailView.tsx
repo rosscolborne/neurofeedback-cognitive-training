@@ -287,6 +287,15 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 })}
               </svg>
             </div>}
+            {psdGroups.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                {psdGroups.map((row) => (
+                  <div key={`values-${row.id}`}>
+                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV²
+                  </div>
+                ))}
+              </div>
+            )}
             {invalidPsdRows.length > 0 && sessionsState === 'ready' && (
               <div role="status" style={{ marginTop: '8px', color: 'var(--status-alert)', fontSize: '11px' }}>
                 {invalidPsdRows.length} session{invalidPsdRows.length === 1 ? '' : 's'} omitted because persisted band data is partial or malformed.
