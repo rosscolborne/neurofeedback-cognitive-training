@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createBrandPalette, getOnPrimaryColor, isValidHexColor } from '../brandEngine';
-import { errorMessage, settingsNotice } from '../clinicSettingsState';
+import { BRAND_COLOR_PRESETS, createBrandPalette, getOnPrimaryColor, isBrandAccentUsable, isValidHexColor } from '../brandEngine';
+import { errorMessage, primaryLicenseIdentifier, settingsNotice } from '../clinicSettingsState';
 
 describe('clinic settings display contracts', () => {
   it('distinguishes loading, onboarding, migration, and error copy', () => {
@@ -15,8 +15,20 @@ describe('clinic settings display contracts', () => {
     expect(isValidHexColor('#D16D4D')).toBe(true);
     expect(isValidHexColor('terracotta')).toBe(false);
     expect(() => createBrandPalette('terracotta', 'Clinic')).toThrow('six-digit');
-    expect(() => createBrandPalette('#D16D4D', ' ')).toThrow('Clinic display name');
+    expect(() => createBrandPalette('#A8482F', ' ')).toThrow('Clinic display name');
+    expect(() => createBrandPalette('#D16D4D', 'Clinic')).toThrow('4.5:1');
+    expect(BRAND_COLOR_PRESETS.every((preset) => isBrandAccentUsable(preset.accent))).toBe(true);
     expect(getOnPrimaryColor('#FFFFFF')).toBe('#1A1A1A');
     expect(getOnPrimaryColor('#000000')).toBe('#FFFFFF');
+  });
+
+  it('selects only the dedicated primary license credential', () => {
+    expect(primaryLicenseIdentifier({
+      id: 'p', userId: 'p', clinicId: 'c', displayName: 'Name',
+      credentials: [
+        { id: 'board', type: 'board-certification', label: 'Board', identifier: 'BOARD-1', status: 'verified' },
+        { id: 'primary-license', type: 'other', label: 'Primary', identifier: 'PRIMARY-2', status: 'unverified' },
+      ],
+    })).toBe('PRIMARY-2');
   });
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ClinicBrandConfig } from '../../types';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
-import { errorMessage, settingsNotice, type SettingsLoadState } from '../../services/clinicSettingsState';
+import { errorMessage, primaryLicenseIdentifier, settingsNotice, type SettingsLoadState } from '../../services/clinicSettingsState';
 import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
@@ -29,7 +29,7 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
       setClinicName(snapshot.clinic?.name ?? '');
       setTimezone(snapshot.clinic?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
       setPractitionerName(snapshot.practitioner?.displayName ?? '');
-      setLicenseIdentifier(snapshot.practitioner?.credentials[0]?.identifier ?? '');
+      setLicenseIdentifier(primaryLicenseIdentifier(snapshot.practitioner));
       setLoadState({ status: 'ready', snapshot });
     }).catch((error: unknown) => {
       if (active) setLoadState({ status: 'error', message: errorMessage(error, 'Clinic settings could not be loaded.') });
@@ -54,6 +54,11 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
   const notice = settingsNotice(loadState);
   const isUnavailable = loadState.status === 'error';
   const isLoading = loadState.status === 'loading';
+  const markEdited = (update: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    update(event.target.value);
+    setSaveState('idle');
+    setSaveError('');
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '900px' }}>
@@ -75,10 +80,10 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
         </div>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-            <label style={labelStyle}>Clinic name<input required disabled={isLoading || isUnavailable || saveState === 'saving'} value={clinicName} onChange={(event) => setClinicName(event.target.value)} placeholder="Enter your clinic name" style={inputStyle} /></label>
-            <label style={labelStyle}>Clinic timezone<input required disabled={isLoading || isUnavailable || saveState === 'saving'} value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="e.g. America/Toronto" style={inputStyle} /></label>
-            <label style={labelStyle}>Practitioner name and titles<input required disabled={isLoading || isUnavailable || saveState === 'saving'} value={practitionerName} onChange={(event) => setPractitionerName(event.target.value)} placeholder="Enter your professional display name" style={inputStyle} /></label>
-            <label style={labelStyle}>License or certification identifier (optional)<input disabled={isLoading || isUnavailable || saveState === 'saving'} value={licenseIdentifier} onChange={(event) => setLicenseIdentifier(event.target.value)} placeholder="Enter an identifier; verification is separate" style={inputStyle} /></label>
+            <label style={labelStyle}>Clinic name<input required maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={clinicName} onChange={markEdited(setClinicName)} placeholder="Enter your clinic name" style={inputStyle} /></label>
+            <label style={labelStyle}>Clinic timezone<input required maxLength={80} disabled={isLoading || isUnavailable || saveState === 'saving'} value={timezone} onChange={markEdited(setTimezone)} placeholder="e.g. America/Toronto" style={inputStyle} /></label>
+            <label style={labelStyle}>Practitioner name and titles<input required maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={practitionerName} onChange={markEdited(setPractitionerName)} placeholder="Enter your professional display name" style={inputStyle} /></label>
+            <label style={labelStyle}>License or certification identifier (optional)<input maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={licenseIdentifier} onChange={markEdited(setLicenseIdentifier)} placeholder="Enter an identifier; verification is separate" style={inputStyle} /></label>
           </div>
           <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-tertiary)' }}>Entered credentials are stored as unverified until a separate verification process is available.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -102,7 +107,7 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
 
       <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Sliders size={18} color="var(--brand-primary)" /><div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic branding</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Current preview: <strong>{brand.name}</strong> · <span style={{ color: brand.primaryAccent, fontWeight: 700 }}>{brand.primaryAccent}</span></div></div></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Sliders size={18} color="var(--brand-primary)" /><div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic branding</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Current preview: <strong>{brand.name}</strong> · <span style={{ fontWeight: 700 }}>{brand.primaryAccent}</span></div></div></div>
           <button onClick={onOpenRebrand} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>Open theme customizer</button>
         </div>
       </div>

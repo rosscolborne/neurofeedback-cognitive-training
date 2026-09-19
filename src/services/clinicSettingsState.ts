@@ -1,4 +1,5 @@
 import type { ClinicSettingsSnapshot } from './clinicSettingsRepository';
+import type { PractitionerProfile } from '../types';
 
 export type SettingsLoadState =
   | { status: 'loading' }
@@ -7,6 +8,9 @@ export type SettingsLoadState =
 
 export const errorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim() ? error.message : fallback;
+
+export const primaryLicenseIdentifier = (practitioner: PractitionerProfile | null): string =>
+  practitioner?.credentials.find((credential) => credential.id === 'primary-license')?.identifier ?? '';
 
 export const settingsNotice = (state: SettingsLoadState): string | null => {
   if (state.status === 'loading') return 'Loading clinic settings…';

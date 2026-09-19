@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ClinicBrandConfig } from '../../types';
-import { BRAND_COLOR_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM, getOnPrimaryColor, isValidHexColor } from '../../services/brandEngine';
+import { BRAND_COLOR_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM, getOnPrimaryColor, isBrandAccentUsable, isValidHexColor } from '../../services/brandEngine';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
 import { errorMessage } from '../../services/clinicSettingsState';
 import { BrandLogo } from './BrandLogo';
@@ -52,9 +52,13 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
   }, []);
 
   // Compute live contrast audit against white card and patient base
-  const auditedAccent = isValidHexColor(accentColor) ? accentColor : currentBrand.primaryAccent;
+  const auditedAccent = isValidHexColor(accentColor)
+    ? accentColor
+    : isValidHexColor(currentBrand.primaryAccent) ? currentBrand.primaryAccent : '#A8482F';
+  const accentIsUsable = isBrandAccentUsable(accentColor);
   const contrastOnWhite = calculateContrast(auditedAccent, '#FFFFFF');
   const textOnAccentContrast = calculateContrast(getOnPrimaryColor(auditedAccent), auditedAccent);
+  const controlsLocked = loadState === 'loading' || saveState === 'saving';
 
   const handleApplyPreset = (accent: string) => {
     setAccentColor(accent);
@@ -63,7 +67,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
 
   const handleColorChange = (hex: string) => {
     setAccentColor(hex);
-    if (isValidHexColor(hex) && clinicName.trim()) applyBrandToDOM(createBrandPalette(hex, clinicName, logoUrl));
+    if (isBrandAccentUsable(hex) && clinicName.trim()) applyBrandToDOM(createBrandPalette(hex, clinicName, logoUrl));
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +153,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
               Configure your clinic identity, custom logo, and primary accent palette with live WCAG AA contrast validation.
             </p>
           </div>
-          <button onClick={handleClose} className="btn btn-ghost" style={{ padding: '6px' }} aria-label="Close clinic branding customizer">
+          <button onClick={handleClose} disabled={controlsLocked} className="btn btn-ghost" style={{ padding: '6px' }} aria-label="Close clinic branding customizer">
             <X size={18} />
           </button>
         </div>
@@ -199,6 +203,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
             <input
               type="text"
               value={clinicName}
+              maxLength={120}
               disabled={loadState !== 'ready' || saveState === 'saving'}
               onChange={e => setClinicName(e.target.value)}
               style={{
@@ -219,6 +224,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
             <input
               type="text"
               value={tagline}
+              maxLength={180}
               disabled={loadState !== 'ready' || saveState === 'saving'}
               onChange={e => setTagline(e.target.value)}
               style={{
@@ -264,6 +270,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
                 ref={fileInputRef}
                 type="file"
                 accept="image/svg+xml,image/png,image/webp"
+                disabled={controlsLocked || loadState === 'error'}
                 style={{ display: 'none' }}
                 onChange={handleLogoUpload}
               />
@@ -271,6 +278,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={controlsLocked || loadState === 'error'}
                   className="btn btn-secondary"
                   style={{ padding: '6px 12px', fontSize: '12px', gap: '6px' }}
                 >
@@ -280,6 +288,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setLogoUrl('/app-logo.png')}
+                    disabled={controlsLocked || loadState === 'error'}
                     className="btn btn-ghost"
                     style={{ padding: '6px 10px', fontSize: '11px' }}
                   >
@@ -303,6 +312,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
             <input
               type="color"
               value={auditedAccent}
+              disabled={controlsLocked || loadState === 'error'}
               onChange={e => handleColorChange(e.target.value)}
               style={{
                 width: '48px',
@@ -316,6 +326,8 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
             <input
               type="text"
               value={accentColor}
+              maxLength={7}
+              disabled={controlsLocked || loadState === 'error'}
               onChange={e => handleColorChange(e.target.value)}
               className="font-mono"
               style={{
@@ -352,8 +364,8 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
 
           <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {contrastOnWhite.passesAALarge ? <ShieldCheck size={14} color="var(--status-active)" /> : <AlertTriangle size={14} color="var(--status-alert)" />}
-              <span>AA Large (3.0:1)</span>
+              {contrastOnWhite.passesAANormal ? <ShieldCheck size={14} color="var(--status-active)" /> : <AlertTriangle size={14} color="var(--status-alert)" />}
+              <span>UI text on white (4.5:1)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {textOnAccentContrast.passesAANormal ? <ShieldCheck size={14} color="var(--status-active)" /> : <AlertTriangle size={14} color="var(--status-alert)" />}
@@ -364,10 +376,10 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-          <button onClick={() => void handleSave()} disabled={loadState !== 'ready' || saveState === 'saving'} className="btn btn-dense" style={{ flex: 1, padding: '12px' }}>
+          <button onClick={() => void handleSave()} disabled={loadState !== 'ready' || saveState === 'saving' || !accentIsUsable} className="btn btn-dense" style={{ flex: 1, padding: '12px' }}>
             {saveState === 'saving' ? 'Saving…' : 'Save and apply clinic branding'}
           </button>
-          <button onClick={handleClose} disabled={saveState === 'saving'} className="btn btn-ghost" style={{ flex: 1 }}>
+          <button onClick={handleClose} disabled={controlsLocked} className="btn btn-ghost" style={{ flex: 1 }}>
             Cancel
           </button>
         </div>
