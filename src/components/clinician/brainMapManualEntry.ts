@@ -65,13 +65,24 @@ export function isValidRecordingDate(value: unknown): value is string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-/** Legacy records may contain locale-formatted dates; new writes remain ISO date-only. */
+const LEGACY_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+/** Legacy records used en-US short-month dates such as `Sep 19, 2026`; new writes remain ISO date-only. */
 export function parsePersistedRecordingDate(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return isValidRecordingDate(trimmed) ? trimmed : null;
-  const parsed = Date.parse(trimmed);
-  return Number.isFinite(parsed) ? trimmed : null;
+
+  const legacy = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([1-9]|[12]\d|3[01]), (\d{4})$/.exec(trimmed);
+  if (!legacy) return null;
+  const monthIndex = LEGACY_MONTHS.indexOf(legacy[1] as (typeof LEGACY_MONTHS)[number]);
+  const day = Number(legacy[2]);
+  const year = Number(legacy[3]);
+  const parsed = new Date(Date.UTC(year, monthIndex, day));
+  const isExactCalendarDate = parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === monthIndex
+    && parsed.getUTCDate() === day;
+  return isExactCalendarDate ? trimmed : null;
 }
 
 const Z_SCORE_FIELDS = [

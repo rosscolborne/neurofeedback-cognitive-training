@@ -52,8 +52,13 @@ describe('manual QEEG entry validation and persistence shape', () => {
   it('accepts valid legacy persisted dates without relaxing new-write validation', () => {
     expect(parsePersistedRecordingDate('Sep 19, 2026')).toBe('Sep 19, 2026');
     expect(parsePersistedRecordingDate('Jul 28, 2026')).toBe('Jul 28, 2026');
+    expect(parsePersistedRecordingDate('Feb 29, 2024')).toBe('Feb 29, 2024');
     expect(parsePersistedRecordingDate('2026-09-19')).toBe('2026-09-19');
     expect(parsePersistedRecordingDate('2026-02-30')).toBeNull();
+    expect(parsePersistedRecordingDate('Feb 29, 2025')).toBeNull();
+    expect(parsePersistedRecordingDate('Feb 30, 2026')).toBeNull();
+    expect(parsePersistedRecordingDate('Sep 31, 2026')).toBeNull();
+    expect(parsePersistedRecordingDate('Apr 31, 2026')).toBeNull();
     expect(parsePersistedRecordingDate('not-a-date')).toBeNull();
     expect(buildManualBrainMap({ ...validInput, recordingDate: 'Sep 19, 2026' }).ok).toBe(false);
   });
