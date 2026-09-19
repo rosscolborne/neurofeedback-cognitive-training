@@ -405,11 +405,11 @@ independent workstream immediately when a slot opens.
 
 ### C2 — Clinical Analytics and Reports
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-reports`
 - **Worktree:** `../neurasticity-mockdata-clinical-reports`
-- **Final commit:** pending
+- **Final commit:** `09d2c086ac0c654b730b6f81365eb98a0de5d34e`
 - **Owned files:** `src/components/clinician/ClinicalReportsView.tsx`,
   `src/services/pdfReportGenerator.ts`, a new isolated analytics helper/tests.
 - **Dependencies:** F0; R1 only for final authorization/E2E.
@@ -424,6 +424,12 @@ independent workstream immediately when a slot opens.
 - **Tests:** date-boundary/timezone and aggregation unit tests; empty/partial/full
   component tests; deterministic PDF text assertions; manual range and export
   comparison for a linked patient.
+- **Implementation report:** one interval-aware analytics model now drives UI and
+  PDF values, coverage, provenance, and adherence; unsupported clinical claims and
+  fabricated report values were removed. Focused analytics/PDF tests passed 9/9,
+  full tests passed 130/130, focused lint was clean, and the production build
+  passed. The requested shared session-read rejection contract landed centrally in
+  `d445528`; independent review is pending.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
@@ -669,6 +675,9 @@ independent workstream immediately when a slot opens.
   canonical QEEG persistence/loading with linked-clinician rules, server timestamps,
   actor provenance, and retained legacy reads. Focused integration tests passed
   81/81 and the production build passed; independent review is pending.
+- **2026-09-19:** C2 completed at `09d2c08`, with 9/9 focused and 130/130 full
+  tests passing, and entered the independent-review queue. Its session-read error
+  dependency was satisfied by central commit `d445528`.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
