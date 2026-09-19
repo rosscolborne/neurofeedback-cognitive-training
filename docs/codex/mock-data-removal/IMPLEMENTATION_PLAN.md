@@ -513,11 +513,12 @@ independent workstream immediately when a slot opens.
 
 ### T1 — Protocol Runtime Consumption
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
-- **Final commit:** `8963f02d382b4fee2c951207b3cb52ccaef69f5c`
+- **Final commit:** `8963f02d382b4fee2c951207b3cb52ccaef69f5c`,
+  `7dea986f0dc1443bfadbc6112c48f84642950fbc`
 - **Owned files:** protocol-consumption portions of
   `src/components/patient/SessionRunner.tsx`, `src/services/adaptiveEngine.ts`, and
   `src/services/eegEngine.ts`; focused tests. Do not change the catalog or shared
@@ -546,6 +547,11 @@ independent workstream immediately when a slot opens.
   frequency support, canonical adaptive-step consumption, visible unsupported-field
   disclosure, non-invented bounds/copy, complete measurement provenance, the
   duration off-by-one fix, and expanded tests. Fixes are in progress.
+  Review fixes now preserve canonical/custom equivalence, reject unsupported
+  arbitrary reward-band edits, consume canonical adaptive steps, show limitations
+  on valid paths, honor explicit bounds, require complete consistent real-hardware
+  provenance, and save exact elapsed duration. Focused tests passed 13/13 and full
+  tests passed 175/175; re-review is pending.
 
 ### D1 — Production/Demo Data Separation
 
@@ -721,6 +727,8 @@ independent workstream immediately when a slot opens.
   Demo sessions were included as clinical evidence, invalid-timestamp explicitly
   selected legacy sessions disappeared from compatibility PDFs, and UI state/error/
   filter/export coverage was insufficient. Fixes were sent to the original agent.
+- **2026-09-19:** T1 completed review fixes at verified commit `7dea986f`, with
+  13/13 focused and 175/175 full tests passing, and entered independent re-review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
