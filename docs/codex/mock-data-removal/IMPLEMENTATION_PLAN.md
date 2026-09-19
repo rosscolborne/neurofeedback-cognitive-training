@@ -260,13 +260,15 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** IMPLEMENTED
+- **Status:** MERGED
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
 - **Final commit:** `7dc01823cdee79e127fe18a0f70a8804d20da385`,
   `b78fa36452ba25732059e382fc50b1991967241b`,
-  `fe194ba9baf32290e3761bc4f3a3954a2b9586d5`
+  `fe194ba9baf32290e3761bc4f3a3954a2b9586d5`,
+  `4c398c1210b2d6359393b330b1d73c685878f5b7`; merged by
+  `bf215a832ee8a0cbf9046fb7ba66fcf9113d0833`
 - **Owned files:** relationship/invitation sections of `firestore.rules`,
   `src/services/storageEngine.ts`, `src/services/dataMappers.ts`, and
   `src/types/index.ts`; `src/components/clinician/ClientRosterView.tsx`;
@@ -290,8 +292,8 @@ independent workstream immediately when a slot opens.
 - **Implementation report:** atomic/idempotent invitation acceptance, persisted
   relationship routing, canonical/legacy roster reads, ownership rules, and
   actionable enrollment states implemented. Emails are stored/compared normalized
-  in the repository; rules rely on the Firebase token email matching that stored
-  form. Pre-account invitations resolve after authenticated patient profile
+  in the repository; rules lowercase the Firebase token email before comparison.
+  Pre-account invitations resolve after authenticated patient profile
   creation. Focused tests passed (47/47), full Vitest passed (119/119), and the
   production build passed. Rules emulator execution is pending because Java is
   unavailable locally; static rules contract tests passed. Independent review
@@ -303,8 +305,10 @@ independent workstream immediately when a slot opens.
   delimiter-collision risk in deterministic claim IDs. Follow-up fixes use a
   rules-provable explicit-null legacy query with independent canonical retrieval
   and collision-free nested claim paths. Focused tests passed 58/58 and full tests
-  passed 130/130; re-review is pending. Missing-field legacy records require a
-  trusted canonical/null backfill before they can be safely enumerated.
+  passed 130/130. Missing-field legacy records require a
+  trusted canonical/null backfill before they can be safely enumerated. Final
+  security review passed, the branch merged, and integrated focused tests passed
+  58/58. Emulator execution remains pending on a Java-capable environment.
 
 ### P1 — Patient Progress Authenticity
 
@@ -487,7 +491,7 @@ independent workstream immediately when a slot opens.
 
 ### T1 — Protocol Runtime Consumption
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
@@ -654,6 +658,10 @@ independent workstream immediately when a slot opens.
   central append/error/provenance dependencies remain open integration work.
 - **2026-09-19:** S1 started from the clean post-C1 integration branch as the next
   unblocked first-wave workstream.
+- **2026-09-19:** R1 passed final independent security review and merged into
+  `fill-in-mocked-data` via `bf215a8`; integrated focused tests passed 58/58. Java
+  remains required for dynamic Firestore emulator validation. T1 started from the
+  clean post-R1 integration branch.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
