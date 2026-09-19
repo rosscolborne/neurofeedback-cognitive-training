@@ -260,7 +260,7 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
@@ -296,8 +296,11 @@ independent workstream immediately when a slot opens.
   unavailable locally; static rules contract tests passed. Independent review
   required security fixes for canonical/legacy ownership precedence, tenant-field
   immutability, direct self-linking, email normalization, audit/deletion bypasses,
-  concurrent duplicate invitations, and visible lifecycle errors. Fixes completed
-  with 55/55 focused and 127/127 full tests passing; re-review is pending.
+  concurrent duplicate invitations, and visible lifecycle errors. First fixes
+  completed with 55/55 focused and 127/127 full tests passing. Re-review found the
+  legacy roster query incompatible with canonical-precedence rules and a
+  delimiter-collision risk in deterministic claim IDs; follow-up fixes are in
+  progress.
 
 ### P1 — Patient Progress Authenticity
 
@@ -346,14 +349,16 @@ independent workstream immediately when a slot opens.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
 - **Final commit:** `c2c4fa4c4377dfcd494b4cd4611f2fcd3c591fca`,
   `6a6a5e6e7061754ba9539d2964140e6e2337d482`,
   `ba9369a41c33e40351dd77758c9cc92ba8df2aa5`,
-  `1a36f5923387ab72e3050a73243dc633673fc53b`
+  `1a36f5923387ab72e3050a73243dc633673fc53b`,
+  `5fcb1bf3a0d22016e98375b6437aacbe2e99ef6f`,
+  `82e3e86d466087670366f5f64aed3c98a4f49fb5`
 - **Owned files:** `src/components/clinician/ClientDetailView.tsx`,
   `src/components/clinician/BrainMapUploadModal.tsx`, new isolated brain-map and
   clinical-metric helpers/tests.
@@ -378,9 +383,10 @@ independent workstream immediately when a slot opens.
   coverage. Owned fixes completed with 14 focused and 121 full tests passing;
   re-review is pending. Dedicated brain-map persistence, query error propagation,
   and session measurement provenance remain centrally reserved integration
-  dependencies. Re-review required further owned fixes to eliminate a redundant
-  stale profile write, gate learning/count evidence states, tolerate legacy dates,
-  and strengthen handler/display tests; those fixes are in progress.
+  dependencies. Second-round owned fixes eliminated the redundant stale profile
+  write, gated learning/count evidence states, tolerated valid legacy dates, and
+  strengthened handler/display tests. Focused tests passed 18/18 and full tests
+  passed 125/125; re-review is pending.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -625,6 +631,10 @@ independent workstream immediately when a slot opens.
   integration dependency before manual failure-state testing.
 - **2026-09-19:** C2 started from the clean post-P1 integration branch as the next
   available independent first-wave workstream.
+- **2026-09-19:** R1 re-review found two remaining Firestore query/keying blockers
+  and returned the stream to IN PROGRESS. C1 completed its second owned fix round at
+  `5fcb1bf` and `82e3e86`, with 18/18 focused and 125/125 full tests passing, then
+  re-entered independent review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
