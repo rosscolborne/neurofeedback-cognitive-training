@@ -338,12 +338,14 @@ independent workstream immediately when a slot opens.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
 - **Final commit:** `c2c4fa4c4377dfcd494b4cd4611f2fcd3c591fca`,
-  `6a6a5e6e7061754ba9539d2964140e6e2337d482`
+  `6a6a5e6e7061754ba9539d2964140e6e2337d482`,
+  `ba9369a41c33e40351dd77758c9cc92ba8df2aa5`,
+  `1a36f5923387ab72e3050a73243dc633673fc53b`
 - **Owned files:** `src/components/clinician/ClientDetailView.tsx`,
   `src/components/clinician/BrainMapUploadModal.tsx`, new isolated brain-map and
   clinical-metric helpers/tests.
@@ -365,8 +367,10 @@ independent workstream immediately when a slot opens.
   production build passed with existing warnings. Independent review required
   fixes for persistence failure/concurrency, measurement provenance, swallowed
   read errors, malformed legacy data, incorrect units, chart order, and test
-  coverage. Owned fixes are in progress; dedicated brain-map persistence, query
-  error propagation, and session measurement provenance are centrally reserved.
+  coverage. Owned fixes completed with 14 focused and 121 full tests passing;
+  re-review is pending. Dedicated brain-map persistence, query error propagation,
+  and session measurement provenance remain centrally reserved integration
+  dependencies.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -596,6 +600,9 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** P1 re-review cleared the metric/badge findings but found loading
   and error states still rendered some negative session evidence. P1 returned to
   IN PROGRESS for a narrow display-state fix and comprehensive display-model tests.
+- **2026-09-19:** C1 completed owned review fixes at `ba9369a` and `1a36f59`, with
+  121/121 full tests passing, and entered independent re-review. Its shared
+  persistence/error/provenance dependencies remain reserved for central integration.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
