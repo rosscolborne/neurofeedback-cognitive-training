@@ -384,7 +384,7 @@ independent workstream immediately when a slot opens.
 
 ### C2 — Clinical Analytics and Reports
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-reports`
 - **Worktree:** `../neurasticity-mockdata-clinical-reports`
@@ -623,6 +623,8 @@ independent workstream immediately when a slot opens.
   without findings. P1 merged into `fill-in-mocked-data` via `fcce66c`; integrated
   focused tests passed 14/14. The central session-read error contract remains an
   integration dependency before manual failure-state testing.
+- **2026-09-19:** C2 started from the clean post-P1 integration branch as the next
+  available independent first-wave workstream.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
