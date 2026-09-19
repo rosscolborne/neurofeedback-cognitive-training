@@ -405,7 +405,7 @@ independent workstream immediately when a slot opens.
 
 ### C2 — Clinical Analytics and Reports
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-reports`
 - **Worktree:** `../neurasticity-mockdata-clinical-reports`
@@ -429,7 +429,10 @@ independent workstream immediately when a slot opens.
   fabricated report values were removed. Focused analytics/PDF tests passed 9/9,
   full tests passed 130/130, focused lint was clean, and the production build
   passed. The requested shared session-read rejection contract landed centrally in
-  `d445528`; independent review is pending.
+  `d445528`. Independent review required Demo-session separation from clinical
+  evidence/adherence, retention of explicitly selected invalid-timestamp legacy
+  sessions in compatibility PDFs, and stronger UI state/filter/export coverage.
+  Fixes are in progress.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
@@ -714,6 +717,10 @@ independent workstream immediately when a slot opens.
   tests, and C2 integration before approval. QEEG fixes landed in `928af1a`; focused
   tests passed 87/87 and the build passed. Independent re-review and C2 integration
   remain pending.
+- **2026-09-19:** C2 independent review returned the stream to IN PROGRESS because
+  Demo sessions were included as clinical evidence, invalid-timestamp explicitly
+  selected legacy sessions disappeared from compatibility PDFs, and UI state/error/
+  filter/export coverage was insufficient. Fixes were sent to the original agent.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
