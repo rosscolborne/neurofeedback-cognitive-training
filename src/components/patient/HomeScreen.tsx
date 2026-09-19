@@ -1,17 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ClientProfile, ExperienceType } from '../../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, ChevronRight as ScrollHint, Crown } from 'lucide-react';
+import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, Crown } from 'lucide-react';
+import {
+  buildPatientProgressDisplayModel,
+} from './patientMetrics';
 
 interface HomeScreenProps {
   client: ClientProfile;
   onStartSession: (exp: ExperienceType) => void;
   onNavigateTab: (tab: 'home' | 'sessions' | 'education' | 'progress' | 'profile') => void;
 }
+
+const EMPTY_SESSIONS: SessionRecord[] = [];
 
 const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ size?: number }>; desc: string; tag: string }> = {
   'skyline-drift': { name: 'Skyline Drift', icon: Mountain, desc: 'Sustained focus glider flight over procedural alpine biomes', tag: 'Focus' },
@@ -43,35 +48,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 }) => {
   const [selectedExp, setSelectedExp] = useState<ExperienceType>(client.allowedExperiences[0] || 'skyline-drift');
   const [showScrollHint, setShowScrollHint] = useState(true);
-  const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+  const [sessionState, setSessionState] = useState<{
+    clientId: string;
+    status: 'loading' | 'ready' | 'error';
+    sessions: SessionRecord[];
+  }>({ clientId: client.id, status: 'loading', sessions: [] });
+  const [nowMs] = useState(() => Date.now());
   const pillsRef = useRef<HTMLDivElement>(null);
-
-  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const todayIndex = new Date().getDay();
+  const sessionStatus = sessionState.clientId === client.id ? sessionState.status : 'loading';
+  const sessions = sessionState.clientId === client.id ? sessionState.sessions : EMPTY_SESSIONS;
 
   useEffect(() => {
     let isMounted = true;
-    storageEngine.getSessions(client.id).then((sessions) => {
-      if (!isMounted) return;
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - dayOfWeek);
-      weekStart.setHours(0, 0, 0, 0);
-
-      const days = new Set<number>();
-      for (const session of sessions) {
-        const sessionDate = new Date(session.timestamp);
-        if (sessionDate >= weekStart && sessionDate <= now) {
-          days.add(sessionDate.getDay());
-        }
-      }
-      setCompletedDays(days);
-    });
+    storageEngine.getSessions(client.id)
+      .then((ownedSessions) => {
+        if (!isMounted) return;
+        setSessionState({ clientId: client.id, status: 'ready', sessions: ownedSessions });
+      })
+      .catch(() => {
+        if (isMounted) setSessionState({ clientId: client.id, status: 'error', sessions: [] });
+      });
     return () => {
       isMounted = false;
     };
   }, [client.id]);
+
+  const progressDisplay = useMemo(() => buildPatientProgressDisplayModel(sessionStatus, sessions, {
+    period: 'week',
+    nowMs,
+    chartWidth: 300,
+    chartHeight: 40,
+  }), [sessionStatus, sessions, nowMs]);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
   const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
@@ -231,44 +238,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             Training Consistency
           </div>
           <div className="font-display" style={{ fontSize: '18px', color: 'var(--text-primary)', marginTop: '2px' }}>
-            {client.currentStreak > 0 ? `${client.currentStreak}-Day Active Streak` : 'Build Your Streak'}
+            {progressDisplay.presentation === 'loading'
+              ? 'Loading activity…'
+              : progressDisplay.presentation === 'error'
+                ? 'Activity unavailable'
+                : (progressDisplay.activeStreak ?? 0) > 0
+                  ? `${progressDisplay.activeStreak}-Day Active Streak`
+                  : 'Build Your Streak'}
           </div>
         </div>
 
-        {/* Grace Day Badge — own row with spacing */}
-        {client.streakFreezeRemaining > 0 && (
-          <div
-            style={{
-              background: 'var(--status-paused-bg)',
-              color: 'var(--status-paused)',
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '11px',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              alignSelf: 'flex-start',
-            }}
-          >
-            {client.streakFreezeRemaining} grace {client.streakFreezeRemaining === 1 ? 'day' : 'days'} available
-          </div>
-        )}
-
         {/* 7-Day Dot Indicator Grid — based on actual session data */}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-          {daysOfWeek.map((day, idx) => {
-            const isCompleted = completedDays.has(idx);
-            const isToday = idx === todayIndex;
+          {progressDisplay.weeklyActivity ? progressDisplay.weeklyActivity.map(day => {
             return (
-              <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+              <div key={day.dayOrdinal} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <div
                   style={{
                     width: '28px',
                     height: '28px',
                     borderRadius: '50%',
-                    backgroundColor: isCompleted ? 'var(--status-active)' : 'var(--surface-patient-recessed)',
-                    border: isToday && !isCompleted ? '2px solid var(--brand-primary)' : 'none',
+                    backgroundColor: day.completed ? 'var(--status-active)' : 'var(--surface-patient-recessed)',
+                    border: day.isToday && !day.completed ? '2px solid var(--brand-primary)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -277,51 +268,62 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     fontWeight: 700,
                   }}
                 >
-                  {isCompleted ? '✓' : ''}
+                  {day.completed ? '✓' : ''}
                 </div>
                 <span style={{
                   fontSize: '11px',
-                  color: isToday ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  fontWeight: isToday ? 700 : 400,
-                }}>{day}</span>
+                  color: day.isToday ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontWeight: day.isToday ? 700 : 400,
+                }}>{day.label}</span>
               </div>
             );
-          })}
+          }) : (
+            <div style={{ width: '100%', fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '12px 0' }}>
+              {progressDisplay.presentation === 'loading'
+                ? 'Loading weekly activity…'
+                : 'Weekly activity unavailable.'}
+            </div>
+          )}
         </div>
 
-        {/* Brain Capacity Trend Sparkline */}
+        {/* Session-derived time-in-zone trend */}
         <div style={{ marginTop: '8px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <div>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Brain Capacity Index</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Average time in target zone</span>
               <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Past 7 days</div>
             </div>
             <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {client.brainCapacityScore} / 100
+              {progressDisplay.summary?.averageTimeInZonePercent != null
+                ? `${progressDisplay.summary.averageTimeInZonePercent}%`
+                : 'Unavailable'}
             </span>
           </div>
 
           <div style={{ width: '100%', height: '45px', overflow: 'hidden' }}>
-            <svg viewBox="0 0 300 40" style={{ width: '100%', height: '100%' }}>
-              <path
-                d="M 10 32 Q 60 28, 100 24 T 180 18 T 240 12 T 290 8"
-                fill="none"
-                stroke="var(--brand-primary)"
-                strokeWidth="2.5"
-              />
-              <path
-                d="M 10 32 Q 60 28, 100 24 T 180 18 T 240 12 T 290 8 L 290 40 L 10 40 Z"
-                fill="var(--brand-primary-subtle)"
-                opacity="0.6"
-              />
-            </svg>
+            {progressDisplay.chart?.line ? (
+              <svg viewBox="0 0 300 40" style={{ width: '100%', height: '100%' }} aria-label="Time in target zone by session">
+                <path d={progressDisplay.chart.area} fill="var(--brand-primary-subtle)" opacity="0.6" />
+                <path d={progressDisplay.chart.line} fill="none" stroke="var(--brand-primary)" strokeWidth="2.5" />
+                {progressDisplay.chart.points.map(point => (
+                  <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="3" fill="var(--brand-primary)" />
+                ))}
+              </svg>
+            ) : (
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', paddingTop: '12px' }}>
+                {progressDisplay.presentation === 'loading'
+                  ? 'Loading session data…'
+                  : progressDisplay.presentation === 'error'
+                    ? 'Could not load session data.'
+                    : 'No measured sessions in this period.'}
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 4px' }}>
-            <span>Mon</span>
-            <span>Wed</span>
-            <span>Fri</span>
-            <span>Today</span>
-          </div>
+          {progressDisplay.summary?.measuredSessions.length === 1 && (
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '2px' }}>
+              One measured session; a trend needs at least two.
+            </div>
+          )}
         </div>
       </div>
 
