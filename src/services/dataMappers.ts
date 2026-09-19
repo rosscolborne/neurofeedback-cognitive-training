@@ -3,6 +3,7 @@ import type {
   PersistedTimestamp,
   SessionRecord,
 } from '../types';
+import { getProtocolTypeForTemplate } from './protocols';
 
 const LEGACY_EXPERIENCE_RENAMES: Record<string, string> = {
   'spatial-audio': 'generative-music',
@@ -45,9 +46,18 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
     allowed.push('neuro-gambit');
   }
 
+  // Custom protocol IDs were historically generated as `custom-*`, so older
+  // saves could incorrectly persist Theta/Beta as the broad training mode.
+  // Treat the saved custom configuration as authoritative when reading those
+  // records, matching the protocol catalog's existing override semantics.
+  const assignedProtocol = raw.customProtocolConfig
+    ? getProtocolTypeForTemplate(raw.customProtocolConfig, raw.assignedProtocol)
+    : raw.assignedProtocol;
+
   return {
     ...raw,
     id: raw.id || documentId || '',
+    assignedProtocol,
     allowedExperiences: [...new Set(allowed)],
     brainMaps: Array.isArray(raw.brainMaps) ? raw.brainMaps : [],
     badges: Array.isArray(raw.badges) ? raw.badges : [],

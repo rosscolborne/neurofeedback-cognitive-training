@@ -224,6 +224,8 @@ export interface PractitionerProfile {
 
 export interface ProtocolTemplate {
   id: string;
+  /** Broad training engine mode represented by this clinical template. */
+  protocolType?: ProtocolType;
   name: string;
   clinicalName: string;
   leadInvestigator: string;

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, ProtocolType, QEEGBrainMap, SessionRecord } from '../../types';
+import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
+import { getProtocolTypeForTemplate } from '../../services/protocols';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
 import {
   ArrowLeft,
   Send,
-  Activity,
   Settings2,
   Download,
   Upload,
@@ -55,11 +55,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   };
 
   const handleSaveProtocol = (newTemplate: ProtocolTemplate) => {
-    let assigned: ProtocolType = 'theta-beta-ratio';
-    if (newTemplate.id.includes('smr')) assigned = 'smr-enhancement';
-    else if (newTemplate.id.includes('alpha-theta')) assigned = 'alpha-theta-crossover';
-    else if (newTemplate.id.includes('alpha')) assigned = 'alpha-enhancement';
-    else if (newTemplate.id.includes('beta')) assigned = 'beta-downtraining';
+    const assigned = getProtocolTypeForTemplate(newTemplate, client.assignedProtocol);
 
     const updated: ClientProfile = {
       ...client,

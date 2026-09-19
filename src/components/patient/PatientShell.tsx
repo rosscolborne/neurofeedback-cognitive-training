@@ -8,6 +8,7 @@ import { ProgressHistory } from './ProgressHistory';
 import { OnboardingFlow } from './OnboardingFlow';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
+import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
 import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown } from 'lucide-react';
@@ -37,6 +38,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [invitationCode, setInvitationCode] = useState('');
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
+  const [showProtocolDetails, setShowProtocolDetails] = useState(false);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -447,6 +449,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 Re-run Assessment & Headband Setup
               </button>
 
+              <button
+                onClick={() => setShowProtocolDetails(true)}
+                className="btn btn-secondary"
+                style={{ width: '100%' }}
+              >
+                View Protocol Details
+              </button>
+
               {client.clinicianId ? (
                 <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)', fontSize: '13px', fontWeight: 600 }}>
                   Connected to your clinician
@@ -552,6 +562,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           </div>
         )}
       </main>
+
+      {showProtocolDetails && (
+        <ProtocolDetailsModal client={client} onClose={() => setShowProtocolDetails(false)} />
+      )}
 
       {/* Patient Mobile Bottom Tab Bar */}
       <nav

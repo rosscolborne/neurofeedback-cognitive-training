@@ -8,6 +8,7 @@ import {
   timestampToIso,
   timestampToMillis,
 } from '../dataMappers';
+import { CLINICAL_PROTOCOL_TEMPLATES } from '../clinicalProtocolTemplates';
 
 const clientFixture = (): ClientProfile => ({
   id: 'patient-1',
@@ -68,6 +69,26 @@ describe('production data migration readers', () => {
     expect(migrated.allowedExperiences).toEqual(['generative-music', 'neuro-gambit']);
     expect(legacy.allowedExperiences).toEqual(['spatial-audio']);
     expect(migrated.schemaVersion).toBe(1);
+  });
+
+  it('repairs the broad mode for legacy custom protocol records on read', () => {
+    const sterman = CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.id === 'proto-sterman-smr');
+    expect(sterman).toBeDefined();
+
+    const legacy = {
+      ...clientFixture(),
+      assignedProtocol: 'theta-beta-ratio' as const,
+      customProtocolConfig: {
+        ...sterman!,
+        id: 'custom-legacy',
+        protocolType: undefined,
+      },
+    };
+
+    const migrated = readClientProfile(legacy);
+
+    expect(migrated.assignedProtocol).toBe('smr-enhancement');
+    expect(legacy.assignedProtocol).toBe('theta-beta-ratio');
   });
 
   it('prefers completedAt over legacy epoch timestamps and fills safe collection defaults', () => {
