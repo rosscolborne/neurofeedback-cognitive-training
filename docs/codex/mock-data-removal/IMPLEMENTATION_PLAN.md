@@ -300,7 +300,7 @@ independent workstream immediately when a slot opens.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
@@ -331,8 +331,10 @@ independent workstream immediately when a slot opens.
   Independent review required fixes for unsupported badge evidence, swallowed read
   errors, an undefined trend rule, loading/single-point states, and component-state
   coverage. Owned fixes were completed with 8/8 focused and 115/115 full tests;
-  re-review is pending. The shared read-error contract remains reserved for the
-  orchestrator and must reject failures while successful empty queries resolve `[]`.
+  re-review cleared the original findings but found session evidence still rendered
+  as negative/empty during loading and error states. That owned display-state fix is
+  in progress. The shared read-error contract remains reserved for the orchestrator
+  and must reject failures while successful empty queries resolve `[]`.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
@@ -591,6 +593,9 @@ independent workstream immediately when a slot opens.
   workstream to IN PROGRESS. P1 completed owned review fixes at `fb2e48a`, with
   115/115 full tests passing, and entered independent re-review while awaiting the
   central session-read error contract.
+- **2026-09-19:** P1 re-review cleared the metric/badge findings but found loading
+  and error states still rendered some negative session evidence. P1 returned to
+  IN PROGRESS for a narrow display-state fix and comprehensive display-model tests.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
