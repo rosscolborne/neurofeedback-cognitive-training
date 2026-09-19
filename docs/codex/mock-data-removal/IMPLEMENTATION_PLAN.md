@@ -421,7 +421,7 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
@@ -652,6 +652,8 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** C1 final review passed without findings and merged into
   `fill-in-mocked-data` via `c825549`; integrated focused tests passed 18/18. Its
   central append/error/provenance dependencies remain open integration work.
+- **2026-09-19:** S1 started from the clean post-C1 integration branch as the next
+  unblocked first-wave workstream.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
