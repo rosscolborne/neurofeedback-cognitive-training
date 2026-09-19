@@ -297,7 +297,7 @@ independent workstream immediately when a slot opens.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
@@ -323,11 +323,15 @@ independent workstream immediately when a slot opens.
   empty/error states implemented without shared-file changes. Focused metrics tests
   passed (7/7), targeted lint passed, and the production build passed. Full Vitest
   reported 112 passing tests and two BrainFlow-service-dependent timeouts while the
-  local backend was unavailable. Independent review is pending.
+  local backend was unavailable; review later reproduced a clean 114/114 pass.
+  Independent review required fixes for unsupported badge evidence, swallowed read
+  errors, an undefined trend rule, loading/single-point states, and component-state
+  coverage. Owned fixes are in progress; the shared read-error contract is reserved
+  for the orchestrator.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
@@ -351,7 +355,11 @@ independent workstream immediately when a slot opens.
 - **Implementation report:** removed fabricated clinical/telemetry values, added
   truthful unavailable states and a validated manual QEEG-entry path, with no
   shared-contract changes. Full Vitest passed (15 files, 113 tests) and the
-  production build passed with existing warnings. Independent review is pending.
+  production build passed with existing warnings. Independent review required
+  fixes for persistence failure/concurrency, measurement provenance, swallowed
+  read errors, malformed legacy data, incorrect units, chart order, and test
+  coverage. Owned fixes are in progress; dedicated brain-map persistence, query
+  error propagation, and session measurement provenance are centrally reserved.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -570,6 +578,10 @@ independent workstream immediately when a slot opens.
   verifying the retained clean branch at `1a632bf62bf88536023ad8687444092c69703d0e`.
   R1 completed at `7dc0182` and entered independent review; rules emulator execution
   remains pending because Java is unavailable locally.
+- **2026-09-19:** Independent Sol/High review returned P1 and C1 to IN PROGRESS.
+  Their original agents received owned-file fixes. Cross-cutting session-read error
+  propagation, brain-map persistence, and measurement provenance changes were held
+  for one orchestrator-owned shared-contract implementation.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
