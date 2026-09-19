@@ -23,6 +23,47 @@ export type ExperienceType =
 
 export type SessionPhase = 'calibration' | 'warmup' | 'training' | 'cooldown' | 'debrief';
 
+/**
+ * Firestore timestamps are intentionally represented structurally here so the
+ * domain layer can read persisted documents without depending on the Firebase
+ * SDK. New writes should use a server timestamp; legacy ISO strings and epoch
+ * milliseconds remain readable during migration.
+ */
+export interface FirestoreTimestampLike {
+  seconds: number;
+  nanoseconds?: number;
+  toDate?: () => Date;
+}
+
+export type PersistedTimestamp = string | number | Date | FirestoreTimestampLike;
+
+export type DataUnavailableReason =
+  | 'not-collected'
+  | 'insufficient-samples'
+  | 'poor-signal'
+  | 'device-disconnected'
+  | 'not-calibrated'
+  | 'not-applicable'
+  | 'legacy-unverified';
+
+export type DataAvailability<T> =
+  | { status: 'available'; value: T; measuredAt?: string; source?: string; version?: string }
+  | { status: 'unavailable'; value: null; reason: DataUnavailableReason; detail?: string };
+
+export interface MetricProvenance {
+  algorithm: string;
+  version: string;
+  source: 'brainflow' | 'browser-dsp' | 'clinical-import' | 'clinician-entered' | 'legacy';
+  computedAt?: PersistedTimestamp;
+}
+
+export interface VersionedMetric<T = number> {
+  value: T | null;
+  availability: 'available' | 'unavailable';
+  unavailableReason?: DataUnavailableReason;
+  provenance?: MetricProvenance;
+}
+
 export interface BandPowers {
   delta: number; // 0.5 - 4 Hz (µV)
   theta: number; // 4 - 8 Hz (µV)
@@ -118,10 +159,75 @@ export interface IndividualBaselineModel {
   betaStd?: number;
   alphaMean?: number;
   alphaStd?: number;
+  /** Optional on legacy baselines; required for newly validated calibration records. */
+  schemaVersion?: number;
+  status?: 'collecting' | 'valid' | 'invalid' | 'expired';
+  sampleCount?: number;
+  cleanSampleCount?: number;
+  durationSeconds?: number;
+  sourceDeviceId?: string;
+  sampleRateHz?: number;
+  algorithmVersion?: string;
+  expiresAt?: PersistedTimestamp;
+  invalidReason?: DataUnavailableReason | 'cancelled' | 'processing-error';
+}
+
+export type DeviceConnectionType = 'bluetooth-le' | 'usb' | 'wifi' | 'clinical-import' | 'unknown';
+
+export interface DeviceCapability {
+  model: string;
+  manufacturer?: string;
+  connectionType: DeviceConnectionType;
+  sampleRateHz: number | null;
+  adcResolutionBits?: number | null;
+  channelIds: string[];
+  supportsImpedance: boolean;
+  supportsBatteryLevel: boolean;
+  firmwareVersion?: string;
+  capabilityVersion?: string;
+}
+
+export interface DeviceAssignment {
+  deviceId: string;
+  patientId: string;
+  clinicId?: string;
+  model: string;
+  displayName?: string;
+  serialNumberLast4?: string;
+  assignedAt?: PersistedTimestamp;
+  unassignedAt?: PersistedTimestamp | null;
+  capability?: DeviceCapability;
+  assignedByUserId?: string;
+}
+
+export interface PractitionerCredential {
+  id: string;
+  type: 'medical-license' | 'board-certification' | 'neurofeedback-certification' | 'other';
+  label: string;
+  jurisdiction?: string;
+  identifier?: string;
+  status: 'unverified' | 'pending' | 'verified' | 'expired' | 'revoked';
+  verifiedAt?: PersistedTimestamp;
+  expiresAt?: PersistedTimestamp;
+}
+
+export interface PractitionerProfile {
+  id: string;
+  userId: string;
+  clinicId: string;
+  displayName: string;
+  professionalSuffixes?: string[];
+  credentials: PractitionerCredential[];
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
 }
 
 export interface ProtocolTemplate {
   id: string;
+  /** Broad training engine mode represented by this clinical template. */
+  protocolType?: ProtocolType;
+  /** Optional patient-facing label; `name` remains the evidence-based protocol name. */
+  alias?: string;
   name: string;
   clinicalName: string;
   leadInvestigator: string;
@@ -152,6 +258,26 @@ export interface ProtocolTemplate {
   recommendedExperiences: ExperienceType[];
   clinicalNotes: string;
   museChannelMapping?: string; // e.g. 'AF7 / AF8 Frontal (Derived Midline TBR)'
+  schemaVersion?: number;
+  version?: string;
+  status?: 'draft' | 'approved' | 'retired';
+  clinicId?: string;
+  evidenceReferences?: string[];
+  compatibleDeviceModels?: string[];
+  approvedByPractitionerId?: string;
+  approvedAt?: PersistedTimestamp;
+}
+
+export interface ProtocolCatalogEntry {
+  protocol: ProtocolTemplate;
+  source: 'system' | 'clinic' | 'patient-override';
+  revision: string;
+  effectiveAt?: PersistedTimestamp;
+}
+
+export interface ProtocolCatalog {
+  getById(id: string, clinicId?: string): Promise<ProtocolCatalogEntry | null>;
+  list(clinicId?: string): Promise<ProtocolCatalogEntry[]>;
 }
 
 export interface QEEGBrainMap {
@@ -186,6 +312,27 @@ export interface ClinicBrandConfig {
   clinicianBaseSurface: string; // #FAFAFA
   typographyStyle: 'editorial-serif' | 'modern-sans';
   createdAt: string;
+  updatedAt?: PersistedTimestamp;
+  schemaVersion?: number;
+}
+
+export interface ClinicProfile {
+  id: string;
+  name: string;
+  timezone: string;
+  branding?: ClinicBrandConfig;
+  practitionerIds: string[];
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+}
+
+export interface SessionDeviceSnapshot {
+  deviceId?: string;
+  model?: string;
+  firmwareVersion?: string;
+  sampleRateHz?: number;
+  channelIds?: string[];
+  transport?: DeviceConnectionType;
 }
 
 export interface SessionRecord {
@@ -223,7 +370,54 @@ export interface SessionRecord {
   clinicianNotes?: string;
   isDemo?: boolean;
   learningRateScore?: number;
+  schemaVersion?: number;
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  completedAt?: PersistedTimestamp;
+  device?: SessionDeviceSnapshot;
+  metricProvenance?: Record<string, MetricProvenance>;
 }
+
+export type SessionQueryScope =
+  | { role: 'patient'; patientId: string }
+  | { role: 'clinician'; clinicianId: string; patientId?: string }
+  | { role: 'clinic'; clinicId: string; patientId?: string };
+
+export interface SessionNotesPatch {
+  patientNotes?: string | null;
+  clinicianNotes?: string | null;
+  moodRating?: 1 | 2 | 3 | 4 | 5 | null;
+}
+
+export interface SessionCreateResult {
+  created: boolean;
+  session: SessionRecord;
+}
+
+export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled';
+
+export interface PatientInvitation {
+  id: string;
+  clinicianId: string;
+  clinicianName: string;
+  patientEmail: string;
+  patientName: string;
+  condition: ClientProfile['condition'];
+  assignedProtocol: ProtocolType;
+  prescribedSessionsPerWeek: number;
+  notes?: string;
+  status: PatientInvitationStatus;
+  patientId?: string;
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  acceptedAt?: PersistedTimestamp;
+  schemaVersion: number;
+}
+
+export type PatientInvitationInput = Pick<
+  PatientInvitation,
+  'patientEmail' | 'patientName' | 'condition' | 'assignedProtocol' | 'prescribedSessionsPerWeek' | 'notes'
+> & { clinicianName: string };
 
 export interface ClientProfile {
   id: string;
@@ -258,9 +452,21 @@ export interface ClientProfile {
   badges: string[];
   linkedClinicianCode?: string;
   clinicianId?: string;
+  acceptedInvitationId?: string;
   patientId?: string;
   isDemo?: boolean;
   notes?: string;
+  clinicId?: string;
+  assignedDevice?: DeviceAssignment;
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  schemaVersion?: number;
+  /**
+   * Bounded, private idempotency ledger for completed-session aggregation.
+   * This lets the client retry a session write without reading a not-yet-created
+   * session document, which Firestore rules correctly cannot authorize.
+   */
+  recentCompletedSessionIds?: string[];
 }
 
 export interface MilestoneBadge {

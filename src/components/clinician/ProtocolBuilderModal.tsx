@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
-import { ProtocolTemplate, ProtocolType } from '../../types';
-import { X, Info } from 'lucide-react';
+import { ProtocolTemplate } from '../../types';
+import { CheckCircle2, X } from 'lucide-react';
+import {
+  CLINICAL_PROTOCOL_TEMPLATES,
+  getClinicalProtocolTemplate,
+  getProtocolAssignmentAlias,
+} from '../../services/clinicalProtocolTemplates';
+import { getProtocolTypeForTemplate } from '../../services/protocols';
 
 interface ProtocolBuilderModalProps {
   initialProtocol?: ProtocolTemplate;
@@ -8,165 +14,21 @@ interface ProtocolBuilderModalProps {
   onClose: () => void;
 }
 
-export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
-  {
-    id: 'proto-lubar-tbr',
-    name: 'Lubar Theta/Beta Ratio Protocol',
-    clinicalName: 'Frontal Theta Suppression with Beta Upregulation',
-    leadInvestigator: 'Joel F. Lubar, Ph.D. (BCN Pioneer)',
-    indication: 'ADHD (Inattentive & Combined), Executive Dysfunction',
-    montageSite: 'Fz / Cz (10-20 System)',
-    museChannelMapping: 'AF7 / AF8 Frontal (Virtual Fz Midline TBR)',
-    rewardBand: {
-      name: 'Beta Focus',
-      freqMin: 15.0,
-      freqMax: 18.0,
-      targetCondition: 'above',
-      targetThreshold: 8.5,
-    },
-    inhibitBand1: {
-      name: 'Theta Inattention',
-      freqMin: 4.0,
-      freqMax: 8.0,
-      targetThreshold: 7.2,
-    },
-    inhibitBand2: {
-      name: 'High-Beta Muscle Noise',
-      freqMin: 22.0,
-      freqMax: 32.0,
-      targetThreshold: 12.0,
-    },
-    adaptiveStep: 0.08,
-    sensitivity: 'balanced',
-    sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit'],
-    clinicalNotes: 'Target TBR < 1.85 at Fz midline. High efficacy for sustained concentration and reduced impulsivity on Muse S Athena.',
-  },
-  {
-    id: 'proto-sterman-smr',
-    name: 'Sterman SMR Stillness Protocol',
-    clinicalName: 'Sensorimotor Rhythm (12-15 Hz) Enhancement',
-    leadInvestigator: 'M. Barry Sterman, Ph.D. (UCLA Brain Research)',
-    indication: 'ADHD (Hyperactive), Physical Restlessness, Sleep Latency',
-    montageSite: 'Cz (Central Sensorimotor Cortex)',
-    museChannelMapping: 'TP9 / TP10 & Central Sensorimotor Synchrony',
-    rewardBand: {
-      name: 'SMR Rhythm',
-      freqMin: 12.0,
-      freqMax: 15.0,
-      targetCondition: 'above',
-      targetThreshold: 7.5,
-    },
-    inhibitBand1: {
-      name: 'Theta Drift',
-      freqMin: 4.0,
-      freqMax: 7.0,
-      targetThreshold: 6.5,
-    },
-    inhibitBand2: {
-      name: 'EMG Jaw/Muscle Tension',
-      freqMin: 23.0,
-      freqMax: 35.0,
-      targetThreshold: 11.0,
-    },
-    adaptiveStep: 0.5,
-    sensitivity: 'high',
-    sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'media-mode', 'eeg-mandala', 'neuro-gambit'],
-    clinicalNotes: 'Reinforces motor inhibition pathways ("active mind, still body"). Reduces motor tic latency.',
-  },
-  {
-    id: 'proto-hardt-alpha',
-    name: 'Hardt Alpha Synchrony Protocol',
-    clinicalName: 'Parieto-Occipital Alpha (8-12 Hz) Enhancement',
-    leadInvestigator: 'James V. Hardt, Ph.D. (Biocybernaut Institute)',
-    indication: 'Generalized Anxiety, Somatic Worry, Executive Burnout',
-    montageSite: 'Pz / Oz (Parietal-Occipital)',
-    museChannelMapping: 'TP9 / TP10 Temporoparietal Posterior Alpha',
-    rewardBand: {
-      name: 'Alpha Synchrony',
-      freqMin: 8.0,
-      freqMax: 12.0,
-      targetCondition: 'above',
-      targetThreshold: 11.5,
-    },
-    inhibitBand1: {
-      name: 'High Beta Hyperarousal',
-      freqMin: 19.0,
-      freqMax: 28.0,
-      targetThreshold: 8.0,
-    },
-    adaptiveStep: 0.6,
-    sensitivity: 'balanced',
-    sessionDurationMinutes: 25,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
-    clinicalNotes: 'Upregulates dominant posterior alpha rhythm to dissolve rumination and induce physiological equanimity.',
-  },
-  {
-    id: 'proto-peniston-alphatheta',
-    name: 'Peniston Alpha-Theta Protocol',
-    clinicalName: 'Alpha-Theta Crossover Deep State Training',
-    leadInvestigator: 'Eugene G. Peniston, Ed.D. (Addiction Protocol)',
-    indication: 'Trauma Desensitization, PTSD, Emotional Regulation',
-    montageSite: 'Pz (Midline Parietal)',
-    museChannelMapping: 'TP9 / TP10 Posterior Hypnagogic Crossover',
-    rewardBand: {
-      name: 'Theta Hypnagogia',
-      freqMin: 4.0,
-      freqMax: 8.0,
-      targetCondition: 'above',
-      targetThreshold: 1.0,
-    },
-    inhibitBand1: {
-      name: 'Beta Cognition',
-      freqMin: 15.0,
-      freqMax: 25.0,
-      targetThreshold: 6.0,
-    },
-    adaptiveStep: 0.5,
-    sensitivity: 'low',
-    sessionDurationMinutes: 30,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'soundscape-mode', 'breath-weave', 'mandala', 'eeg-mandala'],
-    clinicalNotes: 'Facilitates restorative crossover states where theta power temporarily surpasses posterior alpha.',
-  },
-  {
-    id: 'proto-beta-down',
-    name: 'Beta De-arousal Downtraining',
-    clinicalName: 'High-Beta (18-30 Hz) Power Suppression',
-    leadInvestigator: 'Clinical Evidence-Based Guideline',
-    indication: 'Insomnia, Cognitive Overdrive, Physical Muscle Guarding',
-    montageSite: 'Cz / Pz',
-    museChannelMapping: 'AF7 / AF8 & TP9 / TP10 Global Beta Suppression',
-    rewardBand: {
-      name: 'Alpha Equilibrium',
-      freqMin: 9.0,
-      freqMax: 12.0,
-      targetCondition: 'above',
-      targetThreshold: 10.0,
-    },
-    inhibitBand1: {
-      name: 'High Beta Anxiety',
-      freqMin: 18.0,
-      freqMax: 30.0,
-      targetThreshold: 6.0,
-    },
-    adaptiveStep: 0.5,
-    sensitivity: 'balanced',
-    sessionDurationMinutes: 20,
-    recommendedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'tidal-garden', 'mandala', 'eeg-mandala'],
-    clinicalNotes: 'Direct inhibition of hyper-vigilant beta rhythms for rapid sympathetic nervous system down-regulation.',
-  },
-];
-
 export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   initialProtocol,
   onSave,
   onClose,
 }) => {
+  const initialProtocolType = initialProtocol
+    ? getProtocolTypeForTemplate(initialProtocol)
+    : CLINICAL_PROTOCOL_TEMPLATES[0].protocolType!;
+  const initialEvidenceTemplate = getClinicalProtocolTemplate(initialProtocolType) ?? CLINICAL_PROTOCOL_TEMPLATES[0];
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
-    initialProtocol || CLINICAL_PROTOCOL_TEMPLATES[0]
+    initialEvidenceTemplate
   );
-  const [name, setName] = useState(initialProtocol?.name || CLINICAL_PROTOCOL_TEMPLATES[0].name);
+  const [alias, setAlias] = useState(
+    initialProtocol ? getProtocolAssignmentAlias(initialProtocol, initialProtocolType) ?? '' : ''
+  );
   const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || CLINICAL_PROTOCOL_TEMPLATES[0].montageSite);
   const [museMapping, setMuseMapping] = useState(
     initialProtocol?.museChannelMapping || CLINICAL_PROTOCOL_TEMPLATES[0].museChannelMapping || 'AF7 / AF8 Frontal'
@@ -179,7 +41,6 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
 
   const handleSelectTemplate = (tmpl: ProtocolTemplate) => {
     setSelectedTemplate(tmpl);
-    setName(tmpl.name);
     setMontageSite(tmpl.montageSite);
     setMuseMapping(tmpl.museChannelMapping || 'AF7 / AF8 Frontal');
     setRewardMin(tmpl.rewardBand.freqMin);
@@ -194,7 +55,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     const updated: ProtocolTemplate = {
       ...selectedTemplate,
       id: 'custom-' + Date.now(),
-      name,
+      alias: alias.trim() || undefined,
       montageSite,
       museChannelMapping: museMapping,
       rewardBand: {
@@ -261,30 +122,43 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             Clinical Evidence-Based Protocols
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-            {CLINICAL_PROTOCOL_TEMPLATES.map((tmpl) => (
-              <div
-                key={tmpl.id}
-                onClick={() => handleSelectTemplate(tmpl)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: selectedTemplate.id === tmpl.id ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
-                  backgroundColor: selectedTemplate.id === tmpl.id ? 'var(--brand-primary-subtle)' : 'var(--surface-clinician-base)',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.15s ease',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{tmpl.name}</div>
-                  <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                    {tmpl.montageSite.split(' ')[0]}
-                  </span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {tmpl.indication}
-                </div>
-              </div>
-            ))}
+            {CLINICAL_PROTOCOL_TEMPLATES.map((tmpl) => {
+              const isSelected = selectedTemplate.id === tmpl.id;
+              return (
+                <button
+                  type="button"
+                  key={tmpl.id}
+                  onClick={() => handleSelectTemplate(tmpl)}
+                  aria-pressed={isSelected}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: isSelected ? '2px solid #2563EB' : '1px solid var(--border-default)',
+                    outline: isSelected ? '2px solid rgba(37, 99, 235, 0.18)' : 'none',
+                    outlineOffset: '2px',
+                    backgroundColor: isSelected ? '#EFF6FF' : 'var(--surface-clinician-base)',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.15s ease, outline-color 0.15s ease, background-color 0.15s ease',
+                    textAlign: 'left',
+                    font: 'inherit',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{tmpl.name}</div>
+                    {isSelected ? (
+                      <CheckCircle2 size={16} color="#2563EB" style={{ flexShrink: 0, marginLeft: '8px' }} />
+                    ) : (
+                      <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                        {tmpl.montageSite.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {tmpl.indication}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -293,14 +167,18 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Protocol Assignment Name
+                Custom Alias (Optional)
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                placeholder="e.g., Morning Focus Plan"
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
+              <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                The evidence-based protocol name remains {selectedTemplate.name}.
+              </div>
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>

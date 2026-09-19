@@ -4,12 +4,11 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendEmailVerification,
   signOut,
   updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export type UserRole = 'patient' | 'clinician' | null;
 
@@ -156,19 +155,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setUser(cred.user);
     setRole(null);
-    
-    // Send email verification with action code settings
-    try {
-      await sendEmailVerification(cred.user, {
-        url: typeof window !== 'undefined' ? window.location.origin : 'https://waveable.app',
-        handleCodeInApp: true,
-        iOS: {
-          bundleId: 'com.waveable.app',
-        },
-      });
-    } catch (err) {
-      console.warn('Failed to send verification email:', err);
-    }
 
     try {
       await setDoc(doc(db, 'users', cred.user.uid), {
@@ -200,12 +186,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
     setRole(newRole);
     if (user.uid !== 'demo-clinician') {
-      updateDoc(doc(db, 'users', user.uid), {
-        role: newRole,
-        updatedAt: new Date().toISOString(),
-      }).catch((err) => {
+      // Accounts created while Firestore was temporarily unavailable may not
+      // have their profile document yet. A merge write both recovers those
+      // accounts and keeps existing profile fields intact.
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          role: newRole,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      } catch (err) {
         console.warn('Background role update notice:', err);
-      });
+        setRole(null);
+        throw err;
+      }
     }
   };
 

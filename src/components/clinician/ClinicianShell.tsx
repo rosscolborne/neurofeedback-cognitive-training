@@ -4,6 +4,7 @@ import {
   ClientProfile,
   ClinicBrandConfig,
   MessageThread,
+  PatientInvitation,
 } from '../../types';
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
@@ -20,22 +21,27 @@ import {
   Settings,
   Sliders,
   ShieldCheck,
+  LogOut,
 } from 'lucide-react';
 
 interface ClinicianShellProps {
   brand: ClinicBrandConfig;
+  clinicianLabel?: string;
   clients: ClientProfile[];
+  patientInvitations: PatientInvitation[];
   messages: MessageThread[];
   appointments: CalendarAppointment[];
   onUpdateClient: (updated: ClientProfile) => void;
   onDeleteClient?: (clientId: string) => void;
-  onAddClient: (newClient: Partial<ClientProfile>) => void;
+  onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
+  onCancelPatientInvitation: (invitationId: string) => Promise<void>;
   onSendMessage: (clientId: string, text: string) => void;
   onSaveAppointment: (appt: CalendarAppointment) => void;
   onDeleteAppointment: (id: string) => void;
   onClearDemoData: () => void;
   onResetDemoData: () => void;
   onOpenRebrand: () => void;
+  onLogout: () => Promise<void>;
 }
 
 interface ClinicianNavItem {
@@ -47,18 +53,22 @@ interface ClinicianNavItem {
 
 export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   brand,
+  clinicianLabel,
   clients,
+  patientInvitations,
   messages,
   appointments,
   onUpdateClient,
   onDeleteClient,
   onAddClient,
+  onCancelPatientInvitation,
   onSendMessage,
   onSaveAppointment,
   onDeleteAppointment,
   onClearDemoData,
   onResetDemoData,
   onOpenRebrand,
+  onLogout,
 }) => {
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
@@ -106,15 +116,27 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onOpenRebrand}
-          className="btn btn-ghost"
-          style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-          title="Clinic Branding"
-        >
-          <Sliders size={14} />
-          <span>Brand</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            onClick={onOpenRebrand}
+            className="btn btn-ghost"
+            style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            title="Clinic Branding"
+          >
+            <Sliders size={14} />
+            <span>Brand</span>
+          </button>
+          <button
+            onClick={() => void onLogout()}
+            className="btn btn-ghost"
+            style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            <LogOut size={14} />
+            <span>Sign out</span>
+          </button>
+        </div>
       </header>
 
       {/* Clinician Left Sidebar Navigation (iPad & Desktop >= 768px) */}
@@ -191,8 +213,31 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           </nav>
         </div>
 
-        {/* Bottom Rebranding Action */}
+        {/* Account and clinic actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ padding: '0 8px', minWidth: 0 }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Signed in as</div>
+            <div
+              title={clinicianLabel}
+              style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {clinicianLabel}
+            </div>
+          </div>
+          <button
+            onClick={() => void onLogout()}
+            className="btn btn-ghost"
+            style={{
+              width: '100%',
+              justifyContent: 'flex-start',
+              padding: '10px 12px',
+              fontSize: '13px',
+              gap: '8px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <LogOut size={16} /> Sign out
+          </button>
           <button
             onClick={onOpenRebrand}
             className="btn btn-ghost"
@@ -220,8 +265,10 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         {activeNav === 'clients' && !selectedClient && (
           <ClientRosterView
             clients={clients}
+            invitations={patientInvitations}
             onSelectClient={(c) => setSelectedClient(c)}
             onAddClient={onAddClient}
+            onCancelInvitation={onCancelPatientInvitation}
             onUpdateClient={onUpdateClient}
             onDeleteClient={onDeleteClient}
             onScheduleClient={(clientId) => {

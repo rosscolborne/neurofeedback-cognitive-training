@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ClientProfile, ExperienceType } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
+import {
+  getClinicalProtocolTemplate,
+  getProtocolAssignmentAlias,
+} from '../../services/clinicalProtocolTemplates';
 import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, ChevronRight as ScrollHint, Crown } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -70,6 +74,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, [client.id]);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
+  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
+  const protocolAlias = client.customProtocolConfig
+    ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
+    : undefined;
 
   // Hide scroll hint once user scrolls the pills
   useEffect(() => {
@@ -101,7 +109,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {getGreeting()}{client.name ? ',' : '.'}<br />{client.name ? `${client.name.split(' ')[0]}.` : ''}
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
+          {protocolAlias && <>Name: <strong style={{ color: 'var(--text-primary)' }}>{protocolAlias}</strong> · </>}
+          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
         </p>
       </div>
 

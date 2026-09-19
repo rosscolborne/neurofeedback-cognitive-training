@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ClientProfile, ProtocolType } from '../../types';
+import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
 import {
   Search,
   Plus,
@@ -10,12 +10,17 @@ import {
   MessageSquare,
   FileText,
   User,
+  Clock3,
+  Copy,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface ClientRosterViewProps {
   clients: ClientProfile[];
+  invitations: PatientInvitation[];
   onSelectClient: (client: ClientProfile) => void;
-  onAddClient: (newClient: Partial<ClientProfile>) => void;
+  onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
+  onCancelInvitation: (invitationId: string) => Promise<void>;
   onUpdateClient?: (updated: ClientProfile) => void;
   onDeleteClient?: (id: string) => void;
   onScheduleClient?: (clientId: string) => void;
@@ -24,8 +29,10 @@ interface ClientRosterViewProps {
 
 export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   clients,
+  invitations,
   onSelectClient,
   onAddClient,
+  onCancelInvitation,
   onUpdateClient,
   onDeleteClient,
   onScheduleClient,
@@ -47,6 +54,10 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   const [formStatus, setFormStatus] = useState<'active' | 'paused' | 'completed'>('active');
   const [formSessionsPerWeek, setFormSessionsPerWeek] = useState(4);
   const [formNotes, setFormNotes] = useState('');
+  const [createdInvitation, setCreatedInvitation] = useState<PatientInvitation | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
@@ -71,6 +82,9 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setFormStatus('active');
     setFormSessionsPerWeek(4);
     setFormNotes('');
+    setCreatedInvitation(null);
+    setFormError(null);
+    setCopiedCode(false);
     setShowAddModal(true);
   };
 
@@ -94,34 +108,41 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     }
   };
 
-  const handleSaveForm = (e: React.FormEvent) => {
+  const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
-
-    if (editingClient && onUpdateClient) {
-      onUpdateClient({
-        ...editingClient,
-        name: formName,
-        email: formEmail || editingClient.email,
-        condition: formCondition,
-        assignedProtocol: formProtocol,
-        status: formStatus,
-        prescribedSessionsPerWeek: Number(formSessionsPerWeek),
-        notes: formNotes,
-      });
-    } else {
-      onAddClient({
-        name: formName,
-        email: formEmail,
-        condition: formCondition,
-        status: formStatus,
-        assignedProtocol: formProtocol,
-        prescribedSessionsPerWeek: Number(formSessionsPerWeek),
-        notes: formNotes,
-      });
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      if (editingClient && onUpdateClient) {
+        await Promise.resolve(onUpdateClient({
+          ...editingClient,
+          name: formName,
+          email: formEmail || editingClient.email,
+          condition: formCondition,
+          assignedProtocol: formProtocol,
+          status: formStatus,
+          prescribedSessionsPerWeek: Number(formSessionsPerWeek),
+          notes: formNotes,
+        }));
+        setShowAddModal(false);
+      } else {
+        const invitation = await onAddClient({
+          name: formName,
+          email: formEmail,
+          condition: formCondition,
+          status: formStatus,
+          assignedProtocol: formProtocol,
+          prescribedSessionsPerWeek: Number(formSessionsPerWeek),
+          notes: formNotes,
+        });
+        setCreatedInvitation(invitation);
+      }
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not create the invitation.');
+    } finally {
+      setIsSaving(false);
     }
-
-    setShowAddModal(false);
   };
 
   return (
@@ -141,9 +162,27 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           className="btn btn-dense"
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '13px' }}
         >
-          <Plus size={16} /> Enroll New Patient
+          <Plus size={16} /> Invite Patient
         </button>
       </div>
+
+      {invitations.some((invitation) => invitation.status === 'pending') && (
+        <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700 }}>
+            <Clock3 size={16} color="var(--brand-primary)" /> Pending invitations
+          </div>
+          {invitations.filter((invitation) => invitation.status === 'pending').map((invitation) => (
+            <div key={invitation.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600 }}>{invitation.patientName}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{invitation.patientEmail}</div>
+                <div className="font-mono" style={{ marginTop: '3px', fontSize: '11px', color: 'var(--brand-primary)' }}>{invitation.id}</div>
+              </div>
+              <button onClick={() => void onCancelInvitation(invitation.id)} className="btn btn-ghost" style={{ fontSize: '12px', flexShrink: 0 }}>Cancel</button>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Search & Filter Bar */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -453,9 +492,33 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
             }}
           >
             <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
-              {editingClient ? 'Edit Patient Clinical Profile' : 'Enroll New Patient'}
+              {editingClient ? 'Edit Patient Clinical Profile' : createdInvitation ? 'Invitation created' : 'Invite Patient'}
             </h3>
-            <form onSubmit={handleSaveForm} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {createdInvitation ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)' }}>
+                  <CheckCircle2 size={20} />
+                  <div style={{ fontSize: '13px' }}>Share this code with {createdInvitation.patientName}. They must sign in with {createdInvitation.patientEmail} and accept it from their Profile.</div>
+                </div>
+                <div className="font-mono" style={{ padding: '16px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', textAlign: 'center', fontSize: '20px', letterSpacing: '0.08em' }}>{createdInvitation.id}</div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(createdInvitation.id);
+                      setCopiedCode(true);
+                    } catch {
+                      setFormError('Copy was blocked by your browser. Select the code above and copy it manually.');
+                    }
+                  }}
+                  className="btn btn-secondary"
+                >
+                  <Copy size={15} /> {copiedCode ? 'Copied' : 'Copy invitation code'}
+                </button>
+                {formError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{formError}</div>}
+                <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-dense">Done</button>
+              </div>
+            ) : <form onSubmit={handleSaveForm} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                   Full Name
@@ -483,6 +546,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 </label>
                 <input
                   type="email"
+                  required={!editingClient}
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
                   placeholder="patient@example.com"
@@ -600,13 +664,15 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="btn btn-dense"
-                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                  style={{ padding: '8px 16px', fontSize: '13px', opacity: isSaving ? 0.7 : 1 }}
                 >
-                  {editingClient ? 'Save Changes' : 'Enroll Patient'}
+                  {isSaving ? 'Saving…' : editingClient ? 'Save Changes' : 'Create Invitation'}
                 </button>
               </div>
-            </form>
+              {formError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{formError}</div>}
+            </form>}
           </div>
         </div>
       )}

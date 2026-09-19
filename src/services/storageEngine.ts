@@ -1,15 +1,41 @@
 import {
   ClientProfile,
+  ClinicProfile,
   ClinicBrandConfig,
+  DeviceAssignment,
   MessageThread,
   MilestoneBadge,
   SessionRecord,
   CalendarAppointment,
-  ExperienceType,
+  SessionCreateResult,
+  SessionNotesPatch,
+  SessionQueryScope,
+  PractitionerProfile,
+  PatientInvitation,
+  PatientInvitationInput,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
 import { auth, db } from './firebase';
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+  where,
+} from 'firebase/firestore';
+import {
+  applySessionCompletionToClient,
+  readClientProfile,
+  readSessionRecord,
+  removeUndefined,
+  timestampToMillis,
+} from './dataMappers';
 
 const STORAGE_KEYS = {
   BRAND: 'waveable_brand_config',
@@ -19,6 +45,20 @@ const STORAGE_KEYS = {
   APPOINTMENTS: 'waveable_appointments',
   CURRENT_CLIENT_ID: 'waveable_current_client_id',
 };
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const createInvitationCode = (): string => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const raw = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+};
+
+const readPatientInvitation = (data: unknown, id: string): PatientInvitation => ({
+  ...(data as Omit<PatientInvitation, 'id'>),
+  id,
+});
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {
@@ -548,6 +588,113 @@ class StorageEngine {
     localStorage.setItem(STORAGE_KEYS.BRAND, JSON.stringify(brand));
   }
 
+  public async getClinicBrandConfig(clinicId: string): Promise<ClinicBrandConfig> {
+    const clinic = await this.getClinic(clinicId);
+    return clinic?.branding ?? this.getBrandConfig();
+  }
+
+  public async saveClinicBrandConfig(brand: ClinicBrandConfig): Promise<void> {
+    this.saveBrandConfig(brand);
+    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    await setDoc(
+      doc(db, 'clinics', brand.clinicId),
+      { branding: removeUndefined({ ...brand, updatedAt: serverTimestamp() }), updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  public async getClinic(clinicId: string): Promise<ClinicProfile | null> {
+    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return null;
+    const snapshot = await getDoc(doc(db, 'clinics', clinicId));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data() as Partial<ClinicProfile>;
+    return {
+      ...data,
+      id: data.id || snapshot.id,
+      name: data.name ?? '',
+      timezone: data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      practitionerIds: Array.isArray(data.practitionerIds) ? data.practitionerIds : [],
+    };
+  }
+
+  public async saveClinic(clinic: ClinicProfile): Promise<void> {
+    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    await setDoc(
+      doc(db, 'clinics', clinic.id),
+      removeUndefined({ ...clinic, updatedAt: serverTimestamp() }),
+      { merge: true }
+    );
+  }
+
+  public async getPractitioner(practitionerId: string): Promise<PractitionerProfile | null> {
+    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return null;
+    const snapshot = await getDoc(doc(db, 'practitioners', practitionerId));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data() as Partial<PractitionerProfile>;
+    return {
+      ...data,
+      id: data.id || snapshot.id,
+      userId: data.userId ?? '',
+      clinicId: data.clinicId ?? '',
+      displayName: data.displayName ?? '',
+      credentials: Array.isArray(data.credentials) ? data.credentials : [],
+    };
+  }
+
+  public async savePractitioner(practitioner: PractitionerProfile): Promise<void> {
+    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    await setDoc(
+      doc(db, 'practitioners', practitioner.id),
+      removeUndefined({ ...practitioner, updatedAt: serverTimestamp() }),
+      { merge: true }
+    );
+  }
+
+  private async canManagePatient(patientId: string): Promise<boolean> {
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) return false;
+    if (currentUserId === patientId) return true;
+
+    try {
+      const patient = await getDoc(doc(db, 'clients', patientId));
+      if (!patient.exists()) return false;
+      const profile = readClientProfile(patient.data(), patient.id);
+      return profile.clinicianId === currentUserId || profile.linkedClinicianCode === currentUserId;
+    } catch {
+      return false;
+    }
+  }
+
+  public async getDeviceAssignment(patientId: string): Promise<DeviceAssignment | null> {
+    if (patientId.startsWith('demo-') || !(await this.canManagePatient(patientId))) return null;
+    const snapshot = await getDoc(doc(db, 'deviceAssignments', patientId));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data() as Partial<DeviceAssignment>;
+    if (!data.deviceId || !data.model) return null;
+    return { ...data, patientId, deviceId: data.deviceId, model: data.model };
+  }
+
+  public async saveDeviceAssignment(assignment: DeviceAssignment): Promise<void> {
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId || assignment.patientId.startsWith('demo-')) return;
+    if (!(await this.canManagePatient(assignment.patientId))) {
+      throw new Error('Not authorized to manage this patient device assignment');
+    }
+
+    const assignmentRef = doc(db, 'deviceAssignments', assignment.patientId);
+    const existing = await getDoc(assignmentRef);
+    const existingData = existing.exists() ? (existing.data() as Partial<DeviceAssignment>) : null;
+    await setDoc(
+      assignmentRef,
+      removeUndefined({
+        ...assignment,
+        assignedByUserId: existingData?.assignedByUserId ?? currentUserId,
+        assignedAt: existingData?.assignedAt ?? assignment.assignedAt ?? serverTimestamp(),
+      }),
+      { merge: true }
+    );
+  }
+
   public async getClient(id: string): Promise<ClientProfile | null> {
     if (id.startsWith('demo-') || !auth.currentUser) {
       return this.demoClients.find((c) => c.id === id) || null;
@@ -555,16 +702,7 @@ class StorageEngine {
     try {
       const snap = await getDoc(doc(db, 'clients', id));
       if (snap.exists()) {
-        const client = snap.data() as ClientProfile;
-        if (client.allowedExperiences) {
-          client.allowedExperiences = client.allowedExperiences.map((e: any) =>
-            e === 'spatial-audio' ? 'generative-music' : e
-          );
-          if (!client.allowedExperiences.includes('neuro-gambit')) {
-            client.allowedExperiences.push('neuro-gambit');
-          }
-        }
-        return client;
+        return readClientProfile(snap.data(), snap.id);
       }
     } catch (err) {
       console.warn('Failed to fetch client from Firestore:', err);
@@ -587,23 +725,140 @@ class StorageEngine {
         where('clinicianId', '==', activeClinicianId)
       );
       const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => {
-        const client = d.data() as ClientProfile;
-        if (client.allowedExperiences) {
-          client.allowedExperiences = client.allowedExperiences.map((e: any) =>
-            e === 'spatial-audio' ? 'generative-music' : e
-          );
-          if (!client.allowedExperiences.includes('neuro-gambit')) {
-            client.allowedExperiences.push('neuro-gambit');
-          }
-        }
-        return client;
-      });
+      const docs = snap.docs.map((d) => readClientProfile(d.data(), d.id));
       return docs;
     } catch (err) {
       console.warn('Failed to fetch clients from Firestore:', err);
       return [];
     }
+  }
+
+  public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
+    const clinician = auth.currentUser;
+    if (!clinician || clinician.uid === 'demo-clinician') {
+      throw new Error('A real clinician account is required to invite a patient');
+    }
+
+    const patientEmail = normalizeEmail(input.patientEmail);
+    if (!patientEmail) throw new Error('Patient email is required');
+
+    const invitation: PatientInvitation = {
+      id: createInvitationCode(),
+      clinicianId: clinician.uid,
+      clinicianName: input.clinicianName.trim() || clinician.email || 'Clinician',
+      patientEmail,
+      patientName: input.patientName.trim(),
+      condition: input.condition,
+      assignedProtocol: input.assignedProtocol,
+      prescribedSessionsPerWeek: input.prescribedSessionsPerWeek,
+      notes: input.notes?.trim() || undefined,
+      status: 'pending',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      schemaVersion: 1,
+    };
+
+    await setDoc(
+      doc(db, 'patientInvitations', invitation.id),
+      removeUndefined({
+        ...invitation,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    );
+    return invitation;
+  }
+
+  public async getPatientInvitationsForClinician(): Promise<PatientInvitation[]> {
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId || clinicianId === 'demo-clinician') return [];
+    const snapshot = await getDocs(
+      query(collection(db, 'patientInvitations'), where('clinicianId', '==', clinicianId))
+    );
+    return snapshot.docs
+      .map((entry) => readPatientInvitation(entry.data(), entry.id))
+      .sort((a, b) => (timestampToMillis(b.createdAt) ?? 0) - (timestampToMillis(a.createdAt) ?? 0));
+  }
+
+  public async cancelPatientInvitation(invitationId: string): Promise<void> {
+    if (!auth.currentUser) throw new Error('Sign in to cancel an invitation');
+    await setDoc(
+      doc(db, 'patientInvitations', invitationId),
+      { status: 'cancelled', updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  public async unlinkPatient(patientId: string): Promise<void> {
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId) throw new Error('Sign in to remove a patient from your roster');
+    const patientRef = doc(db, 'clients', patientId);
+    const snapshot = await getDoc(patientRef);
+    if (!snapshot.exists()) return;
+    const patient = readClientProfile(snapshot.data(), snapshot.id);
+    if (patient.clinicianId !== clinicianId && patient.linkedClinicianCode !== clinicianId) {
+      throw new Error('You are not linked to this patient');
+    }
+    await setDoc(
+      patientRef,
+      { clinicianId: null, linkedClinicianCode: null, acceptedInvitationId: null, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  public async acceptPatientInvitation(invitationCode: string, fallbackClient: ClientProfile): Promise<ClientProfile> {
+    const patient = auth.currentUser;
+    if (!patient?.email) throw new Error('Sign in with the invited email address');
+    const patientEmail = patient.email;
+
+    const code = invitationCode.trim().toUpperCase();
+    const invitationRef = doc(db, 'patientInvitations', code);
+    const clientRef = doc(db, 'clients', patient.uid);
+
+    return runTransaction(db, async (transaction) => {
+      const invitationSnapshot = await transaction.get(invitationRef);
+      if (!invitationSnapshot.exists()) throw new Error('Invitation not found');
+
+      const invitation = readPatientInvitation(invitationSnapshot.data(), invitationSnapshot.id);
+      if (invitation.status !== 'pending') throw new Error('This invitation is no longer available');
+      if (normalizeEmail(invitation.patientEmail) !== normalizeEmail(patientEmail)) {
+        throw new Error('This invitation was sent to a different email address');
+      }
+      const clientSnapshot = await transaction.get(clientRef);
+      const current = clientSnapshot.exists()
+        ? readClientProfile(clientSnapshot.data(), clientSnapshot.id)
+        : { ...fallbackClient, id: patient.uid, patientId: patient.uid, email: patientEmail };
+      if (current.clinicianId && current.clinicianId !== invitation.clinicianId) {
+        throw new Error('Disconnect from your current clinician before accepting another invitation');
+      }
+      const linkedClient: ClientProfile = {
+        ...current,
+        id: patient.uid,
+        patientId: patient.uid,
+        email: patientEmail,
+        name: current.name || invitation.patientName,
+        clinicianId: invitation.clinicianId,
+        acceptedInvitationId: invitation.id,
+        condition: invitation.condition,
+        assignedProtocol: invitation.assignedProtocol,
+        prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
+        notes: invitation.notes ?? current.notes,
+      };
+      const timestamp = serverTimestamp();
+
+      transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
+      transaction.set(
+        invitationRef,
+        {
+          status: 'accepted',
+          patientId: patient.uid,
+          acceptedAt: timestamp,
+          updatedAt: timestamp,
+        },
+        { merge: true }
+      );
+      return linkedClient;
+    });
   }
 
   public async saveClient(client: ClientProfile): Promise<void> {
@@ -656,15 +911,7 @@ class StorageEngine {
       try {
         const snap = await getDoc(doc(db, 'clients', user.uid));
         if (snap && snap.exists()) {
-          const existing = snap.data() as ClientProfile;
-          if (existing.allowedExperiences) {
-            existing.allowedExperiences = existing.allowedExperiences.map((e: any) =>
-              e === 'spatial-audio' ? 'generative-music' : e
-            );
-            if (!existing.allowedExperiences.includes('neuro-gambit')) {
-              existing.allowedExperiences.push('neuro-gambit');
-            }
-          }
+          const existing = readClientProfile(snap.data(), snap.id);
           if (!existing.name && user.displayName) {
             existing.name = user.displayName
               .trim()
@@ -696,101 +943,253 @@ class StorageEngine {
     localStorage.setItem(STORAGE_KEYS.CURRENT_CLIENT_ID, id);
   }
 
-  public async getSessions(clientId?: string): Promise<SessionRecord[]> {
-    if (clientId && clientId.startsWith('demo-')) {
-      return this.demoSessions.filter((s) => s.patientId === clientId);
+  public async getSessionsFor(scope: SessionQueryScope): Promise<SessionRecord[]> {
+    const demoPatientId = 'patientId' in scope ? scope.patientId : undefined;
+    const isDemoScope =
+      auth.currentUser?.uid === 'demo-clinician' ||
+      demoPatientId?.startsWith('demo-') ||
+      ('clinicianId' in scope && scope.clinicianId === 'demo-clinician');
+
+    if (isDemoScope) {
+      const sessions = demoPatientId
+        ? this.demoSessions.filter((session) => session.patientId === demoPatientId)
+        : this.demoSessions;
+      return [...sessions].sort((a, b) => b.timestamp - a.timestamp);
     }
-    if (auth.currentUser?.uid === 'demo-clinician') {
-      if (clientId) {
-        return this.demoSessions.filter((s) => s.patientId === clientId);
-      }
-      return [...this.demoSessions];
-    }
-    if (!auth.currentUser) {
-      return [];
+    if (!auth.currentUser) return [];
+
+    const currentUserId = auth.currentUser.uid;
+    if (scope.role === 'patient' && scope.patientId !== currentUserId) return [];
+    if (scope.role === 'clinician' && scope.clinicianId !== currentUserId) return [];
+    if (scope.role === 'clinic' && scope.clinicId !== currentUserId) {
+      const clinic = await this.getClinic(scope.clinicId);
+      if (!clinic?.practitionerIds.includes(currentUserId)) return [];
     }
 
     try {
-      const activeClientId = clientId || auth.currentUser.uid;
-      const q = query(
-        collection(db, 'sessions'),
-        where('patientId', '==', activeClientId)
-      );
-      const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => d.data() as SessionRecord);
-      return docs.sort((a, b) => b.timestamp - a.timestamp);
+      const snapshots = [];
+      if (scope.role === 'patient') {
+        snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
+      } else if (scope.role === 'clinician' && scope.patientId) {
+        const patient = await getDoc(doc(db, 'clients', scope.patientId));
+        if (!patient.exists()) return [];
+        const profile = readClientProfile(patient.data(), patient.id);
+        if (profile.clinicianId !== scope.clinicianId && profile.linkedClinicianCode !== scope.clinicianId) {
+          return [];
+        }
+        snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
+      } else if (scope.role === 'clinician') {
+        snapshots.push(
+          await getDocs(query(collection(db, 'sessions'), where('clinicianId', '==', scope.clinicianId)))
+        );
+        const roster = await getDocs(
+          query(collection(db, 'clients'), where('clinicianId', '==', scope.clinicianId))
+        );
+        const legacySnapshots = await Promise.all(
+          roster.docs.map((client) =>
+            getDocs(query(collection(db, 'sessions'), where('patientId', '==', client.id)))
+          )
+        );
+        snapshots.push(...legacySnapshots);
+      } else if (scope.patientId) {
+        const patient = await getDoc(doc(db, 'clients', scope.patientId));
+        if (!patient.exists() || readClientProfile(patient.data(), patient.id).clinicId !== scope.clinicId) return [];
+        snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
+      } else {
+        snapshots.push(await getDocs(query(collection(db, 'sessions'), where('clinicId', '==', scope.clinicId))));
+      }
+
+      const unique = new Map<string, SessionRecord>();
+      for (const snapshot of snapshots) {
+        for (const entry of snapshot.docs) {
+          unique.set(entry.id, readSessionRecord(entry.data(), entry.id));
+        }
+      }
+      return [...unique.values()]
+        .sort((a, b) => b.timestamp - a.timestamp);
     } catch (err) {
       console.warn('Failed to fetch sessions from Firestore:', err);
       return [];
     }
   }
 
-  public async saveSession(session: SessionRecord): Promise<void> {
-    if (session.isDemo || session.patientId.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
-      const existingIndex = this.demoSessions.findIndex((s) => s.id === session.id);
-      if (existingIndex >= 0) {
-        this.demoSessions[existingIndex] = session;
-      } else {
-        this.demoSessions.unshift(session);
+  /**
+   * Backward-compatible query surface. Supplying a client ID is patient-scoped;
+   * omitting it is clinician-scoped, which fixes cohort reports for real users.
+   */
+  public async getSessions(clientId?: string): Promise<SessionRecord[]> {
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) return [];
+    if (clientId === currentUserId) {
+      return this.getSessionsFor({ role: 'patient', patientId: clientId });
+    }
+    if (clientId) {
+      return this.getSessionsFor({ role: 'clinician', clinicianId: currentUserId, patientId: clientId });
+    }
+    return this.getSessionsFor({ role: 'clinician', clinicianId: currentUserId });
+  }
+
+  public async createSession(session: SessionRecord): Promise<SessionCreateResult> {
+    const normalizedSession = readSessionRecord(
+      { ...session, schemaVersion: session.schemaVersion ?? 2 },
+      session.id
+    );
+    const useMemory =
+      session.patientId.startsWith('demo-') ||
+      auth.currentUser?.uid === 'demo-clinician' ||
+      !auth.currentUser;
+
+    if (useMemory) {
+      const existing = this.demoSessions.find((entry) => entry.id === session.id);
+      if (existing) return { created: false, session: existing };
+
+      this.demoSessions.unshift(normalizedSession);
+      const clientIndex = this.demoClients.findIndex((client) => client.id === session.patientId);
+      if (clientIndex >= 0) {
+        this.demoClients[clientIndex] = applySessionCompletionToClient(
+          this.demoClients[clientIndex],
+          normalizedSession
+        );
       }
-    } else {
-      try {
-        await setDoc(doc(db, 'sessions', session.id), session, { merge: true });
-      } catch (err) {
-        console.error('Failed to save session to Firestore:', err);
-      }
+      return { created: true, session: normalizedSession };
     }
 
-    const client = await this.getClient(session.patientId);
-    if (client) {
-      client.completedSessionsCount = (client.completedSessionsCount || 0) + 1;
-      client.lastSessionDate = 'Just now';
-      client.currentStreak = (client.currentStreak || 0) + 1;
-
-      if (client.completedSessionsCount >= 1 && !client.badges.includes('first-light')) {
-        client.badges.push('first-light');
-      }
-
-      if (client.currentStreak >= 7 && !client.badges.includes('steady-state')) {
-        client.badges.push('steady-state');
-      }
-
-      if (session.protocol === 'theta-beta-ratio' && session.timeInZonePercent >= 80 && !client.badges.includes('deep-focus')) {
-        client.badges.push('deep-focus');
-      }
-
-      if (session.protocol === 'alpha-enhancement' && session.durationSeconds >= 900 && session.timeInZonePercent >= 60 && !client.badges.includes('still-waters')) {
-        client.badges.push('still-waters');
-      }
-
-      const consistency = Math.min(100, (client.currentStreak / client.prescribedSessionsPerWeek) * 100);
-      const newScore = Math.round(
-        session.timeInZonePercent * 0.4 +
-          consistency * 0.3 +
-          session.peakFocusScore * 0.2 +
-          (session.averageCoherence ?? 0) * 0.1
+    const currentUserId = auth.currentUser?.uid;
+    let authorized = currentUserId === session.patientId || (await this.canManagePatient(session.patientId));
+    if (!authorized && session.clinicId) {
+      const [clinic, patient] = await Promise.all([
+        this.getClinic(session.clinicId),
+        getDoc(doc(db, 'clients', session.patientId)),
+      ]);
+      authorized = Boolean(
+        currentUserId &&
+        clinic?.practitionerIds.includes(currentUserId) &&
+        patient.exists() &&
+        readClientProfile(patient.data(), patient.id).clinicId === session.clinicId
       );
-      client.brainCapacityScore = Math.max(30, Math.min(99, newScore));
+    }
+    if (!authorized) throw new Error('Not authorized to create a session for this patient');
 
-      if (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement') {
-        client.tidalGardenState.growthPoints += Math.round(session.timeInZonePercent * 1.5);
-        if (client.tidalGardenState.growthPoints > 300 && client.tidalGardenState.stage < 2)
-          client.tidalGardenState.stage = 2;
-        if (client.tidalGardenState.growthPoints > 500 && client.tidalGardenState.stage < 3)
-          client.tidalGardenState.stage = 3;
-        if (client.tidalGardenState.growthPoints > 800 && client.tidalGardenState.stage < 4)
-          client.tidalGardenState.stage = 4;
+    const sessionRef = doc(db, 'sessions', session.id);
+    const clientRef = doc(db, 'clients', session.patientId);
+    return runTransaction(db, async (transaction) => {
+      const currentClient = await transaction.get(clientRef);
+      const timestamp = serverTimestamp();
 
-        if (client.tidalGardenState.stage >= 3 && !client.badges.includes('garden-keeper')) {
-          client.badges.push('garden-keeper');
+      // A brand-new session cannot be read under the patient-scoped Firestore
+      // rules because it has no patientId to authorize yet. Keep a bounded
+      // ledger on the already-authorized client profile instead, so retries do
+      // not apply its aggregate effects twice.
+      if (
+        currentClient.exists() &&
+        readClientProfile(currentClient.data(), currentClient.id)
+          .recentCompletedSessionIds?.includes(normalizedSession.id)
+      ) {
+        return { created: false, session: normalizedSession };
+      }
+
+      transaction.set(
+        sessionRef,
+        removeUndefined({
+          ...normalizedSession,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          completedAt: normalizedSession.completedAt ?? timestamp,
+        })
+      );
+
+      if (currentClient.exists()) {
+        const nextClient = applySessionCompletionToClient(
+          readClientProfile(currentClient.data(), currentClient.id),
+          normalizedSession
+        );
+        transaction.set(
+          clientRef,
+          removeUndefined({ ...nextClient, updatedAt: timestamp }),
+          { merge: true }
+        );
+      }
+
+      return { created: true, session: normalizedSession };
+    });
+  }
+
+  public async patchSessionNotes(sessionId: string, patch: SessionNotesPatch): Promise<void> {
+    const notePatch = removeUndefined({
+      patientNotes: patch.patientNotes,
+      clinicianNotes: patch.clinicianNotes,
+      moodRating: patch.moodRating,
+    });
+    const demoIndex = this.demoSessions.findIndex((session) => session.id === sessionId);
+    const useMemory =
+      demoIndex >= 0 &&
+      (this.demoSessions[demoIndex].isDemo ||
+        this.demoSessions[demoIndex].patientId.startsWith('demo-') ||
+        auth.currentUser?.uid === 'demo-clinician' ||
+        !auth.currentUser);
+
+    if (useMemory) {
+      const updated = { ...this.demoSessions[demoIndex] };
+      if (patch.patientNotes === null) delete updated.patientNotes;
+      else if (patch.patientNotes !== undefined) updated.patientNotes = patch.patientNotes;
+      if (patch.clinicianNotes === null) delete updated.clinicianNotes;
+      else if (patch.clinicianNotes !== undefined) updated.clinicianNotes = patch.clinicianNotes;
+      if (patch.moodRating === null) delete updated.moodRating;
+      else if (patch.moodRating !== undefined) updated.moodRating = patch.moodRating;
+      this.demoSessions[demoIndex] = updated;
+      return;
+    }
+    if (!auth.currentUser) return;
+
+    const sessionRef = doc(db, 'sessions', sessionId);
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(sessionRef);
+      if (!snapshot.exists()) throw new Error(`Session ${sessionId} does not exist`);
+
+      const session = readSessionRecord(snapshot.data(), snapshot.id);
+      const currentUserId = auth.currentUser?.uid;
+      const isPatient = session.patientId === currentUserId;
+      let isProvider = false;
+      if (!isPatient && currentUserId) {
+        const patient = await transaction.get(doc(db, 'clients', session.patientId));
+        if (patient.exists()) {
+          const profile = readClientProfile(patient.data(), patient.id);
+          isProvider =
+            profile.clinicianId === currentUserId || profile.linkedClinicianCode === currentUserId;
+          if (!isProvider && session.clinicId && profile.clinicId === session.clinicId) {
+            const clinic = await transaction.get(doc(db, 'clinics', session.clinicId));
+            const practitionerIds = clinic.exists()
+              ? (clinic.data() as Partial<ClinicProfile>).practitionerIds
+              : undefined;
+            isProvider = Array.isArray(practitionerIds) && practitionerIds.includes(currentUserId);
+          }
         }
       }
+      if (!isPatient && !isProvider) throw new Error('Not authorized to update this session');
 
-      if (client.skylineBiomesUnlocked.length >= 5 && !client.badges.includes('skyline-explorer')) {
-        client.badges.push('skyline-explorer');
-      }
+      const authorizedPatch = isPatient
+        ? removeUndefined({ patientNotes: notePatch.patientNotes, moodRating: notePatch.moodRating })
+        : removeUndefined({ clinicianNotes: notePatch.clinicianNotes });
+      transaction.set(
+        sessionRef,
+        { ...authorizedPatch, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    });
+  }
 
-      await this.saveClient(client);
+  /**
+   * Compatibility wrapper for current UI callers. A first call creates the
+   * immutable measurement and aggregates it once; repeats patch only notes.
+   */
+  public async saveSession(session: SessionRecord): Promise<void> {
+    const result = await this.createSession(session);
+    if (!result.created) {
+      await this.patchSessionNotes(session.id, {
+        patientNotes: session.patientNotes,
+        clinicianNotes: session.clinicianNotes,
+        moodRating: session.moodRating,
+      });
     }
   }
 
