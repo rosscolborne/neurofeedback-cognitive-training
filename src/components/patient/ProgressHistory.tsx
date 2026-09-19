@@ -3,15 +3,11 @@ import { ClientProfile, SessionRecord } from '../../types';
 import { storageEngine, INITIAL_BADGES } from '../../services/storageEngine';
 import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText } from 'lucide-react';
 import {
-  filterSessionsByPeriod,
-  generateTimeInZoneChart,
+  buildPatientProgressDisplayModel,
   getDurationSeconds,
-  getEarnedBadgeIds,
-  getSessionPresentationState,
   getSessionTimestamp,
   getTimeInZonePercent,
   ProgressPeriod,
-  summarizeSessions,
 } from './patientMetrics';
 
 interface ProgressHistoryProps {
@@ -62,13 +58,16 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     };
   }, [client.id]);
 
-  const validAllSessions = useMemo(() => filterSessionsByPeriod(allSessions, 'all', nowMs), [allSessions, nowMs]);
-  const filteredSessions = useMemo(() => filterSessionsByPeriod(allSessions, period, nowMs), [allSessions, period, nowMs]);
-  const summary = useMemo(() => summarizeSessions(filteredSessions), [filteredSessions]);
-  const chart = useMemo(() => generateTimeInZoneChart(filteredSessions, 360, 120), [filteredSessions]);
-  const earnedBadges = useMemo(() => getEarnedBadgeIds(validAllSessions), [validAllSessions]);
-  const historySessions = useMemo(() => [...filteredSessions].reverse(), [filteredSessions]);
-  const sessionPresentation = getSessionPresentationState(sessionStatus, validAllSessions.length);
+  const progressDisplay = useMemo(() => buildPatientProgressDisplayModel(sessionStatus, allSessions, {
+    period,
+    nowMs,
+    chartWidth: 360,
+    chartHeight: 120,
+  }), [sessionStatus, allSessions, period, nowMs]);
+  const historySessions = useMemo(
+    () => [...progressDisplay.periodSessions].reverse(),
+    [progressDisplay.periodSessions],
+  );
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
 
@@ -135,8 +134,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
             ? 'Loading your saved sessions…'
             : sessionStatus === 'error'
               ? 'Your saved sessions could not be loaded.'
-              : validAllSessions.length > 0
-            ? `Tracking ${validAllSessions.length} session${validAllSessions.length !== 1 ? 's' : ''} over time.`
+              : progressDisplay.validSessions.length > 0
+            ? `Tracking ${progressDisplay.validSessions.length} session${progressDisplay.validSessions.length !== 1 ? 's' : ''} over time.`
             : 'Complete your first session to start tracking progress.'}
         </p>
       </div>
@@ -182,20 +181,26 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               Average time in target zone
             </div>
             <div className="font-mono" style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {summary.averageTimeInZonePercent == null ? 'Unavailable' : `${summary.averageTimeInZonePercent}%`}{' '}
-              {summary.measuredSessions.length === 0 ? (
+              {progressDisplay.presentation === 'loading'
+                ? 'Loading…'
+                : progressDisplay.summary?.averageTimeInZonePercent == null
+                  ? 'Unavailable'
+                  : `${progressDisplay.summary.averageTimeInZonePercent}%`}{' '}
+              {progressDisplay.summary?.measuredSessions.length === 0 ? (
                 <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>No measured data</span>
               ) : null}
             </div>
             <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-              {periodLabel} · {summary.sessionCount} session{summary.sessionCount !== 1 ? 's' : ''}
+              {periodLabel} · {progressDisplay.summary
+                ? `${progressDisplay.summary.sessionCount} session${progressDisplay.summary.sessionCount !== 1 ? 's' : ''}`
+                : 'Session count unavailable'}
             </div>
           </div>
         </div>
 
         {/* Dynamic SVG Area Chart */}
         <div style={{ width: '100%', height: '140px', overflow: 'hidden' }}>
-          {chart.line ? (
+          {progressDisplay.chart?.line ? (
             <>
               <svg viewBox="0 0 360 120" style={{ width: '100%', height: '120px' }}>
                 <defs>
@@ -204,22 +209,22 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                     <stop offset="100%" stopColor="var(--brand-primary)" stopOpacity="0.05" />
                   </linearGradient>
                 </defs>
-                <path d={chart.area} fill="url(#scoreAreaGrad)" />
+                <path d={progressDisplay.chart.area} fill="url(#scoreAreaGrad)" />
                 <path
-                  d={chart.line}
+                  d={progressDisplay.chart.line}
                   fill="none"
                   stroke="var(--brand-primary)"
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                {chart.points.map(point => (
+                {progressDisplay.chart.points.map(point => (
                   <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="4" fill="var(--brand-primary)" />
                 ))}
                 <line x1="20" y1="110" x2="350" y2="110" stroke="var(--border-default)" strokeWidth="1" />
               </svg>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 8px' }}>
-                {chart.labels.map((label, i) => (
+                {progressDisplay.chart.labels.map((label, i) => (
                   <span key={i}>{label}</span>
                 ))}
               </div>
@@ -246,16 +251,16 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
-                  {sessionPresentation === 'loading'
+                  {progressDisplay.presentation === 'loading'
                     ? 'Loading session data…'
-                    : sessionPresentation === 'error'
+                    : progressDisplay.presentation === 'error'
                       ? 'Session data unavailable'
                       : 'No measured sessions'}
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {sessionPresentation === 'loading'
+                  {progressDisplay.presentation === 'loading'
                     ? 'Your saved sessions will appear here when loaded.'
-                    : sessionPresentation === 'error'
+                    : progressDisplay.presentation === 'error'
                       ? 'Try again after checking your connection.'
                       : 'Complete a session with a time-in-zone measurement to see a trend.'}
                 </div>
@@ -263,7 +268,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
             </div>
           )}
         </div>
-        {summary.measuredSessions.length === 1 && (
+        {progressDisplay.summary?.measuredSessions.length === 1 && (
           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '8px' }}>
             One measured session is shown; a trend needs at least two.
           </div>
@@ -272,9 +277,9 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
         {[
-          ['Sessions', sessionStatus === 'ready' ? String(summary.sessionCount) : '—'],
-          ['Training time', sessionStatus === 'ready' ? `${Math.round(summary.totalDurationSeconds / 60)} min` : '—'],
-          ['Measured sessions', sessionStatus === 'ready' ? String(summary.measuredSessions.length) : '—'],
+          ['Sessions', progressDisplay.summary ? String(progressDisplay.summary.sessionCount) : '—'],
+          ['Training time', progressDisplay.summary ? `${Math.round(progressDisplay.summary.totalDurationSeconds / 60)} min` : '—'],
+          ['Measured sessions', progressDisplay.summary ? String(progressDisplay.summary.measuredSessions.length) : '—'],
         ].map(([label, value]) => (
           <div key={label} className="card-patient" style={{ padding: '12px', textAlign: 'center' }}>
             <div className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
@@ -293,16 +298,16 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
           <div className="card-patient" style={{ padding: '32px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
             <Target size={32} color="var(--border-default)" />
             <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {sessionPresentation === 'loading'
+              {progressDisplay.presentation === 'loading'
                 ? 'Loading session history…'
-                : sessionPresentation === 'error'
+                : progressDisplay.presentation === 'error'
                   ? 'Session history unavailable'
                   : 'No sessions in this period'}
             </div>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {sessionPresentation === 'loading'
+              {progressDisplay.presentation === 'loading'
                 ? 'Your saved sessions will appear here when loaded.'
-                : sessionPresentation === 'error'
+                : progressDisplay.presentation === 'error'
                   ? 'Try again after checking your connection.'
                   : 'Choose another range or complete a training session to see it here.'}
             </p>
@@ -417,9 +422,16 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
           </h3>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+        {progressDisplay.earnedBadgeIds == null ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+            {progressDisplay.presentation === 'loading'
+              ? 'Loading milestone evidence…'
+              : 'Milestone evidence unavailable.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
           {INITIAL_BADGES.map(badge => {
-            const isUnlocked = earnedBadges.has(badge.id);
+            const isUnlocked = progressDisplay.earnedBadgeIds?.has(badge.id) === true;
             const Icon = BADGE_ICONS[badge.iconName] || Trophy;
             return (
               <div
@@ -447,7 +459,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Export CSV — small button */}

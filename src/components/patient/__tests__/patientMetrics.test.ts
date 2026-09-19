@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionRecord } from '../../../types';
 import {
+  buildPatientProgressDisplayModel,
   computeActiveStreak,
   filterSessionsByPeriod,
   generateTimeInZoneChart,
   getEarnedBadgeIds,
-  getSessionPresentationState,
   getWeeklyActivity,
   summarizeSessions,
 } from '../patientMetrics';
@@ -103,10 +103,75 @@ describe('patient metrics', () => {
     expect(earned.has('skyline-explorer')).toBe(false);
   });
 
-  it('distinguishes loading, failed, empty, and populated session states', () => {
-    expect(getSessionPresentationState('loading', 0)).toBe('loading');
-    expect(getSessionPresentationState('error', 0)).toBe('error');
-    expect(getSessionPresentationState('ready', 0)).toBe('empty');
-    expect(getSessionPresentationState('ready', 1)).toBe('data');
+  it('withholds all evidence conclusions while loading', () => {
+    const model = buildPatientProgressDisplayModel('loading', [], {
+      period: 'week', nowMs: Date.parse('2026-09-19T12:00:00Z'), timeZone: 'UTC',
+      chartWidth: 300, chartHeight: 40,
+    });
+    expect(model.presentation).toBe('loading');
+    expect(model.summary).toBeNull();
+    expect(model.weeklyActivity).toBeNull();
+    expect(model.activeStreak).toBeNull();
+    expect(model.chart).toBeNull();
+    expect(model.earnedBadgeIds).toBeNull();
+  });
+
+  it('represents a resolved empty read as negative evidence', () => {
+    const model = buildPatientProgressDisplayModel('ready', [], {
+      period: 'month', nowMs: Date.parse('2026-09-19T12:00:00Z'), timeZone: 'UTC',
+      chartWidth: 360, chartHeight: 120,
+    });
+    expect(model.presentation).toBe('empty');
+    expect(model.summary?.sessionCount).toBe(0);
+    expect(model.summary?.averageTimeInZonePercent).toBeNull();
+    expect(model.weeklyActivity).toHaveLength(7);
+    expect(model.weeklyActivity?.every(day => !day.completed)).toBe(true);
+    expect(model.chart?.points).toEqual([]);
+    expect(model.earnedBadgeIds).toEqual(new Set());
+  });
+
+  it('withholds all evidence conclusions after a rejected read', () => {
+    const model = buildPatientProgressDisplayModel('error', [], {
+      period: 'all', nowMs: Date.parse('2026-09-19T12:00:00Z'), timeZone: 'UTC',
+      chartWidth: 360, chartHeight: 120,
+    });
+    expect(model.presentation).toBe('error');
+    expect(model.summary).toBeNull();
+    expect(model.weeklyActivity).toBeNull();
+    expect(model.chart).toBeNull();
+    expect(model.earnedBadgeIds).toBeNull();
+  });
+
+  it('preserves valid zero in the complete populated display model', () => {
+    const model = buildPatientProgressDisplayModel('ready', [session({ timeInZonePercent: 0 })], {
+      period: 'all', nowMs: Date.parse('2026-09-20T12:00:00Z'), timeZone: 'UTC',
+      chartWidth: 360, chartHeight: 120,
+    });
+    expect(model.presentation).toBe('data');
+    expect(model.summary?.averageTimeInZonePercent).toBe(0);
+    expect(model.chart?.points).toHaveLength(1);
+  });
+
+  it('represents one session as a point without inventing a trend', () => {
+    const model = buildPatientProgressDisplayModel('ready', [session()], {
+      period: 'all', nowMs: Date.parse('2026-09-20T12:00:00Z'), timeZone: 'UTC',
+      chartWidth: 360, chartHeight: 120,
+    });
+    expect(model.chart?.points).toHaveLength(1);
+    expect(model.chart?.line.startsWith('M ')).toBe(true);
+    expect(model.chart?.line.includes(' L ')).toBe(false);
+  });
+
+  it('exposes badge evidence only after a resolved qualifying read', () => {
+    const qualifying = Array.from({ length: 7 }, (_, index) => session({
+      id: `qualifying-${index}`,
+      timestamp: Date.parse(`2026-09-${String(10 + index).padStart(2, '0')}T12:00:00Z`),
+      timeInZonePercent: index === 6 ? 80 : 50,
+    }));
+    const model = buildPatientProgressDisplayModel('ready', qualifying, {
+      period: 'all', nowMs: Date.parse('2026-09-20T12:00:00Z'), timeZone: 'UTC',
+      chartWidth: 360, chartHeight: 120,
+    });
+    expect(model.earnedBadgeIds).toEqual(new Set(['first-light', 'steady-state', 'deep-focus']));
   });
 });

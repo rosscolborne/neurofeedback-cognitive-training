@@ -27,6 +27,25 @@ export interface ProgressChart {
 export type SessionLoadStatus = 'loading' | 'ready' | 'error';
 export type SessionPresentationState = 'loading' | 'error' | 'empty' | 'data';
 
+export interface PatientProgressDisplayModel {
+  presentation: SessionPresentationState;
+  validSessions: SessionRecord[];
+  periodSessions: SessionRecord[];
+  summary: PatientProgressSummary | null;
+  weeklyActivity: WeeklyActivityDay[] | null;
+  activeStreak: number | null;
+  chart: ProgressChart | null;
+  earnedBadgeIds: Set<string> | null;
+}
+
+export interface PatientProgressDisplayOptions {
+  period: ProgressPeriod;
+  nowMs?: number;
+  timeZone?: string;
+  chartWidth: number;
+  chartHeight: number;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const dateFormatter = (timeZone?: string) => new Intl.DateTimeFormat('en-CA', {
@@ -116,6 +135,49 @@ export function getSessionPresentationState(
   if (status === 'loading') return 'loading';
   if (status === 'error') return 'error';
   return sessionCount > 0 ? 'data' : 'empty';
+}
+
+/**
+ * Complete evidence-state boundary for patient progress UI. Until a read
+ * resolves successfully, evidence-derived fields are null rather than empty so
+ * the UI cannot imply that activity, measurements, or awards are absent.
+ */
+export function buildPatientProgressDisplayModel(
+  status: SessionLoadStatus,
+  sessions: SessionRecord[],
+  options: PatientProgressDisplayOptions,
+): PatientProgressDisplayModel {
+  if (status !== 'ready') {
+    return {
+      presentation: status,
+      validSessions: [],
+      periodSessions: [],
+      summary: null,
+      weeklyActivity: null,
+      activeStreak: null,
+      chart: null,
+      earnedBadgeIds: null,
+    };
+  }
+
+  const nowMs = options.nowMs ?? Date.now();
+  const validSessions = filterSessionsByPeriod(sessions, 'all', nowMs);
+  const periodSessions = filterSessionsByPeriod(validSessions, options.period, nowMs);
+  return {
+    presentation: getSessionPresentationState('ready', validSessions.length),
+    validSessions,
+    periodSessions,
+    summary: summarizeSessions(periodSessions),
+    weeklyActivity: getWeeklyActivity(validSessions, nowMs, options.timeZone),
+    activeStreak: computeActiveStreak(validSessions, nowMs, options.timeZone),
+    chart: generateTimeInZoneChart(
+      periodSessions,
+      options.chartWidth,
+      options.chartHeight,
+      options.timeZone,
+    ),
+    earnedBadgeIds: getEarnedBadgeIds(validSessions, options.timeZone),
+  };
 }
 
 /**

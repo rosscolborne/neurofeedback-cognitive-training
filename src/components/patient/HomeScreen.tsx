@@ -7,12 +7,7 @@ import {
 } from '../../services/clinicalProtocolTemplates';
 import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, Crown } from 'lucide-react';
 import {
-  computeActiveStreak,
-  filterSessionsByPeriod,
-  generateTimeInZoneChart,
-  getSessionPresentationState,
-  getWeeklyActivity,
-  summarizeSessions,
+  buildPatientProgressDisplayModel,
 } from './patientMetrics';
 
 interface HomeScreenProps {
@@ -78,12 +73,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     };
   }, [client.id]);
 
-  const weeklyActivity = useMemo(() => getWeeklyActivity(sessions, nowMs), [sessions, nowMs]);
-  const activeStreak = useMemo(() => computeActiveStreak(sessions, nowMs), [sessions, nowMs]);
-  const recentSessions = useMemo(() => filterSessionsByPeriod(sessions, 'week', nowMs), [sessions, nowMs]);
-  const recentSummary = useMemo(() => summarizeSessions(recentSessions), [recentSessions]);
-  const recentChart = useMemo(() => generateTimeInZoneChart(recentSessions, 300, 40), [recentSessions]);
-  const sessionPresentation = getSessionPresentationState(sessionStatus, sessions.length);
+  const progressDisplay = useMemo(() => buildPatientProgressDisplayModel(sessionStatus, sessions, {
+    period: 'week',
+    nowMs,
+    chartWidth: 300,
+    chartHeight: 40,
+  }), [sessionStatus, sessions, nowMs]);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
   const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
@@ -243,19 +238,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             Training Consistency
           </div>
           <div className="font-display" style={{ fontSize: '18px', color: 'var(--text-primary)', marginTop: '2px' }}>
-            {sessionStatus === 'loading'
+            {progressDisplay.presentation === 'loading'
               ? 'Loading activity…'
-              : sessionStatus === 'error'
+              : progressDisplay.presentation === 'error'
                 ? 'Activity unavailable'
-                : activeStreak > 0
-                  ? `${activeStreak}-Day Active Streak`
+                : (progressDisplay.activeStreak ?? 0) > 0
+                  ? `${progressDisplay.activeStreak}-Day Active Streak`
                   : 'Build Your Streak'}
           </div>
         </div>
 
         {/* 7-Day Dot Indicator Grid — based on actual session data */}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-          {weeklyActivity.map(day => {
+          {progressDisplay.weeklyActivity ? progressDisplay.weeklyActivity.map(day => {
             return (
               <div key={day.dayOrdinal} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <div
@@ -282,7 +277,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 }}>{day.label}</span>
               </div>
             );
-          })}
+          }) : (
+            <div style={{ width: '100%', fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '12px 0' }}>
+              {progressDisplay.presentation === 'loading'
+                ? 'Loading weekly activity…'
+                : 'Weekly activity unavailable.'}
+            </div>
+          )}
         </div>
 
         {/* Session-derived time-in-zone trend */}
@@ -293,32 +294,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Past 7 days</div>
             </div>
             <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-              {sessionStatus === 'ready' && recentSummary.averageTimeInZonePercent != null
-                ? `${recentSummary.averageTimeInZonePercent}%`
+              {progressDisplay.summary?.averageTimeInZonePercent != null
+                ? `${progressDisplay.summary.averageTimeInZonePercent}%`
                 : 'Unavailable'}
             </span>
           </div>
 
           <div style={{ width: '100%', height: '45px', overflow: 'hidden' }}>
-            {recentChart.line ? (
+            {progressDisplay.chart?.line ? (
               <svg viewBox="0 0 300 40" style={{ width: '100%', height: '100%' }} aria-label="Time in target zone by session">
-                <path d={recentChart.area} fill="var(--brand-primary-subtle)" opacity="0.6" />
-                <path d={recentChart.line} fill="none" stroke="var(--brand-primary)" strokeWidth="2.5" />
-                {recentChart.points.map(point => (
+                <path d={progressDisplay.chart.area} fill="var(--brand-primary-subtle)" opacity="0.6" />
+                <path d={progressDisplay.chart.line} fill="none" stroke="var(--brand-primary)" strokeWidth="2.5" />
+                {progressDisplay.chart.points.map(point => (
                   <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="3" fill="var(--brand-primary)" />
                 ))}
               </svg>
             ) : (
               <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', paddingTop: '12px' }}>
-                {sessionPresentation === 'loading'
+                {progressDisplay.presentation === 'loading'
                   ? 'Loading session data…'
-                  : sessionPresentation === 'error'
+                  : progressDisplay.presentation === 'error'
                     ? 'Could not load session data.'
                     : 'No measured sessions in this period.'}
               </div>
             )}
           </div>
-          {recentSummary.measuredSessions.length === 1 && (
+          {progressDisplay.summary?.measuredSessions.length === 1 && (
             <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '2px' }}>
               One measured session; a trend needs at least two.
             </div>
