@@ -1,5 +1,6 @@
 import type {
   ClientProfile,
+  PatientInvitation,
   PersistedTimestamp,
   SessionRecord,
 } from '../types';
@@ -63,6 +64,39 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
     badges: Array.isArray(raw.badges) ? raw.badges : [],
     schemaVersion: raw.schemaVersion ?? 1,
   };
+}
+
+/** Return the canonical owner while retaining legacy link fields on the profile itself. */
+export function getPatientClinicianId(profile: Pick<ClientProfile, 'clinicianId' | 'linkedClinicianCode'>): string | undefined {
+  return profile.clinicianId || profile.linkedClinicianCode;
+}
+
+export function isPatientInvitationExpired(
+  invitation: Pick<PatientInvitation, 'expiresAt'>,
+  now = Date.now()
+): boolean {
+  const expiresAt = timestampToMillis(invitation.expiresAt);
+  return expiresAt != null && expiresAt <= now;
+}
+
+/** Read current and pre-expiry invitation documents without rewriting them. */
+export function readPatientInvitation(
+  data: unknown,
+  documentId: string,
+  now = Date.now()
+): PatientInvitation {
+  const raw = { ...(data as Record<string, unknown>) } as unknown as PatientInvitation;
+  const invitation: PatientInvitation = {
+    ...raw,
+    id: raw.id || documentId,
+    clinicianName: raw.clinicianName ?? '',
+    patientName: raw.patientName ?? '',
+    schemaVersion: raw.schemaVersion ?? 1,
+  };
+  if (invitation.status === 'pending' && isPatientInvitationExpired(invitation, now)) {
+    return { ...invitation, status: 'expired' };
+  }
+  return invitation;
 }
 
 /** Normalize Firestore Timestamp fields while retaining legacy numeric timestamps for the UI. */

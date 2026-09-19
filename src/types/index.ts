@@ -394,7 +394,7 @@ export interface SessionCreateResult {
   session: SessionRecord;
 }
 
-export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled';
+export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled' | 'expired';
 
 export interface PatientInvitation {
   id: string;
@@ -411,6 +411,9 @@ export interface PatientInvitation {
   createdAt?: PersistedTimestamp;
   updatedAt?: PersistedTimestamp;
   acceptedAt?: PersistedTimestamp;
+  expiresAt?: PersistedTimestamp;
+  /** Normalized email key under patientInvitationClaims/{clinicianId}/emails. */
+  uniquenessClaimId?: string;
   schemaVersion: number;
 }
 

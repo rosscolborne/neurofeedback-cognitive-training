@@ -32,7 +32,7 @@ interface ClinicianShellProps {
   messages: MessageThread[];
   appointments: CalendarAppointment[];
   onUpdateClient: (updated: ClientProfile) => void;
-  onDeleteClient?: (clientId: string) => void;
+  onDeleteClient?: (clientId: string) => void | Promise<void>;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelPatientInvitation: (invitationId: string) => Promise<void>;
   onSendMessage: (clientId: string, text: string) => void;

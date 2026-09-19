@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment, PatientInvitation } from './types';
 import { storageEngine } from './services/storageEngine';
 import { applyBrandToDOM } from './services/brandEngine';
@@ -17,8 +17,27 @@ import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 
+function InvitationEntryRedirect() {
+  const { invitationCode } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (invitationCode) {
+      window.sessionStorage.setItem('waveable_pending_invitation', invitationCode.toUpperCase());
+    }
+    navigate('/welcome', { replace: true });
+  }, [invitationCode, navigate]);
+
+  return null;
+}
+
 export function App() {
   const { user, role, loading, logout } = useAuth();
+  const location = useLocation();
+  const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
+  const storedInvitationCode = typeof window === 'undefined'
+    ? undefined
+    : window.sessionStorage.getItem('waveable_pending_invitation') || undefined;
   
   const [brand, setBrand] = useState<ClinicBrandConfig>(() => storageEngine.getBrandConfig());
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -31,6 +50,12 @@ export function App() {
   useEffect(() => {
     applyBrandToDOM(brand);
   }, [brand]);
+
+  useEffect(() => {
+    if (routeInvitationCode) {
+      window.sessionStorage.setItem('waveable_pending_invitation', routeInvitationCode.toUpperCase());
+    }
+  }, [routeInvitationCode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -229,6 +254,65 @@ export function App() {
     applyBrandToDOM(newBrand);
   };
 
+  const invitationCode = routeInvitationCode?.toUpperCase() || storedInvitationCode;
+
+  const renderPrimaryApp = () => {
+    if (!role) return <Navigate to="/role-selection" replace />;
+    if (role === 'patient') {
+      return (
+        <PatientShell
+          brand={brand}
+          client={currentClient || {
+            id: user?.uid || 'patient',
+            name: user?.displayName || 'Patient',
+            email: user?.email || 'patient@waveable.app',
+            avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            condition: 'Peak Performance',
+            status: 'active',
+            assignedProtocol: 'theta-beta-ratio',
+            brainMaps: [],
+            allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'tidal-garden', 'breath-weave', 'signal-sort', 'rhythm-lock', 'media-mode', 'soundscape-mode', 'mandala', 'eeg-mandala', 'neuro-gambit'],
+            prescribedSessionsPerWeek: 4,
+            completedSessionsCount: 0,
+            currentStreak: 0,
+            streakFreezeRemaining: 1,
+            brainCapacityScore: 60,
+            lastSessionDate: 'Just Enrolled',
+            nextSessionDate: 'Ready to schedule',
+            tidalGardenState: { stage: 1, plantsUnlocked: ['amber-coral'], growthPoints: 0, lastWatered: new Date().toISOString().split('T')[0] },
+            skylineBiomesUnlocked: ['Alpine Meadows'],
+            badges: ['first-light'],
+          }}
+          initialInvitationCode={invitationCode}
+          onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
+          onUpdateClient={handleUpdateClient}
+          onOpenRebrand={() => setShowRebrandModal(true)}
+        />
+      );
+    }
+    return (
+      <ClinicianShell
+        brand={brand}
+        clinicianLabel={user?.displayName || user?.email || undefined}
+        clients={clients}
+        patientInvitations={patientInvitations}
+        messages={messages}
+        appointments={appointments}
+        onUpdateClient={handleUpdateClient}
+        onDeleteClient={handleDeleteClient}
+        onAddClient={handleAddClient}
+        onCancelPatientInvitation={handleCancelPatientInvitation}
+        onSendMessage={handleSendMessage}
+        onSaveAppointment={handleSaveAppointment}
+        onDeleteAppointment={handleDeleteAppointment}
+        onClearDemoData={handleClearDemoData}
+        onResetDemoData={handleResetDemoData}
+        onOpenRebrand={() => setShowRebrandModal(true)}
+        onLogout={logout}
+      />
+    );
+  };
+
   return (
     <>
       <Routes>
@@ -241,6 +325,7 @@ export function App() {
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/connect/:invitationCode" element={<InvitationEntryRedirect />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (
@@ -249,57 +334,8 @@ export function App() {
             <Route path="/role-selection" element={<RoleSelection />} />
             <Route path="/hardware-setup" element={<HardwareSetup />} />
             
-            <Route path="/" element={
-              !role ? <Navigate to="/role-selection" replace /> :
-              role === 'patient' ? (
-                <PatientShell
-                  brand={brand}
-                  client={currentClient || {
-                    id: user?.uid || 'patient',
-                    name: user?.displayName || 'Patient',
-                    email: user?.email || 'patient@waveable.app',
-                    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-                    condition: 'Peak Performance',
-                    status: 'active',
-                    assignedProtocol: 'theta-beta-ratio',
-                    brainMaps: [],
-                    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'tidal-garden', 'breath-weave', 'signal-sort', 'rhythm-lock', 'media-mode', 'soundscape-mode', 'mandala', 'eeg-mandala', 'neuro-gambit'],
-                    prescribedSessionsPerWeek: 4,
-                    completedSessionsCount: 0,
-                    currentStreak: 0,
-                    streakFreezeRemaining: 1,
-                    brainCapacityScore: 60,
-                    lastSessionDate: 'Just Enrolled',
-                    nextSessionDate: 'Ready to schedule',
-                    tidalGardenState: { stage: 1, plantsUnlocked: ['amber-coral'], growthPoints: 0, lastWatered: new Date().toISOString().split('T')[0] },
-                    skylineBiomesUnlocked: ['Alpine Meadows'],
-                    badges: ['first-light'],
-                  }}
-                  onUpdateClient={handleUpdateClient}
-                  onOpenRebrand={() => setShowRebrandModal(true)}
-                />
-              ) : (
-                <ClinicianShell
-                  brand={brand}
-                  clinicianLabel={user?.displayName || user?.email || undefined}
-                  clients={clients}
-                  patientInvitations={patientInvitations}
-                  messages={messages}
-                  appointments={appointments}
-                  onUpdateClient={handleUpdateClient}
-                  onDeleteClient={handleDeleteClient}
-                  onAddClient={handleAddClient}
-                  onCancelPatientInvitation={handleCancelPatientInvitation}
-                  onSendMessage={handleSendMessage}
-                  onSaveAppointment={handleSaveAppointment}
-                  onDeleteAppointment={handleDeleteAppointment}
-                  onClearDemoData={handleClearDemoData}
-                  onResetDemoData={handleResetDemoData}
-                  onOpenRebrand={() => setShowRebrandModal(true)}
-                  onLogout={logout}
-                />
-              )
-            } />
+            <Route path="/" element={renderPrimaryApp()} />
+            <Route path="/connect/:invitationCode" element={renderPrimaryApp()} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         )}
