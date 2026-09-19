@@ -437,7 +437,7 @@ independent workstream immediately when a slot opens.
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
-- **Final commit:** `a31d963e254bc076ef9ae52149f483a57e77b011`
+- **Final commit:** `0fbc281a115effe529c54d9f0ff04e8b375cbae8`
 - **Owned files:** `src/components/clinician/ClinicSettingsView.tsx`,
   `src/components/brand/ClinicCustomizerModal.tsx`, `src/services/brandEngine.ts`,
   new dedicated clinic/practitioner repository/helper/tests. `App.tsx` wiring is
@@ -696,7 +696,7 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** T1 completed at `8963f02`, with 9/9 focused and 171/171 full
   tests passing, and entered independent review. It uses the existing session
   provenance contract, so no shared type change was requested.
-- **2026-09-19:** S1 completed at `a31d963`, with 12/12 focused and 151/151 full
+- **2026-09-19:** S1 completed at `0fbc281`, with 12/12 focused and 151/151 full
   tests passing, and entered independent review. Fresh-clinician rules and app-level
   remote-brand hydration were retained as central integration requests.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
