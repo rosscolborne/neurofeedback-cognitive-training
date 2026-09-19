@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { SessionRecord } from '../../../types';
 import {
   computeActiveStreak,
-  computeTimeInZoneChange,
   filterSessionsByPeriod,
   generateTimeInZoneChart,
   getEarnedBadgeIds,
+  getSessionPresentationState,
   getWeeklyActivity,
   summarizeSessions,
 } from '../patientMetrics';
@@ -26,7 +26,7 @@ describe('patient metrics', () => {
       sessions: [], measuredSessions: [], sessionCount: 0, totalDurationSeconds: 0,
       averageTimeInZonePercent: null,
     });
-    expect(generateTimeInZoneChart([], 360, 120)).toEqual({ line: '', area: '', labels: [] });
+    expect(generateTimeInZoneChart([], 360, 120)).toEqual({ line: '', area: '', labels: [], points: [] });
     expect(computeActiveStreak([], Date.parse('2026-09-19T12:00:00Z'), 'UTC')).toBe(0);
   });
 
@@ -37,6 +37,7 @@ describe('patient metrics', () => {
     expect(summary.totalDurationSeconds).toBe(0);
     expect(summary.measuredSessions).toHaveLength(1);
     expect(generateTimeInZoneChart(sessions, 360, 120).line).not.toBe('');
+    expect(generateTimeInZoneChart(sessions, 360, 120).points).toHaveLength(1);
   });
 
   it('does not substitute malformed or partial legacy values', () => {
@@ -69,21 +70,43 @@ describe('patient metrics', () => {
     expect(activity.filter(day => day.completed)).toHaveLength(2);
   });
 
-  it('derives changes and badge awards only from qualifying session evidence', () => {
+  it('awards only badges whose stated condition has direct session evidence', () => {
     const sessions = Array.from({ length: 7 }, (_, index) => session({
       id: `day-${index}`,
       timestamp: Date.parse(`2026-09-${String(10 + index).padStart(2, '0')}T12:00:00Z`),
       timeInZonePercent: index === 6 ? 80 : 40,
     }));
-    expect(computeTimeInZoneChange(sessions)).toEqual({ value: 25, label: '+25%' });
     expect(getEarnedBadgeIds(sessions, 'UTC')).toEqual(new Set(['first-light', 'steady-state', 'deep-focus']));
     expect(getEarnedBadgeIds([], 'UTC').size).toBe(0);
   });
 
-  it('does not claim a percentage change from a zero baseline', () => {
-    expect(computeTimeInZoneChange([
-      session({ id: 'zero', timeInZonePercent: 0 }),
-      session({ id: 'later', timestamp: Date.parse('2026-09-20T12:00:00Z'), timeInZonePercent: 50 }),
-    ])).toBeNull();
+  it('keeps unsupported badge proxies and near misses locked', () => {
+    const proxySessions = Array.from({ length: 6 }, (_, index) => session({
+      id: `proxy-${index}`,
+      timestamp: Date.parse(`2026-09-${String(10 + index).padStart(2, '0')}T12:00:00Z`),
+      protocol: 'alpha-enhancement',
+      experience: 'tidal-garden',
+      durationSeconds: 1_800,
+      timeInZonePercent: index === 0 ? 79 : 100,
+    }));
+    proxySessions.push(session({
+      id: 'deep-focus-near-miss',
+      timestamp: Date.parse('2026-09-15T18:00:00Z'),
+      protocol: 'theta-beta-ratio',
+      timeInZonePercent: 79,
+    }));
+    const earned = getEarnedBadgeIds(proxySessions, 'UTC');
+    expect(earned.has('steady-state')).toBe(false);
+    expect(earned.has('deep-focus')).toBe(false);
+    expect(earned.has('still-waters')).toBe(false);
+    expect(earned.has('garden-keeper')).toBe(false);
+    expect(earned.has('skyline-explorer')).toBe(false);
+  });
+
+  it('distinguishes loading, failed, empty, and populated session states', () => {
+    expect(getSessionPresentationState('loading', 0)).toBe('loading');
+    expect(getSessionPresentationState('error', 0)).toBe('error');
+    expect(getSessionPresentationState('ready', 0)).toBe('empty');
+    expect(getSessionPresentationState('ready', 1)).toBe('data');
   });
 });

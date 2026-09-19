@@ -10,6 +10,7 @@ import {
   computeActiveStreak,
   filterSessionsByPeriod,
   generateTimeInZoneChart,
+  getSessionPresentationState,
   getWeeklyActivity,
   summarizeSessions,
 } from './patientMetrics';
@@ -82,6 +83,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const recentSessions = useMemo(() => filterSessionsByPeriod(sessions, 'week', nowMs), [sessions, nowMs]);
   const recentSummary = useMemo(() => summarizeSessions(recentSessions), [recentSessions]);
   const recentChart = useMemo(() => generateTimeInZoneChart(recentSessions, 300, 40), [recentSessions]);
+  const sessionPresentation = getSessionPresentationState(sessionStatus, sessions.length);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
   const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
@@ -302,13 +304,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <svg viewBox="0 0 300 40" style={{ width: '100%', height: '100%' }} aria-label="Time in target zone by session">
                 <path d={recentChart.area} fill="var(--brand-primary-subtle)" opacity="0.6" />
                 <path d={recentChart.line} fill="none" stroke="var(--brand-primary)" strokeWidth="2.5" />
+                {recentChart.points.map(point => (
+                  <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="3" fill="var(--brand-primary)" />
+                ))}
               </svg>
             ) : (
               <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', paddingTop: '12px' }}>
-                {sessionStatus === 'error' ? 'Could not load session data.' : 'No measured sessions in this period.'}
+                {sessionPresentation === 'loading'
+                  ? 'Loading session data…'
+                  : sessionPresentation === 'error'
+                    ? 'Could not load session data.'
+                    : 'No measured sessions in this period.'}
               </div>
             )}
           </div>
+          {recentSummary.measuredSessions.length === 1 && (
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '2px' }}>
+              One measured session; a trend needs at least two.
+            </div>
+          )}
         </div>
       </div>
 

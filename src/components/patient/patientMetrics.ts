@@ -21,7 +21,11 @@ export interface ProgressChart {
   line: string;
   area: string;
   labels: string[];
+  points: Array<{ x: number; y: number }>;
 }
+
+export type SessionLoadStatus = 'loading' | 'ready' | 'error';
+export type SessionPresentationState = 'loading' | 'error' | 'empty' | 'data';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -105,6 +109,15 @@ export function summarizeSessions(sessions: SessionRecord[]): PatientProgressSum
   };
 }
 
+export function getSessionPresentationState(
+  status: SessionLoadStatus,
+  sessionCount: number,
+): SessionPresentationState {
+  if (status === 'loading') return 'loading';
+  if (status === 'error') return 'error';
+  return sessionCount > 0 ? 'data' : 'empty';
+}
+
 /**
  * Product rule: an active streak is one or more consecutive local calendar days
  * ending today or yesterday. Multiple sessions on one day count once.
@@ -160,23 +173,6 @@ export function getWeeklyActivity(
   });
 }
 
-export function computeTimeInZoneChange(
-  sessions: SessionRecord[],
-): { value: number; label: string } | null {
-  const values = sessions
-    .map(session => getTimeInZonePercent(session))
-    .filter((value): value is number => value != null);
-  if (values.length < 2) return null;
-  const split = Math.floor(values.length / 2);
-  const first = values.slice(0, split);
-  const second = values.slice(split);
-  const firstAverage = first.reduce((total, value) => total + value, 0) / first.length;
-  const secondAverage = second.reduce((total, value) => total + value, 0) / second.length;
-  if (firstAverage === 0) return null;
-  const value = Math.round(((secondAverage - firstAverage) / firstAverage) * 100);
-  return { value, label: value >= 0 ? `+${value}%` : `${value}%` };
-}
-
 export function generateTimeInZoneChart(
   sessions: SessionRecord[],
   width: number,
@@ -184,7 +180,7 @@ export function generateTimeInZoneChart(
   timeZone?: string,
 ): ProgressChart {
   const measured = sessions.filter(session => getTimeInZonePercent(session) != null);
-  if (measured.length === 0) return { line: '', area: '', labels: [] };
+  if (measured.length === 0) return { line: '', area: '', labels: [], points: [] };
   const scores = measured.map(session => getTimeInZonePercent(session) as number);
   const minimum = Math.max(0, Math.min(...scores) - 10);
   const maximum = Math.min(100, Math.max(...scores) + 10);
@@ -207,7 +203,7 @@ export function generateTimeInZoneChart(
     const timestamp = getSessionTimestamp(measured[sessionIndex]) as number;
     return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone });
   });
-  return { line, area, labels };
+  return { line, area, labels, points };
 }
 
 function hasSevenDayRun(sessions: SessionRecord[], timeZone?: string): boolean {
@@ -234,16 +230,7 @@ export function getEarnedBadgeIds(sessions: SessionRecord[], timeZone?: string):
   if (sessions.some(session => session.protocol === 'theta-beta-ratio' && (getTimeInZonePercent(session) ?? -1) >= 80)) {
     earned.add('deep-focus');
   }
-  if (sessions.some(session => session.protocol === 'alpha-enhancement'
-      && (getDurationSeconds(session) ?? -1) >= 900
-      && (getTimeInZonePercent(session) ?? -1) >= 60)) {
-    earned.add('still-waters');
-  }
-  const gardenGrowth = sessions
-    .filter(session => session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement')
-    .reduce((total, session) => total + Math.round((getTimeInZonePercent(session) ?? 0) * 1.5), 0);
-  if (gardenGrowth > 500) earned.add('garden-keeper');
-  // A session does not record visited skyline biomes, so skyline-explorer remains
-  // locked until persisted evidence for its stated condition is available.
+  // Sessions do not persist alpha-dominance duration, garden stage evidence, or
+  // visited skyline biomes. Their corresponding badges therefore remain locked.
   return earned;
 }

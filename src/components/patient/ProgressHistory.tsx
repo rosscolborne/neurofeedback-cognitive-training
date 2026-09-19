@@ -3,11 +3,11 @@ import { ClientProfile, SessionRecord } from '../../types';
 import { storageEngine, INITIAL_BADGES } from '../../services/storageEngine';
 import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText } from 'lucide-react';
 import {
-  computeTimeInZoneChange,
   filterSessionsByPeriod,
   generateTimeInZoneChart,
   getDurationSeconds,
   getEarnedBadgeIds,
+  getSessionPresentationState,
   getSessionTimestamp,
   getTimeInZonePercent,
   ProgressPeriod,
@@ -65,10 +65,10 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
   const validAllSessions = useMemo(() => filterSessionsByPeriod(allSessions, 'all', nowMs), [allSessions, nowMs]);
   const filteredSessions = useMemo(() => filterSessionsByPeriod(allSessions, period, nowMs), [allSessions, period, nowMs]);
   const summary = useMemo(() => summarizeSessions(filteredSessions), [filteredSessions]);
-  const changePercent = useMemo(() => computeTimeInZoneChange(filteredSessions), [filteredSessions]);
   const chart = useMemo(() => generateTimeInZoneChart(filteredSessions, 360, 120), [filteredSessions]);
   const earnedBadges = useMemo(() => getEarnedBadgeIds(validAllSessions), [validAllSessions]);
   const historySessions = useMemo(() => [...filteredSessions].reverse(), [filteredSessions]);
+  const sessionPresentation = getSessionPresentationState(sessionStatus, validAllSessions.length);
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
 
@@ -183,11 +183,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
             </div>
             <div className="font-mono" style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-primary)' }}>
               {summary.averageTimeInZonePercent == null ? 'Unavailable' : `${summary.averageTimeInZonePercent}%`}{' '}
-              {changePercent ? (
-                <span style={{ fontSize: '13px', color: changePercent.value >= 0 ? 'var(--status-active)' : 'var(--status-alert)' }}>
-                  {changePercent.label}
-                </span>
-              ) : summary.measuredSessions.length === 0 ? (
+              {summary.measuredSessions.length === 0 ? (
                 <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>No measured data</span>
               ) : null}
             </div>
@@ -217,6 +213,9 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
+                {chart.points.map(point => (
+                  <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="4" fill="var(--brand-primary)" />
+                ))}
                 <line x1="20" y1="110" x2="350" y2="110" stroke="var(--border-default)" strokeWidth="1" />
               </svg>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 8px' }}>
@@ -247,15 +246,28 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
-                  {sessionStatus === 'error' ? 'Session data unavailable' : 'No measured sessions'}
+                  {sessionPresentation === 'loading'
+                    ? 'Loading session data…'
+                    : sessionPresentation === 'error'
+                      ? 'Session data unavailable'
+                      : 'No measured sessions'}
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {sessionStatus === 'error' ? 'Try again after checking your connection.' : 'Complete a session with a time-in-zone measurement to see a trend.'}
+                  {sessionPresentation === 'loading'
+                    ? 'Your saved sessions will appear here when loaded.'
+                    : sessionPresentation === 'error'
+                      ? 'Try again after checking your connection.'
+                      : 'Complete a session with a time-in-zone measurement to see a trend.'}
                 </div>
               </div>
             </div>
           )}
         </div>
+        {summary.measuredSessions.length === 1 && (
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '8px' }}>
+            One measured session is shown; a trend needs at least two.
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
@@ -281,12 +293,18 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
           <div className="card-patient" style={{ padding: '32px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
             <Target size={32} color="var(--border-default)" />
             <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {sessionStatus === 'error' ? 'Session history unavailable' : 'No sessions in this period'}
+              {sessionPresentation === 'loading'
+                ? 'Loading session history…'
+                : sessionPresentation === 'error'
+                  ? 'Session history unavailable'
+                  : 'No sessions in this period'}
             </div>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {sessionStatus === 'error'
-                ? 'Try again after checking your connection.'
-                : 'Choose another range or complete a training session to see it here.'}
+              {sessionPresentation === 'loading'
+                ? 'Your saved sessions will appear here when loaded.'
+                : sessionPresentation === 'error'
+                  ? 'Try again after checking your connection.'
+                  : 'Choose another range or complete a training session to see it here.'}
             </p>
           </div>
         ) : (
