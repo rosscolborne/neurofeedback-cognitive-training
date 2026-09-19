@@ -32,6 +32,22 @@ export type SubmitManualBrainMapResult =
   | { ok: true; map: QEEGBrainMap }
   | { ok: false; errors: string[] };
 
+export interface ManualBrainMapSubmissionState {
+  isSaving: boolean;
+  errors: string[];
+}
+
+export const INITIAL_MANUAL_BRAIN_MAP_SUBMISSION_STATE: ManualBrainMapSubmissionState = {
+  isSaving: false,
+  errors: [],
+};
+
+export const beginManualBrainMapSubmission = (): ManualBrainMapSubmissionState => ({ isSaving: true, errors: [] });
+
+export function finishManualBrainMapSubmission(result: SubmitManualBrainMapResult): ManualBrainMapSubmissionState {
+  return result.ok ? { isSaving: false, errors: [] } : { isSaving: false, errors: result.errors };
+}
+
 export const Z_SCORE_MIN = -10;
 export const Z_SCORE_MAX = 10;
 export const ALPHA_PEAK_MIN_EXCLUSIVE = 0;
@@ -47,6 +63,15 @@ export function isValidRecordingDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+/** Legacy records may contain locale-formatted dates; new writes remain ISO date-only. */
+export function parsePersistedRecordingDate(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return isValidRecordingDate(trimmed) ? trimmed : null;
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? trimmed : null;
 }
 
 const Z_SCORE_FIELDS = [
@@ -107,6 +132,28 @@ export async function submitManualBrainMap(
     const detail = error instanceof Error && error.message.trim() ? ` ${error.message.trim()}` : '';
     return { ok: false, errors: [`The QEEG record could not be saved.${detail}`] };
   }
+}
+
+export async function runManualBrainMapSubmission(
+  input: ManualBrainMapInput,
+  onSave: ManualBrainMapSave,
+  onSuccess: (map: QEEGBrainMap) => void,
+): Promise<SubmitManualBrainMapResult> {
+  const result = await submitManualBrainMap(input, onSave);
+  if (result.ok) onSuccess(result.map);
+  return result;
+}
+
+export async function appendBrainMapForDisplay(
+  map: QEEGBrainMap,
+  append: ManualBrainMapSave | undefined,
+  showPersisted: (map: QEEGBrainMap) => void,
+): Promise<QEEGBrainMap> {
+  if (!append) throw new Error('Authorized QEEG persistence is not configured yet. No local record was added.');
+  const persisted = await append(map);
+  const canonical = persisted ?? map;
+  showPersisted(canonical);
+  return canonical;
 }
 
 /** Returns local display state only after the authoritative append completes. */

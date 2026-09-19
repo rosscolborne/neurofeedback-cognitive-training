@@ -6,14 +6,16 @@ import { getProtocolAssignmentAlias } from '../../services/clinicalProtocolTempl
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
-import { persistAndAppendBrainMap, type ManualBrainMapSave } from './brainMapManualEntry';
+import { appendBrainMapForDisplay, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
 import {
   assessQeegRecord,
   deriveLearningScorePoints,
   deriveSessionBandRows,
   finiteMetric,
   formatSigned,
+  getLearningScoreContentState,
   getSessionContentState,
+  getSessionTabLabel,
 } from './clinicalDetailMetrics';
 import {
   ArrowLeft,
@@ -46,6 +48,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const [activeTab, setActiveTab] = useState<'eeg' | 'protocol' | 'brainmaps' | 'telemetry' | 'sessions'>('eeg');
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
   const [showBrainMapUpload, setShowBrainMapUpload] = useState(false);
+  const [persistedBrainMapsByPatient, setPersistedBrainMapsByPatient] = useState<Record<string, QEEGBrainMap[]>>({});
 
   const [sessionResult, setSessionResult] = useState<{
     clientId: string;
@@ -89,21 +92,30 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   };
 
   const handleSaveBrainMap = async (map: QEEGBrainMap) => {
-    if (!onAppendBrainMap) {
-      throw new Error('Authorized QEEG persistence is not configured yet. No local record was added.');
-    }
-    const brainMaps = await persistAndAppendBrainMap(map, client.brainMaps, onAppendBrainMap);
-    const updated: ClientProfile = {
-      ...client,
-      brainMaps,
-    };
-    onUpdateClient(updated);
+    return appendBrainMapForDisplay(map, onAppendBrainMap, (canonical) => {
+      setPersistedBrainMapsByPatient((current) => {
+        const patientMaps = current[client.id] ?? [];
+        return {
+          ...current,
+          [client.id]: [canonical, ...patientMaps.filter((entry) => entry.id !== canonical.id)],
+        };
+      });
+    });
   };
 
   const assignedProtocol = typeof client.assignedProtocol === 'string' && client.assignedProtocol.trim()
     ? client.assignedProtocol
     : null;
-  const brainMaps: unknown[] = Array.isArray(client.brainMaps) ? client.brainMaps : [];
+  const persistedBrainMaps = persistedBrainMapsByPatient[client.id] ?? [];
+  const persistedIds = new Set(persistedBrainMaps.map((map) => map.id));
+  const profileBrainMaps: unknown[] = Array.isArray(client.brainMaps) ? client.brainMaps : [];
+  const brainMaps: unknown[] = [
+    ...persistedBrainMaps,
+    ...profileBrainMaps.filter((value) => {
+      const id = value != null && typeof value === 'object' && 'id' in value ? (value as { id?: unknown }).id : undefined;
+      return typeof id !== 'string' || !persistedIds.has(id);
+    }),
+  ];
   const sessionContentState = getSessionContentState(sessionsState, sessions);
   const psdRows = deriveSessionBandRows(sessions);
   const psdGroups = psdRows.filter((row) => row.bands != null);
@@ -112,6 +124,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const psdAxisMaximum = Math.ceil(psdMaximum / 10) * 10 || 1;
   const psdAxisValues = [0, 0.25, 0.5, 0.75, 1].map((fraction) => psdAxisMaximum * fraction);
   const learningScores = deriveLearningScorePoints(sessions);
+  const learningScoreContentState = getLearningScoreContentState(sessionContentState, learningScores.points.length);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -207,7 +220,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           { id: 'protocol', label: 'Protocol Settings' },
           { id: 'brainmaps', label: `QEEG Records (${brainMaps.length})` },
           { id: 'telemetry', label: 'Live Telemetry' },
-          { id: 'sessions', label: `Session Logs (${sessions.length})` },
+          { id: 'sessions', label: getSessionTabLabel(sessionContentState, sessions.length) },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -332,7 +345,11 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 </div>
               </div>
               
-              {learningScores.points.length === 0 ? (
+              {learningScoreContentState === 'loading' ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading learning scores…</div>
+              ) : learningScoreContentState === 'error' ? (
+                <div role="alert" style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Learning scores are unavailable because sessions could not be loaded.</div>
+              ) : learningScoreContentState === 'empty' ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>No persisted learning-rate scores are available.</div>
               ) : <div className="chart-touch-container" style={{ width: '100%', height: '160px' }}>
                 <svg viewBox="0 0 700 160" style={{ width: '100%', minWidth: '420px', height: '100%' }}>
@@ -438,7 +455,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                       <Brain size={16} color="var(--brand-primary)" />
                       <span style={{ fontWeight: 600, fontSize: '13px' }}>{typeof bm.deviceSource === 'string' && bm.deviceSource.trim() ? bm.deviceSource : 'Source unavailable'}</span>
                     </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Recorded {typeof bm.recordingDate === 'string' && bm.recordingDate ? bm.recordingDate : 'date unavailable'}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Recorded {parsePersistedRecordingDate(bm.recordingDate) ?? 'date unavailable'}</span>
                   </div>
 
                   {assessment.status !== 'complete' && (

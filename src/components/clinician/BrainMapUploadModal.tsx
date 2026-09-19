@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { EMPTY_MANUAL_BRAIN_MAP, submitManualBrainMap, type ManualBrainMapInput, type ManualBrainMapSave } from './brainMapManualEntry';
+import {
+  beginManualBrainMapSubmission,
+  EMPTY_MANUAL_BRAIN_MAP,
+  finishManualBrainMapSubmission,
+  INITIAL_MANUAL_BRAIN_MAP_SUBMISSION_STATE,
+  runManualBrainMapSubmission,
+  type ManualBrainMapInput,
+  type ManualBrainMapSave,
+} from './brainMapManualEntry';
 
 interface BrainMapUploadModalProps {
   patientName: string;
@@ -19,26 +27,23 @@ const Z_FIELDS: Array<{ key: keyof ManualBrainMapInput; label: string }> = [
 
 export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patientName, onSave, onClose }) => {
   const [input, setInput] = useState<ManualBrainMapInput>({ ...EMPTY_MANUAL_BRAIN_MAP });
-  const [errors, setErrors] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [submission, setSubmission] = useState(INITIAL_MANUAL_BRAIN_MAP_SUBMISSION_STATE);
+  const { errors, isSaving } = submission;
 
   const setField = (field: keyof ManualBrainMapInput, value: string) => {
     setInput((current) => ({ ...current, [field]: value }));
-    setErrors([]);
+    setSubmission(INITIAL_MANUAL_BRAIN_MAP_SUBMISSION_STATE);
   };
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isSaving) return;
-    setIsSaving(true);
-    setErrors([]);
-    const result = await submitManualBrainMap(input, onSave);
+    setSubmission(beginManualBrainMapSubmission());
+    const result = await runManualBrainMapSubmission(input, onSave, () => onClose());
     if (!result.ok) {
-      setErrors(result.errors);
-      setIsSaving(false);
+      setSubmission(finishManualBrainMapSubmission(result));
       return;
     }
-    onClose();
   };
 
   return (

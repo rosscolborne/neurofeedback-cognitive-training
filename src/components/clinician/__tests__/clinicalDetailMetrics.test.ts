@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QEEGBrainMap, SessionRecord } from '../../../types';
-import { assessQeegRecord, deriveLearningScorePoints, deriveSessionBandRows, formatSigned, getSessionContentState } from '../clinicalDetailMetrics';
+import { assessQeegRecord, deriveLearningScorePoints, deriveSessionBandRows, formatSigned, getLearningScoreContentState, getSessionContentState, getSessionTabLabel } from '../clinicalDetailMetrics';
 
 const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 's1', patientId: 'p1', patientName: 'Patient', clinicId: 'c1', date: 'Sep 19, 2026', timestamp: 1,
@@ -53,6 +53,15 @@ describe('clinical detail metric boundaries', () => {
     expect(getSessionContentState('error', [])).toBe('error');
     expect(getSessionContentState('ready', [])).toBe('empty');
     expect(getSessionContentState('ready', [session()])).toBe('data');
+    expect(getSessionTabLabel('loading', 0)).toBe('Session Logs (Loading…)');
+    expect(getSessionTabLabel('error', 0)).toBe('Session Logs (Unavailable)');
+    expect(getSessionTabLabel('empty', 0)).toBe('Session Logs (0)');
+    expect(getSessionTabLabel('data', 2)).toBe('Session Logs (2)');
+    expect(getLearningScoreContentState('loading', 0)).toBe('loading');
+    expect(getLearningScoreContentState('error', 0)).toBe('error');
+    expect(getLearningScoreContentState('empty', 0)).toBe('empty');
+    expect(getLearningScoreContentState('data', 0)).toBe('empty');
+    expect(getLearningScoreContentState('data', 1)).toBe('data');
   });
 
   it('assesses complete, partial, and malformed QEEG records while preserving zeros', () => {
@@ -61,6 +70,8 @@ describe('clinical detail metric boundaries', () => {
       zScores: { frontalTheta: 0, centralBeta: -1, occipitalAlpha: 2, temporalDelta: 0, sensorimotorSMR: 1 }, dominantAlphaPeakHz: 10,
     };
     expect(assessQeegRecord(complete)).toMatchObject({ status: 'complete', dominantAlphaPeakHz: 10 });
+    expect(assessQeegRecord({ ...complete, recordingDate: 'Sep 19, 2026' }).status).toBe('complete');
+    expect(assessQeegRecord({ ...complete, recordingDate: 'Jul 28, 2026' }).status).toBe('complete');
     expect(assessQeegRecord({ ...complete, zScores: { frontalTheta: 0 } as QEEGBrainMap['zScores'] }).status).toBe('partial');
     expect(assessQeegRecord({ ...complete, zScores: undefined as unknown as QEEGBrainMap['zScores'], dominantAlphaPeakHz: Number.NaN }).status).toBe('malformed');
     const outOfRange = assessQeegRecord({ ...complete, recordingDate: 'bad-date', zScores: { ...complete.zScores, frontalTheta: 11 }, dominantAlphaPeakHz: 31 });

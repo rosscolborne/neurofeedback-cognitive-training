@@ -1,5 +1,5 @@
 import type { QEEGBrainMap, SessionRecord } from '../../types';
-import { isValidAlphaPeak, isValidRecordingDate, isValidZScore } from './brainMapManualEntry';
+import { isValidAlphaPeak, isValidZScore, parsePersistedRecordingDate } from './brainMapManualEntry';
 
 export const DISPLAY_BANDS = ['delta', 'theta', 'alpha', 'beta'] as const;
 export type DisplayBand = (typeof DISPLAY_BANDS)[number];
@@ -18,6 +18,20 @@ export function getSessionContentState(loadState: SessionLoadState, sessions: Se
   if (loadState === 'loading') return 'loading';
   if (loadState === 'error') return 'error';
   return sessions.length > 0 ? 'data' : 'empty';
+}
+
+export function getSessionTabLabel(contentState: SessionContentState, count: number): string {
+  if (contentState === 'loading') return 'Session Logs (Loading…)';
+  if (contentState === 'error') return 'Session Logs (Unavailable)';
+  return `Session Logs (${count})`;
+}
+
+export function getLearningScoreContentState(
+  sessionState: SessionContentState,
+  pointCount: number,
+): SessionContentState {
+  if (sessionState === 'loading' || sessionState === 'error') return sessionState;
+  return pointCount > 0 ? 'data' : 'empty';
 }
 
 const isFiniteNonNegative = (value: unknown): value is number =>
@@ -134,7 +148,7 @@ export function assessQeegRecord(value: unknown): QeegRecordAssessment {
     : null;
   if (dominantAlphaPeakHz == null) issues.push('dominant alpha peak is missing, invalid, or out of range');
   if (typeof map.deviceSource !== 'string' || !map.deviceSource.trim()) issues.push('acquisition source is missing');
-  if (!isValidRecordingDate(map.recordingDate)) issues.push('recording date is missing or invalid');
+  if (parsePersistedRecordingDate(map.recordingDate) == null) issues.push('recording date is missing or invalid');
 
   const presentCount = Object.keys(zScores).length + (dominantAlphaPeakHz == null ? 0 : 1);
   return {
