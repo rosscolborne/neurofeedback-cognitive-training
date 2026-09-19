@@ -300,12 +300,13 @@ independent workstream immediately when a slot opens.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
 - **Final commit:** `1a632bf62bf88536023ad8687444092c69703d0e`,
-  `fb2e48a4c221e7d8705170e1f047cb7f7afb82c9`
+  `fb2e48a4c221e7d8705170e1f047cb7f7afb82c9`,
+  `fdb5e84c7d4a4b579abbddd6be7089e04d7361f3`
 - **Owned files:** `src/components/patient/HomeScreen.tsx`,
   `src/components/patient/ProgressHistory.tsx`, a new isolated patient-metrics
   helper and its tests. Do not edit shared storage/types without approval.
@@ -332,9 +333,10 @@ independent workstream immediately when a slot opens.
   errors, an undefined trend rule, loading/single-point states, and component-state
   coverage. Owned fixes were completed with 8/8 focused and 115/115 full tests;
   re-review cleared the original findings but found session evidence still rendered
-  as negative/empty during loading and error states. That owned display-state fix is
-  in progress. The shared read-error contract remains reserved for the orchestrator
-  and must reject failures while successful empty queries resolve `[]`.
+  as negative/empty during loading and error states. The final owned display-state
+  fix completed with 13 focused and 120 full tests passing; re-review is pending.
+  The shared read-error contract remains reserved for the orchestrator and must
+  reject failures while successful empty queries resolve `[]`.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
@@ -603,6 +605,8 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** C1 completed owned review fixes at `ba9369a` and `1a36f59`, with
   121/121 full tests passing, and entered independent re-review. Its shared
   persistence/error/provenance dependencies remain reserved for central integration.
+- **2026-09-19:** P1 completed the remaining evidence-state fix at `fdb5e84`, with
+  13/13 focused and 120/120 full tests passing, and re-entered independent review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
