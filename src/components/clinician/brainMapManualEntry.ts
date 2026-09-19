@@ -1,4 +1,5 @@
 import type { QEEGBrainMap } from '../../types';
+import { timestampToMillis } from '../../services/dataMappers';
 
 export interface ManualBrainMapInput {
   recordingDate: string;
@@ -53,6 +54,15 @@ export const Z_SCORE_MAX = 10;
 export const ALPHA_PEAK_MIN_EXCLUSIVE = 0;
 export const ALPHA_PEAK_MAX = 30;
 
+export function createManualBrainMapRequestId(): string {
+  if (globalThis.crypto?.randomUUID) return `qeeg-${globalThis.crypto.randomUUID()}`;
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+    return `qeeg-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`;
+  }
+  return `qeeg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export const isValidZScore = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= Z_SCORE_MIN && value <= Z_SCORE_MAX;
 
@@ -83,6 +93,25 @@ export function parsePersistedRecordingDate(value: unknown): string | null {
     && parsed.getUTCMonth() === monthIndex
     && parsed.getUTCDate() === day;
   return isExactCalendarDate ? trimmed : null;
+}
+
+export function comparePersistedBrainMaps(a: unknown, b: unknown): number {
+  const left = a != null && typeof a === 'object' ? a as Partial<QEEGBrainMap> : {};
+  const right = b != null && typeof b === 'object' ? b as Partial<QEEGBrainMap> : {};
+  const timeFor = (map: Partial<QEEGBrainMap>) => {
+    const created = timestampToMillis(map.createdAt);
+    if (created != null) return created;
+    const uploaded = typeof map.uploadDate === 'string' ? Date.parse(map.uploadDate) : Number.NaN;
+    if (Number.isFinite(uploaded)) return uploaded;
+    const recorded = parsePersistedRecordingDate(map.recordingDate);
+    const parsedRecorded = recorded == null ? Number.NaN : Date.parse(recorded);
+    return Number.isFinite(parsedRecorded) ? parsedRecorded : 0;
+  };
+  const byTime = timeFor(right) - timeFor(left);
+  if (byTime !== 0) return byTime;
+  const leftId = typeof left.id === 'string' ? left.id : '';
+  const rightId = typeof right.id === 'string' ? right.id : '';
+  return leftId.localeCompare(rightId);
 }
 
 const Z_SCORE_FIELDS = [
@@ -149,8 +178,10 @@ export async function runManualBrainMapSubmission(
   input: ManualBrainMapInput,
   onSave: ManualBrainMapSave,
   onSuccess: (map: QEEGBrainMap) => void,
+  requestId?: string,
+  requestCreatedAt = new Date(),
 ): Promise<SubmitManualBrainMapResult> {
-  const result = await submitManualBrainMap(input, onSave);
+  const result = await submitManualBrainMap(input, onSave, requestCreatedAt, requestId);
   if (result.ok) onSuccess(result.map);
   return result;
 }

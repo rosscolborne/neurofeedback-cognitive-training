@@ -28,6 +28,7 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  Timestamp,
   where,
 } from 'firebase/firestore';
 import {
@@ -39,6 +40,7 @@ import {
   readSessionRecord,
   removeUndefined,
   timestampToMillis,
+  timestampToIso,
 } from './dataMappers';
 
 const STORAGE_KEYS = {
@@ -67,6 +69,76 @@ const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 const INVITATION_CODE_PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 const getInvitationClaimRef = (clinicianId: string, normalizedEmail: string) =>
   doc(db, 'patientInvitationClaims', clinicianId, 'emails', normalizedEmail);
+
+const QEEG_Z_SCORE_KEYS = ['centralBeta', 'frontalTheta', 'occipitalAlpha', 'sensorimotorSMR', 'temporalDelta'] as const;
+
+const normalizeQeegInput = (input: QEEGBrainMap) => {
+  const keys = Object.keys(input.zScores ?? {}).sort();
+  const parsedRecordingDate = /^\d{4}-\d{2}-\d{2}$/.test(input.recordingDate)
+    ? new Date(`${input.recordingDate}T00:00:00.000Z`)
+    : new Date(Number.NaN);
+  const uploadMillis = Date.parse(input.uploadDate);
+  const validRecordingDate = Number.isFinite(parsedRecordingDate.getTime()) &&
+    parsedRecordingDate.toISOString().slice(0, 10) === input.recordingDate;
+  const zScores = QEEG_Z_SCORE_KEYS.map((key) => input.zScores?.[key]);
+  if (
+    keys.join('|') !== [...QEEG_Z_SCORE_KEYS].sort().join('|') ||
+    zScores.some((value) => !Number.isFinite(value) || value < -10 || value > 10) ||
+    !Number.isFinite(input.dominantAlphaPeakHz) ||
+    input.dominantAlphaPeakHz <= 0 ||
+    input.dominantAlphaPeakHz > 30 ||
+    !validRecordingDate ||
+    !Number.isFinite(uploadMillis) ||
+    input.deviceSource.trim().length < 1 ||
+    input.deviceSource.trim().length > 200 ||
+    input.technicianNotes.trim().length > 5000
+  ) {
+    throw new Error('QEEG record contains invalid clinical values');
+  }
+  return {
+    id: input.id,
+    uploadDate: new Date(uploadMillis).toISOString(),
+    fileName: '',
+    recordingDate: input.recordingDate,
+    deviceSource: input.deviceSource.trim(),
+    technicianNotes: input.technicianNotes.trim(),
+    zScores: {
+      frontalTheta: input.zScores.frontalTheta,
+      centralBeta: input.zScores.centralBeta,
+      occipitalAlpha: input.zScores.occipitalAlpha,
+      temporalDelta: input.zScores.temporalDelta,
+      sensorimotorSMR: input.zScores.sensorimotorSMR,
+    },
+    dominantAlphaPeakHz: input.dominantAlphaPeakHz,
+  };
+};
+
+const readCanonicalBrainMap = (data: unknown, id: string): QEEGBrainMap => {
+  const raw = data as Record<string, unknown>;
+  const recordingDate = timestampToIso(raw.recordingDate as QEEGBrainMap['createdAt'])?.slice(0, 10) ?? '';
+  const uploadDate = timestampToIso(raw.uploadDate as QEEGBrainMap['createdAt']) ??
+    timestampToIso(raw.createdAt as QEEGBrainMap['createdAt']) ?? '';
+  return { ...(raw as unknown as QEEGBrainMap), id, recordingDate, uploadDate };
+};
+
+const qeegPayloadMatches = (saved: QEEGBrainMap, expected: ReturnType<typeof normalizeQeegInput>) =>
+  JSON.stringify({
+    id: saved.id,
+    fileName: saved.fileName,
+    recordingDate: saved.recordingDate,
+    deviceSource: saved.deviceSource,
+    technicianNotes: saved.technicianNotes,
+    zScores: saved.zScores,
+    dominantAlphaPeakHz: saved.dominantAlphaPeakHz,
+  }) === JSON.stringify({
+    id: expected.id,
+    fileName: expected.fileName,
+    recordingDate: expected.recordingDate,
+    deviceSource: expected.deviceSource,
+    technicianNotes: expected.technicianNotes,
+    zScores: expected.zScores,
+    dominantAlphaPeakHz: expected.dominantAlphaPeakHz,
+  });
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {
@@ -993,13 +1065,13 @@ class StorageEngine {
 
     const snapshot = await getDocs(collection(db, 'clients', patientId, 'brainMaps'));
     return snapshot.docs
-      .map((entry) => ({ ...(entry.data() as QEEGBrainMap), id: entry.id }))
+      .map((entry) => readCanonicalBrainMap(entry.data(), entry.id))
       .sort((a, b) => {
         const bUpload = Date.parse(b.uploadDate);
         const aUpload = Date.parse(a.uploadDate);
         const bTime = timestampToMillis(b.createdAt) ?? (Number.isFinite(bUpload) ? bUpload : 0);
         const aTime = timestampToMillis(a.createdAt) ?? (Number.isFinite(aUpload) ? aUpload : 0);
-        return bTime - aTime;
+        return bTime - aTime || a.id.localeCompare(b.id);
       });
   }
 
@@ -1008,22 +1080,10 @@ class StorageEngine {
     if (!currentUser) throw new Error('Sign in as the managing clinician to save QEEG records');
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(input.id)) throw new Error('QEEG record identifier is invalid');
 
-    const zScores = Object.values(input.zScores ?? {});
-    if (
-      zScores.length !== 5 ||
-      zScores.some((value) => !Number.isFinite(value) || value < -10 || value > 10) ||
-      !Number.isFinite(input.dominantAlphaPeakHz) ||
-      input.dominantAlphaPeakHz <= 0 ||
-      input.dominantAlphaPeakHz > 30 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(input.recordingDate) ||
-      !input.deviceSource.trim()
-    ) {
-      throw new Error('QEEG record contains invalid clinical values');
-    }
+    const normalized = normalizeQeegInput(input);
 
     const canonicalBase: QEEGBrainMap = {
-      ...input,
-      id: input.id,
+      ...normalized,
       createdBy: currentUser.uid,
       schemaVersion: 1,
     };
@@ -1031,11 +1091,16 @@ class StorageEngine {
     if (patientId.startsWith('demo-') || currentUser.uid === 'demo-clinician') {
       const demoIndex = this.demoClients.findIndex((client) => client.id === patientId);
       if (demoIndex < 0) throw new Error('Demo patient was not found');
+      const collision = (this.demoClients[demoIndex].brainMaps ?? []).find((entry) => entry.id === input.id);
+      if (collision) {
+        if (collision.createdBy === currentUser.uid && qeegPayloadMatches(collision, normalized)) return collision;
+        throw new Error('QEEG record identifier is already in use');
+      }
       const canonical = { ...canonicalBase, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       const existing = this.demoClients[demoIndex].brainMaps ?? [];
       this.demoClients[demoIndex] = {
         ...this.demoClients[demoIndex],
-        brainMaps: [canonical, ...existing.filter((entry) => entry.id !== canonical.id)],
+        brainMaps: [canonical, ...existing],
       };
       return canonical;
     }
@@ -1053,12 +1118,16 @@ class StorageEngine {
         throw new Error('Only the linked clinician can add QEEG records');
       }
       if (mapSnapshot.exists()) {
-        const saved = { ...(mapSnapshot.data() as QEEGBrainMap), id: mapSnapshot.id };
-        if (saved.createdBy !== currentUser.uid) throw new Error('QEEG record identifier is already in use');
+        const saved = readCanonicalBrainMap(mapSnapshot.data(), mapSnapshot.id);
+        if (saved.createdBy !== currentUser.uid || !qeegPayloadMatches(saved, normalized)) {
+          throw new Error('QEEG record identifier is already in use');
+        }
         return saved;
       }
       transaction.set(mapRef, {
         ...removeUndefined(canonicalBase),
+        uploadDate: serverTimestamp(),
+        recordingDate: Timestamp.fromDate(new Date(`${normalized.recordingDate}T00:00:00.000Z`)),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -1068,7 +1137,7 @@ class StorageEngine {
 
     const persisted = await getDoc(mapRef);
     if (!persisted.exists()) throw new Error('QEEG record was not available after saving');
-    return { ...(persisted.data() as QEEGBrainMap), id: persisted.id };
+    return readCanonicalBrainMap(persisted.data(), persisted.id);
   }
 
   public async saveClients(clients: ClientProfile[]): Promise<void> {

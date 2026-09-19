@@ -6,7 +6,7 @@ import { getProtocolAssignmentAlias } from '../../services/clinicalProtocolTempl
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
-import { appendBrainMapForDisplay, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
+import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
 import {
   assessQeegRecord,
   deriveLearningScorePoints,
@@ -50,6 +50,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const [showBrainMapUpload, setShowBrainMapUpload] = useState(false);
   const [persistedBrainMapsByPatient, setPersistedBrainMapsByPatient] = useState<Record<string, QEEGBrainMap[]>>({});
   const [brainMapLoadResult, setBrainMapLoadResult] = useState<{ clientId: string; state: 'ready' | 'error' } | null>(null);
+  const [brainMapReloadToken, setBrainMapReloadToken] = useState(0);
 
   const [sessionResult, setSessionResult] = useState<{
     clientId: string;
@@ -90,7 +91,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [client.id]);
+  }, [client.id, brainMapReloadToken]);
 
   const sessions = sessionResult?.clientId === client.id ? sessionResult.sessions : [];
   const sessionsState = sessionResult?.clientId === client.id ? sessionResult.state : 'loading';
@@ -136,7 +137,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       const id = value != null && typeof value === 'object' && 'id' in value ? (value as { id?: unknown }).id : undefined;
       return typeof id !== 'string' || !persistedIds.has(id);
     }),
-  ];
+  ].sort(comparePersistedBrainMaps);
   const sessionContentState = getSessionContentState(sessionsState, sessions);
   const psdRows = deriveSessionBandRows(sessions);
   const psdGroups = psdRows.filter((row) => row.bands != null);
@@ -162,6 +163,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setShowBrainMapUpload(true)}
+            disabled={brainMapLoadState !== 'ready'}
             className="btn btn-ghost"
             style={{ border: '1px solid var(--border-default)', fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
@@ -460,7 +462,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <div role="status" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Loading saved QEEG records…</div>
           )}
           {brainMapLoadState === 'error' && (
-            <div role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)' }}>Saved QEEG records are unavailable. Reopen this patient to retry before adding a record.</div>
+            <div role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span>Saved QEEG records are unavailable. Retry before adding a record.</span>
+              <button type="button" className="btn btn-ghost" onClick={() => setBrainMapReloadToken((value) => value + 1)}>Retry</button>
+            </div>
           )}
 
           {brainMaps.length > 0 ? (

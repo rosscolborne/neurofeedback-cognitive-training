@@ -3,6 +3,8 @@ import {
   appendBrainMapForDisplay,
   beginManualBrainMapSubmission,
   buildManualBrainMap,
+  comparePersistedBrainMaps,
+  createManualBrainMapRequestId,
   EMPTY_MANUAL_BRAIN_MAP,
   parsePersistedRecordingDate,
   persistAndAppendBrainMap,
@@ -162,5 +164,37 @@ describe('manual QEEG entry validation and persistence shape', () => {
     ]);
     expect(close).not.toHaveBeenCalled();
     expect(showPersisted).not.toHaveBeenCalled();
+  });
+
+  it('keeps one cryptographic request identity and timestamp across a failed retry', async () => {
+    const requestId = createManualBrainMapRequestId();
+    const requestCreatedAt = new Date('2026-09-19T12:00:00.000Z');
+    const seen: Array<{ id: string; uploadDate: string }> = [];
+    let attempt = 0;
+    const save = vi.fn(async (map) => {
+      seen.push({ id: map.id, uploadDate: map.uploadDate });
+      attempt += 1;
+      if (attempt === 1) throw new Error('read after commit failed');
+      return map;
+    });
+
+    await expect(runManualBrainMapSubmission(validInput, save, vi.fn(), requestId, requestCreatedAt))
+      .resolves.toMatchObject({ ok: false });
+    await expect(runManualBrainMapSubmission(validInput, save, vi.fn(), requestId, requestCreatedAt))
+      .resolves.toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      { id: requestId, uploadDate: requestCreatedAt.toISOString() },
+      { id: requestId, uploadDate: requestCreatedAt.toISOString() },
+    ]);
+  });
+
+  it('orders mixed canonical and legacy records deterministically', () => {
+    const records = [
+      { id: 'legacy-b', uploadDate: '', recordingDate: 'Sep 19, 2026' },
+      { id: 'canonical', uploadDate: '2026-09-20T00:00:00.000Z', recordingDate: '2026-09-20' },
+      { id: 'legacy-a', uploadDate: '', recordingDate: 'Sep 19, 2026' },
+    ];
+    expect(records.sort(comparePersistedBrainMaps).map((record) => record.id))
+      .toEqual(['canonical', 'legacy-a', 'legacy-b']);
   });
 });

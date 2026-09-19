@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   beginManualBrainMapSubmission,
+  createManualBrainMapRequestId,
   EMPTY_MANUAL_BRAIN_MAP,
   finishManualBrainMapSubmission,
   INITIAL_MANUAL_BRAIN_MAP_SUBMISSION_STATE,
@@ -27,6 +28,8 @@ const Z_FIELDS: Array<{ key: keyof ManualBrainMapInput; label: string }> = [
 
 export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patientName, onSave, onClose }) => {
   const [input, setInput] = useState<ManualBrainMapInput>({ ...EMPTY_MANUAL_BRAIN_MAP });
+  const requestIdRef = useRef(createManualBrainMapRequestId());
+  const requestCreatedAtRef = useRef(new Date());
   const [submission, setSubmission] = useState(INITIAL_MANUAL_BRAIN_MAP_SUBMISSION_STATE);
   const { errors, isSaving } = submission;
 
@@ -39,7 +42,13 @@ export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patien
     event.preventDefault();
     if (isSaving) return;
     setSubmission(beginManualBrainMapSubmission());
-    const result = await runManualBrainMapSubmission(input, onSave, () => onClose());
+    const result = await runManualBrainMapSubmission(
+      input,
+      onSave,
+      () => onClose(),
+      requestIdRef.current,
+      requestCreatedAtRef.current,
+    );
     if (!result.ok) {
       setSubmission(finishManualBrainMapSubmission(result));
       return;

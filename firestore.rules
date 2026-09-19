@@ -278,7 +278,54 @@ service cloud.firestore {
         );
         allow create: if isClinician() &&
           isPatientClinician(clientId) &&
+          request.resource.data.keys().hasOnly([
+            'id', 'uploadDate', 'fileName', 'recordingDate', 'deviceSource',
+            'technicianNotes', 'zScores', 'dominantAlphaPeakHz', 'createdBy',
+            'createdAt', 'updatedAt', 'schemaVersion'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'id', 'uploadDate', 'fileName', 'recordingDate', 'deviceSource',
+            'technicianNotes', 'zScores', 'dominantAlphaPeakHz', 'createdBy',
+            'createdAt', 'updatedAt', 'schemaVersion'
+          ]) &&
           request.resource.data.id == brainMapId &&
+          brainMapId.matches('^[A-Za-z0-9_-]{1,128}$') &&
+          request.resource.data.uploadDate == request.time &&
+          request.resource.data.fileName == '' &&
+          request.resource.data.recordingDate is timestamp &&
+          request.resource.data.recordingDate <= request.time &&
+          request.resource.data.deviceSource is string &&
+          request.resource.data.deviceSource.size() > 0 &&
+          request.resource.data.deviceSource.size() <= 200 &&
+          request.resource.data.technicianNotes is string &&
+          request.resource.data.technicianNotes.size() <= 5000 &&
+          request.resource.data.zScores is map &&
+          request.resource.data.zScores.keys().hasOnly([
+            'frontalTheta', 'centralBeta', 'occipitalAlpha',
+            'temporalDelta', 'sensorimotorSMR'
+          ]) &&
+          request.resource.data.zScores.keys().hasAll([
+            'frontalTheta', 'centralBeta', 'occipitalAlpha',
+            'temporalDelta', 'sensorimotorSMR'
+          ]) &&
+          request.resource.data.zScores.frontalTheta is number &&
+          request.resource.data.zScores.frontalTheta >= -10 &&
+          request.resource.data.zScores.frontalTheta <= 10 &&
+          request.resource.data.zScores.centralBeta is number &&
+          request.resource.data.zScores.centralBeta >= -10 &&
+          request.resource.data.zScores.centralBeta <= 10 &&
+          request.resource.data.zScores.occipitalAlpha is number &&
+          request.resource.data.zScores.occipitalAlpha >= -10 &&
+          request.resource.data.zScores.occipitalAlpha <= 10 &&
+          request.resource.data.zScores.temporalDelta is number &&
+          request.resource.data.zScores.temporalDelta >= -10 &&
+          request.resource.data.zScores.temporalDelta <= 10 &&
+          request.resource.data.zScores.sensorimotorSMR is number &&
+          request.resource.data.zScores.sensorimotorSMR >= -10 &&
+          request.resource.data.zScores.sensorimotorSMR <= 10 &&
+          request.resource.data.dominantAlphaPeakHz is number &&
+          request.resource.data.dominantAlphaPeakHz > 0 &&
+          request.resource.data.dominantAlphaPeakHz <= 30 &&
           request.resource.data.createdBy == request.auth.uid &&
           request.resource.data.createdAt == request.time &&
           request.resource.data.updatedAt == request.time &&

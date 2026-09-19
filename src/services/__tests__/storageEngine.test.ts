@@ -25,6 +25,7 @@ vi.mock('firebase/firestore', () => ({
   }),
   where: (field: string, op: string, value: string) => ({ field, op, value }),
   query: (source: unknown, ...constraints: unknown[]) => ({ source, constraints }),
+  Timestamp: { fromDate: (date: Date) => ({ __timestamp: date.toISOString() }) },
   ...firestore,
 }));
 
@@ -137,8 +138,80 @@ describe('role-aware session repository', () => {
         createdBy: 'clinician-1',
         createdAt: { __serverTimestamp: true },
         updatedAt: { __serverTimestamp: true },
+        recordingDate: { __timestamp: '2026-09-18T00:00:00.000Z' },
       })
     );
+  });
+
+  it('rejects malformed QEEG keys before opening a transaction', async () => {
+    const malformed = {
+      id: 'qeeg-request-1', uploadDate: '2026-09-19T12:00:00.000Z', fileName: '',
+      recordingDate: '2026-02-30', deviceSource: 'Validated source', technicianNotes: '',
+      zScores: { frontalTheta: 0, centralBeta: 1, occipitalAlpha: -1, temporalDelta: 2, wrongBand: 0 },
+      dominantAlphaPeakHz: 10,
+    } as unknown as import('../../types').QEEGBrainMap;
+    await expect(storageEngine.appendBrainMap('patient-1', malformed)).rejects.toThrow('invalid clinical values');
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects a same-id QEEG collision when the persisted payload differs', async () => {
+    const map = {
+      id: 'qeeg-request-1', uploadDate: '2026-09-19T12:00:00.000Z', fileName: '',
+      recordingDate: '2026-09-18', deviceSource: 'Validated source', technicianNotes: '',
+      zScores: { frontalTheta: 0, centralBeta: 1, occipitalAlpha: -1, temporalDelta: 2, sensorimotorSMR: 0 },
+      dominantAlphaPeakHz: 10,
+    };
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }) })
+          .mockResolvedValueOnce({
+            id: map.id, exists: () => true,
+            data: () => ({ ...map, dominantAlphaPeakHz: 11, createdBy: 'clinician-1' }),
+          }),
+        set: vi.fn(),
+      })
+    );
+    await expect(storageEngine.appendBrainMap('patient-1', map)).rejects.toThrow('identifier is already in use');
+  });
+
+  it('returns the existing QEEG record for an idempotent same-payload retry', async () => {
+    const map = {
+      id: 'qeeg-request-1', uploadDate: '2026-09-19T12:00:00.000Z', fileName: '',
+      recordingDate: '2026-09-18', deviceSource: 'Validated source', technicianNotes: 'same',
+      zScores: { frontalTheta: 0, centralBeta: 1, occipitalAlpha: -1, temporalDelta: 2, sensorimotorSMR: 0 },
+      dominantAlphaPeakHz: 10,
+    };
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }) })
+          .mockResolvedValueOnce({
+            id: map.id, exists: () => true,
+            data: () => ({ ...map, uploadDate: '2026-09-19T12:00:01.000Z', createdBy: 'clinician-1' }),
+          }),
+        set,
+      })
+    );
+    await expect(storageEngine.appendBrainMap('patient-1', map)).resolves.toMatchObject({ id: map.id, technicianNotes: 'same' });
+    expect(set).not.toHaveBeenCalled();
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+  });
+
+  it('propagates canonical QEEG read failures and orders equal timestamps by id', async () => {
+    firestore.getDocs.mockResolvedValueOnce({
+      docs: [
+        { id: 'b', data: () => ({ uploadDate: 100, recordingDate: 100 }) },
+        { id: 'a', data: () => ({ uploadDate: 100, recordingDate: 100 }) },
+      ],
+    });
+    await expect(storageEngine.getBrainMaps('patient-1')).resolves.toEqual([
+      expect.objectContaining({ id: 'a' }),
+      expect.objectContaining({ id: 'b' }),
+    ]);
+    firestore.getDocs.mockRejectedValueOnce(new Error('offline'));
+    await expect(storageEngine.getBrainMaps('patient-1')).rejects.toThrow('offline');
   });
 
   it('deduplicates direct clinician sessions and owned legacy patient sessions', async () => {
