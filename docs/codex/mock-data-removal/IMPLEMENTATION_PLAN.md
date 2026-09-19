@@ -433,7 +433,7 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
@@ -459,7 +459,11 @@ independent workstream immediately when a slot opens.
   and unsupported compliance claims are implemented. Focused tests passed 12/12,
   full tests passed 151/151, focused lint was clean, and the build passed. Fresh
   onboarding rules and app-level brand hydration are centrally reserved integration
-  requests; independent review is pending.
+  requests. Independent review also required stricter role/ownership rules, remote
+  branding validation/contrast safety, elimination of new global cache writes,
+  primary-credential selection, atomic Firestore writes, server-owned branding
+  creation metadata, complete onboarding detection, and stronger state tests.
+  Owned fixes are pending; shared rules/app/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
@@ -506,7 +510,7 @@ independent workstream immediately when a slot opens.
 
 ### T1 — Protocol Runtime Consumption
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
@@ -535,7 +539,10 @@ independent workstream immediately when a slot opens.
   mapping/notes remain unsupported runtime controls. Average-band provenance is
   written only for complete consistently sourced non-Demo measurements. Focused
   tests passed 9/9, full tests passed 171/171, and the production build passed.
-  Independent review is pending.
+  Independent review required canonical/custom semantic parity, honest aggregate
+  frequency support, canonical adaptive-step consumption, visible unsupported-field
+  disclosure, non-invented bounds/copy, complete measurement provenance, the
+  duration off-by-one fix, and expanded tests. Fixes are in progress.
 
 ### D1 — Production/Demo Data Separation
 
@@ -699,6 +706,14 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** S1 completed at `0fbc281`, with 12/12 focused and 151/151 full
   tests passing, and entered independent review. Fresh-clinician rules and app-level
   remote-brand hydration were retained as central integration requests.
+- **2026-09-19:** Independent review returned S1 and T1 to IN PROGRESS with
+  correctness/security fixes assigned to their original agents. Shared S1 rules,
+  app hydration, and patient-to-clinic propagation remain centrally reserved.
+- **2026-09-19:** Shared-contract review required stronger QEEG schema enforcement,
+  retry/collision semantics, load guards/retry, deterministic ordering, expanded
+  tests, and C2 integration before approval. QEEG fixes landed in `928af1a`; focused
+  tests passed 87/87 and the build passed. Independent re-review and C2 integration
+  remain pending.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
