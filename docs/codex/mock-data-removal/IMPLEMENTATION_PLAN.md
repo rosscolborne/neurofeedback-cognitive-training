@@ -260,11 +260,11 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
-- **Final commit:** pending
+- **Final commit:** `7dc01823cdee79e127fe18a0f70a8804d20da385`
 - **Owned files:** relationship/invitation sections of `firestore.rules`,
   `src/services/storageEngine.ts`, `src/services/dataMappers.ts`, and
   `src/types/index.ts`; `src/components/clinician/ClientRosterView.tsx`;
@@ -285,6 +285,15 @@ independent workstream immediately when a slot opens.
   UI tests for all code states; manual two-patient/two-clinician browser test.
 - **Caveat/report:** document whether email matching is case-normalized and how
   invitations for not-yet-created accounts are resolved.
+- **Implementation report:** atomic/idempotent invitation acceptance, persisted
+  relationship routing, canonical/legacy roster reads, ownership rules, and
+  actionable enrollment states implemented. Emails are stored/compared normalized
+  in the repository; rules rely on the Firebase token email matching that stored
+  form. Pre-account invitations resolve after authenticated patient profile
+  creation. Focused tests passed (47/47), full Vitest passed (119/119), and the
+  production build passed. Rules emulator execution is pending because Java is
+  unavailable locally; static rules contract tests passed. Independent review is
+  pending.
 
 ### P1 — Patient Progress Authenticity
 
@@ -292,7 +301,7 @@ independent workstream immediately when a slot opens.
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
-- **Final commit:** `1a632bfbf49f7a853c0773572802420c5e41b8fe`
+- **Final commit:** `1a632bf62bf88536023ad8687444092c69703d0e`
 - **Owned files:** `src/components/patient/HomeScreen.tsx`,
   `src/components/patient/ProgressHistory.tsx`, a new isolated patient-metrics
   helper and its tests. Do not edit shared storage/types without approval.
@@ -557,6 +566,10 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** P1 completed at `1a632bf` and C1 completed at `c2c4fa4` plus
   `6a6a5e6`; both remained in retained clean worktrees and entered independent
   review. No shared-contract changes were requested by either workstream.
+- **2026-09-19:** Corrected a non-material P1 full-hash transcription error after
+  verifying the retained clean branch at `1a632bf62bf88536023ad8687444092c69703d0e`.
+  R1 completed at `7dc0182` and entered independent review; rules emulator execution
+  remains pending because Java is unavailable locally.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
