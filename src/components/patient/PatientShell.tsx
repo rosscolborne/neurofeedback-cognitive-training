@@ -441,8 +441,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div><strong>Goal:</strong> {client.condition}</div>
-                {protocolAlias && <div><strong>Plan Alias:</strong> {protocolAlias}</div>}
-                <div><strong>Evidence-Based Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
+                {protocolAlias && <div><strong>Name:</strong> {protocolAlias}</div>}
+                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
                 <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek} sessions / week</div>
                 <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
               </div>

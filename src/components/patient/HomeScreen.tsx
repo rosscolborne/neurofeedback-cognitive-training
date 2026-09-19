@@ -109,7 +109,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {getGreeting()}{client.name ? ',' : '.'}<br />{client.name ? `${client.name.split(' ')[0]}.` : ''}
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {protocolAlias && <>Plan: <strong style={{ color: 'var(--text-primary)' }}>{protocolAlias}</strong> · </>}
+          {protocolAlias && <>Name: <strong style={{ color: 'var(--text-primary)' }}>{protocolAlias}</strong> · </>}
           Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
         </p>
       </div>
