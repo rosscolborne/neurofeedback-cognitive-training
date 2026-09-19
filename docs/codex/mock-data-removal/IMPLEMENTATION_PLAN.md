@@ -433,11 +433,11 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
-- **Final commit:** pending
+- **Final commit:** `a31d963e254bc076ef9ae52149f483a57e77b011`
 - **Owned files:** `src/components/clinician/ClinicSettingsView.tsx`,
   `src/components/brand/ClinicCustomizerModal.tsx`, `src/services/brandEngine.ts`,
   new dedicated clinic/practitioner repository/helper/tests. `App.tsx` wiring is
@@ -453,6 +453,13 @@ independent workstream immediately when a slot opens.
   cannot read them; hardware is never called ready from static copy alone.
 - **Tests:** repository tenant/rules tests; local-settings migration; component
   loading/empty/save/error states; manual two-clinic persistence/isolation test.
+- **Implementation report:** authenticated tenant-scoped clinic/practitioner and
+  branding repositories, honest UI states, scoped legacy migration, input/logo
+  validation, capability-only hardware copy, and removal of production demo-reset
+  and unsupported compliance claims are implemented. Focused tests passed 12/12,
+  full tests passed 151/151, focused lint was clean, and the build passed. Fresh
+  onboarding rules and app-level brand hydration are centrally reserved integration
+  requests; independent review is pending.
 
 ### M1 — Production Messaging
 
@@ -503,7 +510,7 @@ independent workstream immediately when a slot opens.
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
-- **Final commit:** `8963f02a04e15943ef27df7fb884776596e3a6d8`
+- **Final commit:** `8963f02d382b4fee2c951207b3cb52ccaef69f5c`
 - **Owned files:** protocol-consumption portions of
   `src/components/patient/SessionRunner.tsx`, `src/services/adaptiveEngine.ts`, and
   `src/services/eegEngine.ts`; focused tests. Do not change the catalog or shared
@@ -689,6 +696,9 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** T1 completed at `8963f02`, with 9/9 focused and 171/171 full
   tests passing, and entered independent review. It uses the existing session
   provenance contract, so no shared type change was requested.
+- **2026-09-19:** S1 completed at `a31d963`, with 12/12 focused and 151/151 full
+  tests passing, and entered independent review. Fresh-clinician rules and app-level
+  remote-brand hydration were retained as central integration requests.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
