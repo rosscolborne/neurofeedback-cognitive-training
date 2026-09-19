@@ -260,11 +260,12 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
-- **Final commit:** `7dc01823cdee79e127fe18a0f70a8804d20da385`
+- **Final commit:** `7dc01823cdee79e127fe18a0f70a8804d20da385`,
+  `b78fa36452ba25732059e382fc50b1991967241b`
 - **Owned files:** relationship/invitation sections of `firestore.rules`,
   `src/services/storageEngine.ts`, `src/services/dataMappers.ts`, and
   `src/types/index.ts`; `src/components/clinician/ClientRosterView.tsx`;
@@ -295,12 +296,12 @@ independent workstream immediately when a slot opens.
   unavailable locally; static rules contract tests passed. Independent review
   required security fixes for canonical/legacy ownership precedence, tenant-field
   immutability, direct self-linking, email normalization, audit/deletion bypasses,
-  concurrent duplicate invitations, and visible lifecycle errors. Fixes are in
-  progress.
+  concurrent duplicate invitations, and visible lifecycle errors. Fixes completed
+  with 55/55 focused and 127/127 full tests passing; re-review is pending.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
@@ -334,13 +335,15 @@ independent workstream immediately when a slot opens.
   coverage. Owned fixes were completed with 8/8 focused and 115/115 full tests;
   re-review cleared the original findings but found session evidence still rendered
   as negative/empty during loading and error states. The final owned display-state
-  fix completed with 13 focused and 120 full tests passing; re-review is pending.
+  fix completed with 13 focused and 120 full tests passing; re-review passed with a
+  low finding that CSV export must share the resolved-state boundary. That final
+  owned polish fix is in progress.
   The shared read-error contract remains reserved for the orchestrator and must
   reject failures while successful empty queries resolve `[]`.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
@@ -372,7 +375,9 @@ independent workstream immediately when a slot opens.
   coverage. Owned fixes completed with 14 focused and 121 full tests passing;
   re-review is pending. Dedicated brain-map persistence, query error propagation,
   and session measurement provenance remain centrally reserved integration
-  dependencies.
+  dependencies. Re-review required further owned fixes to eliminate a redundant
+  stale profile write, gate learning/count evidence states, tolerate legacy dates,
+  and strengthen handler/display tests; those fixes are in progress.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -607,6 +612,10 @@ independent workstream immediately when a slot opens.
   persistence/error/provenance dependencies remain reserved for central integration.
 - **2026-09-19:** P1 completed the remaining evidence-state fix at `fdb5e84`, with
   13/13 focused and 120/120 full tests passing, and re-entered independent review.
+- **2026-09-19:** R1 completed security review fixes at `b78fa36`, with 55/55
+  focused and 127/127 full tests passing, and entered re-review. P1 review passed
+  with one low export-state finding sent for repair. C1 re-review required one more
+  owned fix round for stale-write removal and truthful session/QEEG legacy states.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
