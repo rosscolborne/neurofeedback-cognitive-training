@@ -260,7 +260,7 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
@@ -288,7 +288,7 @@ independent workstream immediately when a slot opens.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
@@ -313,7 +313,7 @@ independent workstream immediately when a slot opens.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
@@ -537,6 +537,11 @@ independent workstream immediately when a slot opens.
 
 ## Project log
 
+- **2026-09-19:** Handoff reconciled against Git. The integration worktree was
+  clean at `fill-in-mocked-data@414f507`; `main` and `origin/main` remained at
+  `8bab4b8`; the foundation history was present; no downstream worktrees or remote
+  `fill-in-mocked-data` branch existed. First-wave R1, P1, and C1 started from the
+  same recorded integration base, limited by the four-slot orchestration capacity.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
