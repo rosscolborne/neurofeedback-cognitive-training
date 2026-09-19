@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { getProtocolTypeForTemplate } from '../../services/protocols';
+import { getProtocolAssignmentAlias } from '../../services/clinicalProtocolTemplates';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
@@ -334,9 +335,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                Active Protocol: {client.customProtocolConfig?.name || client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}
+                Active Protocol: {client.customProtocolConfig
+                  ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol) || client.customProtocolConfig.name
+                  : client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {client.customProtocolConfig && <>Evidence-Based Protocol: <strong>{client.customProtocolConfig.name}</strong> • </>}
                 10-20 Site: <strong>{client.customProtocolConfig?.montageSite || 'Fz / Cz'}</strong> • Muse S Athena Mapping: <strong>{client.customProtocolConfig?.museChannelMapping || 'AF7 / AF8 Frontal (Derived Fz)'}</strong>
               </p>
             </div>

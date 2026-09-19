@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { ProtocolTemplate } from '../../types';
-import { X } from 'lucide-react';
-import { CLINICAL_PROTOCOL_TEMPLATES } from '../../services/clinicalProtocolTemplates';
+import { CheckCircle2, X } from 'lucide-react';
+import {
+  CLINICAL_PROTOCOL_TEMPLATES,
+  getClinicalProtocolTemplate,
+  getProtocolAssignmentAlias,
+} from '../../services/clinicalProtocolTemplates';
+import { getProtocolTypeForTemplate } from '../../services/protocols';
 
 interface ProtocolBuilderModalProps {
   initialProtocol?: ProtocolTemplate;
@@ -14,10 +19,16 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const initialProtocolType = initialProtocol
+    ? getProtocolTypeForTemplate(initialProtocol)
+    : CLINICAL_PROTOCOL_TEMPLATES[0].protocolType!;
+  const initialEvidenceTemplate = getClinicalProtocolTemplate(initialProtocolType) ?? CLINICAL_PROTOCOL_TEMPLATES[0];
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
-    initialProtocol || CLINICAL_PROTOCOL_TEMPLATES[0]
+    initialEvidenceTemplate
   );
-  const [name, setName] = useState(initialProtocol?.name || CLINICAL_PROTOCOL_TEMPLATES[0].name);
+  const [alias, setAlias] = useState(
+    initialProtocol ? getProtocolAssignmentAlias(initialProtocol, initialProtocolType) ?? '' : ''
+  );
   const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || CLINICAL_PROTOCOL_TEMPLATES[0].montageSite);
   const [museMapping, setMuseMapping] = useState(
     initialProtocol?.museChannelMapping || CLINICAL_PROTOCOL_TEMPLATES[0].museChannelMapping || 'AF7 / AF8 Frontal'
@@ -30,7 +41,6 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
 
   const handleSelectTemplate = (tmpl: ProtocolTemplate) => {
     setSelectedTemplate(tmpl);
-    setName(tmpl.name);
     setMontageSite(tmpl.montageSite);
     setMuseMapping(tmpl.museChannelMapping || 'AF7 / AF8 Frontal');
     setRewardMin(tmpl.rewardBand.freqMin);
@@ -45,7 +55,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     const updated: ProtocolTemplate = {
       ...selectedTemplate,
       id: 'custom-' + Date.now(),
-      name,
+      alias: alias.trim() || undefined,
       montageSite,
       museChannelMapping: museMapping,
       rewardBand: {
@@ -112,30 +122,43 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             Clinical Evidence-Based Protocols
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-            {CLINICAL_PROTOCOL_TEMPLATES.map((tmpl) => (
-              <div
-                key={tmpl.id}
-                onClick={() => handleSelectTemplate(tmpl)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: selectedTemplate.id === tmpl.id ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
-                  backgroundColor: selectedTemplate.id === tmpl.id ? 'var(--brand-primary-subtle)' : 'var(--surface-clinician-base)',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.15s ease',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{tmpl.name}</div>
-                  <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                    {tmpl.montageSite.split(' ')[0]}
-                  </span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {tmpl.indication}
-                </div>
-              </div>
-            ))}
+            {CLINICAL_PROTOCOL_TEMPLATES.map((tmpl) => {
+              const isSelected = selectedTemplate.id === tmpl.id;
+              return (
+                <button
+                  type="button"
+                  key={tmpl.id}
+                  onClick={() => handleSelectTemplate(tmpl)}
+                  aria-pressed={isSelected}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: isSelected ? '2px solid #2563EB' : '1px solid var(--border-default)',
+                    outline: isSelected ? '2px solid rgba(37, 99, 235, 0.18)' : 'none',
+                    outlineOffset: '2px',
+                    backgroundColor: isSelected ? '#EFF6FF' : 'var(--surface-clinician-base)',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.15s ease, outline-color 0.15s ease, background-color 0.15s ease',
+                    textAlign: 'left',
+                    font: 'inherit',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{tmpl.name}</div>
+                    {isSelected ? (
+                      <CheckCircle2 size={16} color="#2563EB" style={{ flexShrink: 0, marginLeft: '8px' }} />
+                    ) : (
+                      <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                        {tmpl.montageSite.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {tmpl.indication}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -144,14 +167,18 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Protocol Assignment Name
+                Custom Alias (Optional)
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                placeholder="e.g., Morning Focus Plan"
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
+              <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                The evidence-based protocol name remains {selectedTemplate.name}.
+              </div>
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>

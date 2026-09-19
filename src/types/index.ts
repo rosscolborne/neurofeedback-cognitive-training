@@ -226,6 +226,8 @@ export interface ProtocolTemplate {
   id: string;
   /** Broad training engine mode represented by this clinical template. */
   protocolType?: ProtocolType;
+  /** Optional patient-facing label; `name` remains the evidence-based protocol name. */
+  alias?: string;
   name: string;
   clinicalName: string;
   leadInvestigator: string;

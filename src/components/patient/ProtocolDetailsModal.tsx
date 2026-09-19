@@ -1,7 +1,11 @@
 import React, { useEffect } from 'react';
 import { Activity, Brain, Clock3, Radio, Shield, Target, X } from 'lucide-react';
 import type { ClientProfile, ExperienceType, ProtocolTemplate } from '../../types';
-import { CLINICAL_PROTOCOL_TEMPLATES } from '../../services/clinicalProtocolTemplates';
+import {
+  CLINICAL_PROTOCOL_TEMPLATES,
+  getClinicalProtocolTemplate,
+  getProtocolAssignmentAlias,
+} from '../../services/clinicalProtocolTemplates';
 import { getProtocolTypeForTemplate } from '../../services/protocols';
 
 interface ProtocolDetailsModalProps {
@@ -52,6 +56,11 @@ const InhibitBand: React.FC<{ band: NonNullable<ProtocolTemplate['inhibitBand1']
 
 export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ client, onClose }) => {
   const protocol = getDisplayedProtocol(client);
+  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
+  const assignmentAlias = protocol
+    ? getProtocolAssignmentAlias(protocol, client.assignedProtocol)
+    : undefined;
+  const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -112,11 +121,16 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
               <Brain size={16} /> Your assigned protocol
             </div>
             <h2 id="protocol-details-title" className="font-display" style={{ margin: '5px 0 0', fontSize: '25px', lineHeight: 1.15 }}>
-              {protocol?.name ?? formatIdentifier(client.assignedProtocol)}
+              {assignmentAlias ?? evidenceProtocolName ?? formatIdentifier(client.assignedProtocol)}
             </h2>
-            {protocol?.clinicalName && (
+            {assignmentAlias && evidenceProtocolName && (
+              <p style={{ margin: '6px 0 0', color: 'var(--text-primary)', fontSize: '13px', lineHeight: 1.45 }}>
+                <strong>Evidence-based protocol:</strong> {evidenceProtocolName}
+              </p>
+            )}
+            {(evidenceProtocol?.clinicalName ?? protocol?.clinicalName) && (
               <p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.45 }}>
-                {protocol.clinicalName}
+                {evidenceProtocol?.clinicalName ?? protocol?.clinicalName}
               </p>
             )}
           </div>

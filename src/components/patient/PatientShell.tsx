@@ -14,6 +14,10 @@ import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
+import {
+  getClinicalProtocolTemplate,
+  getProtocolAssignmentAlias,
+} from '../../services/clinicalProtocolTemplates';
 
 interface PatientShellProps {
   brand: ClinicBrandConfig;
@@ -39,6 +43,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
+  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
+  const protocolAlias = client.customProtocolConfig
+    ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
+    : undefined;
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -433,7 +441,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div><strong>Goal:</strong> {client.condition}</div>
-                <div><strong>Protocol:</strong> {client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
+                {protocolAlias && <div><strong>Plan Alias:</strong> {protocolAlias}</div>}
+                <div><strong>Evidence-Based Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
                 <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek} sessions / week</div>
                 <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
               </div>

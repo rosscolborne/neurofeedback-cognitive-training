@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { CLINICAL_PROTOCOL_TEMPLATES } from '../clinicalProtocolTemplates';
+import {
+  CLINICAL_PROTOCOL_TEMPLATES,
+  getProtocolAssignmentAlias,
+} from '../clinicalProtocolTemplates';
 import type { ProtocolTemplate, ProtocolType } from '../../types';
 import { getDefaultProtocolThreshold, getProtocolTypeForTemplate, protocolDefinitions } from '../protocols';
 
@@ -44,5 +47,16 @@ describe('protocol definitions', () => {
     } satisfies ProtocolTemplate;
 
     expect(getProtocolTypeForTemplate(legacy)).toBe(expected);
+  });
+
+  it('keeps canonical protocol names separate from aliases and reads legacy aliases', () => {
+    const sterman = CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.id === 'proto-sterman-smr')!;
+
+    expect(getProtocolAssignmentAlias({ ...sterman, alias: 'Morning Focus Plan' }, 'smr-enhancement'))
+      .toBe('Morning Focus Plan');
+    expect(getProtocolAssignmentAlias({ ...sterman, name: 'Legacy Plan Name' }, 'smr-enhancement'))
+      .toBe('Legacy Plan Name');
+    expect(getProtocolAssignmentAlias(sterman, 'smr-enhancement')).toBeUndefined();
+    expect(sterman.name).toBe('Sterman SMR Stillness Protocol');
   });
 });

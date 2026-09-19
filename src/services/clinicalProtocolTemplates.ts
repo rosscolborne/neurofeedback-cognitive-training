@@ -1,4 +1,4 @@
-import type { ProtocolTemplate } from '../types';
+import type { ProtocolTemplate, ProtocolType } from '../types';
 
 export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
   {
@@ -154,3 +154,20 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     clinicalNotes: 'Direct inhibition of hyper-vigilant beta rhythms for rapid sympathetic nervous system down-regulation.',
   },
 ];
+
+export function getClinicalProtocolTemplate(protocolType: ProtocolType): ProtocolTemplate | undefined {
+  return CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.protocolType === protocolType);
+}
+
+/** Read aliases saved before `alias` was introduced without changing Firestore data. */
+export function getProtocolAssignmentAlias(
+  protocol: ProtocolTemplate,
+  protocolType: ProtocolType
+): string | undefined {
+  const explicitAlias = protocol.alias?.trim();
+  if (explicitAlias) return explicitAlias;
+
+  const canonical = getClinicalProtocolTemplate(protocolType);
+  const legacyName = protocol.name?.trim();
+  return canonical && legacyName && legacyName !== canonical.name ? legacyName : undefined;
+}
