@@ -23,4 +23,12 @@ describe('relationship enrollment UI wiring', () => {
     expect(rosterSource).toContain('The invitation expires after 14 days.');
     expect(rosterSource).toContain('Copy invitation link');
   });
+
+  it('shows progress and errors for cancel and unlink operations', () => {
+    expect(rosterSource).toContain('pendingActionId');
+    expect(rosterSource).toContain('Cancelling…');
+    expect(rosterSource).toContain('Removing…');
+    expect(rosterSource).toContain('setActionError');
+    expect(rosterSource).toContain('role="alert"');
+  });
 });

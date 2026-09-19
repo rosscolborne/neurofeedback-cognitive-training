@@ -64,6 +64,8 @@ const createInvitationCode = (): string => {
 
 const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 const INVITATION_CODE_PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
+const createInvitationClaimId = (clinicianId: string, normalizedEmail: string): string =>
+  `${clinicianId}__${normalizedEmail}`;
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {
@@ -749,6 +751,7 @@ class StorageEngine {
 
     const patientEmail = normalizeEmail(input.patientEmail);
     if (!patientEmail) throw new Error('Patient email is required');
+    if (patientEmail.includes('/')) throw new Error('Patient email contains unsupported characters');
     if (patientEmail === normalizeEmail(clinician.email || '')) {
       throw new Error('You cannot invite your own clinician account as a patient');
     }
@@ -757,15 +760,8 @@ class StorageEngine {
       throw new Error('Weekly sessions must be a positive whole number');
     }
 
-    const existingInvitations = await this.getPatientInvitationsForClinician();
-    const duplicate = existingInvitations.find(
-      (entry) => entry.status === 'pending' && normalizeEmail(entry.patientEmail) === patientEmail
-    );
-    if (duplicate) {
-      throw new Error(`A pending invitation already exists for this email (${duplicate.id})`);
-    }
-
     const now = Date.now();
+    const uniquenessClaimId = createInvitationClaimId(clinician.uid, patientEmail);
 
     const invitation: PatientInvitation = {
       id: createInvitationCode(),
@@ -781,18 +777,37 @@ class StorageEngine {
       createdAt: now,
       updatedAt: now,
       expiresAt: now + INVITATION_LIFETIME_MS,
+      uniquenessClaimId,
       schemaVersion: 1,
     };
 
-    await setDoc(
-      doc(db, 'patientInvitations', invitation.id),
-      removeUndefined({
+    const invitationRef = doc(db, 'patientInvitations', invitation.id);
+    const claimRef = doc(db, 'patientInvitationClaims', uniquenessClaimId);
+    await runTransaction(db, async (transaction) => {
+      const claimSnapshot = await transaction.get(claimRef);
+      if (claimSnapshot.exists()) {
+        const claim = claimSnapshot.data() as { invitationId?: string; expiresAt?: unknown };
+        if ((timestampToMillis(claim.expiresAt as PatientInvitation['expiresAt']) ?? Number.POSITIVE_INFINITY) > now) {
+          throw new Error(`A pending invitation already exists for this email${claim.invitationId ? ` (${claim.invitationId})` : ''}`);
+        }
+      }
+
+      const expiresAt = new Date(now + INVITATION_LIFETIME_MS);
+      transaction.set(invitationRef, removeUndefined({
         ...invitation,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        expiresAt: new Date(now + INVITATION_LIFETIME_MS),
-      })
-    );
+        expiresAt,
+      }));
+      transaction.set(claimRef, {
+        clinicianId: clinician.uid,
+        patientEmail,
+        invitationId: invitation.id,
+        status: 'pending',
+        expiresAt,
+        createdAt: serverTimestamp(),
+      });
+    });
     return invitation;
   }
 
@@ -808,12 +823,22 @@ class StorageEngine {
   }
 
   public async cancelPatientInvitation(invitationId: string): Promise<void> {
-    if (!auth.currentUser) throw new Error('Sign in to cancel an invitation');
-    await setDoc(
-      doc(db, 'patientInvitations', invitationId),
-      { status: 'cancelled', updatedAt: serverTimestamp() },
-      { merge: true }
-    );
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId) throw new Error('Sign in to cancel an invitation');
+    const invitationRef = doc(db, 'patientInvitations', invitationId);
+    await runTransaction(db, async (transaction) => {
+      const invitationSnapshot = await transaction.get(invitationRef);
+      if (!invitationSnapshot.exists()) throw new Error('Invitation not found');
+      const invitation = readPatientInvitation(invitationSnapshot.data(), invitationSnapshot.id);
+      if (invitation.clinicianId !== clinicianId) throw new Error('You cannot cancel another clinician’s invitation');
+      if (invitation.status === 'cancelled') return;
+      if (invitation.status === 'accepted') throw new Error('An accepted invitation cannot be cancelled');
+
+      transaction.set(invitationRef, { status: 'cancelled', updatedAt: serverTimestamp() }, { merge: true });
+      if (invitation.uniquenessClaimId) {
+        transaction.delete(doc(db, 'patientInvitationClaims', invitation.uniquenessClaimId));
+      }
+    });
   }
 
   public async unlinkPatient(patientId: string): Promise<void> {
@@ -823,7 +848,7 @@ class StorageEngine {
     const snapshot = await getDoc(patientRef);
     if (!snapshot.exists()) return;
     const patient = readClientProfile(snapshot.data(), snapshot.id);
-    if (patient.clinicianId !== clinicianId && patient.linkedClinicianCode !== clinicianId) {
+    if (getPatientClinicianId(patient) !== clinicianId) {
       throw new Error('You are not linked to this patient');
     }
     await setDoc(
@@ -910,6 +935,9 @@ class StorageEngine {
           },
           { merge: true }
         );
+        if (invitation.uniquenessClaimId) {
+          transaction.delete(doc(db, 'patientInvitationClaims', invitation.uniquenessClaimId));
+        }
         return linkedClient;
       });
     } catch (error) {
@@ -1033,7 +1061,7 @@ class StorageEngine {
         const patient = await getDoc(doc(db, 'clients', scope.patientId));
         if (!patient.exists()) return [];
         const profile = readClientProfile(patient.data(), patient.id);
-        if (profile.clinicianId !== scope.clinicianId && profile.linkedClinicianCode !== scope.clinicianId) {
+        if (getPatientClinicianId(profile) !== scope.clinicianId) {
           return [];
         }
         snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
@@ -1213,8 +1241,7 @@ class StorageEngine {
         const patient = await transaction.get(doc(db, 'clients', session.patientId));
         if (patient.exists()) {
           const profile = readClientProfile(patient.data(), patient.id);
-          isProvider =
-            profile.clinicianId === currentUserId || profile.linkedClinicianCode === currentUserId;
+          isProvider = getPatientClinicianId(profile) === currentUserId;
           if (!isProvider && session.clinicId && profile.clinicId === session.clinicId) {
             const clinic = await transaction.get(doc(db, 'clinics', session.clinicId));
             const practitionerIds = clinic.exists()

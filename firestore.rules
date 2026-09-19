@@ -33,10 +33,20 @@ service cloud.firestore {
     }
 
     function isPatientClinician(patientId) {
-      return isAuthenticated() && patientExists(patientId) && (
-        get(/databases/$(database)/documents/clients/$(patientId)).data.get('clinicianId', null) == request.auth.uid ||
-        get(/databases/$(database)/documents/clients/$(patientId)).data.get('linkedClinicianCode', null) == request.auth.uid
-      );
+      return isAuthenticated() && patientExists(patientId) &&
+        isCanonicalPatientClinician(
+          get(/databases/$(database)/documents/clients/$(patientId)).data
+        );
+    }
+
+    // Canonical ownership always wins. The legacy field is consulted only when
+    // clinicianId is absent, preventing mixed documents from authorizing twice.
+    function isCanonicalPatientClinician(patient) {
+      return patient.get('clinicianId', null) == request.auth.uid ||
+        (
+          patient.get('clinicianId', null) == null &&
+          patient.get('linkedClinicianCode', null) == request.auth.uid
+        );
     }
 
     function isPatientInClinic(patientId, clinicId) {
@@ -66,7 +76,13 @@ service cloud.firestore {
       function isInvitedPatient() {
         return isAuthenticated() &&
           request.auth.token.email != null &&
-          resource.data.patientEmail == request.auth.token.email;
+          resource.data.patientEmail == request.auth.token.email.lower();
+      }
+
+      function uniquenessReleased() {
+        let claimId = resource.data.get('uniquenessClaimId', null);
+        return claimId == null ||
+          !existsAfter(/databases/$(database)/documents/patientInvitationClaims/$(claimId));
       }
 
       allow create: if isClinician() &&
@@ -75,10 +91,17 @@ service cloud.firestore {
         request.resource.data.status == 'pending' &&
         request.resource.data.patientEmail is string &&
         request.resource.data.patientEmail.size() > 3 &&
+        request.resource.data.patientEmail == request.resource.data.patientEmail.lower() &&
+        request.auth.token.email != null &&
+        request.resource.data.patientEmail != request.auth.token.email.lower() &&
         request.resource.data.patientName is string &&
+        request.resource.data.uniquenessClaimId is string &&
+        request.resource.data.uniquenessClaimId == request.auth.uid + '__' + request.resource.data.patientEmail &&
         request.resource.data.expiresAt is timestamp &&
         request.resource.data.expiresAt > request.time &&
-        request.resource.data.expiresAt <= request.time + duration.value(30, 'd');
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
+        getAfter(/databases/$(database)/documents/patientInvitationClaims/$(request.resource.data.uniquenessClaimId))
+          .data.get('invitationId', null) == invitationId;
       allow read: if isAuthenticated() && (
         resource.data.clinicianId == request.auth.uid || isInvitedPatient()
       );
@@ -88,10 +111,12 @@ service cloud.firestore {
           resource.data.status == 'pending' &&
           request.resource.data.status == 'cancelled' &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'updatedAt'])
+            .hasOnly(['status', 'updatedAt']) &&
+          uniquenessReleased()
         ) || (
           isInvitedPatient() &&
           resource.data.status == 'pending' &&
+          resource.data.clinicianId != request.auth.uid &&
           resource.data.get('expiresAt', request.time + duration.value(1, 's')) > request.time &&
           request.resource.data.status == 'accepted' &&
           request.resource.data.patientId == request.auth.uid &&
@@ -100,10 +125,61 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
             .data.get('clinicianId', null) == resource.data.clinicianId &&
           getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
-            .data.get('acceptedInvitationId', null) == invitationId
+            .data.get('acceptedInvitationId', null) == invitationId &&
+          uniquenessReleased()
         )
       );
       allow delete: if false;
+    }
+
+    // One live claim exists for each clinician + normalized patient email.
+    // It is created atomically with an invitation and released on cancel/accept.
+    match /patientInvitationClaims/{claimId} {
+      function matchesPendingInvitation() {
+        let invitation = getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.invitationId)).data;
+        return invitation.get('status', null) == 'pending' &&
+          invitation.get('clinicianId', null) == request.auth.uid &&
+          invitation.get('patientEmail', null) == request.resource.data.patientEmail &&
+          invitation.get('expiresAt', null) == request.resource.data.expiresAt &&
+          invitation.get('uniquenessClaimId', null) == claimId;
+      }
+
+      allow read: if isAuthenticated() && resource.data.clinicianId == request.auth.uid;
+      allow create: if isClinician() &&
+        claimId == request.auth.uid + '__' + request.resource.data.patientEmail &&
+        request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.patientEmail is string &&
+        request.resource.data.patientEmail == request.resource.data.patientEmail.lower() &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
+        matchesPendingInvitation();
+      allow update: if isClinician() &&
+        claimId == request.auth.uid + '__' + request.resource.data.patientEmail &&
+        resource.data.clinicianId == request.auth.uid &&
+        resource.data.expiresAt <= request.time &&
+        request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.patientEmail == resource.data.patientEmail &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
+        matchesPendingInvitation();
+      allow delete: if isAuthenticated() && (
+        (
+          resource.data.clinicianId == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+            .data.get('status', null) == 'cancelled'
+        ) || (
+          request.auth.token.email != null &&
+          resource.data.patientEmail == request.auth.token.email.lower() &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+            .data.get('status', null) == 'accepted' &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+            .data.get('patientId', null) == request.auth.uid
+        )
+      );
     }
 
     // Patient Profiles & Clinician Records (clients/{clientId})
@@ -117,6 +193,7 @@ service cloud.firestore {
       function acceptsValidInvitation() {
         let invitationId = request.resource.data.get('acceptedInvitationId', null);
         return invitationId is string &&
+          request.resource.data.get('clinicianId', null) != request.auth.uid &&
           resource.data.get('clinicianId', null) == null &&
           resource.data.get('linkedClinicianCode', null) == null &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
@@ -131,6 +208,7 @@ service cloud.firestore {
       function createsWithValidInvitation() {
         let invitationId = request.resource.data.get('acceptedInvitationId', null);
         return invitationId is string &&
+          request.resource.data.get('clinicianId', null) != request.auth.uid &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
             .data.get('status', null) == 'accepted' &&
@@ -141,10 +219,7 @@ service cloud.firestore {
       }
 
       function unlinksOwningClinician() {
-        return (
-          resource.data.get('clinicianId', null) == request.auth.uid ||
-          resource.data.get('linkedClinicianCode', null) == request.auth.uid
-        ) &&
+        return isCanonicalPatientClinician(resource.data) &&
           request.resource.data.get('clinicianId', null) == null &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
           request.resource.data.get('acceptedInvitationId', null) == null;
@@ -152,13 +227,13 @@ service cloud.firestore {
 
       allow read: if isAuthenticated() && (
         request.auth.uid == clientId ||
-        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-        resource.data.get('clinicianId', null) == request.auth.uid ||
+        isCanonicalPatientClinician(resource.data) ||
         isClinicMember(resource.data.get('clinicId', null))
       );
       allow create: if isAuthenticated() &&
         request.auth.uid == clientId &&
         request.resource.data.id == clientId &&
+        request.resource.data.get('clinicId', null) == null &&
         (
           (
             request.resource.data.get('clinicianId', null) == null &&
@@ -166,27 +241,29 @@ service cloud.firestore {
             request.resource.data.get('acceptedInvitationId', null) == null
           ) || createsWithValidInvitation()
         );
-      allow update: if isAuthenticated() && (
+      allow update: if isAuthenticated() &&
+        request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) && (
         (
           request.auth.uid == clientId &&
           (relationshipUnchanged() || acceptsValidInvitation())
         ) ||
         (
-          (
-            resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-            resource.data.get('clinicianId', null) == request.auth.uid
-          ) &&
+          isCanonicalPatientClinician(resource.data) &&
           (relationshipUnchanged() || unlinksOwningClinician())
         ) ||
         (
           isClinicMember(resource.data.get('clinicId', null)) &&
           request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
           request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) &&
-          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null)
+          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null) &&
+          request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null)
         )
       );
       allow delete: if isAuthenticated() && (
-        request.auth.uid == clientId
+        request.auth.uid == clientId &&
+        resource.data.get('clinicianId', null) == null &&
+        resource.data.get('linkedClinicianCode', null) == null &&
+        resource.data.get('acceptedInvitationId', null) == null
       );
     }
 

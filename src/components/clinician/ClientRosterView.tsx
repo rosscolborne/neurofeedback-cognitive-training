@@ -22,7 +22,7 @@ interface ClientRosterViewProps {
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelInvitation: (invitationId: string) => Promise<void>;
   onUpdateClient?: (updated: ClientProfile) => void;
-  onDeleteClient?: (id: string) => void;
+  onDeleteClient?: (id: string) => void | Promise<void>;
   onScheduleClient?: (clientId: string) => void;
   onMessageClient?: (clientId: string) => void;
 }
@@ -58,6 +58,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
 
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
@@ -101,10 +103,31 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setShowAddModal(true);
   };
 
-  const handleDelete = (clientId: string, e: React.MouseEvent) => {
+  const handleDelete = async (clientId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to remove this patient from the roster?')) {
-      if (onDeleteClient) onDeleteClient(clientId);
+      if (!onDeleteClient) return;
+      setActionError(null);
+      setPendingActionId(clientId);
+      try {
+        await onDeleteClient(clientId);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Could not remove this patient. Try again.');
+      } finally {
+        setPendingActionId(null);
+      }
+    }
+  };
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    setActionError(null);
+    setPendingActionId(invitationId);
+    try {
+      await onCancelInvitation(invitationId);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not cancel this invitation. Try again.');
+    } finally {
+      setPendingActionId(null);
     }
   };
 
@@ -166,6 +189,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </button>
       </div>
 
+      {actionError && <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '12px' }}>{actionError}</div>}
+
       {invitations.some((invitation) => invitation.status === 'pending') && (
         <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700 }}>
@@ -178,7 +203,9 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{invitation.patientEmail}</div>
                 <div className="font-mono" style={{ marginTop: '3px', fontSize: '11px', color: 'var(--brand-primary)' }}>{invitation.id}</div>
               </div>
-              <button onClick={() => void onCancelInvitation(invitation.id)} className="btn btn-ghost" style={{ fontSize: '12px', flexShrink: 0 }}>Cancel</button>
+              <button onClick={() => void handleCancelInvitation(invitation.id)} disabled={pendingActionId === invitation.id} className="btn btn-ghost" style={{ fontSize: '12px', flexShrink: 0 }}>
+                {pendingActionId === invitation.id ? 'Cancelling…' : 'Cancel'}
+              </button>
             </div>
           ))}
         </section>
@@ -376,12 +403,13 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       </button>
                       {onDeleteClient && (
                         <button
-                          onClick={(e) => handleDelete(client.id, e)}
+                          onClick={(e) => void handleDelete(client.id, e)}
+                          disabled={pendingActionId === client.id}
                           className="btn btn-ghost"
                           style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--status-alert)' }}
                           title="Remove Patient"
                         >
-                          <Trash2 size={14} />
+                          {pendingActionId === client.id ? 'Removing…' : <Trash2 size={14} />}
                         </button>
                       )}
                     </div>

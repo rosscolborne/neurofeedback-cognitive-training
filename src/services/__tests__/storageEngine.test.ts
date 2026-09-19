@@ -226,8 +226,13 @@ describe('patient invitation linking', () => {
   });
 
   it('creates a pending invitation for the entered patient email instead of a fake client', async () => {
-    firestore.getDocs.mockResolvedValueOnce({ docs: [] });
-    firestore.setDoc.mockResolvedValueOnce(undefined);
+    const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValueOnce({ exists: () => false }),
+        set: vi.fn((ref, payload) => writes.push({ ref, payload })),
+      })
+    );
 
     const invitation = await storageEngine.createPatientInvitation({
       clinicianName: 'Dr. Example',
@@ -240,10 +245,15 @@ describe('patient invitation linking', () => {
 
     expect(invitation.id).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
     expect(invitation).toMatchObject({ clinicianId: 'clinician-1', patientEmail: 'patient@one.example', status: 'pending' });
-    expect(firestore.setDoc).toHaveBeenCalledWith(
-      { type: 'doc', path: 'patientInvitations', id: invitation.id },
-      expect.objectContaining({ patientEmail: 'patient@one.example', status: 'pending', expiresAt: expect.any(Date) })
-    );
+    expect(invitation.uniquenessClaimId).toBe('clinician-1__patient@one.example');
+    expect(writes).toContainEqual({
+      ref: { type: 'doc', path: 'patientInvitations', id: invitation.id },
+      payload: expect.objectContaining({ patientEmail: 'patient@one.example', status: 'pending', expiresAt: expect.any(Date) }),
+    });
+    expect(writes).toContainEqual({
+      ref: { type: 'doc', path: 'patientInvitationClaims', id: invitation.uniquenessClaimId },
+      payload: expect.objectContaining({ patientEmail: 'patient@one.example', invitationId: invitation.id }),
+    });
   });
 
   it('rejects self invitations and duplicate pending invitations', async () => {
@@ -252,34 +262,57 @@ describe('patient invitation linking', () => {
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).rejects.toThrow('cannot invite your own');
 
-    firestore.getDocs.mockResolvedValueOnce({
-      docs: [{
-        id: 'ABCD-EFGH-JKLM',
-        data: () => ({ patientEmail: 'patient@example.com', status: 'pending', schemaVersion: 1 }),
-      }],
-    });
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValueOnce({
+          exists: () => true,
+          data: () => ({ invitationId: 'ABCD-EFGH-JKLM', expiresAt: Date.now() + 60_000 }),
+        }),
+        set: vi.fn(),
+      })
+    );
     await expect(storageEngine.createPatientInvitation({
       clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'Patient@Example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).rejects.toThrow('pending invitation already exists');
-    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('reuses only an expired uniqueness claim for a new invitation', async () => {
+    const writes: unknown[] = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValueOnce({
+          exists: () => true,
+          data: () => ({ invitationId: 'EXPIRED-CODE', expiresAt: Date.now() - 1 }),
+        }),
+        set: vi.fn((...args) => writes.push(args)),
+      })
+    );
+
+    await expect(storageEngine.createPatientInvitation({
+      clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'patient@example.com',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    })).resolves.toMatchObject({ status: 'pending' });
+    expect(writes).toHaveLength(2);
   });
 
   it('atomically links the real patient profile and accepts the invitation', async () => {
-    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.com' };
+    state.auth.currentUser = { uid: 'patient-1', email: 'Patient@Example.COM' };
     const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
+    const deletes: unknown[] = [];
     firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
       callback({
         get: vi.fn()
           .mockResolvedValueOnce({
             id: 'ABCD-EFGH-JKLM', exists: () => true,
-            data: () => ({ clinicianId: 'clinician-1', clinicianName: 'Dr. Example', patientEmail: 'patient@example.com', patientName: 'Patient One', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3, status: 'pending', schemaVersion: 1 }),
+            data: () => ({ clinicianId: 'clinician-1', clinicianName: 'Dr. Example', patientEmail: 'patient@example.com', patientName: 'Patient One', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: 'claim-1', schemaVersion: 1 }),
           })
           .mockResolvedValueOnce({
             id: 'patient-1', exists: () => true,
             data: () => createBlankProfile('patient-1', 'patient@example.com', 'Patient One'),
           }),
         set: vi.fn((ref, payload) => writes.push({ ref, payload })),
+        delete: vi.fn((ref) => deletes.push(ref)),
       })
     );
 
@@ -291,6 +324,29 @@ describe('patient invitation linking', () => {
     expect(linked).toMatchObject({ id: 'patient-1', clinicianId: 'clinician-1', acceptedInvitationId: 'ABCD-EFGH-JKLM' });
     expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1' }) });
     expect(writes[1]).toMatchObject({ ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' }, payload: expect.objectContaining({ status: 'accepted', patientId: 'patient-1' }) });
+    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims', id: 'claim-1' }]);
+  });
+
+  it('atomically cancels an owned invitation and releases its uniqueness claim', async () => {
+    const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
+    const deletes: unknown[] = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValueOnce({
+          id: 'ABCD-EFGH-JKLM', exists: () => true,
+          data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', uniquenessClaimId: 'claim-1' }),
+        }),
+        set: vi.fn((ref, payload) => writes.push({ ref, payload })),
+        delete: vi.fn((ref) => deletes.push(ref)),
+      })
+    );
+
+    await storageEngine.cancelPatientInvitation('ABCD-EFGH-JKLM');
+    expect(writes).toContainEqual({
+      ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' },
+      payload: expect.objectContaining({ status: 'cancelled' }),
+    });
+    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims', id: 'claim-1' }]);
   });
 
   it('refuses an invitation addressed to a different account email', async () => {
@@ -378,12 +434,28 @@ describe('patient invitation linking', () => {
     const legacy = {
       id: 'patient-2', data: () => ({ ...createBlankProfile('patient-2', 'two@example.com'), linkedClinicianCode: 'clinician-1' }),
     };
+    const mixedOwnedByAnotherClinician = {
+      id: 'patient-3', data: () => ({ ...createBlankProfile('patient-3', 'three@example.com'), clinicianId: 'clinician-2', linkedClinicianCode: 'clinician-1' }),
+    };
     firestore.getDocs
       .mockResolvedValueOnce({ docs: [canonical] })
-      .mockResolvedValueOnce({ docs: [canonical, legacy] });
+      .mockResolvedValueOnce({ docs: [canonical, legacy, mixedOwnedByAnotherClinician] });
 
     const roster = await storageEngine.getClients();
     expect(roster.map((entry) => entry.id)).toEqual(['patient-1', 'patient-2']);
+  });
+
+  it('denies a legacy-field clinician when a different canonical clinician exists', async () => {
+    state.auth.currentUser = { uid: 'clinician-legacy', email: 'legacy@example.com' };
+    firestore.getDoc.mockResolvedValueOnce({
+      id: 'patient-1', exists: () => true,
+      data: () => ({ clinicianId: 'clinician-canonical', linkedClinicianCode: 'clinician-legacy' }),
+    });
+
+    await expect(storageEngine.getSessionsFor({
+      role: 'clinician', clinicianId: 'clinician-legacy', patientId: 'patient-1',
+    })).resolves.toEqual([]);
+    expect(firestore.getDocs).not.toHaveBeenCalled();
   });
 
   it('refuses to replace a clinician link found in the persisted patient profile', async () => {
@@ -451,6 +523,17 @@ describe('patient invitation linking', () => {
       expect.objectContaining({ clinicianId: null, acceptedInvitationId: null }),
       { merge: true }
     );
+  });
+
+  it('does not let a split-brain legacy clinician unlink the canonical owner', async () => {
+    state.auth.currentUser = { uid: 'clinician-legacy', email: 'legacy@example.com' };
+    firestore.getDoc.mockResolvedValueOnce({
+      id: 'patient-1', exists: () => true,
+      data: () => ({ ...createBlankProfile('patient-1', 'patient@example.com'), clinicianId: 'clinician-canonical', linkedClinicianCode: 'clinician-legacy' }),
+    });
+
+    await expect(storageEngine.unlinkPatient('patient-1')).rejects.toThrow('not linked');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
   });
 });
 
