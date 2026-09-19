@@ -260,7 +260,7 @@ independent workstream immediately when a slot opens.
 
 ### R1 — Relationship Integrity and Enrollment
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave and highest priority
 - **Branch:** `codex/mockdata-relationship-integrity`
 - **Worktree:** `../neurasticity-mockdata-relationship`
@@ -292,16 +292,20 @@ independent workstream immediately when a slot opens.
   form. Pre-account invitations resolve after authenticated patient profile
   creation. Focused tests passed (47/47), full Vitest passed (119/119), and the
   production build passed. Rules emulator execution is pending because Java is
-  unavailable locally; static rules contract tests passed. Independent review is
-  pending.
+  unavailable locally; static rules contract tests passed. Independent review
+  required security fixes for canonical/legacy ownership precedence, tenant-field
+  immutability, direct self-linking, email normalization, audit/deletion bypasses,
+  concurrent duplicate invitations, and visible lifecycle errors. Fixes are in
+  progress.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
-- **Final commit:** `1a632bf62bf88536023ad8687444092c69703d0e`
+- **Final commit:** `1a632bf62bf88536023ad8687444092c69703d0e`,
+  `fb2e48a4c221e7d8705170e1f047cb7f7afb82c9`
 - **Owned files:** `src/components/patient/HomeScreen.tsx`,
   `src/components/patient/ProgressHistory.tsx`, a new isolated patient-metrics
   helper and its tests. Do not edit shared storage/types without approval.
@@ -326,8 +330,9 @@ independent workstream immediately when a slot opens.
   local backend was unavailable; review later reproduced a clean 114/114 pass.
   Independent review required fixes for unsupported badge evidence, swallowed read
   errors, an undefined trend rule, loading/single-point states, and component-state
-  coverage. Owned fixes are in progress; the shared read-error contract is reserved
-  for the orchestrator.
+  coverage. Owned fixes were completed with 8/8 focused and 115/115 full tests;
+  re-review is pending. The shared read-error contract remains reserved for the
+  orchestrator and must reject failures while successful empty queries resolve `[]`.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
@@ -582,6 +587,10 @@ independent workstream immediately when a slot opens.
   Their original agents received owned-file fixes. Cross-cutting session-read error
   propagation, brain-map persistence, and measurement provenance changes were held
   for one orchestrator-owned shared-contract implementation.
+- **2026-09-19:** R1 independent security review required fixes and returned the
+  workstream to IN PROGRESS. P1 completed owned review fixes at `fb2e48a`, with
+  115/115 full tests passing, and entered independent re-review while awaiting the
+  central session-read error contract.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
