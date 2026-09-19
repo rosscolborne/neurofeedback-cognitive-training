@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import type { QEEGBrainMap } from '../../types';
-import { buildManualBrainMap, EMPTY_MANUAL_BRAIN_MAP, type ManualBrainMapInput } from './brainMapManualEntry';
+import { EMPTY_MANUAL_BRAIN_MAP, submitManualBrainMap, type ManualBrainMapInput, type ManualBrainMapSave } from './brainMapManualEntry';
 
 interface BrainMapUploadModalProps {
   patientName: string;
-  onSave: (map: QEEGBrainMap) => void;
+  onSave: ManualBrainMapSave;
   onClose: () => void;
 }
 
@@ -21,20 +20,24 @@ const Z_FIELDS: Array<{ key: keyof ManualBrainMapInput; label: string }> = [
 export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patientName, onSave, onClose }) => {
   const [input, setInput] = useState<ManualBrainMapInput>({ ...EMPTY_MANUAL_BRAIN_MAP });
   const [errors, setErrors] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const setField = (field: keyof ManualBrainMapInput, value: string) => {
     setInput((current) => ({ ...current, [field]: value }));
     setErrors([]);
   };
 
-  const handleSave = (event: React.FormEvent) => {
+  const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    const result = buildManualBrainMap(input);
+    if (isSaving) return;
+    setIsSaving(true);
+    setErrors([]);
+    const result = await submitManualBrainMap(input, onSave);
     if (!result.ok) {
       setErrors(result.errors);
+      setIsSaving(false);
       return;
     }
-    onSave(result.map);
     onClose();
   };
 
@@ -48,18 +51,18 @@ export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patien
               Enter values already produced by a validated clinical system for {patientName}. This form does not upload, parse, or calculate QEEG data.
             </p>
           </div>
-          <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }} aria-label="Close"><X size={18} /></button>
+          <button onClick={onClose} disabled={isSaving} className="btn btn-ghost" style={{ padding: '6px' }} aria-label="Close"><X size={18} /></button>
         </div>
 
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Recording date
-              <input type="date" value={input.recordingDate} onChange={(event) => setField('recordingDate', event.target.value)} style={{ width: '100%', marginTop: '4px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px' }} />
+              <input type="date" value={input.recordingDate} onChange={(event) => setField('recordingDate', event.target.value)} disabled={isSaving} style={{ width: '100%', marginTop: '4px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px' }} />
             </label>
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Acquisition device/source
-              <input type="text" value={input.deviceSource} onChange={(event) => setField('deviceSource', event.target.value)} placeholder="Enter source exactly as documented" style={{ width: '100%', marginTop: '4px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px' }} />
+              <input type="text" value={input.deviceSource} onChange={(event) => setField('deviceSource', event.target.value)} placeholder="Enter source exactly as documented" disabled={isSaving} style={{ width: '100%', marginTop: '4px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px' }} />
             </label>
           </div>
 
@@ -67,14 +70,14 @@ export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patien
             {Z_FIELDS.map(({ key, label }) => (
               <label key={key} style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {label}
-                <input type="number" step="any" value={input[key]} onChange={(event) => setField(key, event.target.value)} placeholder="Required" style={{ width: '100%', marginTop: '3px', padding: '7px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px' }} />
+                <input type="number" step="any" value={input[key]} onChange={(event) => setField(key, event.target.value)} placeholder="Required" disabled={isSaving} style={{ width: '100%', marginTop: '3px', padding: '7px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px' }} />
               </label>
             ))}
           </div>
 
           <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
             Technician notes (optional)
-            <textarea value={input.technicianNotes} onChange={(event) => setField('technicianNotes', event.target.value)} placeholder="Enter only documented observations" style={{ width: '100%', height: '64px', marginTop: '4px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px', resize: 'vertical' }} />
+            <textarea value={input.technicianNotes} onChange={(event) => setField('technicianNotes', event.target.value)} placeholder="Enter only documented observations" disabled={isSaving} style={{ width: '100%', height: '64px', marginTop: '4px', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12px', resize: 'vertical' }} />
           </label>
 
           {errors.length > 0 && (
@@ -85,8 +88,8 @@ export const BrainMapUploadModal: React.FC<BrainMapUploadModalProps> = ({ patien
           )}
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
-            <button type="submit" className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>Save Manual Record</button>
-            <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>Cancel</button>
+            <button type="submit" disabled={isSaving} className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>{isSaving ? 'Saving…' : 'Save Manual Record'}</button>
+            <button type="button" onClick={onClose} disabled={isSaving} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>Cancel</button>
           </div>
         </form>
       </div>

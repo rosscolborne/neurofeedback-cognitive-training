@@ -6,12 +6,14 @@ import { getProtocolAssignmentAlias } from '../../services/clinicalProtocolTempl
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
+import { persistAndAppendBrainMap, type ManualBrainMapSave } from './brainMapManualEntry';
 import {
   assessQeegRecord,
   deriveLearningScorePoints,
   deriveSessionBandRows,
   finiteMetric,
   formatSigned,
+  getSessionContentState,
 } from './clinicalDetailMetrics';
 import {
   ArrowLeft,
@@ -28,6 +30,8 @@ interface ClientDetailViewProps {
   brand: ClinicBrandConfig;
   onBack: () => void;
   onUpdateClient: (updated: ClientProfile) => void;
+  /** Integration seam for the centrally owned authorized append transaction. */
+  onAppendBrainMap?: ManualBrainMapSave;
   onSendMessage: () => void;
 }
 
@@ -36,33 +40,37 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   brand,
   onBack,
   onUpdateClient,
+  onAppendBrainMap,
   onSendMessage,
 }) => {
   const [activeTab, setActiveTab] = useState<'eeg' | 'protocol' | 'brainmaps' | 'telemetry' | 'sessions'>('eeg');
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
   const [showBrainMapUpload, setShowBrainMapUpload] = useState(false);
 
-  const [sessions, setSessions] = useState<SessionRecord[]>([]);
-  const [sessionsState, setSessionsState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [sessionResult, setSessionResult] = useState<{
+    clientId: string;
+    state: 'ready' | 'error';
+    sessions: SessionRecord[];
+  } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    setSessionsState('loading');
     storageEngine.getSessions(client.id).then((data) => {
       if (isMounted) {
-        setSessions(data);
-        setSessionsState('ready');
+        setSessionResult({ clientId: client.id, state: 'ready', sessions: data });
       }
     }).catch(() => {
       if (isMounted) {
-        setSessions([]);
-        setSessionsState('error');
+        setSessionResult({ clientId: client.id, state: 'error', sessions: [] });
       }
     });
     return () => {
       isMounted = false;
     };
   }, [client.id]);
+
+  const sessions = sessionResult?.clientId === client.id ? sessionResult.sessions : [];
+  const sessionsState = sessionResult?.clientId === client.id ? sessionResult.state : 'loading';
 
   const handleDownloadPDF = () => {
     generatePatientClinicalPDF(client, sessions, brand);
@@ -80,14 +88,23 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     onUpdateClient(updated);
   };
 
-  const handleSaveBrainMap = (map: QEEGBrainMap) => {
+  const handleSaveBrainMap = async (map: QEEGBrainMap) => {
+    if (!onAppendBrainMap) {
+      throw new Error('Authorized QEEG persistence is not configured yet. No local record was added.');
+    }
+    const brainMaps = await persistAndAppendBrainMap(map, client.brainMaps, onAppendBrainMap);
     const updated: ClientProfile = {
       ...client,
-      brainMaps: [map, ...(client.brainMaps || [])],
+      brainMaps,
     };
     onUpdateClient(updated);
   };
 
+  const assignedProtocol = typeof client.assignedProtocol === 'string' && client.assignedProtocol.trim()
+    ? client.assignedProtocol
+    : null;
+  const brainMaps: unknown[] = Array.isArray(client.brainMaps) ? client.brainMaps : [];
+  const sessionContentState = getSessionContentState(sessionsState, sessions);
   const psdRows = deriveSessionBandRows(sessions);
   const psdGroups = psdRows.filter((row) => row.bands != null);
   const invalidPsdRows = psdRows.filter((row) => row.issue);
@@ -160,7 +177,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition} • Protocol: <strong>{client.assignedProtocol ? client.assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
+              {client.condition} • Protocol: <strong>{assignedProtocol ? assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
             </div>
           </div>
         </div>
@@ -188,7 +205,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         {[
           { id: 'eeg', label: 'EEG Overview & Spectral PSD' },
           { id: 'protocol', label: 'Protocol Settings' },
-          { id: 'brainmaps', label: `QEEG Records (${client.brainMaps?.length || 0})` },
+          { id: 'brainmaps', label: `QEEG Records (${brainMaps.length})` },
           { id: 'telemetry', label: 'Live Telemetry' },
           { id: 'sessions', label: `Session Logs (${sessions.length})` },
         ].map((tab) => (
@@ -221,10 +238,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  Spectral Power Distribution (µV²) Across Sessions
+                  Spectral Power Distribution (µV) Across Sessions
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Persisted session band-power values. No QEEG transform or missing-value substitution is applied.
+                  Persisted session band-power values with verified metricProvenance.averageBands algorithm, version, and non-legacy source. No missing-value substitution is applied.
                 </p>
               </div>
 
@@ -249,9 +266,9 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </div>
             </div>
 
-            {sessionsState === 'loading' ? (
+            {sessionContentState === 'loading' ? (
               <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading recorded sessions…</div>
-            ) : sessionsState === 'error' ? (
+            ) : sessionContentState === 'error' ? (
               <div role="alert" style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session measurements could not be loaded.</div>
             ) : psdGroups.length === 0 ? (
               <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>No complete persisted band-power measurements are available.</div>
@@ -291,7 +308,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
                 {psdGroups.map((row) => (
                   <div key={`values-${row.id}`}>
-                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV²
+                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV
                   </div>
                 ))}
               </div>
@@ -350,6 +367,11 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   {learningScores.invalidCount} session{learningScores.invalidCount === 1 ? '' : 's'} omitted because the score is missing or invalid.
                 </div>
               )}
+              {learningScores.invalidDateCount > 0 && (
+                <div role="status" style={{ color: 'var(--status-alert)', fontSize: '11px' }}>
+                  {learningScores.invalidDateCount} scored session{learningScores.invalidDateCount === 1 ? '' : 's'} omitted because the recorded date is invalid.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -362,8 +384,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                 Active Protocol: {client.customProtocolConfig
-                  ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol) || client.customProtocolConfig.name
-                  : client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}
+                  ? (assignedProtocol ? getProtocolAssignmentAlias(client.customProtocolConfig, assignedProtocol) : undefined) || client.customProtocolConfig.name || 'Unavailable'
+                  : assignedProtocol ? assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {client.customProtocolConfig && <>Evidence-Based Protocol: <strong>{client.customProtocolConfig.name}</strong> • </>}
@@ -396,13 +418,14 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             </button>
           </div>
 
-          {client.brainMaps && client.brainMaps.length > 0 ? (
+          {brainMaps.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {client.brainMaps.map((bm) => {
+              {brainMaps.map((value, index) => {
+                const bm = value != null && typeof value === 'object' ? value as Partial<QEEGBrainMap> : {};
                 const assessment = assessQeegRecord(bm);
                 return (
                 <div
-                  key={bm.id}
+                  key={typeof bm.id === 'string' && bm.id ? bm.id : `malformed-qeeg-${index}`}
                   style={{
                     border: '1px solid var(--border-default)',
                     borderRadius: 'var(--radius-sm)',
@@ -413,9 +436,9 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Brain size={16} color="var(--brand-primary)" />
-                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{bm.deviceSource || 'Source unavailable'}</span>
+                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{typeof bm.deviceSource === 'string' && bm.deviceSource.trim() ? bm.deviceSource : 'Source unavailable'}</span>
                     </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Recorded {bm.recordingDate || 'date unavailable'}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Recorded {typeof bm.recordingDate === 'string' && bm.recordingDate ? bm.recordingDate : 'date unavailable'}</span>
                   </div>
 
                   {assessment.status !== 'complete' && (
@@ -464,7 +487,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   </div>
 
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                    <strong>Technician notes:</strong> {bm.technicianNotes || 'Unavailable'}
+                    <strong>Technician notes:</strong> {typeof bm.technicianNotes === 'string' && bm.technicianNotes.trim() ? bm.technicianNotes : 'Unavailable'}
                   </div>
                 </div>
               );})}
@@ -518,9 +541,9 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             </button>
           </div>
 
-          {sessionsState === 'loading' ? (
+          {sessionContentState === 'loading' ? (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading session logs…</div>
-          ) : sessionsState === 'error' ? (
+          ) : sessionContentState === 'error' ? (
             <div role="alert" style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session logs could not be loaded.</div>
           ) : sessions.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -544,7 +567,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                       {s.date || 'Date unavailable'} • {s.experience ? s.experience.replace(/-/g, ' ').toUpperCase() : 'EXPERIENCE UNAVAILABLE'}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} | In-Zone: {finiteMetric(s.timeInZonePercent, '%')} | Peak Focus: {finiteMetric(s.peakFocusScore)} | Coherence: {finiteMetric(s.averageCoherence, '%')}
+                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} | In-Zone: {finiteMetric(s.timeInZonePercent, '%')} | Coherence: {finiteMetric(s.averageCoherence, '%')}
                     </div>
                     {s.clinicianNotes && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
