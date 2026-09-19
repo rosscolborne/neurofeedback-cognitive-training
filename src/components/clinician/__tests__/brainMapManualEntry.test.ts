@@ -67,4 +67,13 @@ describe('manual QEEG entry validation and persistence shape', () => {
     await expect(persistAndAppendBrainMap(built.map, existing, vi.fn(async () => { throw new Error('offline'); }))).rejects.toThrow('offline');
     expect(existing.map((map) => map.id)).toEqual(['q-existing']);
   });
+
+  it('uses the canonical record returned by persistence', async () => {
+    const built = buildManualBrainMap(validInput, new Date('2026-09-19T12:00:00.000Z'), 'q-client');
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const canonical = { ...built.map, id: 'q-server' };
+    const saved = await persistAndAppendBrainMap(built.map, [], vi.fn(async () => canonical));
+    expect(saved[0].id).toBe('q-server');
+  });
 });

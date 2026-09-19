@@ -26,7 +26,7 @@ export const EMPTY_MANUAL_BRAIN_MAP: ManualBrainMapInput = {
 
 type BuildResult = { ok: true; map: QEEGBrainMap } | { ok: false; errors: string[] };
 
-export type ManualBrainMapSave = (map: QEEGBrainMap) => void | Promise<void>;
+export type ManualBrainMapSave = (map: QEEGBrainMap) => QEEGBrainMap | void | Promise<QEEGBrainMap | void>;
 
 export type SubmitManualBrainMapResult =
   | { ok: true; map: QEEGBrainMap }
@@ -101,8 +101,8 @@ export async function submitManualBrainMap(
   if (!built.ok) return built;
 
   try {
-    await onSave(built.map);
-    return built;
+    const persisted = await onSave(built.map);
+    return { ok: true, map: persisted ?? built.map };
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? ` ${error.message.trim()}` : '';
     return { ok: false, errors: [`The QEEG record could not be saved.${detail}`] };
@@ -115,9 +115,9 @@ export async function persistAndAppendBrainMap(
   existing: unknown,
   append: ManualBrainMapSave,
 ): Promise<QEEGBrainMap[]> {
-  await append(map);
+  const persisted = await append(map);
   const current = Array.isArray(existing)
     ? existing.filter((entry): entry is QEEGBrainMap => entry != null && typeof entry === 'object')
     : [];
-  return [map, ...current];
+  return [persisted ?? map, ...current];
 }
