@@ -6,6 +6,10 @@ import { Capacitor } from '@capacitor/core';
 import { AthenaWasmDecoder, BleTransport } from '@elata-biosciences/eeg-web-ble';
 import { initEegWasm, type HeadbandFrameV1 } from '@elata-biosciences/eeg-web';
 import eegWasmUrl from '@elata-biosciences/eeg-web/wasm/eeg_wasm_bg.wasm?url';
+import {
+  calculateRewardBandMetric,
+  type ProtocolRuntimeConfig,
+} from './adaptiveEngine';
 
 // Muse's EEG data service contains the 273e0001–273e0006 control and signal
 // characteristics. It is also the service advertised during device discovery.
@@ -25,6 +29,7 @@ export class EEGEngine {
   // Protocol configuration
   private currentProtocol: ProtocolType = 'theta-beta-ratio';
   private targetThreshold = 1.85;
+  private runtimeRewardBand: ProtocolRuntimeConfig['rewardBand'];
   private phaseAngle = 0;
   private noiseSeed = Math.random() * 100;
 
@@ -79,7 +84,7 @@ export class EEGEngine {
   private latestRawMetrics: Record<string, number> = {};
   private latestBaselineRelativeMetrics: Record<string, number> = {};
   private latestInterhemisphericCoherence: number | null = null;
-  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null } | null = null;
+  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null; available?: boolean } | null = null;
   private localFitStableSince: number | null = null;
 
   private gattServer: any = null;
@@ -139,6 +144,14 @@ export class EEGEngine {
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
     this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
+    this.runtimeRewardBand = undefined;
+    this.syncProtocolToBrainflowSession();
+  }
+
+  public configureProtocol(config: ProtocolRuntimeConfig) {
+    this.currentProtocol = config.protocol;
+    this.targetThreshold = config.initialThreshold;
+    this.runtimeRewardBand = config.rewardBand;
     this.syncProtocolToBrainflowSession();
   }
 
@@ -153,6 +166,14 @@ export class EEGEngine {
 
   public getProtocol(): ProtocolType {
     return this.currentProtocol;
+  }
+
+  public getBandPowerProvenance(): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null {
+    if (this.isDemoMode || !this.isHardwareConnected || !this.latestServerBands) return null;
+    if (this.isBrainflowActive || this.fitSessionId) {
+      return { algorithm: 'welch-psd', version: 'brainflow-service-v0.5', source: 'brainflow' };
+    }
+    return { algorithm: 'browser-band-dft', version: '1', source: 'browser-dsp' };
   }
 
   public getLatestBands(): BandPowers | null {
@@ -1295,10 +1316,27 @@ export class EEGEngine {
     this.latestBaselineRelativeMetrics = {};
   }
 
-  private calculateBrowserFeedback(bands: BandPowers, thetaBeta: number) {
+  private calculateBrowserFeedback(
+    bands: BandPowers,
+    thetaBeta: number,
+    availability: Partial<Record<keyof BandPowers, boolean>> = {
+      delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true,
+    },
+  ) {
     let metric = thetaBeta;
     let inZone = false;
     let zoneScore = 0;
+    if (this.runtimeRewardBand) {
+      const rewardMetric = calculateRewardBandMetric(bands, availability, this.runtimeRewardBand);
+      if (rewardMetric === null) return { ratio: thetaBeta, inZone: false, zoneScore: 0, available: false };
+      const width = Math.max(0.1, this.targetThreshold * 0.2);
+      const lowerIsBetter = this.runtimeRewardBand.targetCondition === 'below';
+      inZone = lowerIsBetter ? rewardMetric <= this.targetThreshold : rewardMetric >= this.targetThreshold;
+      zoneScore = lowerIsBetter
+        ? 1 - (rewardMetric - this.targetThreshold) / width
+        : (rewardMetric - this.targetThreshold + width) / (2 * width);
+      return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+    }
     switch (this.currentProtocol) {
       case 'theta-beta-ratio':
         inZone = metric <= this.targetThreshold;
@@ -1326,7 +1364,7 @@ export class EEGEngine {
         zoneScore = 1 - (metric - this.targetThreshold) / 5;
         break;
     }
-    return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)) };
+    return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
   }
 
   /**
@@ -1687,7 +1725,7 @@ export class EEGEngine {
         valence: ratio(bands.alpha, bands.theta + bands.beta),
         betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
       };
-      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
+      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta, bandAvailability);
       brainFlowScores = {
         mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
         restfulnessScore: Math.round(this.userCalm),
@@ -1718,16 +1756,19 @@ export class EEGEngine {
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
     const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
-    let inZoneAvailable = trainingFeedback?.inZone != null;
+    if (this.runtimeRewardBand) {
+      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
+    }
+    let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
     let inZone = trainingFeedback?.inZone ?? false;
     let zoneScore = trainingFeedback?.zoneScore ?? 0;
 
     // Fallback: If server has not yet returned inZone for this window, compute from live bands & protocol
     if (!inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
-      const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio);
+      const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
       inZone = fb.inZone;
       zoneScore = fb.zoneScore;
-      inZoneAvailable = true;
+      inZoneAvailable = fb.available;
     }
 
     // Hardware values come from the server's cross-spectral AF7↔AF8 /
