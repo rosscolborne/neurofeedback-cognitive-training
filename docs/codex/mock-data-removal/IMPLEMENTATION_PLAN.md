@@ -351,7 +351,8 @@ independent workstream immediately when a slot opens.
   fix completed with 13 focused and 120 full tests passing; re-review passed with a
   low finding that CSV export must share the resolved-state boundary. The final
   fix passed independent review with no findings and merged into the integration
-  branch. Integrated focused tests passed (14/14).
+  branch. Integrated focused tests passed (14/14). The central session-read error
+  contract landed in `d445528` and now makes P1's error state reachable.
   The shared read-error contract remains reserved for the orchestrator and must
   reject failures while successful empty queries resolve `[]`.
 
@@ -399,7 +400,8 @@ independent workstream immediately when a slot opens.
   passed 125/125. A final review finding for impossible normalized legacy dates was
   fixed with explicit format/component validation; final re-review passed without
   findings and the branch merged. Integrated focused tests passed 18/18. Central
-  append/error/provenance wiring is still required before full manual testing.
+  append and session-error wiring landed in `d445528`; average-band provenance
+  remains coordinated with T1 before full manual testing.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -539,7 +541,7 @@ independent workstream immediately when a slot opens.
 
 ### I1 — Integration, Review, and Release Candidate
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** no; continuous branch integration can occur after each
   review, but final validation waits for all required workstreams
 - **Branch:** `fill-in-mocked-data` (integration target; no separate feature work)
@@ -662,6 +664,11 @@ independent workstream immediately when a slot opens.
   `fill-in-mocked-data` via `bf215a8`; integrated focused tests passed 58/58. Java
   remains required for dynamic Firestore emulator validation. T1 started from the
   clean post-R1 integration branch.
+- **2026-09-19:** Orchestrator-owned shared contract commit `d445528` made session
+  query failures reject distinctly from successful empty reads and added append-only
+  canonical QEEG persistence/loading with linked-clinician rules, server timestamps,
+  actor provenance, and retained legacy reads. Focused integration tests passed
+  81/81 and the production build passed; independent review is pending.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
