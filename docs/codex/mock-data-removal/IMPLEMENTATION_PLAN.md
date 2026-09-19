@@ -499,11 +499,11 @@ independent workstream immediately when a slot opens.
 
 ### T1 — Protocol Runtime Consumption
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
-- **Final commit:** pending
+- **Final commit:** `8963f02a04e15943ef27df7fb884776596e3a6d8`
 - **Owned files:** protocol-consumption portions of
   `src/components/patient/SessionRunner.tsx`, `src/services/adaptiveEngine.ts`, and
   `src/services/eegEngine.ts`; focused tests. Do not change the catalog or shared
@@ -521,6 +521,14 @@ independent workstream immediately when a slot opens.
 - **Tests:** deterministic engine tests per setting and boundary; legacy assignment
   fallback; Demo/headset parity contract; manual short session with visibly
   distinct valid assignments.
+- **Implementation report:** validated persisted reward range, threshold, condition,
+  duration, and adaptive-step settings now drive runtime behavior; alias is
+  display-only, invalid assignments block visibly, and Demo/headset acquisition
+  shares the evaluator. Aggregate-band resolution is explicit; inhibit/montage/
+  mapping/notes remain unsupported runtime controls. Average-band provenance is
+  written only for complete consistently sourced non-Demo measurements. Focused
+  tests passed 9/9, full tests passed 171/171, and the production build passed.
+  Independent review is pending.
 
 ### D1 — Production/Demo Data Separation
 
@@ -678,6 +686,9 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** C2 completed at `09d2c08`, with 9/9 focused and 130/130 full
   tests passing, and entered the independent-review queue. Its session-read error
   dependency was satisfied by central commit `d445528`.
+- **2026-09-19:** T1 completed at `8963f02`, with 9/9 focused and 171/171 full
+  tests passing, and entered independent review. It uses the existing session
+  provenance contract, so no shared type change was requested.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
