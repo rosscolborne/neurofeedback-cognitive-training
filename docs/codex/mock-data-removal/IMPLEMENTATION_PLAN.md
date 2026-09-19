@@ -288,11 +288,11 @@ independent workstream immediately when a slot opens.
 
 ### P1 — Patient Progress Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-patient-progress`
 - **Worktree:** `../neurasticity-mockdata-patient-progress`
-- **Final commit:** pending
+- **Final commit:** `1a632bfbf49f7a853c0773572802420c5e41b8fe`
 - **Owned files:** `src/components/patient/HomeScreen.tsx`,
   `src/components/patient/ProgressHistory.tsx`, a new isolated patient-metrics
   helper and its tests. Do not edit shared storage/types without approval.
@@ -310,14 +310,20 @@ independent workstream immediately when a slot opens.
   checks across Week/Month/All Time.
 - **Shared change request:** if blank-profile defaults must change, submit a small
   orchestrator-owned patch request rather than editing `storageEngine.ts`.
+- **Implementation report:** session-derived home/progress metrics and truthful
+  empty/error states implemented without shared-file changes. Focused metrics tests
+  passed (7/7), targeted lint passed, and the production build passed. Full Vitest
+  reported 112 passing tests and two BrainFlow-service-dependent timeouts while the
+  local backend was unavailable. Independent review is pending.
 
 ### C1 — Patient Detail, QEEG, and Telemetry Authenticity
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-detail`
 - **Worktree:** `../neurasticity-mockdata-clinical-detail`
-- **Final commit:** pending
+- **Final commit:** `c2c4fa4c4377dfcd494b4cd4611f2fcd3c591fca`,
+  `6a6a5e6e7061754ba9539d2964140e6e2337d482`
 - **Owned files:** `src/components/clinician/ClientDetailView.tsx`,
   `src/components/clinician/BrainMapUploadModal.tsx`, new isolated brain-map and
   clinical-metric helpers/tests.
@@ -333,6 +339,10 @@ independent workstream immediately when a slot opens.
   shown only from a real active source, otherwise “not connected/unavailable.”
 - **Tests:** mapper/derivation boundary and zero tests; modal validation/persistence
   tests; detail empty/loading/error/data states; manual linked-patient review.
+- **Implementation report:** removed fabricated clinical/telemetry values, added
+  truthful unavailable states and a validated manual QEEG-entry path, with no
+  shared-contract changes. Full Vitest passed (15 files, 113 tests) and the
+  production build passed with existing warnings. Independent review is pending.
 
 ### C2 — Clinical Analytics and Reports
 
@@ -544,6 +554,9 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** Published `fill-in-mocked-data` as
   `origin/fill-in-mocked-data` and configured the local integration branch to track
   it. No change was made to `main`.
+- **2026-09-19:** P1 completed at `1a632bf` and C1 completed at `c2c4fa4` plus
+  `6a6a5e6`; both remained in retained clean worktrees and entered independent
+  review. No shared-contract changes were requested by either workstream.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
