@@ -26,6 +26,7 @@ export interface ProgressChart {
 
 export type SessionLoadStatus = 'loading' | 'ready' | 'error';
 export type SessionPresentationState = 'loading' | 'error' | 'empty' | 'data';
+export type SessionExportState = 'loading' | 'unavailable' | 'empty' | 'ready';
 
 export interface PatientProgressDisplayModel {
   presentation: SessionPresentationState;
@@ -135,6 +136,13 @@ export function getSessionPresentationState(
   if (status === 'loading') return 'loading';
   if (status === 'error') return 'error';
   return sessionCount > 0 ? 'data' : 'empty';
+}
+
+export function getSessionExportState(presentation: SessionPresentationState): SessionExportState {
+  if (presentation === 'loading') return 'loading';
+  if (presentation === 'error') return 'unavailable';
+  if (presentation === 'empty') return 'empty';
+  return 'ready';
 }
 
 /**

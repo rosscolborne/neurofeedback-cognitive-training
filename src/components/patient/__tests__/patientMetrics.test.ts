@@ -6,6 +6,7 @@ import {
   filterSessionsByPeriod,
   generateTimeInZoneChart,
   getEarnedBadgeIds,
+  getSessionExportState,
   getWeeklyActivity,
   summarizeSessions,
 } from '../patientMetrics';
@@ -173,5 +174,21 @@ describe('patient metrics', () => {
       chartWidth: 360, chartHeight: 120,
     });
     expect(model.earnedBadgeIds).toEqual(new Set(['first-light', 'steady-state', 'deep-focus']));
+  });
+
+  it('enables export only for resolved validated session data', () => {
+    expect(getSessionExportState('loading')).toBe('loading');
+    expect(getSessionExportState('error')).toBe('unavailable');
+    expect(getSessionExportState('empty')).toBe('empty');
+    expect(getSessionExportState('data')).toBe('ready');
+
+    const nowMs = Date.parse('2026-09-20T12:00:00Z');
+    const valid = session({ id: 'valid' });
+    const invalid = session({ id: 'invalid', timestamp: 0 });
+    const model = buildPatientProgressDisplayModel('ready', [invalid, valid], {
+      period: 'all', nowMs, timeZone: 'UTC', chartWidth: 360, chartHeight: 120,
+    });
+    expect(getSessionExportState(model.presentation)).toBe('ready');
+    expect(model.validSessions.map(item => item.id)).toEqual(['valid']);
   });
 });

@@ -5,6 +5,7 @@ import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText } from 'luc
 import {
   buildPatientProgressDisplayModel,
   getDurationSeconds,
+  getSessionExportState,
   getSessionTimestamp,
   getTimeInZonePercent,
   ProgressPeriod,
@@ -68,16 +69,14 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     () => [...progressDisplay.periodSessions].reverse(),
     [progressDisplay.periodSessions],
   );
+  const exportAvailability = getSessionExportState(progressDisplay.presentation);
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
 
   const exportCSV = () => {
-    if (allSessions.length === 0) {
-      alert('No session data to export.');
-      return;
-    }
+    if (exportAvailability !== 'ready') return;
     const headers = ['Date', 'Protocol', 'Experience', 'Duration (s)', 'Time In Zone %', 'Coherence %', 'Peak Score', 'Mood'];
-    const rows = allSessions.map(s => [
+    const rows = progressDisplay.validSessions.map(s => [
       s.date,
       s.protocol,
       s.experience,
@@ -467,6 +466,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
         <button
           onClick={exportCSV}
+          disabled={exportAvailability !== 'ready'}
           className="btn btn-secondary"
           style={{
             padding: '8px 16px',
@@ -475,10 +475,20 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
+            opacity: exportAvailability === 'ready' ? 1 : 0.6,
+            cursor: exportAvailability === 'ready' ? 'pointer' : 'not-allowed',
           }}
         >
           <FileText size={14} />
-          {exportStatus === 'done' ? 'Exported ✓' : 'Export Data (CSV)'}
+          {exportStatus === 'done'
+            ? 'Exported ✓'
+            : exportAvailability === 'loading'
+              ? 'Loading export data…'
+              : exportAvailability === 'unavailable'
+                ? 'Export unavailable'
+                : exportAvailability === 'empty'
+                  ? 'No data to export'
+                  : 'Export Data (CSV)'}
         </button>
       </div>
     </div>
