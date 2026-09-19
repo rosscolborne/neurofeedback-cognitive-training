@@ -144,5 +144,18 @@ describe('manual QEEG entry validation and persistence shape', () => {
     const showPersisted = vi.fn();
     await expect(appendBrainMapForDisplay(built.map, undefined, showPersisted)).rejects.toThrow('not configured');
     expect(showPersisted).not.toHaveBeenCalled();
+
+    const close = vi.fn();
+    const submission = await runManualBrainMapSubmission(
+      validInput,
+      (map) => appendBrainMapForDisplay(map, undefined, showPersisted),
+      close,
+    );
+    expect(submission.ok).toBe(false);
+    expect(submission.ok ? [] : submission.errors).toEqual([
+      'The QEEG record could not be saved. Authorized QEEG persistence is not configured yet. No local record was added.',
+    ]);
+    expect(close).not.toHaveBeenCalled();
+    expect(showPersisted).not.toHaveBeenCalled();
   });
 });
