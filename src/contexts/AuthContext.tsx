@@ -189,12 +189,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Accounts created while Firestore was temporarily unavailable may not
       // have their profile document yet. A merge write both recovers those
       // accounts and keeps existing profile fields intact.
-      setDoc(doc(db, 'users', user.uid), {
-        role: newRole,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch((err) => {
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          role: newRole,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      } catch (err) {
         console.warn('Background role update notice:', err);
-      });
+        setRole(null);
+        throw err;
+      }
     }
   };
 

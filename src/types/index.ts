@@ -390,6 +390,31 @@ export interface SessionCreateResult {
   session: SessionRecord;
 }
 
+export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled';
+
+export interface PatientInvitation {
+  id: string;
+  clinicianId: string;
+  clinicianName: string;
+  patientEmail: string;
+  patientName: string;
+  condition: ClientProfile['condition'];
+  assignedProtocol: ProtocolType;
+  prescribedSessionsPerWeek: number;
+  notes?: string;
+  status: PatientInvitationStatus;
+  patientId?: string;
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  acceptedAt?: PersistedTimestamp;
+  schemaVersion: number;
+}
+
+export type PatientInvitationInput = Pick<
+  PatientInvitation,
+  'patientEmail' | 'patientName' | 'condition' | 'assignedProtocol' | 'prescribedSessionsPerWeek' | 'notes'
+> & { clinicianName: string };
+
 export interface ClientProfile {
   id: string;
   name: string;
@@ -423,6 +448,7 @@ export interface ClientProfile {
   badges: string[];
   linkedClinicianCode?: string;
   clinicianId?: string;
+  acceptedInvitationId?: string;
   patientId?: string;
   isDemo?: boolean;
   notes?: string;

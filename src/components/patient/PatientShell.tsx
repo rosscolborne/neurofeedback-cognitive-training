@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
@@ -34,7 +33,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
-  const navigate = useNavigate();
+  const [showClinicianLink, setShowClinicianLink] = useState(false);
+  const [invitationCode, setInvitationCode] = useState('');
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [isLinking, setIsLinking] = useState(false);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -42,16 +44,18 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   const handleLinkClinician = async () => {
-    const code = window.prompt("Enter your clinician's code:");
-    if (code && auth.currentUser) {
-      try {
-        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-          linkedClinicianCode: code
-        });
-        alert('Clinician linked successfully! They now have access to your progress.');
-      } catch (err) {
-        alert('Failed to link clinician. Invalid code or network error.');
-      }
+    if (!invitationCode.trim()) return;
+    setIsLinking(true);
+    setLinkError(null);
+    try {
+      const linkedClient = await storageEngine.acceptPatientInvitation(invitationCode, client);
+      await onUpdateClient(linkedClient);
+      setInvitationCode('');
+      setShowClinicianLink(false);
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : 'Could not accept this invitation.');
+    } finally {
+      setIsLinking(false);
     }
   };
 
@@ -443,14 +447,38 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 Re-run Assessment & Headband Setup
               </button>
 
-              {!client.linkedClinicianCode && (
-                <button
-                  onClick={handleLinkClinician}
-                  className="btn btn-secondary"
-                  style={{ width: '100%' }}
-                >
-                  Link to Clinician
+              {client.clinicianId ? (
+                <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)', fontSize: '13px', fontWeight: 600 }}>
+                  Connected to your clinician
+                </div>
+              ) : !showClinicianLink ? (
+                <button onClick={() => setShowClinicianLink(true)} className="btn btn-secondary" style={{ width: '100%' }}>
+                  Connect to Clinician
                 </button>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                  <label htmlFor="clinician-invitation-code" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Invitation code
+                  </label>
+                  <input
+                    id="clinician-invitation-code"
+                    value={invitationCode}
+                    onChange={(event) => setInvitationCode(event.target.value.toUpperCase())}
+                    placeholder="XXXX-XXXX-XXXX"
+                    autoComplete="off"
+                    className="font-mono"
+                    style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '14px', letterSpacing: '0.06em' }}
+                  />
+                  {linkError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{linkError}</div>}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => void handleLinkClinician()} disabled={isLinking} className="btn btn-primary" style={{ flex: 1, padding: '11px 14px', fontSize: '13px', opacity: isLinking ? 0.7 : 1 }}>
+                      {isLinking ? 'Connecting…' : 'Accept Invitation'}
+                    </button>
+                    <button onClick={() => { setShowClinicianLink(false); setLinkError(null); }} disabled={isLinking} className="btn btn-ghost" style={{ padding: '11px 14px' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment } from './types';
+import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment, PatientInvitation } from './types';
 import { storageEngine } from './services/storageEngine';
 import { applyBrandToDOM } from './services/brandEngine';
 import { PatientShell } from './components/patient/PatientShell';
@@ -25,6 +25,7 @@ export function App() {
   const [currentClient, setCurrentClient] = useState<ClientProfile | null>(null);
   const [messages, setMessages] = useState<MessageThread[]>([]);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
+  const [patientInvitations, setPatientInvitations] = useState<PatientInvitation[]>([]);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
 
   useEffect(() => {
@@ -39,8 +40,14 @@ export function App() {
           const client = await storageEngine.getCurrentClient(user);
           if (isMounted) setCurrentClient(client);
         } else if (role === 'clinician') {
-          const cls = await storageEngine.getClients();
-          if (isMounted) setClients(cls);
+          const [cls, invitations] = await Promise.all([
+            storageEngine.getClients(),
+            storageEngine.getPatientInvitationsForClinician(),
+          ]);
+          if (isMounted) {
+            setClients(cls);
+            setPatientInvitations(invitations);
+          }
         } else {
           const defaultClient = await storageEngine.getCurrentClient(user);
           const cls = await storageEngine.getClients();
@@ -92,70 +99,37 @@ export function App() {
   };
 
   const handleDeleteClient = async (clientId: string) => {
-    const next = clients.filter(c => c.id !== clientId);
-    setClients(next);
-    await storageEngine.deleteClient(clientId);
+    const client = clients.find((entry) => entry.id === clientId);
+    if (client?.isDemo || clientId.startsWith('demo-')) {
+      await storageEngine.deleteClient(clientId);
+    } else {
+      await storageEngine.unlinkPatient(clientId);
+    }
+    setClients((current) => current.filter((client) => client.id !== clientId));
   };
 
-  const handleAddClient = async (newClient: Partial<ClientProfile>) => {
-    const fullClient: ClientProfile = {
-      id: 'client-' + Date.now(),
-      clinicianId: user?.uid,
-      patientId: 'client-' + Date.now(),
-      name: newClient.name || 'New Patient',
-      email: (newClient.name?.toLowerCase().replace(/\s+/g, '.') || 'patient') + '@example.com',
-      avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
-      condition: newClient.condition || 'ADHD (Inattentive)',
-      status: 'active',
+  const handleAddClient = async (newClient: Partial<ClientProfile>): Promise<PatientInvitation> => {
+    if (!newClient.email?.trim()) throw new Error('Patient email is required');
+    const invitation = await storageEngine.createPatientInvitation({
+      clinicianName: user?.displayName || user?.email || 'Clinician',
+      patientEmail: newClient.email,
+      patientName: newClient.name || '',
+      condition: newClient.condition || 'Peak Performance',
       assignedProtocol: newClient.assignedProtocol || 'theta-beta-ratio',
-      brainMaps: [],
-      allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'mandala', 'eeg-mandala', 'neuro-gambit'],
-      prescribedSessionsPerWeek: 4,
-      completedSessionsCount: 0,
-      currentStreak: 0,
-      streakFreezeRemaining: 1,
-      brainCapacityScore: 60,
-      lastSessionDate: 'Just Enrolled',
-      nextSessionDate: 'Ready to schedule',
-      isDemo: false,
-      notes: newClient.notes || '',
-      tidalGardenState: {
-        stage: 1,
-        plantsUnlocked: ['amber-coral'],
-        growthPoints: 0,
-        lastWatered: new Date().toISOString().split('T')[0],
-      },
-      skylineBiomesUnlocked: ['Alpine Meadows'],
-      badges: ['first-light'],
-    };
+      prescribedSessionsPerWeek: newClient.prescribedSessionsPerWeek || 4,
+      notes: newClient.notes,
+    });
+    setPatientInvitations((current) => [invitation, ...current]);
+    return invitation;
+  };
 
-    const next = [fullClient, ...clients];
-    setClients(next);
-    await storageEngine.saveClient(fullClient);
-
-    // Auto-create a welcome thread for this patient
-    const newThread: MessageThread = {
-      clientId: fullClient.id,
-      patientId: fullClient.id,
-      clinicianId: user?.uid,
-      clientName: fullClient.name,
-      clientAvatar: fullClient.avatarUrl,
-      lastMessageTime: 'Just now',
-      unreadCount: 0,
-      isDemo: false,
-      messages: [
-        {
-          id: 'welcome-' + Date.now(),
-          sender: 'clinician',
-          text: `Welcome ${fullClient.name}! Your clinical neurofeedback profile has been initialized with the ${fullClient.assignedProtocol.replace(/-/g, ' ')} protocol for your Muse S (Athena) headset.`,
-          timestamp: 'Just now',
-          isRead: true,
-        },
-      ],
-    };
-    const nextThreads = [newThread, ...messages];
-    setMessages(nextThreads);
-    await storageEngine.saveMessageThread(newThread);
+  const handleCancelPatientInvitation = async (invitationId: string) => {
+    await storageEngine.cancelPatientInvitation(invitationId);
+    setPatientInvitations((current) =>
+      current.map((invitation) =>
+        invitation.id === invitationId ? { ...invitation, status: 'cancelled' } : invitation
+      )
+    );
   };
 
   const handleSendMessage = async (clientId: string, text: string) => {
@@ -309,11 +283,13 @@ export function App() {
                   brand={brand}
                   clinicianLabel={user?.displayName || user?.email || undefined}
                   clients={clients}
+                  patientInvitations={patientInvitations}
                   messages={messages}
                   appointments={appointments}
                   onUpdateClient={handleUpdateClient}
                   onDeleteClient={handleDeleteClient}
                   onAddClient={handleAddClient}
+                  onCancelPatientInvitation={handleCancelPatientInvitation}
                   onSendMessage={handleSendMessage}
                   onSaveAppointment={handleSaveAppointment}
                   onDeleteAppointment={handleDeleteAppointment}

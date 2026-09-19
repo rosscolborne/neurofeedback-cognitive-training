@@ -4,6 +4,7 @@ import {
   ClientProfile,
   ClinicBrandConfig,
   MessageThread,
+  PatientInvitation,
 } from '../../types';
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
@@ -27,11 +28,13 @@ interface ClinicianShellProps {
   brand: ClinicBrandConfig;
   clinicianLabel?: string;
   clients: ClientProfile[];
+  patientInvitations: PatientInvitation[];
   messages: MessageThread[];
   appointments: CalendarAppointment[];
   onUpdateClient: (updated: ClientProfile) => void;
   onDeleteClient?: (clientId: string) => void;
-  onAddClient: (newClient: Partial<ClientProfile>) => void;
+  onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
+  onCancelPatientInvitation: (invitationId: string) => Promise<void>;
   onSendMessage: (clientId: string, text: string) => void;
   onSaveAppointment: (appt: CalendarAppointment) => void;
   onDeleteAppointment: (id: string) => void;
@@ -52,11 +55,13 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   brand,
   clinicianLabel,
   clients,
+  patientInvitations,
   messages,
   appointments,
   onUpdateClient,
   onDeleteClient,
   onAddClient,
+  onCancelPatientInvitation,
   onSendMessage,
   onSaveAppointment,
   onDeleteAppointment,
@@ -260,8 +265,10 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         {activeNav === 'clients' && !selectedClient && (
           <ClientRosterView
             clients={clients}
+            invitations={patientInvitations}
             onSelectClient={(c) => setSelectedClient(c)}
             onAddClient={onAddClient}
+            onCancelInvitation={onCancelPatientInvitation}
             onUpdateClient={onUpdateClient}
             onDeleteClient={onDeleteClient}
             onScheduleClient={(clientId) => {

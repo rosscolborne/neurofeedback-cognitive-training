@@ -11,6 +11,8 @@ import {
   SessionNotesPatch,
   SessionQueryScope,
   PractitionerProfile,
+  PatientInvitation,
+  PatientInvitationInput,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
 import { auth, db } from './firebase';
@@ -32,6 +34,7 @@ import {
   readClientProfile,
   readSessionRecord,
   removeUndefined,
+  timestampToMillis,
 } from './dataMappers';
 
 const STORAGE_KEYS = {
@@ -42,6 +45,20 @@ const STORAGE_KEYS = {
   APPOINTMENTS: 'waveable_appointments',
   CURRENT_CLIENT_ID: 'waveable_current_client_id',
 };
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const createInvitationCode = (): string => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const raw = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+};
+
+const readPatientInvitation = (data: unknown, id: string): PatientInvitation => ({
+  ...(data as Omit<PatientInvitation, 'id'>),
+  id,
+});
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {
@@ -714,6 +731,134 @@ class StorageEngine {
       console.warn('Failed to fetch clients from Firestore:', err);
       return [];
     }
+  }
+
+  public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
+    const clinician = auth.currentUser;
+    if (!clinician || clinician.uid === 'demo-clinician') {
+      throw new Error('A real clinician account is required to invite a patient');
+    }
+
+    const patientEmail = normalizeEmail(input.patientEmail);
+    if (!patientEmail) throw new Error('Patient email is required');
+
+    const invitation: PatientInvitation = {
+      id: createInvitationCode(),
+      clinicianId: clinician.uid,
+      clinicianName: input.clinicianName.trim() || clinician.email || 'Clinician',
+      patientEmail,
+      patientName: input.patientName.trim(),
+      condition: input.condition,
+      assignedProtocol: input.assignedProtocol,
+      prescribedSessionsPerWeek: input.prescribedSessionsPerWeek,
+      notes: input.notes?.trim() || undefined,
+      status: 'pending',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      schemaVersion: 1,
+    };
+
+    await setDoc(
+      doc(db, 'patientInvitations', invitation.id),
+      removeUndefined({
+        ...invitation,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    );
+    return invitation;
+  }
+
+  public async getPatientInvitationsForClinician(): Promise<PatientInvitation[]> {
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId || clinicianId === 'demo-clinician') return [];
+    const snapshot = await getDocs(
+      query(collection(db, 'patientInvitations'), where('clinicianId', '==', clinicianId))
+    );
+    return snapshot.docs
+      .map((entry) => readPatientInvitation(entry.data(), entry.id))
+      .sort((a, b) => (timestampToMillis(b.createdAt) ?? 0) - (timestampToMillis(a.createdAt) ?? 0));
+  }
+
+  public async cancelPatientInvitation(invitationId: string): Promise<void> {
+    if (!auth.currentUser) throw new Error('Sign in to cancel an invitation');
+    await setDoc(
+      doc(db, 'patientInvitations', invitationId),
+      { status: 'cancelled', updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  public async unlinkPatient(patientId: string): Promise<void> {
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId) throw new Error('Sign in to remove a patient from your roster');
+    const patientRef = doc(db, 'clients', patientId);
+    const snapshot = await getDoc(patientRef);
+    if (!snapshot.exists()) return;
+    const patient = readClientProfile(snapshot.data(), snapshot.id);
+    if (patient.clinicianId !== clinicianId && patient.linkedClinicianCode !== clinicianId) {
+      throw new Error('You are not linked to this patient');
+    }
+    await setDoc(
+      patientRef,
+      { clinicianId: null, linkedClinicianCode: null, acceptedInvitationId: null, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  public async acceptPatientInvitation(invitationCode: string, fallbackClient: ClientProfile): Promise<ClientProfile> {
+    const patient = auth.currentUser;
+    if (!patient?.email) throw new Error('Sign in with the invited email address');
+    const patientEmail = patient.email;
+
+    const code = invitationCode.trim().toUpperCase();
+    const invitationRef = doc(db, 'patientInvitations', code);
+    const clientRef = doc(db, 'clients', patient.uid);
+
+    return runTransaction(db, async (transaction) => {
+      const invitationSnapshot = await transaction.get(invitationRef);
+      if (!invitationSnapshot.exists()) throw new Error('Invitation not found');
+
+      const invitation = readPatientInvitation(invitationSnapshot.data(), invitationSnapshot.id);
+      if (invitation.status !== 'pending') throw new Error('This invitation is no longer available');
+      if (normalizeEmail(invitation.patientEmail) !== normalizeEmail(patientEmail)) {
+        throw new Error('This invitation was sent to a different email address');
+      }
+      const clientSnapshot = await transaction.get(clientRef);
+      const current = clientSnapshot.exists()
+        ? readClientProfile(clientSnapshot.data(), clientSnapshot.id)
+        : { ...fallbackClient, id: patient.uid, patientId: patient.uid, email: patientEmail };
+      if (current.clinicianId && current.clinicianId !== invitation.clinicianId) {
+        throw new Error('Disconnect from your current clinician before accepting another invitation');
+      }
+      const linkedClient: ClientProfile = {
+        ...current,
+        id: patient.uid,
+        patientId: patient.uid,
+        email: patientEmail,
+        name: current.name || invitation.patientName,
+        clinicianId: invitation.clinicianId,
+        acceptedInvitationId: invitation.id,
+        condition: invitation.condition,
+        assignedProtocol: invitation.assignedProtocol,
+        prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
+        notes: invitation.notes ?? current.notes,
+      };
+      const timestamp = serverTimestamp();
+
+      transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
+      transaction.set(
+        invitationRef,
+        {
+          status: 'accepted',
+          patientId: patient.uid,
+          acceptedAt: timestamp,
+          updatedAt: timestamp,
+        },
+        { merge: true }
+      );
+      return linkedClient;
+    });
   }
 
   public async saveClient(client: ClientProfile): Promise<void> {

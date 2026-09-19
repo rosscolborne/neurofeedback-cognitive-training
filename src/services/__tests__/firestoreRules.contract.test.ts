@@ -39,4 +39,21 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain("request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null)");
     expect(rules).toContain("request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null)");
   });
+
+  it('links patients through atomic, email-targeted invitations', () => {
+    expect(rules).toContain('match /patientInvitations/{invitationId}');
+    expect(rules).toContain("request.resource.data.status == 'pending'");
+    expect(rules).toContain('resource.data.patientEmail == request.auth.token.email');
+    expect(rules).toContain("request.resource.data.status == 'accepted'");
+    expect(rules).toContain(".data.get('acceptedInvitationId', null) == invitationId");
+    expect(rules).toContain('getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))');
+  });
+
+  it('does not expose the user directory or let clinicians create and delete patient profiles', () => {
+    const usersBlock = rules.slice(rules.indexOf('match /users/{userId}'), rules.indexOf('// A clinician creates an invitation'));
+    expect(usersBlock).toContain('allow read: if isOwner(userId);');
+    const clientsBlock = rules.slice(rules.indexOf('match /clients/{clientId}'), rules.indexOf('// Neurofeedback Session Records'));
+    expect(clientsBlock).not.toContain("request.resource.data.get('clinicianId', null) == request.auth.uid");
+    expect(clientsBlock).toContain('allow delete: if isAuthenticated() && (\n        request.auth.uid == clientId');
+  });
 });

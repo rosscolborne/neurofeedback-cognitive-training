@@ -11,6 +11,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isClinician() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', null) == 'clinician';
+    }
+
     function clinicExists(clinicId) {
       return clinicId != null &&
         exists(/databases/$(database)/documents/clinics/$(clinicId));
@@ -50,8 +55,51 @@ service cloud.firestore {
 
     // User profiles (users/{userId})
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isOwner(userId);
       allow write: if isOwner(userId);
+    }
+
+    // A clinician creates an invitation, then the intended patient accepts it
+    // from the account using that email. The invitation and patient profile
+    // link are committed atomically.
+    match /patientInvitations/{invitationId} {
+      function isInvitedPatient() {
+        return isAuthenticated() &&
+          request.auth.token.email != null &&
+          resource.data.patientEmail == request.auth.token.email;
+      }
+
+      allow create: if isClinician() &&
+        request.resource.data.id == invitationId &&
+        request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.patientEmail is string &&
+        request.resource.data.patientEmail.size() > 3 &&
+        request.resource.data.patientName is string;
+      allow read: if isAuthenticated() && (
+        resource.data.clinicianId == request.auth.uid || isInvitedPatient()
+      );
+      allow update: if isAuthenticated() && (
+        (
+          resource.data.clinicianId == request.auth.uid &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'cancelled' &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt'])
+        ) || (
+          isInvitedPatient() &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.patientId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'patientId', 'acceptedAt', 'updatedAt']) &&
+          getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
+            .data.get('clinicianId', null) == resource.data.clinicianId &&
+          getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
+            .data.get('acceptedInvitationId', null) == invitationId
+        )
+      );
+      allow delete: if false;
     }
 
     // Patient Profiles & Clinician Records (clients/{clientId})
@@ -64,12 +112,23 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated() && (
         request.auth.uid == clientId ||
-        request.resource.data.id == request.auth.uid ||
-        request.resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-        request.resource.data.get('clinicianId', null) == request.auth.uid
+        request.resource.data.id == request.auth.uid
       );
       allow update: if isAuthenticated() && (
-        request.auth.uid == clientId ||
+        (
+          request.auth.uid == clientId && (
+            request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) ||
+            (
+              request.resource.data.get('acceptedInvitationId', null) is string &&
+              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
+                .data.get('status', null) == 'accepted' &&
+              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
+                .data.get('patientId', null) == request.auth.uid &&
+              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
+                .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null)
+            )
+          )
+        ) ||
         resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
         resource.data.get('clinicianId', null) == request.auth.uid ||
         (
@@ -80,9 +139,7 @@ service cloud.firestore {
         )
       );
       allow delete: if isAuthenticated() && (
-        request.auth.uid == clientId ||
-        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-        resource.data.get('clinicianId', null) == request.auth.uid
+        request.auth.uid == clientId
       );
     }
 
