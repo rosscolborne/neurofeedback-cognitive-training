@@ -4,8 +4,13 @@ import { eegEngine } from '../../services/eegEngine';
 import {
   AdaptiveDifficultyEngine,
   AdaptiveAdjustmentLog,
-  getSessionPhaseAtElapsed,
+  accumulateVerifiedBands,
+  advanceSessionClock,
+  createVerifiedBandAccumulator,
+  getCompletedSessionDuration,
+  PROTOCOL_RUNTIME_LIMITATIONS,
   resolveProtocolRuntime,
+  summarizeVerifiedBands,
 } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
@@ -148,6 +153,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   // Timers (in seconds)
   const sessionTotalDuration = runtimeConfig?.durationSeconds ?? 0;
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
+  const totalSecondsElapsedRef = useRef(0);
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
   const [inZoneMeasuredSeconds, setInZoneMeasuredSeconds] = useState(0);
 
@@ -157,12 +163,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     runtimeConfig ?? undefined,
   ));
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
-  const bandAccumulatorRef = useRef({
-    delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0,
-    counts: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
-    provenance: null as ReturnType<typeof eegEngine.getBandPowerProvenance>,
-    provenanceConsistent: true,
-  });
+  const bandAccumulatorRef = useRef(createVerifiedBandAccumulator());
   const coherenceAccumulatorRef = useRef({ total: 0, count: 0 });
   const brainflowAccRef = useRef({
     mindfulness: 0,
@@ -203,18 +204,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     }
   }, []);
 
-  const finishSession = React.useCallback(async () => {
+  const finishSession = React.useCallback(async (completedDurationSeconds?: number) => {
     if (isSavingSession) return;
     setIsSavingSession(true);
     setSaveError(null);
 
     const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
-    const acc = bandAccumulatorRef.current;
-    const averageBand = (band: keyof typeof acc.counts) => acc.counts[band] > 0
-      ? Math.round((acc[band] / acc.counts[band]) * 10) / 10
-      : 0;
-    const allBandsMeasured = Object.values(acc.counts).every(count => count > 0);
+    const bandSummary = summarizeVerifiedBands(bandAccumulatorRef.current);
 
     const bfAcc = brainflowAccRef.current;
     const summary: SessionRecord = {
@@ -226,20 +223,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       timestamp: Date.now(),
       protocol: runtimeConfig?.protocol ?? client.assignedProtocol,
       experience: selectedExperience,
-      durationSeconds: totalSecondsElapsed,
+      durationSeconds: getCompletedSessionDuration(completedDurationSeconds, totalSecondsElapsedRef.current),
       timeInZonePercent,
       averageCoherence: coherenceAccumulatorRef.current.count > 0
         ? Math.round(coherenceAccumulatorRef.current.total / coherenceAccumulatorRef.current.count)
         : null,
       peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
-      averageBands: {
-        delta: averageBand('delta'),
-        theta: averageBand('theta'),
-        alpha: averageBand('alpha'),
-        smr: averageBand('smr'),
-        beta: averageBand('beta'),
-        gamma: averageBand('gamma'),
-      },
+      averageBands: bandSummary.bands,
       timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
       adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
       finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
@@ -248,8 +238,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       averageMindfulness: bfAcc.mindfulnessCount > 0 ? Math.round(bfAcc.mindfulness / bfAcc.mindfulnessCount) : undefined,
       averageValence: bfAcc.valenceCount > 0 ? Math.round((bfAcc.valence / bfAcc.valenceCount) * 100) / 100 : undefined,
       averageArousal: bfAcc.arousalCount > 0 ? Math.round((bfAcc.arousal / bfAcc.arousalCount) * 100) / 100 : undefined,
-      metricProvenance: allBandsMeasured && acc.provenance && acc.provenanceConsistent
-        ? { averageBands: acc.provenance }
+      metricProvenance: bandSummary.provenance
+        ? { averageBands: bandSummary.provenance }
         : undefined,
     };
 
@@ -261,7 +251,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       setSaveError("We couldn't save this session. Check your connection and try again.");
       setIsSavingSession(false);
     }
-  }, [client.assignedProtocol, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isSavingSession, onComplete, runtimeConfig, selectedExperience, totalSecondsElapsed]);
+  }, [client.assignedProtocol, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {
@@ -303,21 +293,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
       if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
         // Collect rolling band averages
-        const acc = bandAccumulatorRef.current;
-        const bandKeys = ['delta', 'theta', 'alpha', 'smr', 'beta', 'gamma'] as const;
-        bandKeys.forEach(band => {
-          if (data.bandAvailability[band] && Number.isFinite(data.bands[band])) {
-            acc[band] += data.bands[band];
-            acc.counts[band] += 1;
-          }
-        });
-        const provenance = eegEngine.getBandPowerProvenance();
-        if (provenance) {
-          if (!acc.provenance) acc.provenance = provenance;
-          else if (acc.provenance.source !== provenance.source
-            || acc.provenance.algorithm !== provenance.algorithm
-            || acc.provenance.version !== provenance.version) acc.provenanceConsistent = false;
-        }
+        accumulateVerifiedBands(
+          bandAccumulatorRef.current,
+          data.bands,
+          data.bandAvailability,
+          eegEngine.getBandPowerProvenance(),
+        );
         if (data.coherenceAvailable && data.coherence != null) {
           coherenceAccumulatorRef.current.total += data.coherence;
           coherenceAccumulatorRef.current.count += 1;
@@ -363,34 +344,29 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     if (isPaused || !isSessionStarted || !runtimeConfig) return;
 
     const interval = window.setInterval(() => {
-      setTotalSecondsElapsed(prev => {
-        const next = prev + 1;
+      const tick = advanceSessionClock(totalSecondsElapsedRef.current, sessionTotalDuration, eegEngine.isDemoMode);
+      totalSecondsElapsedRef.current = tick.elapsed;
+      setTotalSecondsElapsed(tick.elapsed);
+      if (tick.phase === 'complete') {
+        void finishSession(tick.elapsed);
+      } else if (tick.phase !== phaseRef.current) {
+        if (tick.phase === 'warmup') audioEngine.playChime('success');
+        setPhase(tick.phase);
+      }
 
-        const nextPhase = getSessionPhaseAtElapsed(next, sessionTotalDuration, eegEngine.isDemoMode);
-        if (nextPhase === 'complete') {
-          void finishSession();
-        } else if (nextPhase !== phaseRef.current) {
-          if (nextPhase === 'warmup') audioEngine.playChime('success');
-          setPhase(nextPhase);
-        }
-
-        // Periodic time-series capture every 10 seconds
-        const currentData = eegDataRef.current;
-        if (next % 10 === 0 && currentData) {
-          timeSeriesRef.current.push({
-            t: next,
-            thetaBetaRatio: currentData.thetaBetaRatio,
-            alpha: currentData.bands.alpha,
-            smr: currentData.bands.smr,
-            beta: currentData.bands.beta,
-            inZone: currentData.inZone,
-          });
-        }
-
-        return next;
-      });
-
+      // Periodic time-series capture every 10 seconds
       const currentData = eegDataRef.current;
+      if (tick.elapsed % 10 === 0 && currentData) {
+        timeSeriesRef.current.push({
+          t: tick.elapsed,
+          thetaBetaRatio: currentData.thetaBetaRatio,
+          alpha: currentData.bands.alpha,
+          smr: currentData.bands.smr,
+          beta: currentData.bands.beta,
+          inZone: currentData.inZone,
+        });
+      }
+
       // The live in-zone display should reflect every valid observation as
       // soon as a session begins. Calibration is real EEG data too; only an
       // unavailable protocol metric should keep this value indeterminate.
@@ -448,8 +424,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         <h1 style={{ fontSize: '22px' }}>Protocol unavailable</h1>
         <p>{runtimeResolution.error}</p>
         <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-          This engine applies reward frequency, threshold, and duration settings. Inhibit bands, montage,
-          sensitivity, and clinical notes are not runtime controls and remain documentation only.
+          {PROTOCOL_RUNTIME_LIMITATIONS}
         </p>
         <button className="btn btn-primary" onClick={onCancel}>Return to dashboard</button>
       </div>
@@ -533,6 +508,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <ShieldCheck size={14} />
           <span>Runs 100% in your browser. No server downloads required.</span>
         </div>
+        <p style={{ fontSize: '10px', color: 'var(--text-tertiary)', lineHeight: 1.4, margin: 0 }}>
+          {PROTOCOL_RUNTIME_LIMITATIONS}
+        </p>
       </div>
     );
   }
@@ -712,6 +690,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </button>
         </div>
       </header>
+
+      <div role="status" style={{ padding: '5px 14px', fontSize: '9px', lineHeight: 1.3, color: 'var(--text-tertiary)' }}>
+        {PROTOCOL_RUNTIME_LIMITATIONS}
+      </div>
 
       {/* Adaptive Threshold Notification Banner */}
       {adjustmentNotice && (

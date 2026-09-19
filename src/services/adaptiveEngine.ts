@@ -1,20 +1,14 @@
-import { BandPowers, ClientProfile, ProtocolType, SessionPhase } from '../types';
+import { BandPowers, ClientProfile, MetricProvenance, ProtocolTemplate, ProtocolType, SessionPhase } from '../types';
 import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 import { getDefaultProtocolThreshold, getProtocolTypeForTemplate } from './protocols';
-
-export interface RuntimeRewardBand {
-  freqMin: number;
-  freqMax: number;
-  targetCondition: 'above' | 'below';
-  targetThreshold: number;
-}
 
 export interface ProtocolRuntimeConfig {
   protocol: ProtocolType;
   durationSeconds: number;
   initialThreshold: number;
   adaptiveStep: number;
-  rewardBand?: RuntimeRewardBand;
+  lowerIsBetter: boolean;
+  thresholdBounds: { min: number; max: number };
   source: 'canonical-default' | 'patient-override';
 }
 
@@ -23,39 +17,66 @@ export type ProtocolRuntimeResolution =
   | { ok: false; error: string };
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const DEFAULT_THRESHOLD_BOUNDS = { min: 0, max: 1000 } as const;
+const LOWER_IS_BETTER: Record<ProtocolType, boolean> = {
+  'theta-beta-ratio': true,
+  'smr-enhancement': false,
+  'alpha-enhancement': false,
+  'alpha-theta-crossover': false,
+  'beta-downtraining': true,
+  'individualized-upper-alpha': false,
+};
+
+export const PROTOCOL_RUNTIME_LIMITATIONS =
+  'Runtime controls: canonical protocol mode, session duration, adaptive step, and validated threshold bounds. '
+  + 'Canonical reward-band fields, inhibit bands, montage or device mapping, sensitivity, clinical notes or rationale, '
+  + 'recommended experiences, and the custom alias are documentation/display-only. Reward-band frequency, condition, or threshold edits are unsupported and block training.';
+
+function sameRewardDefinition(
+  value: ProtocolTemplate['rewardBand'],
+  canonical: ProtocolTemplate['rewardBand'],
+): boolean {
+  return value?.freqMin === canonical.freqMin
+    && value?.freqMax === canonical.freqMax
+    && value?.targetCondition === canonical.targetCondition
+    && value?.targetThreshold === canonical.targetThreshold;
+}
 
 /** Resolve the persisted assignment without allowing its display alias to affect training semantics. */
 export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeResolution {
   const custom = client.customProtocolConfig;
-  if (!custom) {
-    const canonical = getClinicalProtocolTemplate(client.assignedProtocol);
-    if (!canonical) return { ok: false, error: 'The assigned protocol is not supported by this training engine.' };
-    return {
-      ok: true,
-      config: {
-        protocol: client.assignedProtocol,
-        durationSeconds: Math.round(canonical.sessionDurationMinutes * 60),
-        initialThreshold: getDefaultProtocolThreshold(client.assignedProtocol),
-        adaptiveStep: canonical.adaptiveStep,
-        source: 'canonical-default',
-      },
-    };
+  const canonical = getClinicalProtocolTemplate(client.assignedProtocol);
+  if (!canonical) return { ok: false, error: 'The assigned protocol is not supported by this training engine.' };
+  const initialThreshold = getDefaultProtocolThreshold(client.assignedProtocol);
+  const requestedBounds = client.customThresholdBounds;
+  const thresholdBounds = requestedBounds ?? DEFAULT_THRESHOLD_BOUNDS;
+  if (!finite(thresholdBounds.min) || !finite(thresholdBounds.max)
+    || thresholdBounds.min < 0 || thresholdBounds.max > 1000 || thresholdBounds.min >= thresholdBounds.max
+    || initialThreshold < thresholdBounds.min || initialThreshold > thresholdBounds.max) {
+    return { ok: false, error: 'Threshold bounds must be an increasing range from 0 to 1000 that contains the protocol threshold.' };
   }
+  if (!custom) return {
+    ok: true,
+    config: {
+      protocol: client.assignedProtocol,
+      durationSeconds: Math.round(canonical.sessionDurationMinutes * 60),
+      initialThreshold,
+      adaptiveStep: canonical.adaptiveStep,
+      lowerIsBetter: LOWER_IS_BETTER[client.assignedProtocol],
+      thresholdBounds: { ...thresholdBounds },
+      source: 'canonical-default',
+    },
+  };
 
   const protocol = getProtocolTypeForTemplate(custom, client.assignedProtocol);
   if (protocol !== client.assignedProtocol) {
     return { ok: false, error: 'The saved protocol template does not match the assigned training mode.' };
   }
-  const reward = custom.rewardBand;
-  if (!reward || !finite(reward.freqMin) || !finite(reward.freqMax)
-    || reward.freqMin < 0.5 || reward.freqMax > 50 || reward.freqMin >= reward.freqMax) {
-    return { ok: false, error: 'Reward frequencies must be a valid increasing range between 0.5 and 50 Hz.' };
-  }
-  if (!finite(reward.targetThreshold) || reward.targetThreshold < 0 || reward.targetThreshold > 1000) {
-    return { ok: false, error: 'The reward threshold must be a finite value between 0 and 1000 µV.' };
-  }
-  if (reward.targetCondition !== 'above' && reward.targetCondition !== 'below') {
-    return { ok: false, error: 'The saved reward condition is not supported.' };
+  if (!custom.rewardBand || !sameRewardDefinition(custom.rewardBand, canonical.rewardBand)) {
+    return {
+      ok: false,
+      error: 'Custom reward frequencies, conditions, and thresholds are not supported by this engine. Restore the canonical reward definition before training.',
+    };
   }
   if (!finite(custom.sessionDurationMinutes) || custom.sessionDurationMinutes < 1 || custom.sessionDurationMinutes > 180) {
     return { ok: false, error: 'Session duration must be between 1 and 180 minutes.' };
@@ -69,44 +90,103 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
     config: {
       protocol,
       durationSeconds: Math.round(custom.sessionDurationMinutes * 60),
-      initialThreshold: reward.targetThreshold,
+      initialThreshold,
       adaptiveStep: custom.adaptiveStep,
-      rewardBand: {
-        freqMin: reward.freqMin,
-        freqMax: reward.freqMax,
-        targetCondition: reward.targetCondition,
-        targetThreshold: reward.targetThreshold,
-      },
+      lowerIsBetter: LOWER_IS_BETTER[protocol],
+      thresholdBounds: { ...thresholdBounds },
       source: 'patient-override',
     },
   };
 }
 
-const BAND_INTERVALS: Array<{ band: keyof BandPowers; min: number; max: number }> = [
-  { band: 'delta', min: 0.5, max: 4 },
-  { band: 'theta', min: 4, max: 8 },
-  { band: 'alpha', min: 8, max: 12 },
-  { band: 'smr', min: 12, max: 15 },
-  { band: 'beta', min: 15, max: 30 },
-  { band: 'gamma', min: 30, max: 50 },
-];
-
-export function calculateRewardBandMetric(
+export function evaluateProtocolFeedback(
+  protocol: ProtocolType,
+  threshold: number,
   bands: BandPowers,
   availability: Partial<Record<keyof BandPowers, boolean>>,
-  reward: RuntimeRewardBand,
-): number | null {
-  let weightedTotal = 0;
-  let coveredWidth = 0;
-  for (const interval of BAND_INTERVALS) {
-    const overlap = Math.max(0, Math.min(reward.freqMax, interval.max) - Math.max(reward.freqMin, interval.min));
-    if (overlap === 0) continue;
-    if (!availability[interval.band] || !finite(bands[interval.band])) return null;
-    weightedTotal += bands[interval.band] * overlap;
-    coveredWidth += overlap;
+): { ratio: number | null; inZone: boolean; zoneScore: number; available: boolean } {
+  const available = (...keys: Array<keyof BandPowers>) => keys.every(key => availability[key] && finite(bands[key]));
+  const ratio = available('theta', 'beta') ? bands.theta / Math.max(1e-9, bands.beta) : null;
+  let metric: number | null = null;
+  let lowerIsBetter = false;
+  let width = 1;
+  switch (protocol) {
+    case 'theta-beta-ratio': metric = ratio; lowerIsBetter = true; width = 1.5; break;
+    case 'smr-enhancement': metric = available('smr') ? bands.smr : null; width = 1.5; break;
+    case 'alpha-enhancement':
+    case 'individualized-upper-alpha': metric = available('alpha') ? bands.alpha : null; width = 2; break;
+    case 'alpha-theta-crossover':
+      metric = available('theta', 'alpha') ? bands.theta / Math.max(1e-9, bands.alpha) : null;
+      width = 0.5;
+      break;
+    case 'beta-downtraining': metric = available('beta') ? bands.beta : null; lowerIsBetter = true; width = 5; break;
   }
-  const requestedWidth = reward.freqMax - reward.freqMin;
-  return coveredWidth >= requestedWidth - 1e-9 ? weightedTotal / coveredWidth : null;
+  if (metric === null) return { ratio, inZone: false, zoneScore: 0, available: false };
+  const inZone = lowerIsBetter ? metric <= threshold : metric >= threshold;
+  const zoneScore = lowerIsBetter
+    ? 1 - (metric - threshold) / width
+    : (metric - threshold + width) / (2 * width);
+  return { ratio, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+}
+
+export function advanceSessionClock(elapsedSeconds: number, durationSeconds: number, demoMode: boolean) {
+  const elapsed = elapsedSeconds + 1;
+  return { elapsed, phase: getSessionPhaseAtElapsed(elapsed, durationSeconds, demoMode) };
+}
+
+export function getCompletedSessionDuration(completedDurationSeconds: number | undefined, elapsedSeconds: number): number {
+  return completedDurationSeconds ?? elapsedSeconds;
+}
+
+export interface VerifiedBandAccumulator {
+  sums: BandPowers;
+  sampleCount: number;
+  provenance: MetricProvenance | null;
+  consistent: boolean;
+}
+
+export function createVerifiedBandAccumulator(): VerifiedBandAccumulator {
+  return {
+    sums: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
+    sampleCount: 0,
+    provenance: null,
+    consistent: true,
+  };
+}
+
+export function accumulateVerifiedBands(
+  accumulator: VerifiedBandAccumulator,
+  bands: BandPowers,
+  availability: Partial<Record<keyof BandPowers, boolean>>,
+  provenance: MetricProvenance | null,
+): void {
+  const keys = Object.keys(accumulator.sums) as Array<keyof BandPowers>;
+  if (!provenance || !keys.every(key => availability[key] && finite(bands[key]))) return;
+  if (accumulator.provenance && (
+    accumulator.provenance.source !== provenance.source
+    || accumulator.provenance.algorithm !== provenance.algorithm
+    || accumulator.provenance.version !== provenance.version
+  )) {
+    accumulator.consistent = false;
+    return;
+  }
+  accumulator.provenance ??= provenance;
+  keys.forEach(key => { accumulator.sums[key] += bands[key]; });
+  accumulator.sampleCount += 1;
+}
+
+export function summarizeVerifiedBands(accumulator: VerifiedBandAccumulator): {
+  bands: BandPowers;
+  provenance?: MetricProvenance;
+} {
+  if (!accumulator.sampleCount || !accumulator.provenance || !accumulator.consistent) {
+    return { bands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 } };
+  }
+  const bands = Object.fromEntries(
+    (Object.keys(accumulator.sums) as Array<keyof BandPowers>)
+      .map(key => [key, Math.round((accumulator.sums[key] / accumulator.sampleCount) * 10) / 10]),
+  ) as unknown as BandPowers;
+  return { bands, provenance: accumulator.provenance };
 }
 
 export function getSessionPhaseAtElapsed(
@@ -144,12 +224,12 @@ export class AdaptiveDifficultyEngine {
 
   // Protocol safety bounds
   private bounds: Record<ProtocolType, { min: number; max: number; step: number; lowerIsBetter: boolean }> = {
-    'theta-beta-ratio': { min: 1.1, max: 2.8, step: 0.08, lowerIsBetter: true },
-    'smr-enhancement': { min: 4.0, max: 14.0, step: 0.5, lowerIsBetter: false },
-    'alpha-enhancement': { min: 6.0, max: 18.0, step: 0.6, lowerIsBetter: false },
-    'alpha-theta-crossover': { min: 0.7, max: 1.6, step: 0.05, lowerIsBetter: false },
-    'beta-downtraining': { min: 8.0, max: 20.0, step: 0.8, lowerIsBetter: true },
-    'individualized-upper-alpha': { min: 4.0, max: 15.0, step: 0.5, lowerIsBetter: false },
+    'theta-beta-ratio': { min: 0, max: 1000, step: 0.08, lowerIsBetter: true },
+    'smr-enhancement': { min: 0, max: 1000, step: 0.5, lowerIsBetter: false },
+    'alpha-enhancement': { min: 0, max: 1000, step: 0.6, lowerIsBetter: false },
+    'alpha-theta-crossover': { min: 0, max: 1000, step: 0.05, lowerIsBetter: false },
+    'beta-downtraining': { min: 0, max: 1000, step: 0.8, lowerIsBetter: true },
+    'individualized-upper-alpha': { min: 0, max: 1000, step: 0.5, lowerIsBetter: false },
   };
 
   constructor(protocol: ProtocolType = 'theta-beta-ratio', initialThreshold?: number, runtime?: ProtocolRuntimeConfig) {
@@ -162,21 +242,18 @@ export class AdaptiveDifficultyEngine {
     this.adjustmentsCount = 0;
     this.adjustmentLogs = [];
     
-    if (runtime?.rewardBand) {
-      const step = runtime.adaptiveStep;
-      const threshold = runtime.initialThreshold;
+    if (runtime) {
       this.bounds[protocol] = {
-        min: Math.max(0, threshold - step * 10),
-        max: threshold + step * 10,
-        step,
-        lowerIsBetter: runtime.rewardBand.targetCondition === 'below',
+        min: runtime.thresholdBounds.min,
+        max: runtime.thresholdBounds.max,
+        step: runtime.adaptiveStep,
+        lowerIsBetter: runtime.lowerIsBetter,
       };
-      this.currentThreshold = threshold;
+      this.currentThreshold = runtime.initialThreshold;
     } else if (initialThreshold !== undefined) {
       this.currentThreshold = initialThreshold;
     } else {
-      const b = this.bounds[protocol];
-      this.currentThreshold = (b.min + b.max) / 2;
+      this.currentThreshold = getDefaultProtocolThreshold(protocol);
     }
   }
 
@@ -205,7 +282,6 @@ export class AdaptiveDifficultyEngine {
         } else {
           newThreshold = Math.min(config.max, this.currentThreshold + config.step);
         }
-        reason = `High time-in-zone (${percent.toFixed(0)}% > 80%). Challenge increased by 5%.`;
         adjusted = newThreshold !== this.currentThreshold;
       } else if (percent < 40) {
         // Patient struggling, ease difficulty (make target more achievable)
@@ -215,11 +291,14 @@ export class AdaptiveDifficultyEngine {
         } else {
           newThreshold = Math.max(config.min, this.currentThreshold - config.step);
         }
-        reason = `Low time-in-zone (${percent.toFixed(0)}% < 40%). Target eased by 5% to support momentum.`;
         adjusted = newThreshold !== this.currentThreshold;
       }
 
       if (adjusted) {
+        const absoluteChange = Math.round(Math.abs(newThreshold - this.currentThreshold) * 100) / 100;
+        reason = direction === 'tightened'
+          ? `High time-in-zone (${percent.toFixed(0)}% > 80%). Threshold changed by ${absoluteChange} absolute units.`
+          : `Low time-in-zone (${percent.toFixed(0)}% < 40%). Threshold changed by ${absoluteChange} absolute units to ease the target.`;
         const log: AdaptiveAdjustmentLog = {
           timestamp: Date.now(),
           direction,

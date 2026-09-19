@@ -7,7 +7,7 @@ import { AthenaWasmDecoder, BleTransport } from '@elata-biosciences/eeg-web-ble'
 import { initEegWasm, type HeadbandFrameV1 } from '@elata-biosciences/eeg-web';
 import eegWasmUrl from '@elata-biosciences/eeg-web/wasm/eeg_wasm_bg.wasm?url';
 import {
-  calculateRewardBandMetric,
+  evaluateProtocolFeedback,
   type ProtocolRuntimeConfig,
 } from './adaptiveEngine';
 
@@ -29,7 +29,6 @@ export class EEGEngine {
   // Protocol configuration
   private currentProtocol: ProtocolType = 'theta-beta-ratio';
   private targetThreshold = 1.85;
-  private runtimeRewardBand: ProtocolRuntimeConfig['rewardBand'];
   private phaseAngle = 0;
   private noiseSeed = Math.random() * 100;
 
@@ -79,6 +78,7 @@ export class EEGEngine {
   public latestFftSpectrum: Array<{ freq: number; power: number }> = [];
   public latestPeakAlphaHz = 10.0;
   private latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
+  private latestBandPowerProvenance: { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null = null;
   private latestServerRatios: Record<string, number> = {};
   private latestMetricCalibration: { status: 'off' | 'collecting' | 'active'; progress: number; required: number } = { status: 'off', progress: 0, required: 24 };
   private latestRawMetrics: Record<string, number> = {};
@@ -144,14 +144,12 @@ export class EEGEngine {
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
     this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
-    this.runtimeRewardBand = undefined;
     this.syncProtocolToBrainflowSession();
   }
 
   public configureProtocol(config: ProtocolRuntimeConfig) {
     this.currentProtocol = config.protocol;
     this.targetThreshold = config.initialThreshold;
-    this.runtimeRewardBand = config.rewardBand;
     this.syncProtocolToBrainflowSession();
   }
 
@@ -168,12 +166,16 @@ export class EEGEngine {
     return this.currentProtocol;
   }
 
+  public evaluateFeedbackForBands(
+    bands: BandPowers,
+    availability: Partial<Record<keyof BandPowers, boolean>>,
+  ) {
+    return evaluateProtocolFeedback(this.currentProtocol, this.targetThreshold, bands, availability);
+  }
+
   public getBandPowerProvenance(): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null {
-    if (this.isDemoMode || !this.isHardwareConnected || !this.latestServerBands) return null;
-    if (this.isBrainflowActive || this.fitSessionId) {
-      return { algorithm: 'welch-psd', version: 'brainflow-service-v0.5', source: 'brainflow' };
-    }
-    return { algorithm: 'browser-band-dft', version: '1', source: 'browser-dsp' };
+    if (this.isDemoMode || !this.isHardwareConnected || !this.latestServerBands || !this.latestBandPowerProvenance) return null;
+    return { ...this.latestBandPowerProvenance };
   }
 
   public getLatestBands(): BandPowers | null {
@@ -784,7 +786,14 @@ export class EEGEngine {
                 beta: typeof absoluteBands.beta === 'number',
                 gamma: typeof absoluteBands.gamma === 'number',
               };
+              this.latestBandPowerProvenance = Object.values(this.latestServerBandAvailability).every(Boolean)
+                ? { algorithm: 'welch-psd', version: 'brainflow-service-v0.5', source: 'brainflow' }
+                : null;
               this.latestServerRatios = frame.features.bandPowers?.ratios ?? {};
+            } else {
+              this.latestServerBands = null;
+              this.latestServerBandAvailability = {};
+              this.latestBandPowerProvenance = null;
             }
 
             this.latestBrainFlowScores = {
@@ -866,6 +875,7 @@ export class EEGEngine {
     this.latestTrainingMetric = null;
     this.latestServerBands = null;
     this.latestServerBandAvailability = {};
+    this.latestBandPowerProvenance = null;
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
@@ -1028,6 +1038,7 @@ export class EEGEngine {
         beta: true,
         gamma: true,
       };
+      this.latestBandPowerProvenance = { algorithm: 'browser-band-dft', version: '1', source: 'browser-dsp' };
 
       const ratio = (numerator: number, denominator: number) => numerator / Math.max(1e-9, denominator);
       const thetaBeta = ratio(bands.theta, bands.beta);
@@ -1318,53 +1329,12 @@ export class EEGEngine {
 
   private calculateBrowserFeedback(
     bands: BandPowers,
-    thetaBeta: number,
+    _thetaBeta: number,
     availability: Partial<Record<keyof BandPowers, boolean>> = {
       delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true,
     },
   ) {
-    let metric = thetaBeta;
-    let inZone = false;
-    let zoneScore = 0;
-    if (this.runtimeRewardBand) {
-      const rewardMetric = calculateRewardBandMetric(bands, availability, this.runtimeRewardBand);
-      if (rewardMetric === null) return { ratio: thetaBeta, inZone: false, zoneScore: 0, available: false };
-      const width = Math.max(0.1, this.targetThreshold * 0.2);
-      const lowerIsBetter = this.runtimeRewardBand.targetCondition === 'below';
-      inZone = lowerIsBetter ? rewardMetric <= this.targetThreshold : rewardMetric >= this.targetThreshold;
-      zoneScore = lowerIsBetter
-        ? 1 - (rewardMetric - this.targetThreshold) / width
-        : (rewardMetric - this.targetThreshold + width) / (2 * width);
-      return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
-    }
-    switch (this.currentProtocol) {
-      case 'theta-beta-ratio':
-        inZone = metric <= this.targetThreshold;
-        zoneScore = 1 - (metric - this.targetThreshold) / 1.5;
-        break;
-      case 'smr-enhancement':
-        metric = bands.smr;
-        inZone = metric >= this.targetThreshold;
-        zoneScore = (metric - this.targetThreshold + 1.5) / 3;
-        break;
-      case 'alpha-enhancement':
-      case 'individualized-upper-alpha':
-        metric = bands.alpha;
-        inZone = metric >= this.targetThreshold;
-        zoneScore = (metric - this.targetThreshold + 2) / 4;
-        break;
-      case 'alpha-theta-crossover':
-        metric = bands.theta / Math.max(1e-9, bands.alpha);
-        inZone = metric >= this.targetThreshold;
-        zoneScore = (metric - this.targetThreshold + 0.5) / 1.5;
-        break;
-      case 'beta-downtraining':
-        metric = bands.beta;
-        inZone = metric <= this.targetThreshold;
-        zoneScore = 1 - (metric - this.targetThreshold) / 5;
-        break;
-    }
-    return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+    return this.evaluateFeedbackForBands(bands, availability);
   }
 
   /**
@@ -1497,11 +1467,18 @@ export class EEGEngine {
               delta: typeof abs.delta === 'number',
               theta: typeof abs.theta === 'number',
               alpha: typeof abs.alpha === 'number',
-              smr: true,
+              smr: typeof abs.smr === 'number',
               beta: typeof abs.beta === 'number',
               gamma: typeof abs.gamma === 'number',
             };
+            this.latestBandPowerProvenance = Object.values(this.latestServerBandAvailability).every(Boolean)
+              ? { algorithm: 'welch-psd', version: 'brainflow-service-v0.5', source: 'brainflow' }
+              : null;
             this.latestServerRatios = f.bandPowers.ratios ?? {};
+          } else {
+            this.latestServerBands = null;
+            this.latestServerBandAvailability = {};
+            this.latestBandPowerProvenance = null;
           }
         }
 
@@ -1533,6 +1510,7 @@ export class EEGEngine {
     this.latestTrainingMetric = null;
     this.latestServerBands = null;
     this.latestServerBandAvailability = {};
+    this.latestBandPowerProvenance = null;
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
@@ -1756,9 +1734,6 @@ export class EEGEngine {
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
     const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
-    if (this.runtimeRewardBand) {
-      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
-    }
     let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
     let inZone = trainingFeedback?.inZone ?? false;
     let zoneScore = trainingFeedback?.zoneScore ?? 0;
