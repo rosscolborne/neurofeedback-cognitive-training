@@ -226,6 +226,7 @@ describe('patient invitation linking', () => {
   });
 
   it('creates a pending invitation for the entered patient email instead of a fake client', async () => {
+    firestore.getDocs.mockResolvedValueOnce({ docs: [] });
     firestore.setDoc.mockResolvedValueOnce(undefined);
 
     const invitation = await storageEngine.createPatientInvitation({
@@ -241,8 +242,27 @@ describe('patient invitation linking', () => {
     expect(invitation).toMatchObject({ clinicianId: 'clinician-1', patientEmail: 'patient@one.example', status: 'pending' });
     expect(firestore.setDoc).toHaveBeenCalledWith(
       { type: 'doc', path: 'patientInvitations', id: invitation.id },
-      expect.objectContaining({ patientEmail: 'patient@one.example', status: 'pending' })
+      expect.objectContaining({ patientEmail: 'patient@one.example', status: 'pending', expiresAt: expect.any(Date) })
     );
+  });
+
+  it('rejects self invitations and duplicate pending invitations', async () => {
+    await expect(storageEngine.createPatientInvitation({
+      clinicianName: 'Dr. Example', patientName: 'Self', patientEmail: 'CLINICIAN@example.com',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    })).rejects.toThrow('cannot invite your own');
+
+    firestore.getDocs.mockResolvedValueOnce({
+      docs: [{
+        id: 'ABCD-EFGH-JKLM',
+        data: () => ({ patientEmail: 'patient@example.com', status: 'pending', schemaVersion: 1 }),
+      }],
+    });
+    await expect(storageEngine.createPatientInvitation({
+      clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'Patient@Example.com',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    })).rejects.toThrow('pending invitation already exists');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
   });
 
   it('atomically links the real patient profile and accepts the invitation', async () => {
@@ -291,6 +311,81 @@ describe('patient invitation linking', () => {
     )).rejects.toThrow('different email address');
   });
 
+  it('turns rule-level invitation privacy denials into an actionable account/code error', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'other@example.com' };
+    firestore.runTransaction.mockRejectedValueOnce({ code: 'permission-denied' });
+
+    await expect(storageEngine.acceptPatientInvitation(
+      'ABCD-EFGH-JKLM', createBlankProfile('patient-1', 'other@example.com')
+    )).rejects.toThrow('not found for this signed-in email');
+  });
+
+  it('returns the linked profile without writes when an accepted invitation is retried', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.com' };
+    const linked = {
+      ...createBlankProfile('patient-1', 'patient@example.com'),
+      clinicianId: 'clinician-1', acceptedInvitationId: 'ABCD-EFGH-JKLM',
+    };
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({
+            id: 'ABCD-EFGH-JKLM', exists: () => true,
+            data: () => ({ clinicianId: 'clinician-1', patientId: 'patient-1', patientEmail: 'patient@example.com', status: 'accepted' }),
+          })
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => linked }),
+        set,
+      })
+    );
+
+    await expect(storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', linked)).resolves.toMatchObject(linked);
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('surfaces cancelled, expired, used, invalid, and self-acceptance states', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.com' };
+    await expect(storageEngine.acceptPatientInvitation('bad-code', createBlankProfile('patient-1', 'patient@example.com')))
+      .rejects.toThrow('XXXX-XXXX-XXXX format');
+
+    const cases = [
+      [{ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'cancelled' }, 'cancelled'],
+      [{ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: Date.now() - 1 }, 'expired'],
+      [{ clinicianId: 'clinician-1', patientId: 'patient-2', patientEmail: 'patient@example.com', status: 'accepted' }, 'already been used'],
+      [{ clinicianId: 'patient-1', patientEmail: 'patient@example.com', status: 'pending' }, 'cannot accept their own'],
+    ] as const;
+
+    for (const [invitation, message] of cases) {
+      firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+        callback({
+          get: vi.fn()
+            .mockResolvedValueOnce({ id: 'ABCD-EFGH-JKLM', exists: () => true, data: () => invitation })
+            .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => createBlankProfile('patient-1', 'patient@example.com') }),
+          set: vi.fn(),
+        })
+      );
+      await expect(storageEngine.acceptPatientInvitation(
+        'ABCD-EFGH-JKLM', createBlankProfile('patient-1', 'patient@example.com')
+      )).rejects.toThrow(message);
+    }
+  });
+
+  it('deduplicates canonical and legacy roster results for only the signed-in clinician', async () => {
+    state.auth.currentUser = { uid: 'clinician-1', email: 'clinician@example.com' };
+    const canonical = {
+      id: 'patient-1', data: () => ({ ...createBlankProfile('patient-1', 'one@example.com'), clinicianId: 'clinician-1' }),
+    };
+    const legacy = {
+      id: 'patient-2', data: () => ({ ...createBlankProfile('patient-2', 'two@example.com'), linkedClinicianCode: 'clinician-1' }),
+    };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [canonical] })
+      .mockResolvedValueOnce({ docs: [canonical, legacy] });
+
+    const roster = await storageEngine.getClients();
+    expect(roster.map((entry) => entry.id)).toEqual(['patient-1', 'patient-2']);
+  });
+
   it('refuses to replace a clinician link found in the persisted patient profile', async () => {
     state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.com' };
     const set = vi.fn();
@@ -313,6 +408,30 @@ describe('patient invitation linking', () => {
       'ABCD-EFGH-JKLM',
       createBlankProfile('patient-1', 'patient@example.com')
     )).rejects.toThrow('current clinician');
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('does not rewrite a relationship for a duplicate pending invitation from the linked clinician', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.com' };
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({
+            id: 'ABCD-EFGH-JKLM', exists: () => true,
+            data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending' }),
+          })
+          .mockResolvedValueOnce({
+            id: 'patient-1', exists: () => true,
+            data: () => ({ ...createBlankProfile('patient-1', 'patient@example.com'), clinicianId: 'clinician-1', acceptedInvitationId: 'OLD-CODE' }),
+          }),
+        set,
+      })
+    );
+
+    await expect(storageEngine.acceptPatientInvitation(
+      'ABCD-EFGH-JKLM', createBlankProfile('patient-1', 'patient@example.com')
+    )).rejects.toThrow('already connected');
     expect(set).not.toHaveBeenCalled();
   });
 

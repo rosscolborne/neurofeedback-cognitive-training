@@ -498,14 +498,15 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)' }}>
                   <CheckCircle2 size={20} />
-                  <div style={{ fontSize: '13px' }}>Share this code with {createdInvitation.patientName}. They must sign in with {createdInvitation.patientEmail} and accept it from their Profile.</div>
+                  <div style={{ fontSize: '13px' }}>Share this secure link with {createdInvitation.patientName}. They must sign in with {createdInvitation.patientEmail}. The invitation expires after 14 days.</div>
                 </div>
                 <div className="font-mono" style={{ padding: '16px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', textAlign: 'center', fontSize: '20px', letterSpacing: '0.08em' }}>{createdInvitation.id}</div>
                 <button
                   type="button"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(createdInvitation.id);
+                      const invitationUrl = `${window.location.origin}/connect/${createdInvitation.id}`;
+                      await navigator.clipboard.writeText(invitationUrl);
                       setCopiedCode(true);
                     } catch {
                       setFormError('Copy was blocked by your browser. Select the code above and copy it manually.');
@@ -513,7 +514,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   }}
                   className="btn btn-secondary"
                 >
-                  <Copy size={15} /> {copiedCode ? 'Copied' : 'Copy invitation code'}
+                  <Copy size={15} /> {copiedCode ? 'Link copied' : 'Copy invitation link'}
                 </button>
                 {formError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{formError}</div>}
                 <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-dense">Done</button>

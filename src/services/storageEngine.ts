@@ -31,7 +31,10 @@ import {
 } from 'firebase/firestore';
 import {
   applySessionCompletionToClient,
+  getPatientClinicianId,
+  isPatientInvitationExpired,
   readClientProfile,
+  readPatientInvitation,
   readSessionRecord,
   removeUndefined,
   timestampToMillis,
@@ -46,6 +49,10 @@ const STORAGE_KEYS = {
   CURRENT_CLIENT_ID: 'waveable_current_client_id',
 };
 
+// Invitation addresses are stored and compared case-normalized. Firestore rules
+// still require the Firebase Auth token's canonical email to match exactly.
+// Invitations do not require an existing patient document: the account/profile
+// may be created later, and acceptance links that authenticated profile.
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 const createInvitationCode = (): string => {
@@ -55,10 +62,8 @@ const createInvitationCode = (): string => {
   return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 };
 
-const readPatientInvitation = (data: unknown, id: string): PatientInvitation => ({
-  ...(data as Omit<PatientInvitation, 'id'>),
-  id,
-});
+const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
+const INVITATION_CODE_PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {
@@ -659,7 +664,7 @@ class StorageEngine {
       const patient = await getDoc(doc(db, 'clients', patientId));
       if (!patient.exists()) return false;
       const profile = readClientProfile(patient.data(), patient.id);
-      return profile.clinicianId === currentUserId || profile.linkedClinicianCode === currentUserId;
+      return getPatientClinicianId(profile) === currentUserId;
     } catch {
       return false;
     }
@@ -720,13 +725,16 @@ class StorageEngine {
     }
 
     try {
-      const q = query(
-        collection(db, 'clients'),
-        where('clinicianId', '==', activeClinicianId)
-      );
-      const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => readClientProfile(d.data(), d.id));
-      return docs;
+      const [canonical, legacy] = await Promise.all([
+        getDocs(query(collection(db, 'clients'), where('clinicianId', '==', activeClinicianId))),
+        getDocs(query(collection(db, 'clients'), where('linkedClinicianCode', '==', activeClinicianId))),
+      ]);
+      const owned = new Map<string, ClientProfile>();
+      [...canonical.docs, ...legacy.docs].forEach((entry) => {
+        const profile = readClientProfile(entry.data(), entry.id);
+        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+      });
+      return [...owned.values()];
     } catch (err) {
       console.warn('Failed to fetch clients from Firestore:', err);
       return [];
@@ -741,6 +749,23 @@ class StorageEngine {
 
     const patientEmail = normalizeEmail(input.patientEmail);
     if (!patientEmail) throw new Error('Patient email is required');
+    if (patientEmail === normalizeEmail(clinician.email || '')) {
+      throw new Error('You cannot invite your own clinician account as a patient');
+    }
+    if (!input.patientName.trim()) throw new Error('Patient name is required');
+    if (!Number.isInteger(input.prescribedSessionsPerWeek) || input.prescribedSessionsPerWeek < 1) {
+      throw new Error('Weekly sessions must be a positive whole number');
+    }
+
+    const existingInvitations = await this.getPatientInvitationsForClinician();
+    const duplicate = existingInvitations.find(
+      (entry) => entry.status === 'pending' && normalizeEmail(entry.patientEmail) === patientEmail
+    );
+    if (duplicate) {
+      throw new Error(`A pending invitation already exists for this email (${duplicate.id})`);
+    }
+
+    const now = Date.now();
 
     const invitation: PatientInvitation = {
       id: createInvitationCode(),
@@ -753,8 +778,9 @@ class StorageEngine {
       prescribedSessionsPerWeek: input.prescribedSessionsPerWeek,
       notes: input.notes?.trim() || undefined,
       status: 'pending',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: now + INVITATION_LIFETIME_MS,
       schemaVersion: 1,
     };
 
@@ -764,6 +790,7 @@ class StorageEngine {
         ...invitation,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        expiresAt: new Date(now + INVITATION_LIFETIME_MS),
       })
     );
     return invitation;
@@ -812,53 +839,85 @@ class StorageEngine {
     const patientEmail = patient.email;
 
     const code = invitationCode.trim().toUpperCase();
+    if (!INVITATION_CODE_PATTERN.test(code)) {
+      throw new Error('Enter the 12-character invitation code in XXXX-XXXX-XXXX format');
+    }
     const invitationRef = doc(db, 'patientInvitations', code);
     const clientRef = doc(db, 'clients', patient.uid);
 
-    return runTransaction(db, async (transaction) => {
-      const invitationSnapshot = await transaction.get(invitationRef);
-      if (!invitationSnapshot.exists()) throw new Error('Invitation not found');
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const invitationSnapshot = await transaction.get(invitationRef);
+        if (!invitationSnapshot.exists()) throw new Error('Invitation code not found. Check the code and try again');
 
-      const invitation = readPatientInvitation(invitationSnapshot.data(), invitationSnapshot.id);
-      if (invitation.status !== 'pending') throw new Error('This invitation is no longer available');
-      if (normalizeEmail(invitation.patientEmail) !== normalizeEmail(patientEmail)) {
-        throw new Error('This invitation was sent to a different email address');
-      }
-      const clientSnapshot = await transaction.get(clientRef);
-      const current = clientSnapshot.exists()
-        ? readClientProfile(clientSnapshot.data(), clientSnapshot.id)
-        : { ...fallbackClient, id: patient.uid, patientId: patient.uid, email: patientEmail };
-      if (current.clinicianId && current.clinicianId !== invitation.clinicianId) {
-        throw new Error('Disconnect from your current clinician before accepting another invitation');
-      }
-      const linkedClient: ClientProfile = {
-        ...current,
-        id: patient.uid,
-        patientId: patient.uid,
-        email: patientEmail,
-        name: current.name || invitation.patientName,
-        clinicianId: invitation.clinicianId,
-        acceptedInvitationId: invitation.id,
-        condition: invitation.condition,
-        assignedProtocol: invitation.assignedProtocol,
-        prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
-        notes: invitation.notes ?? current.notes,
-      };
-      const timestamp = serverTimestamp();
+        const invitation = readPatientInvitation(invitationSnapshot.data(), invitationSnapshot.id);
+        if (invitation.clinicianId === patient.uid) {
+          throw new Error('A clinician cannot accept their own patient invitation');
+        }
+        if (normalizeEmail(invitation.patientEmail) !== normalizeEmail(patientEmail)) {
+          throw new Error('This invitation was sent to a different email address');
+        }
+        const clientSnapshot = await transaction.get(clientRef);
+        const current = clientSnapshot.exists()
+          ? readClientProfile(clientSnapshot.data(), clientSnapshot.id)
+          : { ...fallbackClient, id: patient.uid, patientId: patient.uid, email: patientEmail };
+        const currentClinicianId = getPatientClinicianId(current);
 
-      transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
-      transaction.set(
-        invitationRef,
-        {
-          status: 'accepted',
+        if (invitation.status === 'accepted') {
+          if (
+            invitation.patientId === patient.uid &&
+            currentClinicianId === invitation.clinicianId &&
+            current.acceptedInvitationId === invitation.id
+          ) {
+            return current;
+          }
+          throw new Error('This invitation has already been used');
+        }
+        if (invitation.status === 'cancelled') throw new Error('This invitation was cancelled by the clinician');
+        if (invitation.status === 'expired' || isPatientInvitationExpired(invitation)) {
+          throw new Error('This invitation has expired. Ask your clinician for a new code');
+        }
+        if (invitation.status !== 'pending') throw new Error('This invitation is no longer available');
+        if (currentClinicianId === invitation.clinicianId) {
+          throw new Error('You are already connected to this clinician. This invitation is not needed');
+        }
+        if (currentClinicianId && currentClinicianId !== invitation.clinicianId) {
+          throw new Error('Disconnect from your current clinician before accepting another invitation');
+        }
+        const linkedClient: ClientProfile = {
+          ...current,
+          id: patient.uid,
           patientId: patient.uid,
-          acceptedAt: timestamp,
-          updatedAt: timestamp,
-        },
-        { merge: true }
-      );
-      return linkedClient;
-    });
+          email: patientEmail,
+          name: current.name || invitation.patientName,
+          clinicianId: invitation.clinicianId,
+          acceptedInvitationId: invitation.id,
+          condition: invitation.condition,
+          assignedProtocol: invitation.assignedProtocol,
+          prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
+          notes: invitation.notes ?? current.notes,
+        };
+        const timestamp = serverTimestamp();
+
+        transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
+        transaction.set(
+          invitationRef,
+          {
+            status: 'accepted',
+            patientId: patient.uid,
+            acceptedAt: timestamp,
+            updatedAt: timestamp,
+          },
+          { merge: true }
+        );
+        return linkedClient;
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'permission-denied') {
+        throw new Error('Invitation not found for this signed-in email. Check the code and account, then try again');
+      }
+      throw error;
+    }
   }
 
   public async saveClient(client: ClientProfile): Promise<void> {

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../types';
 import {
   applySessionCompletionToClient,
+  getPatientClinicianId,
+  isPatientInvitationExpired,
   readClientProfile,
+  readPatientInvitation,
   readSessionRecord,
   removeUndefined,
   timestampToIso,
@@ -69,6 +72,30 @@ describe('production data migration readers', () => {
     expect(migrated.allowedExperiences).toEqual(['generative-music', 'neuro-gambit']);
     expect(legacy.allowedExperiences).toEqual(['spatial-audio']);
     expect(migrated.schemaVersion).toBe(1);
+  });
+
+  it('preserves and resolves legacy clinician relationship fields', () => {
+    const legacy = { ...clientFixture(), clinicianId: undefined, linkedClinicianCode: 'legacy-clinician' };
+    const migrated = readClientProfile(legacy);
+
+    expect(migrated.linkedClinicianCode).toBe('legacy-clinician');
+    expect(migrated.clinicianId).toBeUndefined();
+    expect(getPatientClinicianId(migrated)).toBe('legacy-clinician');
+    expect(getPatientClinicianId({ clinicianId: 'canonical', linkedClinicianCode: 'legacy' })).toBe('canonical');
+  });
+
+  it('marks current expired invitations while tolerating legacy invitations without expiry', () => {
+    const expired = readPatientInvitation({
+      clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: 99,
+    }, 'CODE', 100);
+    const legacy = readPatientInvitation({
+      clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending',
+    }, 'LEGACY', 100);
+
+    expect(expired.status).toBe('expired');
+    expect(isPatientInvitationExpired(expired, 100)).toBe(true);
+    expect(legacy.status).toBe('pending');
+    expect(legacy.schemaVersion).toBe(1);
   });
 
   it('repairs the broad mode for legacy custom protocol records on read', () => {

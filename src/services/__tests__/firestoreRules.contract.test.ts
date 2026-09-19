@@ -47,6 +47,17 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain("request.resource.data.status == 'accepted'");
     expect(rules).toContain(".data.get('acceptedInvitationId', null) == invitationId");
     expect(rules).toContain('getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))');
+    expect(rules).toContain("resource.data.get('expiresAt', request.time + duration.value(1, 's')) > request.time");
+    expect(rules).toContain("request.resource.data.expiresAt <= request.time + duration.value(30, 'd')");
+  });
+
+  it('freezes relationship fields except for a valid acceptance or owner unlink', () => {
+    expect(rules).toContain('function relationshipUnchanged()');
+    expect(rules).toContain('function acceptsValidInvitation()');
+    expect(rules).toContain('function createsWithValidInvitation()');
+    expect(rules).toContain('function unlinksOwningClinician()');
+    expect(rules).toContain('(relationshipUnchanged() || acceptsValidInvitation())');
+    expect(rules).toContain('(relationshipUnchanged() || unlinksOwningClinician())');
   });
 
   it('does not expose the user directory or let clinicians create and delete patient profiles', () => {

@@ -75,7 +75,10 @@ service cloud.firestore {
         request.resource.data.status == 'pending' &&
         request.resource.data.patientEmail is string &&
         request.resource.data.patientEmail.size() > 3 &&
-        request.resource.data.patientName is string;
+        request.resource.data.patientName is string &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd');
       allow read: if isAuthenticated() && (
         resource.data.clinicianId == request.auth.uid || isInvitedPatient()
       );
@@ -89,6 +92,7 @@ service cloud.firestore {
         ) || (
           isInvitedPatient() &&
           resource.data.status == 'pending' &&
+          resource.data.get('expiresAt', request.time + duration.value(1, 's')) > request.time &&
           request.resource.data.status == 'accepted' &&
           request.resource.data.patientId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys()
@@ -104,33 +108,76 @@ service cloud.firestore {
 
     // Patient Profiles & Clinician Records (clients/{clientId})
     match /clients/{clientId} {
+      function relationshipUnchanged() {
+        return request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) &&
+          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null) &&
+          request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null);
+      }
+
+      function acceptsValidInvitation() {
+        let invitationId = request.resource.data.get('acceptedInvitationId', null);
+        return invitationId is string &&
+          resource.data.get('clinicianId', null) == null &&
+          resource.data.get('linkedClinicianCode', null) == null &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('status', null) == 'accepted' &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('patientId', null) == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null);
+      }
+
+      function createsWithValidInvitation() {
+        let invitationId = request.resource.data.get('acceptedInvitationId', null);
+        return invitationId is string &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('status', null) == 'accepted' &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('patientId', null) == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null);
+      }
+
+      function unlinksOwningClinician() {
+        return (
+          resource.data.get('clinicianId', null) == request.auth.uid ||
+          resource.data.get('linkedClinicianCode', null) == request.auth.uid
+        ) &&
+          request.resource.data.get('clinicianId', null) == null &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          request.resource.data.get('acceptedInvitationId', null) == null;
+      }
+
       allow read: if isAuthenticated() && (
         request.auth.uid == clientId ||
         resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
         resource.data.get('clinicianId', null) == request.auth.uid ||
         isClinicMember(resource.data.get('clinicId', null))
       );
-      allow create: if isAuthenticated() && (
-        request.auth.uid == clientId ||
-        request.resource.data.id == request.auth.uid
-      );
+      allow create: if isAuthenticated() &&
+        request.auth.uid == clientId &&
+        request.resource.data.id == clientId &&
+        (
+          (
+            request.resource.data.get('clinicianId', null) == null &&
+            request.resource.data.get('linkedClinicianCode', null) == null &&
+            request.resource.data.get('acceptedInvitationId', null) == null
+          ) || createsWithValidInvitation()
+        );
       allow update: if isAuthenticated() && (
         (
-          request.auth.uid == clientId && (
-            request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) ||
-            (
-              request.resource.data.get('acceptedInvitationId', null) is string &&
-              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
-                .data.get('status', null) == 'accepted' &&
-              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
-                .data.get('patientId', null) == request.auth.uid &&
-              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
-                .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null)
-            )
-          )
+          request.auth.uid == clientId &&
+          (relationshipUnchanged() || acceptsValidInvitation())
         ) ||
-        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-        resource.data.get('clinicianId', null) == request.auth.uid ||
+        (
+          (
+            resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
+            resource.data.get('clinicianId', null) == request.auth.uid
+          ) &&
+          (relationshipUnchanged() || unlinksOwningClinician())
+        ) ||
         (
           isClinicMember(resource.data.get('clinicId', null)) &&
           request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
