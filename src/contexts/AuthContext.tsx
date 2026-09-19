@@ -8,7 +8,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export type UserRole = 'patient' | 'clinician' | null;
 
@@ -186,10 +186,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
     setRole(newRole);
     if (user.uid !== 'demo-clinician') {
-      updateDoc(doc(db, 'users', user.uid), {
+      // Accounts created while Firestore was temporarily unavailable may not
+      // have their profile document yet. A merge write both recovers those
+      // accounts and keeps existing profile fields intact.
+      setDoc(doc(db, 'users', user.uid), {
         role: newRole,
         updatedAt: new Date().toISOString(),
-      }).catch((err) => {
+      }, { merge: true }).catch((err) => {
         console.warn('Background role update notice:', err);
       });
     }

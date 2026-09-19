@@ -24,7 +24,7 @@ vi.mock('firebase/firestore', () => ({
   ...firestore,
 }));
 
-import { INITIAL_DEMO_CLIENTS, storageEngine } from '../storageEngine';
+import { INITIAL_DEMO_CLIENTS, createBlankProfile, storageEngine } from '../storageEngine';
 
 const sessionDocument = (id: string, patientId: string) => ({
   id,
@@ -168,11 +168,14 @@ describe('authenticated simulator session persistence', () => {
 
   it('persists a demo-mode training session for a real patient instead of routing it to demo memory', async () => {
     const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
+    const transactionGet = vi.fn().mockResolvedValue({
+      id: 'patient-1',
+      exists: () => true,
+      data: () => createBlankProfile('patient-1', 'patient@example.com'),
+    });
     firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
       callback({
-        get: vi.fn()
-          .mockResolvedValueOnce({ exists: () => false })
-          .mockResolvedValueOnce({ exists: () => false }),
+        get: transactionGet,
         set: vi.fn((ref, payload) => writes.push({ ref, payload })),
       })
     );
@@ -185,8 +188,34 @@ describe('authenticated simulator session persistence', () => {
 
     await expect(storageEngine.createSession(session)).resolves.toMatchObject({ created: true });
     expect(firestore.runTransaction).toHaveBeenCalledOnce();
+    expect(transactionGet).toHaveBeenCalledOnce();
+    expect(transactionGet).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' });
     expect(writes[0]?.ref).toEqual({ type: 'doc', path: 'sessions', id: 'simulated-session' });
     expect(writes[0]?.payload).toMatchObject({ isDemo: true, patientId: 'patient-1' });
+    expect(writes[1]?.payload).toMatchObject({ recentCompletedSessionIds: ['simulated-session'] });
+  });
+
+  it('does not apply session aggregates twice when a completed session is retried', async () => {
+    const transactionSet = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValue({
+          id: 'patient-1',
+          exists: () => true,
+          data: () => ({ ...createBlankProfile('patient-1', 'patient@example.com'), recentCompletedSessionIds: ['simulated-session'] }),
+        }),
+        set: transactionSet,
+      })
+    );
+    const session = {
+      ...sessionDocument('simulated-session', 'patient-1').data(),
+      isDemo: true,
+      clinicianId: undefined,
+      clinicId: 'self-guided',
+    };
+
+    await expect(storageEngine.createSession(session)).resolves.toMatchObject({ created: false });
+    expect(transactionSet).not.toHaveBeenCalled();
   });
 });
 

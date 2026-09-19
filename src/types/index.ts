@@ -431,6 +431,12 @@ export interface ClientProfile {
   createdAt?: PersistedTimestamp;
   updatedAt?: PersistedTimestamp;
   schemaVersion?: number;
+  /**
+   * Bounded, private idempotency ledger for completed-session aggregation.
+   * This lets the client retry a session write without reading a not-yet-created
+   * session document, which Firestore rules correctly cannot authorize.
+   */
+  recentCompletedSessionIds?: string[];
 }
 
 export interface MilestoneBadge {

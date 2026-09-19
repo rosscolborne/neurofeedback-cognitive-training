@@ -928,16 +928,21 @@ class StorageEngine {
     const sessionRef = doc(db, 'sessions', session.id);
     const clientRef = doc(db, 'clients', session.patientId);
     return runTransaction(db, async (transaction) => {
-      const existingSession = await transaction.get(sessionRef);
-      if (existingSession.exists()) {
-        return {
-          created: false,
-          session: readSessionRecord(existingSession.data(), existingSession.id),
-        };
-      }
-
       const currentClient = await transaction.get(clientRef);
       const timestamp = serverTimestamp();
+
+      // A brand-new session cannot be read under the patient-scoped Firestore
+      // rules because it has no patientId to authorize yet. Keep a bounded
+      // ledger on the already-authorized client profile instead, so retries do
+      // not apply its aggregate effects twice.
+      if (
+        currentClient.exists() &&
+        readClientProfile(currentClient.data(), currentClient.id)
+          .recentCompletedSessionIds?.includes(normalizedSession.id)
+      ) {
+        return { created: false, session: normalizedSession };
+      }
+
       transaction.set(
         sessionRef,
         removeUndefined({

@@ -106,6 +106,10 @@ export function applySessionCompletionToClient(
       ...current.tidalGardenState,
       plantsUnlocked: [...(current.tidalGardenState?.plantsUnlocked ?? [])],
     },
+    recentCompletedSessionIds: [
+      session.id,
+      ...(current.recentCompletedSessionIds ?? []).filter((id) => id !== session.id),
+    ].slice(0, 100),
   };
 
   client.completedSessionsCount = (client.completedSessionsCount || 0) + 1;
