@@ -295,6 +295,12 @@ export interface QEEGBrainMap {
     sensorimotorSMR: number;
   };
   dominantAlphaPeakHz: number;
+  /** Authenticated clinician who persisted this record. */
+  createdBy?: string;
+  /** Server-owned creation time for canonical records. */
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  schemaVersion?: number;
   topographyColorMap?: string;
   rawTelemetrySnippet?: string;
 }

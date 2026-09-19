@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment, PatientInvitation } from './types';
+import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment, PatientInvitation, QEEGBrainMap } from './types';
 import { storageEngine } from './services/storageEngine';
 import { applyBrandToDOM } from './services/brandEngine';
 import { PatientShell } from './components/patient/PatientShell';
@@ -122,6 +122,9 @@ export function App() {
     setClients(next);
     await storageEngine.saveClient(updated);
   };
+
+  const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
+    storageEngine.appendBrainMap(patientId, map);
 
   const handleDeleteClient = async (clientId: string) => {
     const client = clients.find((entry) => entry.id === clientId);
@@ -299,6 +302,7 @@ export function App() {
         messages={messages}
         appointments={appointments}
         onUpdateClient={handleUpdateClient}
+        onAppendBrainMap={handleAppendBrainMap}
         onDeleteClient={handleDeleteClient}
         onAddClient={handleAddClient}
         onCancelPatientInvitation={handleCancelPatientInvitation}

@@ -269,6 +269,22 @@ service cloud.firestore {
         resource.data.get('linkedClinicianCode', null) == null &&
         resource.data.get('acceptedInvitationId', null) == null
       );
+
+      // Canonical clinician-entered QEEG records are append-only. Legacy records
+      // embedded on the patient profile remain readable through tolerant mappers.
+      match /brainMaps/{brainMapId} {
+        allow read: if isAuthenticated() && (
+          request.auth.uid == clientId || isPatientClinician(clientId)
+        );
+        allow create: if isClinician() &&
+          isPatientClinician(clientId) &&
+          request.resource.data.id == brainMapId &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.updatedAt == request.time &&
+          request.resource.data.schemaVersion == 1;
+        allow update, delete: if false;
+      }
     }
 
     // Neurofeedback Session Records (sessions/{sessionId})

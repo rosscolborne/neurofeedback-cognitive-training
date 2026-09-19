@@ -5,6 +5,7 @@ import {
   ClinicBrandConfig,
   MessageThread,
   PatientInvitation,
+  QEEGBrainMap,
 } from '../../types';
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
@@ -32,6 +33,7 @@ interface ClinicianShellProps {
   messages: MessageThread[];
   appointments: CalendarAppointment[];
   onUpdateClient: (updated: ClientProfile) => void;
+  onAppendBrainMap: (patientId: string, map: QEEGBrainMap) => Promise<QEEGBrainMap>;
   onDeleteClient?: (clientId: string) => void | Promise<void>;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelPatientInvitation: (invitationId: string) => Promise<void>;
@@ -59,6 +61,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   messages,
   appointments,
   onUpdateClient,
+  onAppendBrainMap,
   onDeleteClient,
   onAddClient,
   onCancelPatientInvitation,
@@ -289,6 +292,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
               onUpdateClient(c);
               setSelectedClient(c);
             }}
+            onAppendBrainMap={(map) => onAppendBrainMap(selectedClient.id, map)}
             onSendMessage={() => {
               setActiveNav('messages');
             }}

@@ -150,7 +150,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   );
 
   const exportCSV = async () => {
-    const allSessions = await storageEngine.getSessions(client.id);
+    let allSessions: SessionRecord[];
+    try {
+      allSessions = await storageEngine.getSessions(client.id);
+    } catch {
+      alert('Session data is unavailable right now. Try again after the connection recovers.');
+      return;
+    }
     if (allSessions.length === 0) {
       alert('No session data to export.');
       return;

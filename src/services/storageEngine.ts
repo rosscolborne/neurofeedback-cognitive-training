@@ -13,6 +13,7 @@ import {
   PractitionerProfile,
   PatientInvitation,
   PatientInvitationInput,
+  QEEGBrainMap,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
 import { auth, db } from './firebase';
@@ -983,6 +984,93 @@ class StorageEngine {
     }
   }
 
+  public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {
+    const demoClient = this.demoClients.find((client) => client.id === patientId);
+    if (patientId.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician') {
+      return [...(demoClient?.brainMaps ?? [])];
+    }
+    if (!auth.currentUser) throw new Error('Sign in to load QEEG records');
+
+    const snapshot = await getDocs(collection(db, 'clients', patientId, 'brainMaps'));
+    return snapshot.docs
+      .map((entry) => ({ ...(entry.data() as QEEGBrainMap), id: entry.id }))
+      .sort((a, b) => {
+        const bUpload = Date.parse(b.uploadDate);
+        const aUpload = Date.parse(a.uploadDate);
+        const bTime = timestampToMillis(b.createdAt) ?? (Number.isFinite(bUpload) ? bUpload : 0);
+        const aTime = timestampToMillis(a.createdAt) ?? (Number.isFinite(aUpload) ? aUpload : 0);
+        return bTime - aTime;
+      });
+  }
+
+  public async appendBrainMap(patientId: string, input: QEEGBrainMap): Promise<QEEGBrainMap> {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Sign in as the managing clinician to save QEEG records');
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(input.id)) throw new Error('QEEG record identifier is invalid');
+
+    const zScores = Object.values(input.zScores ?? {});
+    if (
+      zScores.length !== 5 ||
+      zScores.some((value) => !Number.isFinite(value) || value < -10 || value > 10) ||
+      !Number.isFinite(input.dominantAlphaPeakHz) ||
+      input.dominantAlphaPeakHz <= 0 ||
+      input.dominantAlphaPeakHz > 30 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.recordingDate) ||
+      !input.deviceSource.trim()
+    ) {
+      throw new Error('QEEG record contains invalid clinical values');
+    }
+
+    const canonicalBase: QEEGBrainMap = {
+      ...input,
+      id: input.id,
+      createdBy: currentUser.uid,
+      schemaVersion: 1,
+    };
+
+    if (patientId.startsWith('demo-') || currentUser.uid === 'demo-clinician') {
+      const demoIndex = this.demoClients.findIndex((client) => client.id === patientId);
+      if (demoIndex < 0) throw new Error('Demo patient was not found');
+      const canonical = { ...canonicalBase, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const existing = this.demoClients[demoIndex].brainMaps ?? [];
+      this.demoClients[demoIndex] = {
+        ...this.demoClients[demoIndex],
+        brainMaps: [canonical, ...existing.filter((entry) => entry.id !== canonical.id)],
+      };
+      return canonical;
+    }
+
+    const clientRef = doc(db, 'clients', patientId);
+    const mapRef = doc(db, 'clients', patientId, 'brainMaps', input.id);
+    const existing = await runTransaction(db, async (transaction) => {
+      const [clientSnapshot, mapSnapshot] = await Promise.all([
+        transaction.get(clientRef),
+        transaction.get(mapRef),
+      ]);
+      if (!clientSnapshot.exists()) throw new Error('Patient profile was not found');
+      const patient = readClientProfile(clientSnapshot.data(), clientSnapshot.id);
+      if (getPatientClinicianId(patient) !== currentUser.uid) {
+        throw new Error('Only the linked clinician can add QEEG records');
+      }
+      if (mapSnapshot.exists()) {
+        const saved = { ...(mapSnapshot.data() as QEEGBrainMap), id: mapSnapshot.id };
+        if (saved.createdBy !== currentUser.uid) throw new Error('QEEG record identifier is already in use');
+        return saved;
+      }
+      transaction.set(mapRef, {
+        ...removeUndefined(canonicalBase),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return null;
+    });
+    if (existing) return existing;
+
+    const persisted = await getDoc(mapRef);
+    if (!persisted.exists()) throw new Error('QEEG record was not available after saving');
+    return { ...(persisted.data() as QEEGBrainMap), id: persisted.id };
+  }
+
   public async saveClients(clients: ClientProfile[]): Promise<void> {
     const demo = clients.filter((c) => c.isDemo || c.id.startsWith('demo-'));
     this.demoClients = demo.length > 0 ? demo : clients;
@@ -1113,7 +1201,7 @@ class StorageEngine {
         .sort((a, b) => b.timestamp - a.timestamp);
     } catch (err) {
       console.warn('Failed to fetch sessions from Firestore:', err);
-      return [];
+      throw err;
     }
   }
 

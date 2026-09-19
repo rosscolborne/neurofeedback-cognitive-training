@@ -49,6 +49,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
   const [showBrainMapUpload, setShowBrainMapUpload] = useState(false);
   const [persistedBrainMapsByPatient, setPersistedBrainMapsByPatient] = useState<Record<string, QEEGBrainMap[]>>({});
+  const [brainMapLoadResult, setBrainMapLoadResult] = useState<{ clientId: string; state: 'ready' | 'error' } | null>(null);
 
   const [sessionResult, setSessionResult] = useState<{
     clientId: string;
@@ -66,6 +67,25 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       if (isMounted) {
         setSessionResult({ clientId: client.id, state: 'error', sessions: [] });
       }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [client.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setBrainMapLoadResult(null);
+    storageEngine.getBrainMaps(client.id).then((maps) => {
+      if (!isMounted) return;
+      setPersistedBrainMapsByPatient((current) => {
+        const local = current[client.id] ?? [];
+        const loadedIds = new Set(maps.map((map) => map.id));
+        return { ...current, [client.id]: [...local.filter((map) => !loadedIds.has(map.id)), ...maps] };
+      });
+      setBrainMapLoadResult({ clientId: client.id, state: 'ready' });
+    }).catch(() => {
+      if (isMounted) setBrainMapLoadResult({ clientId: client.id, state: 'error' });
     });
     return () => {
       isMounted = false;
@@ -107,6 +127,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     ? client.assignedProtocol
     : null;
   const persistedBrainMaps = persistedBrainMapsByPatient[client.id] ?? [];
+  const brainMapLoadState = brainMapLoadResult?.clientId === client.id ? brainMapLoadResult.state : 'loading';
   const persistedIds = new Set(persistedBrainMaps.map((map) => map.id));
   const profileBrainMaps: unknown[] = Array.isArray(client.brainMaps) ? client.brainMaps : [];
   const brainMaps: unknown[] = [
@@ -430,10 +451,17 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 Manually entered values from a validated clinical source. Neurasticity does not calculate normative transforms here.
               </p>
             </div>
-            <button onClick={() => setShowBrainMapUpload(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button onClick={() => setShowBrainMapUpload(true)} disabled={brainMapLoadState !== 'ready'} className="btn btn-dense" style={{ fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Upload size={13} /> Add Manual Record
             </button>
           </div>
+
+          {brainMapLoadState === 'loading' && (
+            <div role="status" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Loading saved QEEG records…</div>
+          )}
+          {brainMapLoadState === 'error' && (
+            <div role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)' }}>Saved QEEG records are unavailable. Reopen this patient to retry before adding a record.</div>
+          )}
 
           {brainMaps.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -509,11 +537,11 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 </div>
               );})}
             </div>
-          ) : (
+          ) : brainMapLoadState === 'ready' ? (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
               No QEEG measurements have been entered for this patient.
             </div>
-          )}
+          ) : null}
         </div>
       )}
 

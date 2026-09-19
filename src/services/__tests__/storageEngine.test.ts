@@ -17,7 +17,7 @@ const firestore = vi.hoisted(() => ({
 
 vi.mock('../firebase', () => ({ auth: state.auth, db: { name: 'test-db' } }));
 vi.mock('firebase/firestore', () => ({
-  collection: (_db: unknown, path: string) => ({ type: 'collection', path }),
+  collection: (_db: unknown, ...segments: string[]) => ({ type: 'collection', path: segments.join('/') }),
   doc: (_db: unknown, ...segments: string[]) => ({
     type: 'doc',
     path: segments.slice(0, -1).join('/'),
@@ -93,6 +93,52 @@ describe('role-aware session repository', () => {
 
     expect(sessions.map((session) => session.id)).toEqual(['session-1']);
     expect(firestore.getDoc).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' });
+  });
+
+  it('rejects when an authorized Firestore session query fails instead of reporting empty', async () => {
+    firestore.getDoc.mockResolvedValueOnce({
+      id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }),
+    });
+    firestore.getDocs.mockRejectedValueOnce(new Error('offline'));
+
+    await expect(storageEngine.getSessionsFor({
+      role: 'clinician', clinicianId: 'clinician-1', patientId: 'patient-1',
+    })).rejects.toThrow('offline');
+  });
+
+  it('appends an authorized QEEG record once with server and actor provenance', async () => {
+    const set = vi.fn();
+    const map = {
+      id: 'qeeg-request-1', uploadDate: '2026-09-19T12:00:00.000Z', fileName: '',
+      recordingDate: '2026-09-18', deviceSource: 'Validated source', technicianNotes: '',
+      zScores: { frontalTheta: 0, centralBeta: 1, occipitalAlpha: -1, temporalDelta: 2, sensorimotorSMR: 0 },
+      dominantAlphaPeakHz: 10,
+    };
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }) })
+          .mockResolvedValueOnce({ id: map.id, exists: () => false }),
+        set,
+      })
+    );
+    firestore.getDoc.mockResolvedValueOnce({
+      id: map.id, exists: () => true,
+      data: () => ({ ...map, createdBy: 'clinician-1', createdAt: 100, updatedAt: 100, schemaVersion: 1 }),
+    });
+
+    await expect(storageEngine.appendBrainMap('patient-1', map)).resolves.toMatchObject({
+      id: map.id, createdBy: 'clinician-1', createdAt: 100,
+    });
+    expect(set).toHaveBeenCalledWith(
+      { type: 'doc', path: `clients/patient-1/brainMaps`, id: map.id },
+      expect.objectContaining({
+        id: map.id,
+        createdBy: 'clinician-1',
+        createdAt: { __serverTimestamp: true },
+        updatedAt: { __serverTimestamp: true },
+      })
+    );
   });
 
   it('deduplicates direct clinician sessions and owned legacy patient sessions', async () => {

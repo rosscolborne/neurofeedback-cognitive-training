@@ -27,6 +27,16 @@ describe('Firestore authorization rule contract', () => {
     expect(sessionBlock).toContain('allow delete: if false;');
   });
 
+  it('keeps canonical QEEG records patient-readable and clinician-owned append-only', () => {
+    expect(rules).toContain('match /brainMaps/{brainMapId}');
+    expect(rules).toContain('request.auth.uid == clientId || isPatientClinician(clientId)');
+    expect(rules).toContain('request.resource.data.id == brainMapId');
+    expect(rules).toContain('request.resource.data.createdBy == request.auth.uid');
+    expect(rules).toContain('request.resource.data.createdAt == request.time');
+    const brainMapBlock = rules.slice(rules.indexOf('match /brainMaps/{brainMapId}'), rules.indexOf('// Neurofeedback Session Records'));
+    expect(brainMapBlock).toContain('allow update, delete: if false;');
+  });
+
   it('keeps practitioner identity, clinic membership, and clinic membership lists immutable', () => {
     expect(rules).toContain('practitionerId == request.auth.uid');
     expect(rules).toContain('request.resource.data.userId == resource.data.userId');
