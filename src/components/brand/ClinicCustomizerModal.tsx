@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ClinicBrandConfig } from '../../types';
-import { BRAND_COLOR_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM, getOnPrimaryColor, isBrandAccentUsable, isValidHexColor } from '../../services/brandEngine';
+import { BRAND_COLOR_PRESETS, calculateContrast, createBrandPalette, applyBrandToDOM, getOnPrimaryColor, getWorstBrandAccentContrast, isBrandAccentUsable, isValidHexColor } from '../../services/brandEngine';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
 import { errorMessage } from '../../services/clinicSettingsState';
 import { BrandLogo } from './BrandLogo';
@@ -56,7 +56,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
     ? accentColor
     : isValidHexColor(currentBrand.primaryAccent) ? currentBrand.primaryAccent : '#A8482F';
   const accentIsUsable = isBrandAccentUsable(accentColor);
-  const contrastOnWhite = calculateContrast(auditedAccent, '#FFFFFF');
+  const contrastOnSurface = getWorstBrandAccentContrast(auditedAccent);
   const textOnAccentContrast = calculateContrast(getOnPrimaryColor(auditedAccent), auditedAccent);
   const controlsLocked = loadState === 'loading' || saveState === 'saving';
 
@@ -358,14 +358,14 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
               WCAG 2.1 Contrast Audit
             </span>
             <span className="status-tag status-tag-active" style={{ fontSize: '11px' }}>
-              Contrast Ratio: {contrastOnWhite.ratioFormatted}
+              Worst Surface Ratio: {contrastOnSurface.ratioFormatted}
             </span>
           </div>
 
           <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {contrastOnWhite.passesAANormal ? <ShieldCheck size={14} color="var(--status-active)" /> : <AlertTriangle size={14} color="var(--status-alert)" />}
-              <span>UI text on white (4.5:1)</span>
+              {contrastOnSurface.passesAANormal ? <ShieldCheck size={14} color="var(--status-active)" /> : <AlertTriangle size={14} color="var(--status-alert)" />}
+              <span>UI text on supported surfaces (4.5:1)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {textOnAccentContrast.passesAANormal ? <ShieldCheck size={14} color="var(--status-active)" /> : <AlertTriangle size={14} color="var(--status-alert)" />}

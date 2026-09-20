@@ -39,7 +39,12 @@ const memoryStorage = (seed: Record<string, string> = {}, failWrites = false) =>
   };
 };
 
-const repositoryFor = (uid = 'clinician-1', storage = memoryStorage()) =>
+const throwingReadStorage = {
+  getItem: () => { throw new DOMException('blocked', 'SecurityError'); },
+  setItem: () => undefined,
+};
+
+const repositoryFor = (uid = 'clinician-1', storage: { getItem(key: string): string | null; setItem(key: string, value: string): void } = memoryStorage()) =>
   new ClinicSettingsRepository({ auth: { currentUser: { uid } }, database: {} as never, storage });
 
 describe('ClinicSettingsRepository', () => {
@@ -82,6 +87,18 @@ describe('ClinicSettingsRepository', () => {
     expect(firestore.batchSet.mock.calls[1][0]).toEqual({ collection: 'practitioners', id: 'clinician-1' });
     expect(firestore.batchCommit).toHaveBeenCalledOnce();
     expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(firestore.batchSet.mock.calls[0][1]).not.toHaveProperty('branding');
+  });
+
+  it('does not rewrite mapped branding or its server timestamp during settings saves', async () => {
+    const rawCreatedAt = { seconds: 91, nanoseconds: 4 };
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'], branding: { ...brand, createdAt: rawCreatedAt } }))
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'], branding: { ...brand, createdAt: rawCreatedAt } }));
+    await repositoryFor().saveSettings({ clinicName: 'Clinic', timezone: 'UTC', practitionerName: 'Name', licenseIdentifier: '' });
+    expect(firestore.batchSet.mock.calls[0][1]).not.toHaveProperty('branding');
   });
 
   it('preserves unrelated credentials and replaces only primary-license', async () => {
@@ -101,6 +118,53 @@ describe('ClinicSettingsRepository', () => {
       expect.objectContaining({ id: 'primary-license', identifier: 'NEW-2' }),
     ]));
     expect(payload.credentials).not.toContainEqual(expect.objectContaining({ identifier: 'OLD-1' }));
+  });
+
+  it('preserves a verified primary license byte-for-byte when its identifier is unchanged', async () => {
+    const verifiedAt = { seconds: 20 };
+    const expiresAt = { seconds: 200 };
+    const primary = {
+      id: 'primary-license', type: 'medical-license', label: 'Ontario physician license', identifier: 'ON-123',
+      status: 'verified', verifiedAt, expiresAt, jurisdiction: 'Ontario',
+    };
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [primary] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }))
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [primary] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
+    await repositoryFor().saveSettings({ clinicName: 'Clinic', timezone: 'UTC', practitionerName: 'Name', licenseIdentifier: 'ON-123' });
+    const payload = firestore.batchSet.mock.calls[1][1] as { credentials: unknown[] };
+    expect(payload.credentials).toEqual([primary]);
+  });
+
+  it('clears verification timestamps only when the primary identifier changes', async () => {
+    const primary = {
+      id: 'primary-license', type: 'medical-license', label: 'Ontario physician license', identifier: 'ON-123',
+      status: 'verified', verifiedAt: { seconds: 20 }, expiresAt: { seconds: 200 }, jurisdiction: 'Ontario',
+    };
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [primary] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }))
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
+    await repositoryFor().saveSettings({ clinicName: 'Clinic', timezone: 'UTC', practitionerName: 'Name', licenseIdentifier: 'ON-999' });
+    const payload = firestore.batchSet.mock.calls[1][1] as { credentials: Array<Record<string, unknown>> };
+    expect(payload.credentials[0]).toMatchObject({ type: 'medical-license', label: 'Ontario physician license', identifier: 'ON-999', status: 'unverified', jurisdiction: 'Ontario' });
+    expect(payload.credentials[0]).not.toHaveProperty('verifiedAt');
+    expect(payload.credentials[0]).not.toHaveProperty('expiresAt');
+  });
+
+  it('tolerates a malformed non-string primary identifier without copying it into a write', async () => {
+    const malformedPrimary = { id: 'primary-license', type: 'other', label: 'Legacy', identifier: 42, status: 'verified', verifiedAt: { seconds: 10 } };
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [malformedPrimary] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }))
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
+    await repositoryFor().saveSettings({ clinicName: 'Clinic', timezone: 'UTC', practitionerName: 'Name', licenseIdentifier: '' });
+    const payload = firestore.batchSet.mock.calls[1][1] as { credentials: Array<Record<string, unknown>> };
+    expect(payload.credentials[0]).not.toHaveProperty('identifier');
+    expect(payload.credentials[0]).toMatchObject({ id: 'primary-license', status: 'verified' });
   });
 
   it('rejects invalid timezone and overlong text before writing', async () => {
@@ -135,6 +199,13 @@ describe('ClinicSettingsRepository', () => {
     await expect(repositoryFor('clinician-2', malformed).load()).resolves.toMatchObject({ brand: null, brandSource: 'default' });
   });
 
+  it('ignores localStorage read SecurityError and still returns remote/no-brand state', async () => {
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
+    await expect(repositoryFor('clinician-1', throwingReadStorage).load()).resolves.toMatchObject({ brand: null, brandSource: 'default' });
+  });
+
   it('persists branding once, uses server timestamps, and never creates a blank practitioner', async () => {
     const storage = memoryStorage();
     firestore.getDoc.mockResolvedValueOnce(missing('clinician-1')).mockResolvedValueOnce(missing('clinician-1'));
@@ -153,6 +224,17 @@ describe('ClinicSettingsRepository', () => {
       .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
       .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
     await expect(repositoryFor('clinician-1', memoryStorage({}, true)).saveBrand(brand)).resolves.toMatchObject({ clinicId: 'clinic-1' });
+  });
+
+  it('preserves the authoritative raw brand createdAt on brand updates', async () => {
+    const rawCreatedAt = { seconds: 77, nanoseconds: 9 };
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'], branding: { ...brand, createdAt: rawCreatedAt } }));
+    await repositoryFor().saveBrand(brand);
+    const payload = firestore.setDoc.mock.calls[0][1] as { branding: Record<string, unknown> };
+    expect(payload.branding.createdAt).toBe(rawCreatedAt);
+    expect(payload.branding.updatedAt).toEqual({ seconds: 1 });
   });
 
   it('reports atomic commit failure and performs no post-save reload', async () => {

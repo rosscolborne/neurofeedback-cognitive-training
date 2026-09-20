@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ClinicBrandConfig } from '../../types';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
-import { errorMessage, primaryLicenseIdentifier, settingsNotice, type SettingsLoadState } from '../../services/clinicSettingsState';
+import { errorMessage, primaryLicenseIdentifier, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
 import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
@@ -19,7 +19,7 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [practitionerName, setPractitionerName] = useState('');
   const [licenseIdentifier, setLicenseIdentifier] = useState('');
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveState, setSaveState] = useState<SettingsSaveState>('idle');
   const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
@@ -39,15 +39,15 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSaveState('saving');
+    setSaveState((current) => transitionSettingsSaveState(current, 'submit'));
     setSaveError('');
     try {
       const snapshot = await clinicSettingsRepository.saveSettings({ clinicName, timezone, practitionerName, licenseIdentifier });
       setLoadState({ status: 'ready', snapshot });
-      setSaveState('saved');
+      setSaveState((current) => transitionSettingsSaveState(current, 'success'));
     } catch (error) {
       setSaveError(errorMessage(error, 'Clinic settings could not be saved. Try again.'));
-      setSaveState('error');
+      setSaveState((current) => transitionSettingsSaveState(current, 'failure'));
     }
   };
 
@@ -56,7 +56,7 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
   const isLoading = loadState.status === 'loading';
   const markEdited = (update: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
     update(event.target.value);
-    setSaveState('idle');
+    setSaveState((current) => transitionSettingsSaveState(current, 'edit'));
     setSaveError('');
   };
 

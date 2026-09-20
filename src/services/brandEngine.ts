@@ -14,10 +14,18 @@ export interface BrandColorPreset {
   accent: string;
 }
 
+export const BRAND_SMALL_TEXT_SURFACES = ['#FFFFFF', '#F8F7F4', '#FAFAFA'] as const;
+
 export const isValidHexColor = (value: string): boolean => /^#[0-9a-f]{6}$/i.test(value.trim());
 
-export const isBrandAccentUsable = (value: string): boolean =>
-  isValidHexColor(value) && calculateContrast(value, '#FFFFFF').passesAANormal;
+export const getWorstBrandAccentContrast = (value: string): ContrastResult => {
+  if (!isValidHexColor(value)) return { ratio: 0, ratioFormatted: '0.00:1', passesAALarge: false, passesAANormal: false, passesAAANormal: false };
+  return BRAND_SMALL_TEXT_SURFACES
+    .map((surface) => calculateContrast(value, surface))
+    .reduce((worst, current) => current.ratio < worst.ratio ? current : worst);
+};
+
+export const isBrandAccentUsable = (value: string): boolean => getWorstBrandAccentContrast(value).passesAANormal;
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } {
   if (!isValidHexColor(hex) && !/^#[0-9a-f]{3}$/i.test(hex.trim())) {
@@ -80,7 +88,7 @@ export function adjustColorBrightness(hex: string, percent: number): string {
 
 export function createBrandPalette(accentHex: string, clinicName = 'Waveable', logoUrl = '/app-logo.png'): ClinicBrandConfig {
   if (!isValidHexColor(accentHex)) throw new Error('Enter a six-digit hexadecimal accent color.');
-  if (!isBrandAccentUsable(accentHex)) throw new Error('Choose an accent with at least 4.5:1 contrast against white.');
+  if (!isBrandAccentUsable(accentHex)) throw new Error('Choose an accent with at least 4.5:1 contrast against all supported light surfaces.');
   if (!clinicName.trim()) throw new Error('Clinic display name is required.');
   const { r, g, b } = hexToRgb(accentHex);
   

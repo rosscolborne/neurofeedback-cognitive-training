@@ -43,7 +43,13 @@ interface RepositoryDependencies {
 }
 
 const clean = (value: string) => value.trim();
-const getBrowserStorage = (): StorageLike | undefined => typeof window === 'undefined' ? undefined : window.localStorage;
+const getBrowserStorage = (): StorageLike | undefined => {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+};
 const withoutUndefined = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
 
@@ -144,9 +150,9 @@ const mapClinic = (id: string, data: Partial<ClinicProfile>): ClinicProfile => (
 const mapCredential = (value: unknown): PractitionerCredential | null => {
   if (!value || typeof value !== 'object') return null;
   const credential = value as PractitionerCredential;
-  return typeof credential.id === 'string' && typeof credential.label === 'string' && typeof credential.status === 'string'
-    ? credential
-    : null;
+  if (typeof credential.id !== 'string' || typeof credential.label !== 'string' || typeof credential.status !== 'string') return null;
+  const { identifier, ...rest } = credential;
+  return typeof identifier === 'string' ? { ...rest, identifier } : rest;
 };
 
 const mapPractitioner = (id: string, data: Partial<PractitionerProfile>): PractitionerProfile => ({
@@ -185,22 +191,32 @@ export class ClinicSettingsRepository {
     return practitioner;
   }
 
-  private async readClinic(clinicId: string, userId: string): Promise<ClinicProfile | null> {
+  private async readClinicRecord(clinicId: string, userId: string): Promise<{ clinic: ClinicProfile; rawBrandCreatedAt?: unknown } | null> {
     const snapshot = await getDoc(doc(this.database, 'clinics', clinicId));
     if (!snapshot.exists()) return null;
-    const clinic = mapClinic(snapshot.id, snapshot.data() as Partial<ClinicProfile>);
+    const raw = snapshot.data() as Partial<ClinicProfile>;
+    const clinic = mapClinic(snapshot.id, raw);
     if (!clinic.practitionerIds.includes(userId)) throw new Error('The signed-in practitioner is not a member of this clinic.');
-    return clinic;
+    const rawBrand = raw.branding && typeof raw.branding === 'object' ? raw.branding as unknown as Record<string, unknown> : null;
+    return { clinic, rawBrandCreatedAt: rawBrand?.createdAt };
+  }
+
+  private async readClinic(clinicId: string, userId: string): Promise<ClinicProfile | null> {
+    return (await this.readClinicRecord(clinicId, userId))?.clinic ?? null;
   }
 
   private readLocalBrand(clinicId: string): { brand: ClinicBrandConfig; source: BrandSource } | null {
     if (!this.storage) return null;
-    const tenantBrand = readLocalBrandValue(this.storage.getItem(`${TENANT_BRAND_PREFIX}${clinicId}`), clinicId, true);
-    if (tenantBrand) return { brand: tenantBrand, source: 'tenant-local' };
-    const recordedOwner = this.storage.getItem(LEGACY_BRAND_OWNER_KEY);
-    for (const key of LEGACY_BRAND_KEYS) {
-      const legacy = readLocalBrandValue(this.storage.getItem(key), clinicId, recordedOwner === clinicId);
-      if (legacy) return { brand: legacy, source: 'legacy-local' };
+    try {
+      const tenantBrand = readLocalBrandValue(this.storage.getItem(`${TENANT_BRAND_PREFIX}${clinicId}`), clinicId, true);
+      if (tenantBrand) return { brand: tenantBrand, source: 'tenant-local' };
+      const recordedOwner = this.storage.getItem(LEGACY_BRAND_OWNER_KEY);
+      for (const key of LEGACY_BRAND_KEYS) {
+        const legacy = readLocalBrandValue(this.storage.getItem(key), clinicId, recordedOwner === clinicId);
+        if (legacy) return { brand: legacy, source: 'legacy-local' };
+      }
+    } catch {
+      // Local storage is an optional migration/cache layer. Remote settings remain authoritative.
     }
     return null;
   }
@@ -235,16 +251,27 @@ export class ClinicSettingsRepository {
     const clinicId = existingPractitioner?.clinicId || user.uid;
     const existingClinic = await this.readClinic(clinicId, user.uid);
     const timestamp = serverTimestamp() as unknown as PersistedTimestamp;
-    const otherCredentials = (existingPractitioner?.credentials ?? []).filter((credential) => credential.id !== 'primary-license');
-    const credentials: PractitionerCredential[] = licenseIdentifier
-      ? [...otherCredentials, { id: 'primary-license', type: 'other', label: 'Professional license or certification', identifier: licenseIdentifier, status: 'unverified' }]
-      : otherCredentials;
+    const existingCredentials = existingPractitioner?.credentials ?? [];
+    const existingPrimary = existingCredentials.find((credential) => credential.id === 'primary-license');
+    const otherCredentials = existingCredentials.filter((credential) => credential.id !== 'primary-license');
+    const existingIdentifier = typeof existingPrimary?.identifier === 'string' ? clean(existingPrimary.identifier) : '';
+    let primaryCredential: PractitionerCredential | null = null;
+    if (existingPrimary && existingIdentifier === licenseIdentifier) {
+      primaryCredential = existingPrimary;
+    } else if (licenseIdentifier) {
+      if (existingPrimary) {
+        const { verifiedAt: _verifiedAt, expiresAt: _expiresAt, ...preserved } = existingPrimary;
+        primaryCredential = { ...preserved, identifier: licenseIdentifier, status: 'unverified' };
+      } else {
+        primaryCredential = { id: 'primary-license', type: 'other', label: 'Professional license or certification', identifier: licenseIdentifier, status: 'unverified' };
+      }
+    }
+    const credentials: PractitionerCredential[] = primaryCredential ? [...otherCredentials, primaryCredential] : otherCredentials;
     const clinic: ClinicProfile = {
       id: clinicId,
       name: clinicName,
       timezone,
       practitionerIds: existingClinic?.practitionerIds ?? [user.uid],
-      branding: existingClinic?.branding,
       createdAt: existingClinic?.createdAt ?? timestamp,
       updatedAt: timestamp,
     };
@@ -269,14 +296,16 @@ export class ClinicSettingsRepository {
     const user = this.requireUser();
     const existingPractitioner = await this.readPractitioner(user.uid);
     const clinicId = existingPractitioner?.clinicId || user.uid;
-    const existingClinic = await this.readClinic(clinicId, user.uid);
+    const existingClinicRecord = await this.readClinicRecord(clinicId, user.uid);
+    const existingClinic = existingClinicRecord?.clinic ?? null;
     if (!clean(brand.name) || clean(brand.name).length > MAX_CLINIC_NAME) throw new Error(`Clinic display name must be between 1 and ${MAX_CLINIC_NAME} characters.`);
     if (typeof brand.tagline !== 'string' || brand.tagline.trim().length > MAX_TAGLINE) throw new Error(`Clinic tagline must be ${MAX_TAGLINE} characters or fewer.`);
     if (typeof brand.logoUrl !== 'string' || brand.logoUrl.length > MAX_LOGO_URL) throw new Error('Clinic logo data is too large.');
     const safeBrand = mapClinicBrand({ ...brand, clinicId }, clinicId);
     if (!safeBrand) throw new Error('Clinic branding is invalid or does not meet contrast requirements.');
     const timestamp = serverTimestamp() as unknown as PersistedTimestamp;
-    const isNewBrand = !existingClinic?.branding?.createdAt;
+    const authoritativeCreatedAt = existingClinicRecord?.rawBrandCreatedAt;
+    const isNewBrand = authoritativeCreatedAt === undefined || authoritativeCreatedAt === null;
     const returnedBrand: ClinicBrandConfig = {
       ...safeBrand,
       createdAt: existingClinic?.branding?.createdAt ?? new Date().toISOString(),
@@ -285,7 +314,7 @@ export class ClinicSettingsRepository {
     };
     const persistedBrand = {
       ...returnedBrand,
-      createdAt: isNewBrand ? timestamp : returnedBrand.createdAt,
+      createdAt: isNewBrand ? timestamp : authoritativeCreatedAt,
       updatedAt: timestamp,
     };
     const clinic: ClinicProfile = {
