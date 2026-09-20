@@ -2,7 +2,7 @@
 
 Last reconciled: 2026-09-19  
 Integration branch: `fill-in-mocked-data`  
-Last application-code baseline: `a52e43b`
+Last application-code baseline: `b0be0fb`
 
 ## How to use and maintain this document
 
@@ -694,8 +694,8 @@ independent workstream immediately when a slot opens.
   review, but final validation waits for all required workstreams
 - **Branch:** `fill-in-mocked-data` (integration target; no separate feature work)
 - **Worktree:** repository root
-- **Current integration commit:** `a52e43b` (passed focused independent re-review;
-  final repository-wide audit remains pending; not a
+- **Current integration commit:** `b0be0fb` (final repository-wide code audit
+  passed; external emulator and manual/Playwright gates remain; not a
   final release-candidate approval)
 - **Owned files:** shared wiring and plan updates only after reviewing incoming
   branches; conflict resolution must preserve original ownership decisions.
@@ -724,6 +724,19 @@ independent workstream immediately when a slot opens.
   quiet lint passed, and focused re-review suites passed 121/121 and 144/144.
   Firestore emulator authorization execution remains blocked locally by the
   unavailable Java runtime.
+- **Final-audit fix report:** the first repository-wide audit used Sol/High because
+  the requested Astra model was not available in the agent selector. It required
+  fixes for idempotent session completion, verified non-Demo EEG coverage,
+  synthetic result labeling, blank-profile defaults, visible persistence errors,
+  explicit mood selection, auth-role races, rules-compatible current-roster
+  session queries, patient branding permissions, and unsupported compliance copy.
+  Commits `8b53915`, `3563f33`, `0dcb23f`, `06cfd36`, and `b0be0fb` implement and harden
+  those fixes, including actual-source freshness for every supported hardware
+  transport, Promise-based patient writes, explicit Firestore field clearing,
+  stale-snapshot-safe retries, and compatible custom-protocol switching. Final
+  repository-wide Sol/High audit passed without code blockers. Final automated
+  verification passed 394/394 JavaScript tests, 58/58 Python tests, production
+  build, quiet lint, and application-code diff validation.
 
 ## Integration and review procedure
 
@@ -769,6 +782,26 @@ independent workstream immediately when a slot opens.
 
 ## Project log
 
+- **2026-09-19:** Final-audit follow-up commits `3563f33`, `0dcb23f`, `06cfd36`,
+  and `b0be0fb` closed the remaining review findings: stale/empty hardware frames no
+  longer count as live EEG across browser Muse or BrainFlow transports; patient
+  profile writes and retries cannot silently fail or overwrite newer state;
+  optional clinical fields clear durably; legacy/custom protocol inference never
+  invents a default or resurrects an incompatible custom configuration; clinic
+  session queries match rule-provable current tenancy; and invitation failures
+  remain visible. Independent session/data re-reviews and the final repository-wide
+  Sol/High audit passed. Final JavaScript tests passed 394/394, Python tests passed
+  58/58, build and quiet lint passed. Java-less Firestore emulator and real-device/
+  multi-account/Playwright checks remain external gates.
+- **2026-09-19:** The final repository-wide Sol/High audit (Astra/High was
+  unavailable) returned CHANGES_REQUIRED with nine authenticity, persistence,
+  authorization, and UI findings. Fix commit `8b53915` adds durable session IDs,
+  verified real-EEG completion gates, explicit Demo provenance and optional
+  unavailable metrics, truthful blank profiles, persistence failure states,
+  explicit mood capture, guarded auth-role hydration, current-roster session
+  queries, patient branding separation, and removal of unsupported compliance
+  claims. The full JavaScript suite passed 376/376 and the production build and
+  quiet lint passed before independent re-review.
 - **2026-09-19:** Integrated review fixes landed in `a52e43b`: patient-profile
   read/create failures are visible and retryable rather than replaced by defaults;
   fresh clinic setup immediately enables invitations; real and Training Demo
