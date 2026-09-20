@@ -531,7 +531,7 @@ independent workstream immediately when a slot opens.
 
 ### A1 — Production Appointments
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
@@ -555,7 +555,10 @@ independent workstream immediately when a slot opens.
   implemented in owned files with an unwired patient surface. Focused tests passed
   21/21, the full suite passed 223/223, focused lint was clean, and the production
   build passed. Shared rules and shell/App wiring remain central; independent
-  review is pending.
+  review required optimistic revision conflicts, truthful read-only legacy
+  compatibility, stricter timestamp validation, keyed cancellation state, mounted
+  interaction coverage, and the centrally reserved strict authorization rules.
+  Owned fixes are assigned to the original agent.
 
 ### T1 — Protocol Runtime Consumption
 
@@ -865,6 +868,11 @@ independent workstream immediately when a slot opens.
   into `fill-in-mocked-data` via `6195aaa`. The first integrated rules check exposed
   two S1 static assertions that predated the central role-gated `getAfter` contract;
   the assertions were updated centrally to validate the hardened rule instead.
+- **2026-09-19:** A1 independent review returned CHANGES_REQUIRED for optimistic
+  concurrency, truthful timezone-less legacy compatibility, timestamp validation,
+  overlapping/stale UI operations, mounted component coverage, and strict central
+  authorization rules. Owned findings were returned to the original agent; rules
+  and shell/App wiring remain orchestrator-owned.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
