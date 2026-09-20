@@ -496,7 +496,7 @@ independent workstream immediately when a slot opens.
 
 ### M1 — Production Messaging
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-messaging`
@@ -536,17 +536,19 @@ independent workstream immediately when a slot opens.
   221/221, targeted lint was clean, and the build passed. Re-review then required
   removal of stale clinician discovery, fail-safe legacy denial, and synchronous/
   paginated switch guards. Those fixes completed at `c26a9b48`, with 24/24 focused
-  and 225/225 full tests passing; final re-review is pending.
+  and 225/225 full tests passing. Final re-review found one remaining stale
+  pagination rejection/finally guard; a narrow fix is in progress.
 
 ### A1 — Production Appointments
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
 - **Worktree:** `../neurasticity-mockdata-appointments`
 - **Final commit:** `93788ecb927c32524f7bffe59b1b13eff1a031aa`,
-  `c45618ab48ae8838921646dfc463d6fdfe855ed5`
+  `c45618ab48ae8838921646dfc463d6fdfe855ed5`,
+  `efd3b0c3bf960c9791bf19b56a4b68074d959ed2`
 - **Owned files:** `src/components/clinician/ClinicalCalendarView.tsx`, a new
   patient appointment surface, new appointment repository/mappers/tests. No
   independent changes to shared rules/types/storage.
@@ -573,8 +575,11 @@ independent workstream immediately when a slot opens.
   timestamp validation, keyed/stale-safe UI operations, and mounted tests. Focused
   tests passed 31/31, the full suite passed 233/233, lint and build passed, and
   re-review found remaining safe legacy-query, status/date validation, and patient
-  mounted-state coverage gaps; fixes are assigned to the original agent. Strict
-  authorization rules remain central.
+  mounted-state coverage gaps. Those fixes completed at `efd3b0c3`: the legacy
+  query is rules-provable, invalid status/date/time is rejected without invention,
+  status is consistent across surfaces, and patient lifecycle coverage is mounted.
+  Focused tests passed 37/37, the full suite passed 239/239, lint/build passed, and
+  re-review is pending. Strict authorization rules remain central.
 
 ### T1 — Protocol Runtime Consumption
 
@@ -925,6 +930,13 @@ independent workstream immediately when a slot opens.
   fail-closed demo/auth boundary, synchronous account-state clearing with guarded
   independent loads, removal of broad persisted-data filters, and mounted lifecycle
   coverage. Findings were returned to the original agent.
+- **2026-09-19:** M1 final re-review found one narrow stale-pagination rejection/
+  finally state leak; all other owned and central-contract findings passed. The
+  fix was returned to the original agent.
+- **2026-09-19:** A1 completed remaining review fixes at Git-verified `efd3b0c3`;
+  focused tests passed 37/37, the full suite passed 239/239, lint/build passed, and
+  A1 entered final re-review. Missing-field legacy rows still require trusted null
+  backfill before the temporary safe query can enumerate them.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
