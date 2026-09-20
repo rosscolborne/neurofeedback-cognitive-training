@@ -442,13 +442,14 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
 - **Final commit:** `0fbc281a115effe529c54d9f0ff04e8b375cbae8`,
   `19c2514ab84b8d8fea7ad05b99d04bfccd351672`,
-  `e702e443b570c0cece5b0a925420cd71004c3ba4`
+  `e702e443b570c0cece5b0a925420cd71004c3ba4`,
+  `018ebb80b8d2b0a3e73f09f4fc3625aa1e18875c`
 - **Owned files:** `src/components/clinician/ClinicSettingsView.tsx`,
   `src/components/brand/ClinicCustomizerModal.tsx`, `src/services/brandEngine.ts`,
   new dedicated clinic/practitioner repository/helper/tests. `App.tsx` wiring is
@@ -481,8 +482,11 @@ independent workstream immediately when a slot opens.
   focused lint was clean, and the production build passed. Independent final
   re-review found a central atomic-onboarding rules blocker plus owned copy,
   authoritative-save callback, and mounted interaction-test gaps. Owned fixes are
-  assigned to the original implementation agent. The central rules fix is in
-  progress; shared App/clinic-link changes remain central.
+  fixed by the original implementation agent at `018ebb80`, with persisted
+  credential status, authoritative branding-save semantics, and mounted async
+  interaction coverage. The full suite passed 173/173, lint and the production
+  build passed, and final re-review is pending. The central atomic-onboarding rule
+  is committed separately; shared App/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
@@ -818,6 +822,11 @@ independent workstream immediately when a slot opens.
   clean, and the production build passing. Its canonical repository, clinician
   surface, and unwired patient surface entered independent review; shared rules,
   index, and shell/App wiring remain centrally reserved.
+- **2026-09-19:** S1 completed its latest owned review fixes at Git-verified
+  `018ebb80`, exposing truthful persisted credential status, isolating post-write
+  branding callback failures from authoritative persistence, and adding mounted
+  async state/interaction tests. The full suite passed 173/173, lint passed, and
+  the production build passed; S1 entered final independent re-review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
