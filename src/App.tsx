@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment, PatientInvitation, QEEGBrainMap } from './types';
 import { storageEngine } from './services/storageEngine';
@@ -32,7 +32,7 @@ function InvitationEntryRedirect() {
 }
 
 export function App() {
-  const { user, role, loading, logout } = useAuth();
+  const { user, role, loading, logout, isDemoWorkspace } = useAuth();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
   const storedInvitationCode = typeof window === 'undefined'
@@ -46,10 +46,20 @@ export function App() {
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [patientInvitations, setPatientInvitations] = useState<PatientInvitation[]>([]);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
+  const [dataIdentity, setDataIdentity] = useState('');
+  const loadGeneration = useRef(0);
+  const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
+  const hasCurrentData = dataIdentity === accountIdentity;
+  const visibleClients = hasCurrentData ? clients : [];
+  const visibleCurrentClient = hasCurrentData ? currentClient : null;
+  const visibleMessages = hasCurrentData ? messages : [];
+  const visibleAppointments = hasCurrentData ? appointments : [];
+  const visibleInvitations = hasCurrentData ? patientInvitations : [];
+  const visibleBrand = hasCurrentData ? brand : storageEngine.getBrandConfig();
 
   useEffect(() => {
-    applyBrandToDOM(brand);
-  }, [brand]);
+    applyBrandToDOM(visibleBrand);
+  }, [visibleBrand]);
 
   useEffect(() => {
     if (routeInvitationCode) {
@@ -58,53 +68,46 @@ export function App() {
   }, [routeInvitationCode]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadClientData() {
-      try {
-        if (role === 'patient' && user) {
-          const client = await storageEngine.getCurrentClient(user);
-          if (isMounted) setCurrentClient(client);
-        } else if (role === 'clinician') {
-          const [cls, invitations] = await Promise.all([
-            storageEngine.getClients(),
-            storageEngine.getPatientInvitationsForClinician(),
-          ]);
-          if (isMounted) {
-            setClients(cls);
-            setPatientInvitations(invitations);
-          }
-        } else {
-          const defaultClient = await storageEngine.getCurrentClient(user);
-          const cls = await storageEngine.getClients();
-          if (isMounted) {
-            setCurrentClient(defaultClient);
-            setClients(cls);
-          }
-        }
-        const appts = await storageEngine.getAppointments();
-        if (isMounted) setAppointments(appts);
-      } catch (err) {
-        console.warn('Error loading client data:', err);
-      }
+    const generation = ++loadGeneration.current;
+    const isCurrent = () => loadGeneration.current === generation;
+    setDataIdentity(accountIdentity);
+    setClients([]);
+    setCurrentClient(null);
+    setMessages([]);
+    setAppointments([]);
+    setPatientInvitations([]);
+    setShowRebrandModal(false);
+    setBrand(storageEngine.getBrandConfig());
+
+    if (loading || !user) return;
+
+    if (role === 'patient') {
+      void storageEngine.getCurrentClient(user)
+        .then((client) => { if (isCurrent()) setCurrentClient(client); })
+        .catch((error) => { if (isCurrent()) console.warn('Error loading patient profile:', error); });
+    } else if (role === 'clinician') {
+      void storageEngine.getClients()
+        .then((nextClients) => { if (isCurrent()) setClients(nextClients); })
+        .catch((error) => { if (isCurrent()) console.warn('Error loading clinician roster:', error); });
+      void storageEngine.getPatientInvitationsForClinician()
+        .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
+        .catch((error) => { if (isCurrent()) console.warn('Error loading patient invitations:', error); });
     }
 
-    if (!loading) {
-      loadClientData();
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user, role, loading]);
+    void storageEngine.getAppointments()
+      .then((nextAppointments) => { if (isCurrent()) setAppointments(nextAppointments); })
+      .catch((error) => { if (isCurrent()) console.warn('Error loading appointments:', error); });
+  }, [accountIdentity, isDemoWorkspace, loading, role, user]);
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading && user) {
+      const generation = loadGeneration.current;
       const unsubscribe = storageEngine.subscribeToMessages((threads) => {
-        setMessages(threads);
+        if (loadGeneration.current === generation) setMessages(threads);
       }, role);
       return unsubscribe;
     }
-  }, [user, role, loading]);
+  }, [accountIdentity, loading, role, user]);
 
   if (loading) {
     return (
@@ -115,10 +118,10 @@ export function App() {
   }
 
   const handleUpdateClient = async (updated: ClientProfile) => {
-    if (currentClient && currentClient.id === updated.id) {
+    if (visibleCurrentClient && visibleCurrentClient.id === updated.id) {
       setCurrentClient(updated);
     }
-    const next = clients.map(c => (c.id === updated.id ? updated : c));
+    const next = visibleClients.map(c => (c.id === updated.id ? updated : c));
     setClients(next);
     await storageEngine.saveClient(updated);
   };
@@ -127,8 +130,7 @@ export function App() {
     storageEngine.appendBrainMap(patientId, map);
 
   const handleDeleteClient = async (clientId: string) => {
-    const client = clients.find((entry) => entry.id === clientId);
-    if (client?.isDemo || clientId.startsWith('demo-')) {
+    if (isDemoWorkspace) {
       await storageEngine.deleteClient(clientId);
     } else {
       await storageEngine.unlinkPatient(clientId);
@@ -163,7 +165,7 @@ export function App() {
   const handleSendMessage = async (clientId: string, text: string) => {
     if (!text.trim()) return;
 
-    let targetThread = messages.find(t => t.clientId === clientId);
+    let targetThread = visibleMessages.find(t => t.clientId === clientId);
     let updatedThread: MessageThread;
 
     if (targetThread) {
@@ -183,7 +185,7 @@ export function App() {
         lastMessageTime: 'Just now',
       };
     } else {
-      const client = clients.find(c => c.id === clientId);
+      const client = visibleClients.find(c => c.id === clientId);
       updatedThread = {
         clientId,
         patientId: clientId,
@@ -192,7 +194,6 @@ export function App() {
         clientAvatar: client?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         lastMessageTime: 'Just now',
         unreadCount: 0,
-        isDemo: client?.isDemo || false,
         messages: [
           {
             id: 'msg-' + Date.now(),
@@ -206,8 +207,8 @@ export function App() {
     }
 
     const nextThreads = targetThread
-      ? messages.map(t => (t.clientId === clientId ? updatedThread : t))
-      : [updatedThread, ...messages];
+      ? visibleMessages.map(t => (t.clientId === clientId ? updatedThread : t))
+      : [updatedThread, ...visibleMessages];
 
     setMessages(nextThreads);
     await storageEngine.saveMessageThread(updatedThread);
@@ -218,37 +219,17 @@ export function App() {
       ...appt,
       clinicianId: user?.uid || appt.clinicianId,
     };
-    const next = appointments.some(a => a.id === appt.id)
-      ? appointments.map(a => a.id === appt.id ? apptWithUser : a)
-      : [apptWithUser, ...appointments];
+    const next = visibleAppointments.some(a => a.id === appt.id)
+      ? visibleAppointments.map(a => a.id === appt.id ? apptWithUser : a)
+      : [apptWithUser, ...visibleAppointments];
     setAppointments(next);
     await storageEngine.saveAppointment(apptWithUser);
   };
 
   const handleDeleteAppointment = async (id: string) => {
-    const next = appointments.filter(a => a.id !== id);
+    const next = visibleAppointments.filter(a => a.id !== id);
     setAppointments(next);
     await storageEngine.deleteAppointment(id);
-  };
-
-  const handleClearDemoData = async () => {
-    storageEngine.clearDemoData();
-    const cls = await storageEngine.getClients();
-    setClients(cls);
-    const msgs = await storageEngine.getMessages();
-    setMessages(msgs);
-    const appts = await storageEngine.getAppointments();
-    setAppointments(appts);
-  };
-
-  const handleResetDemoData = async () => {
-    storageEngine.resetToDefaultSeed();
-    const cls = await storageEngine.getClients();
-    setClients(cls);
-    const msgs = await storageEngine.getMessages();
-    setMessages(msgs);
-    const appts = await storageEngine.getAppointments();
-    setAppointments(appts);
   };
 
   const handleSaveBrand = (newBrand: ClinicBrandConfig) => {
@@ -264,8 +245,8 @@ export function App() {
     if (role === 'patient') {
       return (
         <PatientShell
-          brand={brand}
-          client={currentClient || {
+          brand={visibleBrand}
+          client={visibleCurrentClient || {
             id: user?.uid || 'patient',
             name: user?.displayName || 'Patient',
             email: user?.email || 'patient@waveable.app',
@@ -295,12 +276,13 @@ export function App() {
     }
     return (
       <ClinicianShell
-        brand={brand}
+        brand={visibleBrand}
         clinicianLabel={user?.displayName || user?.email || undefined}
-        clients={clients}
-        patientInvitations={patientInvitations}
-        messages={messages}
-        appointments={appointments}
+        isDemoWorkspace={isDemoWorkspace}
+        clients={visibleClients}
+        patientInvitations={visibleInvitations}
+        messages={visibleMessages}
+        appointments={visibleAppointments}
         onUpdateClient={handleUpdateClient}
         onAppendBrainMap={handleAppendBrainMap}
         onDeleteClient={handleDeleteClient}
@@ -309,8 +291,6 @@ export function App() {
         onSendMessage={handleSendMessage}
         onSaveAppointment={handleSaveAppointment}
         onDeleteAppointment={handleDeleteAppointment}
-        onClearDemoData={handleClearDemoData}
-        onResetDemoData={handleResetDemoData}
         onOpenRebrand={() => setShowRebrandModal(true)}
         onLogout={logout}
       />
@@ -347,7 +327,7 @@ export function App() {
 
       {showRebrandModal && (
         <ClinicCustomizerModal
-          currentBrand={brand}
+          currentBrand={visibleBrand}
           onSave={handleSaveBrand}
           onClose={() => setShowRebrandModal(false)}
         />

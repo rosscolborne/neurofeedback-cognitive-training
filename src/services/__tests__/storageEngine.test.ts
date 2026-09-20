@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionRecord } from '../../types';
 
 const state = vi.hoisted(() => ({
@@ -30,6 +30,10 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import { INITIAL_DEMO_CLIENTS, createBlankProfile, storageEngine } from '../storageEngine';
+import { activateClinicianDemoWorkspace, deactivateClinicianDemoWorkspace } from '../clinicianDemoBoundary';
+import { buildPatientProgressDisplayModel } from '../../components/patient/patientMetrics';
+
+afterEach(() => deactivateClinicianDemoWorkspace());
 
 const sessionDocument = (id: string, patientId: string) => ({
   id,
@@ -46,8 +50,10 @@ const sessionDocument = (id: string, patientId: string) => ({
 describe('role-aware session repository', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.auth.currentUser = { uid: 'clinician-1' };
+    activateClinicianDemoWorkspace();
     storageEngine.resetToDefaultSeed();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'clinician-1' };
   });
 
   it('rejects a clinician scope that does not match the authenticated clinician', async () => {
@@ -270,6 +276,7 @@ describe('role-aware session repository', () => {
 describe('idempotent compatibility session saves', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    activateClinicianDemoWorkspace();
     state.auth.currentUser = { uid: 'demo-clinician' };
     storageEngine.resetToDefaultSeed();
   });
@@ -295,13 +302,104 @@ describe('idempotent compatibility session saves', () => {
   });
 });
 
+describe('production and sample workspace separation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    activateClinicianDemoWorkspace();
+    storageEngine.resetToDefaultSeed();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'clinician-1', email: 'clinician@example.com' };
+  });
+
+  it('never falls back to seeded records for an empty production account', async () => {
+    firestore.getDocs.mockResolvedValue({ docs: [] });
+
+    await expect(storageEngine.getClients()).resolves.toEqual([]);
+    await expect(storageEngine.getMessages()).resolves.toEqual([]);
+    await expect(storageEngine.getAppointments()).resolves.toEqual([]);
+  });
+
+  it('blocks sample resets from a production account', () => {
+    expect(() => storageEngine.clearDemoData()).toThrow('isolated sample clinician workspace');
+    expect(() => storageEngine.resetToDefaultSeed()).toThrow('isolated sample clinician workspace');
+  });
+
+  it('does not classify legitimate production IDs or mutable flags as sample data', async () => {
+    const productionClient = { ...INITIAL_DEMO_CLIENTS[0], id: 'demo-looking-production-id', clinicianId: 'clinician-1', isDemo: true };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ id: productionClient.id, data: () => productionClient }] })
+      .mockResolvedValueOnce({ docs: [] });
+
+    await expect(storageEngine.getClients()).resolves.toEqual([expect.objectContaining({ id: productionClient.id, isDemo: true })]);
+    await storageEngine.saveClient(productionClient);
+    expect(firestore.setDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: productionClient.id },
+      productionClient,
+      { merge: true },
+    );
+  });
+
+  it('treats even the legacy demo-shaped UID as production unless the workspace authority is active', async () => {
+    state.auth.currentUser = { uid: 'demo-clinician', email: 'real@example.com' };
+    const client = { ...INITIAL_DEMO_CLIENTS[0], id: 'real-patient', clinicianId: 'demo-clinician', isDemo: false };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ id: client.id, data: () => client }] })
+      .mockResolvedValueOnce({ docs: [] });
+
+    await expect(storageEngine.getClients()).resolves.toEqual([expect.objectContaining({ id: 'real-patient' })]);
+    expect(firestore.getDocs).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns persisted messages and appointments even when legacy fields resemble sample data', async () => {
+    const thread = { clientId: 'demo-looking-patient', clinicianId: 'clinician-1', clientName: 'Real patient', clientAvatar: '', lastMessageTime: '', unreadCount: 0, messages: [], isDemo: true };
+    const appointment = { id: 'demo-looking-appointment', clientId: 'demo-looking-patient', clinicianId: 'clinician-1', clientName: 'Real patient', clientAvatar: '', clientCondition: '', date: '2026-09-19', time: '10:00', durationMinutes: 30, type: 'consultation' as const, protocol: 'theta-beta-ratio' as const, status: 'scheduled' as const, isDemo: true };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ data: () => thread }] })
+      .mockResolvedValueOnce({ docs: [{ data: () => appointment }] });
+
+    await expect(storageEngine.getMessages()).resolves.toEqual([thread]);
+    await expect(storageEngine.getAppointments()).resolves.toEqual([appointment]);
+  });
+
+  it('keeps sample records available only inside the explicit demo workspace', async () => {
+    activateClinicianDemoWorkspace();
+    state.auth.currentUser = null;
+
+    await expect(storageEngine.getClients()).resolves.toHaveLength(INITIAL_DEMO_CLIENTS.length);
+    storageEngine.clearDemoData();
+    await expect(storageEngine.getClients()).resolves.toEqual([]);
+    storageEngine.resetToDefaultSeed();
+    await expect(storageEngine.getClients()).resolves.toHaveLength(INITIAL_DEMO_CLIENTS.length);
+    expect(firestore.getDocs).not.toHaveBeenCalled();
+  });
+
+  it('fails closed without network access for production repositories while demo is active', async () => {
+    activateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'underlying-real-session', email: 'real@example.com' };
+
+    await expect(storageEngine.getClinic('clinic-1')).resolves.toBeNull();
+    await expect(storageEngine.getPractitioner('practitioner-1')).resolves.toBeNull();
+    await expect(storageEngine.getPatientInvitationsForClinician()).resolves.toEqual([]);
+    await expect(storageEngine.createPatientInvitation({
+      clinicianName: 'Clinician', patientEmail: 'patient@example.com', patientName: 'Patient',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    })).rejects.toThrow('unavailable in the sample clinician workspace');
+    await expect(storageEngine.saveDeviceAssignment({ patientId: 'patient-1', deviceId: 'device-1', model: 'Muse' }))
+      .rejects.toThrow('unavailable in the sample clinician workspace');
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(firestore.getDocs).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+});
+
 describe('authenticated simulator session persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.auth.currentUser = { uid: 'patient-1' };
   });
 
-  it('persists a demo-mode training session for a real patient instead of routing it to demo memory', async () => {
+  it('persists a completed Try Demo Mode session and reloads it into Progress/History aggregates', async () => {
     const writes: Array<{ ref: unknown; payload: Record<string, unknown> }> = [];
     const transactionGet = vi.fn().mockResolvedValue({
       id: 'patient-1',
@@ -328,6 +426,17 @@ describe('authenticated simulator session persistence', () => {
     expect(writes[0]?.ref).toEqual({ type: 'doc', path: 'sessions', id: 'simulated-session' });
     expect(writes[0]?.payload).toMatchObject({ isDemo: true, patientId: 'patient-1' });
     expect(writes[1]?.payload).toMatchObject({ recentCompletedSessionIds: ['simulated-session'] });
+
+    firestore.getDocs.mockResolvedValueOnce({
+      docs: [{ id: session.id, data: () => writes[0].payload }],
+    });
+    const reloaded = await storageEngine.getSessions('patient-1');
+    expect(reloaded).toEqual([expect.objectContaining({ id: session.id, isDemo: true })]);
+    const progress = buildPatientProgressDisplayModel('ready', reloaded, {
+      period: 'all', chartWidth: 320, chartHeight: 120, timeZone: 'UTC', nowMs: 1_000,
+    });
+    expect(progress.validSessions).toEqual([expect.objectContaining({ id: session.id, isDemo: true })]);
+    expect(progress.summary?.sessionCount).toBe(1);
   });
 
   it('does not apply session aggregates twice when a completed session is retried', async () => {

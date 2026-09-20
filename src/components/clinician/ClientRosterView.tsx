@@ -40,7 +40,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'completed'>('all');
-  const [cohortFilter, setCohortFilter] = useState<'all' | 'real' | 'demo'>('all');
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -67,12 +66,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
       c.condition.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    const matchesCohort =
-      cohortFilter === 'all' ||
-      (cohortFilter === 'real' && !c.isDemo) ||
-      (cohortFilter === 'demo' && !!c.isDemo);
-
-    return matchesSearch && matchesStatus && matchesCohort;
+    return matchesSearch && matchesStatus;
   });
 
   const handleOpenAdd = () => {
@@ -245,32 +239,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           />
         </div>
 
-        {/* Cohort Toggle */}
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'real', label: 'Enrolled' },
-            { id: 'demo', label: 'Sample' },
-          ].map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setCohortFilter(c.id as any)}
-              style={{
-                background: cohortFilter === c.id ? '#3A4B58' : 'var(--surface-clinician-card)',
-                color: cohortFilter === c.id ? '#FFFFFF' : 'var(--text-secondary)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 10px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-
         {/* Filter Chips */}
         <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {(['all', 'active', 'paused', 'completed'] as const).map((f) => (
@@ -348,20 +316,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{client.name}</span>
-                          {client.isDemo && (
-                            <span
-                              style={{
-                                fontSize: '9px',
-                                background: 'var(--surface-clinician-sidebar)',
-                                color: 'var(--text-tertiary)',
-                                padding: '1px 5px',
-                                borderRadius: '4px',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Sample
-                            </span>
-                          )}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 400 }}>
                           {client.email}
@@ -448,11 +402,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 <div>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>{client.name}</span>
-                    {client.isDemo && (
-                      <span style={{ fontSize: '9px', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-tertiary)', padding: '1px 5px', borderRadius: '4px' }}>
-                        Sample
-                      </span>
-                    )}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{client.email}</div>
                 </div>

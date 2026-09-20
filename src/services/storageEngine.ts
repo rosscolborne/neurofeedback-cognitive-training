@@ -42,6 +42,7 @@ import {
   timestampToMillis,
   timestampToIso,
 } from './dataMappers';
+import { DEMO_CLINICIAN_ID, isClinicianDemoWorkspace } from './clinicianDemoBoundary';
 
 const STORAGE_KEYS = {
   BRAND: 'waveable_brand_config',
@@ -457,7 +458,7 @@ export const INITIAL_DEMO_MESSAGES: MessageThread[] = [
 
 export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
   {
-    id: 'sess-001',
+    id: 'demo-sess-001',
     patientId: 'demo-sarah-mitchell',
     patientName: 'Sarah Mitchell',
     clinicId: 'evolve-brain-training',
@@ -486,7 +487,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     isDemo: true,
   },
   {
-    id: 'sess-002',
+    id: 'demo-sess-002',
     patientId: 'demo-sarah-mitchell',
     patientName: 'Sarah Mitchell',
     clinicId: 'evolve-brain-training',
@@ -514,7 +515,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     isDemo: true,
   },
   {
-    id: 'sess-003',
+    id: 'demo-sess-003',
     patientId: 'demo-david-miller',
     patientName: 'David Miller',
     clinicId: 'evolve-brain-training',
@@ -542,7 +543,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     isDemo: true,
   },
   {
-    id: 'sess-004',
+    id: 'demo-sess-004',
     patientId: 'demo-elena-rostova',
     patientName: 'Elena Rostova',
     clinicId: 'evolve-brain-training',
@@ -573,7 +574,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
 
 export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
   {
-    id: 'appt-001',
+    id: 'demo-appt-001',
     clientId: 'demo-sarah-mitchell',
     clientName: 'Sarah Mitchell',
     clientAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
@@ -590,7 +591,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     hardwareProfile: 'Muse S (Athena)',
   },
   {
-    id: 'appt-002',
+    id: 'demo-appt-002',
     clientId: 'demo-david-miller',
     clientName: 'David Miller',
     clientAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -607,7 +608,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     hardwareProfile: 'Muse S (Athena)',
   },
   {
-    id: 'appt-003',
+    id: 'demo-appt-003',
     clientId: 'demo-elena-rostova',
     clientName: 'Elena Rostova',
     clientAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
@@ -624,7 +625,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     hardwareProfile: 'Muse S (Athena)',
   },
   {
-    id: 'appt-004',
+    id: 'demo-appt-004',
     clientId: 'demo-marcus-chen',
     clientName: 'Marcus Chen',
     clientAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
@@ -647,18 +648,34 @@ class StorageEngine {
   private demoSessions: SessionRecord[] = [...INITIAL_DEMO_SESSIONS];
   private demoMessages: MessageThread[] = [...INITIAL_DEMO_MESSAGES];
   private demoAppointments: CalendarAppointment[] = [...INITIAL_DEMO_APPOINTMENTS];
+  private demoBrand: ClinicBrandConfig = BRAND_PRESETS[0];
+
+  private isDemoWorkspace(): boolean {
+    return isClinicianDemoWorkspace();
+  }
+
+  private requireDemoWorkspace(action: string): void {
+    if (!this.isDemoWorkspace()) {
+      throw new Error(`${action} is available only in the isolated sample clinician workspace`);
+    }
+  }
 
   public getBrandConfig(): ClinicBrandConfig {
+    if (this.isDemoWorkspace()) return this.demoBrand;
     const raw = localStorage.getItem(STORAGE_KEYS.BRAND) || localStorage.getItem('brainswell_brand_config') || localStorage.getItem('brainwell_brand_config');
     if (raw) {
       try {
         return JSON.parse(raw);
-      } catch (e) {}
+      } catch {}
     }
     return BRAND_PRESETS[0];
   }
 
   public saveBrandConfig(brand: ClinicBrandConfig) {
+    if (this.isDemoWorkspace()) {
+      this.demoBrand = brand;
+      return;
+    }
     localStorage.setItem(STORAGE_KEYS.BRAND, JSON.stringify(brand));
   }
 
@@ -669,7 +686,8 @@ class StorageEngine {
 
   public async saveClinicBrandConfig(brand: ClinicBrandConfig): Promise<void> {
     this.saveBrandConfig(brand);
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    if (this.isDemoWorkspace()) throw new Error('Clinic branding is unavailable in the sample clinician workspace');
+    if (!auth.currentUser) return;
     await setDoc(
       doc(db, 'clinics', brand.clinicId),
       { branding: removeUndefined({ ...brand, updatedAt: serverTimestamp() }), updatedAt: serverTimestamp() },
@@ -678,7 +696,7 @@ class StorageEngine {
   }
 
   public async getClinic(clinicId: string): Promise<ClinicProfile | null> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return null;
+    if (this.isDemoWorkspace() || !auth.currentUser) return null;
     const snapshot = await getDoc(doc(db, 'clinics', clinicId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<ClinicProfile>;
@@ -692,7 +710,8 @@ class StorageEngine {
   }
 
   public async saveClinic(clinic: ClinicProfile): Promise<void> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    if (this.isDemoWorkspace()) throw new Error('Clinic settings are unavailable in the sample clinician workspace');
+    if (!auth.currentUser) return;
     await setDoc(
       doc(db, 'clinics', clinic.id),
       removeUndefined({ ...clinic, updatedAt: serverTimestamp() }),
@@ -701,7 +720,7 @@ class StorageEngine {
   }
 
   public async getPractitioner(practitionerId: string): Promise<PractitionerProfile | null> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return null;
+    if (this.isDemoWorkspace() || !auth.currentUser) return null;
     const snapshot = await getDoc(doc(db, 'practitioners', practitionerId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<PractitionerProfile>;
@@ -716,7 +735,8 @@ class StorageEngine {
   }
 
   public async savePractitioner(practitioner: PractitionerProfile): Promise<void> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    if (this.isDemoWorkspace()) throw new Error('Practitioner settings are unavailable in the sample clinician workspace');
+    if (!auth.currentUser) return;
     await setDoc(
       doc(db, 'practitioners', practitioner.id),
       removeUndefined({ ...practitioner, updatedAt: serverTimestamp() }),
@@ -725,6 +745,7 @@ class StorageEngine {
   }
 
   private async canManagePatient(patientId: string): Promise<boolean> {
+    if (this.isDemoWorkspace()) return false;
     const currentUserId = auth.currentUser?.uid;
     if (!currentUserId) return false;
     if (currentUserId === patientId) return true;
@@ -740,7 +761,7 @@ class StorageEngine {
   }
 
   public async getDeviceAssignment(patientId: string): Promise<DeviceAssignment | null> {
-    if (patientId.startsWith('demo-') || !(await this.canManagePatient(patientId))) return null;
+    if (this.isDemoWorkspace() || !(await this.canManagePatient(patientId))) return null;
     const snapshot = await getDoc(doc(db, 'deviceAssignments', patientId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<DeviceAssignment>;
@@ -749,8 +770,9 @@ class StorageEngine {
   }
 
   public async saveDeviceAssignment(assignment: DeviceAssignment): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Device assignments are unavailable in the sample clinician workspace');
     const currentUserId = auth.currentUser?.uid;
-    if (!currentUserId || assignment.patientId.startsWith('demo-')) return;
+    if (!currentUserId) return;
     if (!(await this.canManagePatient(assignment.patientId))) {
       throw new Error('Not authorized to manage this patient device assignment');
     }
@@ -770,9 +792,8 @@ class StorageEngine {
   }
 
   public async getClient(id: string): Promise<ClientProfile | null> {
-    if (id.startsWith('demo-') || !auth.currentUser) {
-      return this.demoClients.find((c) => c.id === id) || null;
-    }
+    if (this.isDemoWorkspace()) return this.demoClients.find((client) => client.id === id) ?? null;
+    if (!auth.currentUser) return null;
     try {
       const snap = await getDoc(doc(db, 'clients', id));
       if (snap.exists()) {
@@ -786,9 +807,7 @@ class StorageEngine {
 
   public async getClients(clinicianId?: string): Promise<ClientProfile[]> {
     const activeClinicianId = clinicianId || auth.currentUser?.uid;
-    if (activeClinicianId === 'demo-clinician') {
-      return [...this.demoClients];
-    }
+    if (this.isDemoWorkspace()) return !clinicianId || clinicianId === DEMO_CLINICIAN_ID ? [...this.demoClients] : [];
     if (!activeClinicianId) {
       return [];
     }
@@ -828,8 +847,9 @@ class StorageEngine {
   }
 
   public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
+    if (this.isDemoWorkspace()) throw new Error('Invitations are unavailable in the sample clinician workspace');
     const clinician = auth.currentUser;
-    if (!clinician || clinician.uid === 'demo-clinician') {
+    if (!clinician) {
       throw new Error('A real clinician account is required to invite a patient');
     }
 
@@ -896,8 +916,9 @@ class StorageEngine {
   }
 
   public async getPatientInvitationsForClinician(): Promise<PatientInvitation[]> {
+    if (this.isDemoWorkspace()) return [];
     const clinicianId = auth.currentUser?.uid;
-    if (!clinicianId || clinicianId === 'demo-clinician') return [];
+    if (!clinicianId) return [];
     const snapshot = await getDocs(
       query(collection(db, 'patientInvitations'), where('clinicianId', '==', clinicianId))
     );
@@ -907,6 +928,7 @@ class StorageEngine {
   }
 
   public async cancelPatientInvitation(invitationId: string): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Invitations are unavailable in the sample clinician workspace');
     const clinicianId = auth.currentUser?.uid;
     if (!clinicianId) throw new Error('Sign in to cancel an invitation');
     const invitationRef = doc(db, 'patientInvitations', invitationId);
@@ -926,6 +948,7 @@ class StorageEngine {
   }
 
   public async unlinkPatient(patientId: string): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Patient relationships are unavailable in the sample clinician workspace');
     const clinicianId = auth.currentUser?.uid;
     if (!clinicianId) throw new Error('Sign in to remove a patient from your roster');
     const patientRef = doc(db, 'clients', patientId);
@@ -943,6 +966,7 @@ class StorageEngine {
   }
 
   public async acceptPatientInvitation(invitationCode: string, fallbackClient: ClientProfile): Promise<ClientProfile> {
+    if (this.isDemoWorkspace()) throw new Error('Invitations are unavailable in the sample clinician workspace');
     const patient = auth.currentUser;
     if (!patient?.email) throw new Error('Sign in with the invited email address');
     const patientEmail = patient.email;
@@ -1033,7 +1057,7 @@ class StorageEngine {
   }
 
   public async saveClient(client: ClientProfile): Promise<void> {
-    if (client.isDemo || client.id.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
+    if (this.isDemoWorkspace()) {
       const idx = this.demoClients.findIndex((c) => c.id === client.id);
       if (idx >= 0) {
         this.demoClients[idx] = client;
@@ -1042,6 +1066,8 @@ class StorageEngine {
       }
       return;
     }
+
+    if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
     try {
       await setDoc(doc(db, 'clients', client.id), client, { merge: true });
@@ -1052,7 +1078,7 @@ class StorageEngine {
 
   public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {
     const demoClient = this.demoClients.find((client) => client.id === patientId);
-    if (patientId.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician') {
+    if (this.isDemoWorkspace()) {
       return [...(demoClient?.brainMaps ?? [])];
     }
     if (!auth.currentUser) throw new Error('Sign in to load QEEG records');
@@ -1071,23 +1097,22 @@ class StorageEngine {
 
   public async appendBrainMap(patientId: string, input: QEEGBrainMap): Promise<QEEGBrainMap> {
     const currentUser = auth.currentUser;
-    if (!currentUser) throw new Error('Sign in as the managing clinician to save QEEG records');
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(input.id)) throw new Error('QEEG record identifier is invalid');
 
     const normalized = normalizeQeegInput(input);
 
     const canonicalBase: QEEGBrainMap = {
       ...normalized,
-      createdBy: currentUser.uid,
+      createdBy: currentUser?.uid ?? DEMO_CLINICIAN_ID,
       schemaVersion: 1,
     };
 
-    if (patientId.startsWith('demo-') || currentUser.uid === 'demo-clinician') {
+    if (this.isDemoWorkspace()) {
       const demoIndex = this.demoClients.findIndex((client) => client.id === patientId);
       if (demoIndex < 0) throw new Error('Demo patient was not found');
       const collision = (this.demoClients[demoIndex].brainMaps ?? []).find((entry) => entry.id === input.id);
       if (collision) {
-        if (collision.createdBy === currentUser.uid && qeegPayloadMatches(collision, normalized)) return collision;
+        if (collision.createdBy === canonicalBase.createdBy && qeegPayloadMatches(collision, normalized)) return collision;
         throw new Error('QEEG record identifier is already in use');
       }
       const canonical = { ...canonicalBase, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
@@ -1098,6 +1123,8 @@ class StorageEngine {
       };
       return canonical;
     }
+
+    if (!currentUser) throw new Error('Sign in as the managing clinician to save QEEG records');
 
     const clientRef = doc(db, 'clients', patientId);
     const mapRef = doc(db, 'clients', patientId, 'brainMaps', input.id);
@@ -1135,20 +1162,21 @@ class StorageEngine {
   }
 
   public async saveClients(clients: ClientProfile[]): Promise<void> {
-    const demo = clients.filter((c) => c.isDemo || c.id.startsWith('demo-'));
-    this.demoClients = demo.length > 0 ? demo : clients;
-
-    const realClients = clients.filter((c) => !c.isDemo && !c.id.startsWith('demo-'));
-    for (const c of realClients) {
+    if (this.isDemoWorkspace()) {
+      this.demoClients = clients;
+      return;
+    }
+    for (const c of clients) {
       await this.saveClient(c);
     }
   }
 
   public async deleteClient(id: string): Promise<void> {
-    if (id.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
+    if (this.isDemoWorkspace()) {
       this.demoClients = this.demoClients.filter((c) => c.id !== id);
       return;
     }
+    if (!auth.currentUser) throw new Error('Sign in to remove a patient');
 
     try {
       await deleteDoc(doc(db, 'clients', id));
@@ -1158,11 +1186,8 @@ class StorageEngine {
   }
 
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
+    if (this.isDemoWorkspace()) return this.demoClients[0] ?? null;
     if (user?.uid) {
-      if (user.uid === 'demo-clinician') {
-        return this.demoClients[0] || null;
-      }
-
       try {
         const snap = await getDoc(doc(db, 'clients', user.uid));
         if (snap && snap.exists()) {
@@ -1200,12 +1225,8 @@ class StorageEngine {
 
   public async getSessionsFor(scope: SessionQueryScope): Promise<SessionRecord[]> {
     const demoPatientId = 'patientId' in scope ? scope.patientId : undefined;
-    const isDemoScope =
-      auth.currentUser?.uid === 'demo-clinician' ||
-      demoPatientId?.startsWith('demo-') ||
-      ('clinicianId' in scope && scope.clinicianId === 'demo-clinician');
 
-    if (isDemoScope) {
+    if (this.isDemoWorkspace()) {
       const sessions = demoPatientId
         ? this.demoSessions.filter((session) => session.patientId === demoPatientId)
         : this.demoSessions;
@@ -1257,7 +1278,8 @@ class StorageEngine {
       const unique = new Map<string, SessionRecord>();
       for (const snapshot of snapshots) {
         for (const entry of snapshot.docs) {
-          unique.set(entry.id, readSessionRecord(entry.data(), entry.id));
+          const session = readSessionRecord(entry.data(), entry.id);
+          unique.set(entry.id, session);
         }
       }
       return [...unique.values()]
@@ -1273,6 +1295,9 @@ class StorageEngine {
    * omitting it is clinician-scoped, which fixes cohort reports for real users.
    */
   public async getSessions(clientId?: string): Promise<SessionRecord[]> {
+    if (this.isDemoWorkspace()) {
+      return this.getSessionsFor({ role: 'clinician', clinicianId: DEMO_CLINICIAN_ID, patientId: clientId });
+    }
     const currentUserId = auth.currentUser?.uid;
     if (!currentUserId) return [];
     if (clientId === currentUserId) {
@@ -1290,9 +1315,7 @@ class StorageEngine {
       session.id
     );
     const useMemory =
-      session.patientId.startsWith('demo-') ||
-      auth.currentUser?.uid === 'demo-clinician' ||
-      !auth.currentUser;
+      this.isDemoWorkspace();
 
     if (useMemory) {
       const existing = this.demoSessions.find((entry) => entry.id === session.id);
@@ -1308,6 +1331,8 @@ class StorageEngine {
       }
       return { created: true, session: normalizedSession };
     }
+
+    if (!auth.currentUser) throw new Error('Sign in to save a training session');
 
     const currentUserId = auth.currentUser?.uid;
     let authorized = currentUserId === session.patientId || (await this.canManagePatient(session.patientId));
@@ -1378,10 +1403,7 @@ class StorageEngine {
     const demoIndex = this.demoSessions.findIndex((session) => session.id === sessionId);
     const useMemory =
       demoIndex >= 0 &&
-      (this.demoSessions[demoIndex].isDemo ||
-        this.demoSessions[demoIndex].patientId.startsWith('demo-') ||
-        auth.currentUser?.uid === 'demo-clinician' ||
-        !auth.currentUser);
+      this.isDemoWorkspace();
 
     if (useMemory) {
       const updated = { ...this.demoSessions[demoIndex] };
@@ -1394,6 +1416,7 @@ class StorageEngine {
       this.demoSessions[demoIndex] = updated;
       return;
     }
+    if (this.isDemoWorkspace()) throw new Error(`Sample session ${sessionId} does not exist`);
     if (!auth.currentUser) return;
 
     const sessionRef = doc(db, 'sessions', sessionId);
@@ -1448,7 +1471,7 @@ class StorageEngine {
   }
 
   public async getMessages(): Promise<MessageThread[]> {
-    if (auth.currentUser?.uid === 'demo-clinician') {
+    if (this.isDemoWorkspace()) {
       return [...this.demoMessages];
     }
     if (!auth.currentUser) {
@@ -1482,7 +1505,7 @@ class StorageEngine {
   }
 
   public async saveMessageThread(thread: MessageThread): Promise<void> {
-    if (thread.isDemo || thread.clientId.startsWith('demo-') || auth.currentUser?.uid === 'demo-clinician' || !auth.currentUser) {
+    if (this.isDemoWorkspace()) {
       const idx = this.demoMessages.findIndex((t) => t.clientId === thread.clientId);
       if (idx >= 0) {
         this.demoMessages[idx] = thread;
@@ -1492,6 +1515,8 @@ class StorageEngine {
       return;
     }
 
+    if (!auth.currentUser) throw new Error('Sign in to send a message');
+
     try {
       await setDoc(doc(db, 'messages', thread.clientId), thread, { merge: true });
     } catch (err) {
@@ -1500,17 +1525,17 @@ class StorageEngine {
   }
 
   public async saveMessages(threads: MessageThread[]): Promise<void> {
-    const demo = threads.filter((t) => t.isDemo || t.clientId.startsWith('demo-'));
-    this.demoMessages = demo.length > 0 ? demo : threads;
-
-    const realThreads = threads.filter((t) => !t.isDemo && !t.clientId.startsWith('demo-'));
-    for (const t of realThreads) {
+    if (this.isDemoWorkspace()) {
+      this.demoMessages = threads;
+      return;
+    }
+    for (const t of threads) {
       await this.saveMessageThread(t);
     }
   }
 
   public subscribeToMessages(callback: (threads: MessageThread[]) => void, role?: 'clinician' | 'patient' | null): () => void {
-    if (auth.currentUser?.uid === 'demo-clinician') {
+    if (this.isDemoWorkspace()) {
       callback([...this.demoMessages]);
       return () => {};
     }
@@ -1531,7 +1556,7 @@ class StorageEngine {
         const docs = snapshot.docs.map((d) => d.data() as MessageThread);
         callback(docs);
       },
-      (err) => {
+      () => {
         callback([]);
       }
     );
@@ -1540,7 +1565,7 @@ class StorageEngine {
   }
 
   public async getAppointments(clinicianOrPatientId?: string): Promise<CalendarAppointment[]> {
-    if (auth.currentUser?.uid === 'demo-clinician') {
+    if (this.isDemoWorkspace()) {
       return [...this.demoAppointments];
     }
     if (!auth.currentUser) {
@@ -1576,7 +1601,7 @@ class StorageEngine {
   }
 
   public async saveAppointment(appt: CalendarAppointment): Promise<void> {
-    if (appt.isDemo || appt.clientId.startsWith('demo-') || !auth.currentUser) {
+    if (this.isDemoWorkspace()) {
       const idx = this.demoAppointments.findIndex((a) => a.id === appt.id);
       if (idx >= 0) {
         this.demoAppointments[idx] = appt;
@@ -1586,6 +1611,8 @@ class StorageEngine {
       return;
     }
 
+    if (!auth.currentUser) throw new Error('Sign in to save an appointment');
+
     try {
       await setDoc(doc(db, 'appointments', appt.id), appt, { merge: true });
     } catch (err) {
@@ -1594,20 +1621,22 @@ class StorageEngine {
   }
 
   public async saveAppointments(appts: CalendarAppointment[]): Promise<void> {
-    const demo = appts.filter((a) => a.isDemo || a.clientId.startsWith('demo-'));
-    this.demoAppointments = demo.length > 0 ? demo : appts;
-
-    const realAppts = appts.filter((a) => !a.isDemo && !a.clientId.startsWith('demo-'));
-    for (const a of realAppts) {
+    if (this.isDemoWorkspace()) {
+      this.demoAppointments = appts;
+      return;
+    }
+    for (const a of appts) {
       await this.saveAppointment(a);
     }
   }
 
   public async deleteAppointment(id: string): Promise<void> {
-    if (id.startsWith('demo-') || !auth.currentUser) {
+    if (this.isDemoWorkspace()) {
       this.demoAppointments = this.demoAppointments.filter((a) => a.id !== id);
       return;
     }
+
+    if (!auth.currentUser) throw new Error('Sign in to delete an appointment');
 
     try {
       await deleteDoc(doc(db, 'appointments', id));
@@ -1617,17 +1646,21 @@ class StorageEngine {
   }
 
   public clearDemoData() {
+    this.requireDemoWorkspace('Clearing sample data');
     this.demoClients = [];
     this.demoSessions = [];
     this.demoMessages = [];
     this.demoAppointments = [];
+    this.demoBrand = BRAND_PRESETS[0];
   }
 
   public resetToDefaultSeed() {
+    this.requireDemoWorkspace('Resetting sample data');
     this.demoClients = [...INITIAL_DEMO_CLIENTS];
     this.demoSessions = [...INITIAL_DEMO_SESSIONS];
     this.demoMessages = [...INITIAL_DEMO_MESSAGES];
     this.demoAppointments = [...INITIAL_DEMO_APPOINTMENTS];
+    this.demoBrand = BRAND_PRESETS[0];
   }
 }
 
