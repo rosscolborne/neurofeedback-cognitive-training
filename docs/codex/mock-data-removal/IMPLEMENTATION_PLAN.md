@@ -2,7 +2,7 @@
 
 Last reconciled: 2026-09-19  
 Integration branch: `fill-in-mocked-data`  
-Last application-code baseline: `8bab4b8699e30d1b81ea8426bf3173ab4f3d32dd`
+Last application-code baseline: `035c3cae8cf6770ed5127a5877024b6035828f1c`
 
 ## How to use and maintain this document
 
@@ -642,11 +642,13 @@ independent workstream immediately when a slot opens.
 
 ### D1 — Production/Demo Data Separation
 
-- **Status:** IN PROGRESS
+- **Status:** MERGED
 - **Parallelizable:** no; begin after R1 and S1 review due to overlapping files
 - **Branch:** `codex/mockdata-demo-separation`
 - **Worktree:** `../neurasticity-mockdata-demo-separation`
-- **Final commit:** `404610b93de160d944779c4da61bbfd2e6c14fbe`
+- **Final commits:** `404610b93de160d944779c4da61bbfd2e6c14fbe`,
+  `54f8965`, `7e1ef61`, `f815d58`; merged by `33b4156` into
+  `fill-in-mocked-data`
 - **Owned files:** seeded-demo/reset sections of `src/services/storageEngine.ts`;
   clinician sample-entry controls/routes in login/settings/App as assigned by the
   orchestrator after R1/S1 integration; focused tests.
@@ -669,13 +671,21 @@ independent workstream immediately when a slot opens.
   and aggregate inclusion; non-Demo missing-EEG no-fallback regression; manual
   fresh clinician/patient checks.
 - **Implementation report:** clinician seed/reset access is isolated behind an
-  explicit development/demo workspace, production views filter sample-shaped
-  records, production reset wiring is removed, and patient training Demo/debug
-  simulators remain available. Focused tests passed 46/46, the full suite passed
-  252/252, targeted lint and the production build passed. M1/A1 legacy adapters
-  require central cleanup after their integration. Independent review found auth
-  session/workspace split-brain, stale account state, overly broad persisted-data
-  filtering, and lifecycle-test gaps; fixes are assigned to the original agent.
+  explicit, authoritative in-memory development/demo workspace. Production data
+  never falls back to sample records, broad persisted-data filtering was removed,
+  and reset wiring cannot target an ordinary authenticated tenant. Patient training
+  Demo remains a supported one-session local acquisition mode: its completed
+  synthetic sessions persist, survive reload, appear in Progress/History with
+  visible provenance, and participate in normal aggregates. Non-Demo missing EEG
+  fails visibly and never transitions to synthetic input. The boundary signs out
+  before entering clinician demo mode; stale independent loads are guarded and
+  account state is cleared on transitions. Final independent Sol/High re-review
+  passed without findings. Mounted regressions cover `Try Demo Mode → complete →
+  save → reload → labeled Progress/History`, aggregate inclusion, and the next
+  non-Demo runner's headset gate. Focused tests passed 46/46 initially; final full
+  suite passed 268/268, production build and lint passed, and a clean
+  `npm ci --legacy-peer-deps` installation passed. M1/A1 canonical-care adapter
+  cleanup and demo guards were subsequently completed centrally in I1.
 
 ### I1 — Integration, Review, and Release Candidate
 
@@ -684,7 +694,8 @@ independent workstream immediately when a slot opens.
   review, but final validation waits for all required workstreams
 - **Branch:** `fill-in-mocked-data` (integration target; no separate feature work)
 - **Worktree:** repository root
-- **Final commit:** pending
+- **Current integration commit:** `035c3ca` (under independent review; not a
+  final release-candidate approval)
 - **Owned files:** shared wiring and plan updates only after reviewing incoming
   branches; conflict resolution must preserve original ownership decisions.
 - **Dependencies:** all applicable workstreams REVIEWED.
@@ -698,6 +709,16 @@ independent workstream immediately when a slot opens.
   for role persistence, linking, roster/detail/protocol, messaging, appointments,
   reports, settings, Demo and headset-equivalent save flow, empty accounts, and
   cross-tenant denial. Review browser console/network for hidden permission errors.
+- **Current integration report:** `035c3ca` completes the orchestrator-owned
+  canonical-care and clinic-boundary cutover: App/shell routes now use the M1/A1
+  canonical repositories and patient messaging/appointment surfaces; clinician
+  demo mode fails closed before canonical care repositories can access production
+  network data; brand hydration is account-scoped; invitation clinic identity is
+  propagated and enforced; and obsolete profile/global fallback paths are removed.
+  The integrated suite passed 353/353, production build passed, and lint passed
+  with only existing non-blocking warnings. Independent integrated review is in
+  progress. Firestore emulator authorization execution remains blocked locally by
+  the unavailable Java runtime.
 
 ## Integration and review procedure
 
@@ -743,6 +764,29 @@ independent workstream immediately when a slot opens.
 
 ## Project log
 
+- **2026-09-19:** Central messaging/appointment security work landed in
+  `b35fe35` and `6ffb345`, then merged by `63f860b`. It hardens the canonical
+  rules, requires atomic two-way message-summary updates, and preserves exact R1
+  relationship authorization. The clinician appointment query correction
+  `301251d` restricts reads to the current canonical relationship plus a
+  rules-provable explicit-null legacy path. Independent security review passed;
+  integrated focused tests passed 47/47. Dynamic rules-emulator execution remains
+  pending because Java is unavailable locally.
+- **2026-09-19:** D1 completed its independent review/fix/re-review cycle and
+  merged into `fill-in-mocked-data` via `33b4156`, with final commits `404610b`,
+  `54f8965`, `7e1ef61`, and `f815d58`. Final Sol/High review passed without
+  findings. The final branch suite passed 268/268, build/lint passed, and a clean
+  legacy-peer dependency installation passed. Its mounted regression confirms an
+  intentional patient Demo session saves, reloads into labeled
+  Progress/History, and remains distinct from the following non-Demo headset-gated
+  session.
+- **2026-09-19:** Orchestrator-owned integration commit `035c3ca` completed the
+  canonical M1/A1 care routing and patient surfaces, fail-closed clinician-demo
+  guards, account-scoped brand hydration, invitation `clinicId` propagation and
+  rules, and removal of obsolete profile/global fallback paths. The integrated
+  suite passed 353/353; build and lint passed (lint has only existing
+  non-blocking warnings). I1 entered independent integrated review. Java remains
+  unavailable for dynamic Firestore emulator authorization checks.
 - **2026-09-19:** User clarified D1 semantics: intentional patient training Demo
   sessions are supported persisted sessions, must appear in Progress/History and
   aggregates after reload, and must retain visible synthetic provenance. Only the
