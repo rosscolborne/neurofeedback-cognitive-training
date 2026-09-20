@@ -757,6 +757,12 @@ independent workstream immediately when a slot opens.
   `6b6d4d23`, passed final independent re-review without findings, and merged into
   `fill-in-mocked-data` via `0410f93`; integrated messaging tests passed 26/26.
   Central rules and shell/App cutover remain pending.
+- **2026-09-19:** The clarified intentional training Demo contract was implemented
+  centrally in `398a33c` and hardened in `f23a495`: real-patient Demo sessions are
+  included once in persisted-session aggregates and adherence, retain synthetic
+  provenance in reports and Progress/History, and remain distinct from fictional
+  sample-workspace records. Independent review passed; 69/69 focused tests and the
+  production build passed. D1 retains the save/reload mounted regression.
 - **2026-09-19:** Handoff reconciled against Git. The integration worktree was
   clean at `fill-in-mocked-data@414f507`; `main` and `origin/main` remained at
   `8bab4b8`; the foundation history was present; no downstream worktrees or remote
