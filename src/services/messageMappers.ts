@@ -62,7 +62,8 @@ export function mapThreadDocument(snapshot: Pick<QueryDocumentSnapshot<DocumentD
 interface LegacyMessageItem { id?: unknown; sender?: unknown; text?: unknown; timestamp?: unknown; }
 export function mapLegacyMessageThread(data: DocumentData, relationship: MessageRelationship): ProductionMessage[] {
   const patientId = typeof data.patientId === 'string' ? data.patientId : data.clientId;
-  if (patientId !== relationship.patientId || data.clinicianId !== relationship.clinicianId || data.isDemo === true || relationship.patientId.startsWith('demo-') || !Array.isArray(data.messages)) return [];
+  if (patientId !== relationship.patientId || data.clinicianId !== relationship.clinicianId || data.isDemo === true || relationship.patientId.startsWith('demo-')) return [];
+  if (!Array.isArray(data.messages)) throw new Error('Legacy message history is malformed.');
   return data.messages.flatMap((item: LegacyMessageItem, index: number) => {
     if (!item || typeof item.text !== 'string' || !item.text.trim() || (item.sender !== 'patient' && item.sender !== 'clinician')) return [];
     const senderRole: MessageSenderRole = item.sender; const senderId = senderRole === 'patient' ? relationship.patientId : relationship.clinicianId;

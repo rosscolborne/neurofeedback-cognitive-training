@@ -50,6 +50,15 @@ describe('relationship-scoped message repository', () => {
     await expect(messageRepository.sendPreparedMessage(oldAttempt)).rejects.toThrow('no longer active');
   });
 
+  it('reads a selected summary only by its direct current relationship path', async () => {
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockResolvedValueOnce({
+      id: 'clinician-1', exists: () => true,
+      data: () => ({ patientId: 'patient-1', clinicianId: 'clinician-1', participantIds: ['patient-1', 'clinician-1'] }),
+    });
+    await expect(messageRepository.getRelationshipThread(rel())).resolves.toMatchObject({ relationshipKey: rel().key });
+    expect(firestore.getDoc.mock.calls[1][0]).toMatchObject({ path: 'messageThreads/patient-1/relationships', id: 'clinician-1' });
+  });
+
   it('writes summary and message under the selected relationship with server timestamps', async () => {
     firestore.getDoc.mockResolvedValueOnce(client('clinician-1'));
     const get = vi.fn().mockResolvedValueOnce(missing()).mockResolvedValueOnce(missing()); const set = vi.fn();
@@ -91,6 +100,24 @@ describe('relationship-scoped message repository', () => {
   it('excludes demo and mismatched legacy arrays', async () => {
     firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockResolvedValueOnce({ exists: () => true, data: () => ({ patientId: 'patient-1', clinicianId: 'other', messages: [{ sender: 'patient', text: 'private' }] }) });
     await expect(messageRepository.listLegacyMessages(rel())).resolves.toEqual([]);
+  });
+
+  it('keeps canonical history available when a former-clinician legacy read is denied', async () => {
+    state.auth.currentUser = { uid: 'patient-1' };
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1'));
+    firestore.getDocs.mockResolvedValueOnce({ docs: [{ id: 'new-1', data: () => ({ patientId: 'patient-1', clinicianId: 'clinician-1', senderId: 'patient-1', senderRole: 'patient', text: 'Canonical', createdAt: { seconds: 10 } }) }] });
+    const canonical = await messageRepository.listMessages(rel());
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockRejectedValueOnce({ code: 'permission-denied' });
+    const legacy = await messageRepository.listLegacyMessages(rel());
+    expect(canonical.messages.map(({ text }) => text)).toEqual(['Canonical']);
+    expect(legacy).toEqual([]);
+  });
+
+  it('does not swallow legacy transport or corruption failures', async () => {
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockRejectedValueOnce({ code: 'unavailable' });
+    await expect(messageRepository.listLegacyMessages(rel())).rejects.toMatchObject({ code: 'unavailable' });
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockResolvedValueOnce({ exists: () => true, data: () => ({ patientId: 'patient-1', clinicianId: 'clinician-1', messages: {} }) });
+    await expect(messageRepository.listLegacyMessages(rel())).rejects.toThrow('malformed');
   });
 
   it('suppresses pending snapshots and every callback after disposal', async () => {

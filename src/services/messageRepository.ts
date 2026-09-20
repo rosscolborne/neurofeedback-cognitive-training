@@ -1,6 +1,6 @@
 import {
-  collection, collectionGroup, doc, documentId, getDoc, getDocs, limit, onSnapshot,
-  orderBy, query, runTransaction, serverTimestamp, startAfter, where,
+  collection, doc, documentId, getDoc, getDocs, limit, onSnapshot,
+  orderBy, query, runTransaction, serverTimestamp, startAfter,
   type DocumentData, type QueryDocumentSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -16,10 +16,9 @@ export interface MessagePage { messages: ProductionMessage[]; nextCursor: Messag
 export interface PreparedMessage { id: string; relationship: MessageRelationship; text: string; }
 export interface MessageRepository {
   resolveActiveRelationship(patientId: string): Promise<MessageRelationship>;
-  listThreads(): Promise<ProductionMessageThread[]>;
+  getRelationshipThread(relationship: MessageRelationship): Promise<ProductionMessageThread | null>;
   listMessages(relationship: MessageRelationship, pageSize?: number, cursor?: MessagePageCursor): Promise<MessagePage>;
   listLegacyMessages(relationship: MessageRelationship): Promise<ProductionMessage[]>;
-  subscribeToThreads(callback: (threads: ProductionMessageThread[]) => void, onError: (error: Error) => void): Unsubscribe;
   subscribeToMessages(relationship: MessageRelationship, callback: (messages: ProductionMessage[]) => void, onError: (error: Error) => void, pageSize?: number): Unsubscribe;
   prepareMessage(relationship: MessageRelationship, text: string): PreparedMessage;
   sendPreparedMessage(message: PreparedMessage): Promise<ProductionMessage>;
@@ -56,21 +55,24 @@ const relationshipRef = (value: MessageRelationship) => doc(db, 'messageThreads'
 const messagesRef = (value: MessageRelationship) => collection(db, 'messageThreads', value.patientId, 'relationships', value.clinicianId, 'messages');
 const mapMessages = (documents: Array<QueryDocumentSnapshot<DocumentData>>, value: MessageRelationship) => documents.map((snapshot) => mapMessageDocument(snapshot, value)).filter((message): message is ProductionMessage => message !== null).sort(compareMessagesAscending);
 const boundedPageSize = (value: number) => Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(Number.isFinite(value) ? value : DEFAULT_PAGE_SIZE)));
+const isPermissionDenied = (error: unknown) => {
+  if (!error || typeof error !== 'object' || !('code' in error)) return false;
+  const code = String((error as { code?: unknown }).code);
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
+};
 
 export const messageRepository: MessageRepository = {
   async resolveActiveRelationship(patientId) {
     const value = await resolveAuthorizedRelationship(patientId);
     return { patientId: value.patientId, clinicianId: value.clinicianId, key: value.key };
   },
-  async listThreads() {
-    const uid = currentUserId(); const user = await getDoc(doc(db, 'users', uid)); const role = user.exists() ? user.data().role : null;
-    if (role === 'patient') {
-      const relationship = await this.resolveActiveRelationship(uid); const snapshot = await getDoc(relationshipRef(relationship));
-      if (!snapshot.exists()) return []; const thread = mapThreadDocument(snapshot); return thread && thread.relationshipKey === relationship.key ? [thread] : [];
-    }
-    if (role !== 'clinician') throw new Error('Select an account role before using messaging.');
-    const snapshot = await getDocs(query(collectionGroup(db, 'relationships'), where('clinicianId', '==', uid), orderBy('updatedAt', 'desc'), orderBy(documentId(), 'asc')));
-    return snapshot.docs.map(mapThreadDocument).filter((thread): thread is ProductionMessageThread => thread !== null);
+  async getRelationshipThread(relationship) {
+    const active = await resolveAuthorizedRelationship(relationship.patientId, relationship.clinicianId);
+    if (active.key !== relationship.key) throw new Error('This conversation identity is invalid.');
+    const snapshot = await getDoc(relationshipRef(active));
+    if (!snapshot.exists()) return null;
+    const mapped = mapThreadDocument(snapshot);
+    return mapped?.relationshipKey === active.key ? mapped : null;
   },
   async listMessages(relationship, requestedPageSize = DEFAULT_PAGE_SIZE, cursor) {
     const active = await resolveAuthorizedRelationship(relationship.patientId, relationship.clinicianId);
@@ -84,20 +86,16 @@ export const messageRepository: MessageRepository = {
   async listLegacyMessages(relationship) {
     const active = await resolveAuthorizedRelationship(relationship.patientId, relationship.clinicianId);
     if (active.key !== relationship.key) throw new Error('This conversation identity is invalid.');
-    const snapshot = await getDoc(doc(db, 'messages', relationship.patientId));
-    return snapshot.exists() ? mapLegacyMessageThread(snapshot.data(), active) : [];
-  },
-  subscribeToThreads(callback, onError) {
-    let unsubscribe: Unsubscribe = () => {}; let disposed = false; const uid = currentUserId();
-    void getDoc(doc(db, 'users', uid)).then(async (user) => {
-      if (disposed) return; const role = user.exists() ? user.data().role : null; let source;
-      if (role === 'patient') { const relationship = await this.resolveActiveRelationship(uid); if (disposed) return; source = query(collection(db, 'messageThreads', uid, 'relationships'), where('clinicianId', '==', relationship.clinicianId)); }
-      else if (role === 'clinician') source = query(collectionGroup(db, 'relationships'), where('clinicianId', '==', uid), orderBy('updatedAt', 'desc'), orderBy(documentId(), 'asc'));
-      else throw new Error('Select an account role before using messaging.');
-      const live = onSnapshot(source, { includeMetadataChanges: true }, (snapshot) => { if (disposed || snapshot.metadata.hasPendingWrites) return; callback(snapshot.docs.map(mapThreadDocument).filter((item): item is ProductionMessageThread => item !== null)); }, (error) => { if (!disposed) onError(asError(error)); });
-      if (disposed) live(); else unsubscribe = live;
-    }).catch((error) => { if (!disposed) onError(asError(error)); });
-    return () => { disposed = true; unsubscribe(); };
+    try {
+      const snapshot = await getDoc(doc(db, 'messages', relationship.patientId));
+      return snapshot.exists() ? mapLegacyMessageThread(snapshot.data(), active) : [];
+    } catch (error) {
+      // A relinked patient can have a legacy document owned by the former
+      // clinician. Hardened rules deny that direct read; canonical history must
+      // remain usable. Transport, offline, and data errors still propagate.
+      if (isPermissionDenied(error)) return [];
+      throw error;
+    }
   },
   subscribeToMessages(relationship, callback, onError, requestedPageSize = DEFAULT_PAGE_SIZE) {
     let unsubscribe: Unsubscribe = () => {}; let disposed = false;

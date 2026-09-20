@@ -18,6 +18,7 @@ class HookRuntime {
     if (!(index in this.states)) this.states[index] = typeof initial === 'function' ? (initial as () => T)() : initial;
     return [this.states[index] as T, (value) => { const current = this.states[index] as T; this.states[index] = typeof value === 'function' ? (value as (item: T) => T)(current) : value; }];
   }
+  useRef<T>(initial: T) { const [reference] = this.useState({ current: initial }); return reference; }
   useEffect(effect: () => Cleanup, deps?: unknown[]) {
     const index = this.effectCursor++; const prior = this.effects[index];
     const changed = !prior || !deps || !prior.deps || deps.some((value, position) => !Object.is(value, prior.deps?.[position]));
@@ -33,6 +34,7 @@ vi.mock('react', async () => {
     ...actual,
     useState: <T,>(initial: T | (() => T)) => runtime.current!.useState(initial),
     useEffect: (effect: () => Cleanup, deps?: unknown[]) => runtime.current!.useEffect(effect, deps),
+    useRef: <T,>(initial: T) => runtime.current!.useRef(initial),
     useMemo: <T,>(factory: () => T) => factory(),
     useCallback: <T,>(callback: T) => callback,
   };
@@ -43,8 +45,9 @@ import { useMessageConversation } from '../useMessageConversation';
 const relationship = (patientId: string, clinicianId = 'clinician-1'): MessageRelationship => ({ patientId, clinicianId, key: `${patientId}/${clinicianId}` });
 const repository = (overrides: Partial<MessageRepository> = {}): MessageRepository => ({
   resolveActiveRelationship: vi.fn(async (patientId) => relationship(patientId)),
-  listThreads: vi.fn(async () => []), listMessages: vi.fn(async () => ({ messages: [], nextCursor: null })),
-  listLegacyMessages: vi.fn(async () => []), subscribeToThreads: vi.fn(() => () => {}), subscribeToMessages: vi.fn(() => () => {}),
+  getRelationshipThread: vi.fn(async () => null),
+  listMessages: vi.fn(async () => ({ messages: [], nextCursor: null })),
+  listLegacyMessages: vi.fn(async () => []), subscribeToMessages: vi.fn(() => () => {}),
   prepareMessage: vi.fn((value, text) => ({ id: `id-${value.patientId}`, relationship: value, text: text.trim() })),
   sendPreparedMessage: vi.fn(async (attempt) => ({ id: attempt.id, relationshipKey: attempt.relationship.key, patientId: attempt.relationship.patientId, clinicianId: attempt.relationship.clinicianId, senderId: attempt.relationship.patientId, senderRole: 'patient' as const, text: attempt.text, createdAt: null, source: 'canonical' as const, readOnly: false })),
   ...overrides,
@@ -93,5 +96,24 @@ describe('mounted message conversation interactions', () => {
     const view = mount('patient-1', repository({ resolveActiveRelationship: resolve })); view.render(); await flush(); let result = view.render();
     expect(result.loadState).toBe('error'); expect(result.loadError).toBe('offline'); result.retryLoad(); view.render(); await flush(); result = view.render();
     expect(result.loadState).toBe('ready'); expect(resolve).toHaveBeenCalledTimes(2); view.hooks.unmount();
+  });
+
+  it('renders zero prior-relationship content synchronously and drops stale pagination completion', async () => {
+    let resolveOlder!: (value: Awaited<ReturnType<MessageRepository['listMessages']>>) => void;
+    const older = new Promise<Awaited<ReturnType<MessageRepository['listMessages']>>>((resolve) => { resolveOlder = resolve; });
+    const oldMessage = { id: 'old', relationshipKey: 'patient-1/clinician-1', patientId: 'patient-1', clinicianId: 'clinician-1', senderId: 'patient-1', senderRole: 'patient' as const, text: 'Old private content', createdAt: new Date(), source: 'canonical' as const, readOnly: false };
+    const listMessages = vi.fn((value: MessageRelationship, _size?: number, cursor?: unknown) => {
+      if (cursor) return older;
+      return Promise.resolve({ messages: value.patientId === 'patient-1' ? [oldMessage] : [], nextCursor: value.patientId === 'patient-1' ? { relationshipKey: value.key, createdAt: {}, id: 'old' } : null });
+    });
+    const view = mount('patient-1', repository({ listMessages })); view.render(); await flush(); let result = view.render();
+    expect(result.messages.map(({ text }) => text)).toEqual(['Old private content']);
+    const olderRequest = result.loadOlder();
+    view.setPatient('patient-2'); result = view.render();
+    expect(result.messages).toEqual([]); expect(result.relationship).toBeNull();
+    await flush(); result = view.render(); expect(result.relationship?.patientId).toBe('patient-2');
+    resolveOlder({ messages: [{ ...oldMessage, id: 'older', text: 'Stale older content' }], nextCursor: null });
+    await olderRequest; result = view.render();
+    expect(result.messages).toEqual([]); expect(result.cursor).toBeNull(); view.hooks.unmount();
   });
 });

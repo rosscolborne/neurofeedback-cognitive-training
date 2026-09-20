@@ -7,19 +7,18 @@ import type { MessageRepository } from '../../../services/messageRepository';
 
 const repository: MessageRepository = {
   resolveActiveRelationship: vi.fn(async (patientId) => ({ patientId, clinicianId: 'clinician-1', key: `${patientId}/clinician-1` })),
-  listThreads: vi.fn(async () => []),
+  getRelationshipThread: vi.fn(async () => null),
   listMessages: vi.fn(async () => ({ messages: [], nextCursor: null })),
   listLegacyMessages: vi.fn(async () => []),
-  subscribeToThreads: vi.fn(() => () => {}),
   subscribeToMessages: vi.fn(() => () => {}),
   prepareMessage: vi.fn((relationship, text) => ({ id: 'opaque-1', relationship, text: text.trim() })),
   sendPreparedMessage: vi.fn(async () => { throw new Error('offline'); }),
 };
 
 describe('production messaging surfaces', () => {
-  it('shows explicit clinician initial loading without a placeholder conversation', () => {
+  it('builds clinician choices only from supplied linked participants', () => {
     const markup = renderToStaticMarkup(<MessagingView threads={[]} repository={repository} />);
-    expect(markup).toContain('Loading conversations');
+    expect(markup).toContain('No linked patients');
     expect(markup).not.toContain('Just now');
   });
 
