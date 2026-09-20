@@ -4,7 +4,7 @@ import type {
   PersistedTimestamp,
   SessionRecord,
 } from '../types';
-import { getProtocolTypeForTemplate } from './protocols';
+import { inferProtocolTypeForTemplate } from './protocols';
 
 const LEGACY_EXPERIENCE_RENAMES: Record<string, string> = {
   'spatial-audio': 'generative-music',
@@ -52,7 +52,7 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
   // Treat the saved custom configuration as authoritative when reading those
   // records, matching the protocol catalog's existing override semantics.
   const assignedProtocol = raw.customProtocolConfig
-    ? getProtocolTypeForTemplate(raw.customProtocolConfig, raw.assignedProtocol)
+    ? inferProtocolTypeForTemplate(raw.customProtocolConfig) ?? raw.assignedProtocol
     : raw.assignedProtocol;
 
   return {

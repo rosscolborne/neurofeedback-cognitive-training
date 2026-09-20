@@ -50,6 +50,7 @@ export function App() {
   const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
   const [patientProfileReload, setPatientProfileReload] = useState(0);
   const [clinicianRosterError, setClinicianRosterError] = useState<string | null>(null);
+  const [clinicianInvitationsError, setClinicianInvitationsError] = useState<string | null>(null);
   const [clinicianRosterReload, setClinicianRosterReload] = useState(0);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
   const [dataIdentity, setDataIdentity] = useState('');
@@ -83,6 +84,7 @@ export function App() {
     setCurrentClient(null);
     setPatientProfileError(null);
     setClinicianRosterError(null);
+    setClinicianInvitationsError(null);
     setPatientInvitations([]);
     setShowRebrandModal(false);
 
@@ -106,7 +108,11 @@ export function App() {
         });
       void storageEngine.getPatientInvitationsForClinician()
         .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
-        .catch((error) => { if (isCurrent()) console.warn('Error loading patient invitations:', error); });
+        .catch((error) => {
+          if (!isCurrent()) return;
+          console.warn('Error loading patient invitations:', error);
+          setClinicianInvitationsError(error instanceof Error ? error.message : 'Pending invitations could not be loaded.');
+        });
     }
   }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, role, user]);
 
@@ -161,6 +167,12 @@ export function App() {
     setClients((current) => current.map(c => (c.id === updated.id ? updated : c)));
   };
 
+  const handleClientPersistedElsewhere = (updated: ClientProfile) => {
+    if (accountIdentityRef.current !== accountIdentity) return;
+    if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
+    setClients((current) => current.map((client) => client.id === updated.id ? updated : client));
+  };
+
   const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
     storageEngine.appendBrainMap(patientId, map);
 
@@ -177,14 +189,17 @@ export function App() {
     const requestIdentity = accountIdentity;
     if (!newClient.email?.trim()) throw new Error('Patient email is required');
     if (!visibleClinicId) throw new Error('Complete clinic setup before inviting a patient');
+    if (!newClient.condition || !newClient.assignedProtocol || newClient.prescribedSessionsPerWeek == null) {
+      throw new Error('Select a clinical indication, protocol, and weekly target before inviting a patient');
+    }
     const invitation = await storageEngine.createPatientInvitation({
       clinicId: visibleClinicId,
       clinicianName: user?.displayName || user?.email || 'Clinician',
       patientEmail: newClient.email,
       patientName: newClient.name || '',
-      condition: newClient.condition || 'Peak Performance',
-      assignedProtocol: newClient.assignedProtocol || 'theta-beta-ratio',
-      prescribedSessionsPerWeek: newClient.prescribedSessionsPerWeek || 4,
+      condition: newClient.condition,
+      assignedProtocol: newClient.assignedProtocol,
+      prescribedSessionsPerWeek: newClient.prescribedSessionsPerWeek,
       notes: newClient.notes,
     });
     if (accountIdentityRef.current === requestIdentity) {
@@ -246,6 +261,7 @@ export function App() {
           initialInvitationCode={invitationCode}
           onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
           onUpdateClient={handleUpdateClient}
+          onClientPersistedElsewhere={handleClientPersistedElsewhere}
           onOpenRebrand={() => setShowRebrandModal(true)}
         />
       );
@@ -253,6 +269,7 @@ export function App() {
     return (
       <>
       {clinicianRosterError && <div role="alert" style={{ padding: '10px 16px', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}><span>Patient roster unavailable: {clinicianRosterError}</span><button type="button" className="btn btn-ghost" onClick={() => setClinicianRosterReload((value) => value + 1)}>Retry</button></div>}
+      {clinicianInvitationsError && <div role="alert" style={{ padding: '10px 16px', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}><span>Pending invitations unavailable: {clinicianInvitationsError}</span><button type="button" className="btn btn-ghost" onClick={() => setClinicianRosterReload((value) => value + 1)}>Retry</button></div>}
       <ClinicianShell
         brand={visibleBrand}
         clinicianLabel={user?.displayName || user?.email || undefined}

@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../../types';
 
 const saved = vi.hoisted(() => ({ sessions: [] as SessionRecord[] }));
+const stream = vi.hoisted(() => ({
+  callback: null as null | ((data: unknown) => void),
+  sourceState: { sequence: 0, lastFrameAtMs: 0 },
+}));
 const engine = vi.hoisted(() => ({
   isHardwareConnected: false,
   isDemoMode: false,
@@ -12,8 +16,9 @@ const engine = vi.hoisted(() => ({
   configureProtocol: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
-  subscribe: vi.fn(() => vi.fn()),
-  getBandPowerProvenance: vi.fn(() => null),
+  subscribe: vi.fn((callback: (data: unknown) => void) => { stream.callback = callback; return vi.fn(); }),
+  getBandPowerProvenance: vi.fn((): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null => null),
+  getHardwareSourceState: vi.fn(() => ({ ...stream.sourceState })),
   setThreshold: vi.fn(),
   setSimulatedState: vi.fn(),
   connectMuseBluetooth: vi.fn(),
@@ -71,6 +76,8 @@ describe('mounted patient Demo session lifecycle', () => {
     engine.isHardwareConnected = false;
     engine.isDemoMode = false;
     engine.demoState = 'auto';
+    stream.callback = null;
+    stream.sourceState = { sequence: 0, lastFrameAtMs: 0 };
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
   });
@@ -86,6 +93,7 @@ describe('mounted patient Demo session lifecycle', () => {
 
   afterEach(() => {
     engine.isDemoMode = false;
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -148,7 +156,7 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
     await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
     expect(onComplete).not.toHaveBeenCalled();
-    expect(text(renderer)).toContain('No verified training time was recorded yet.');
+    expect(text(renderer)).toContain('Live EEG data has stopped');
     await act(async () => { renderer.unmount(); });
   });
 
@@ -169,6 +177,46 @@ describe('mounted patient Demo session lifecycle', () => {
     });
     expect(text(renderer)).toContain('This real-EEG session is paused; Demo data cannot replace it.');
     expect(text(renderer)).not.toContain('Try Demo Mode');
+    expect(onComplete).not.toHaveBeenCalled();
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('pauses and blocks saving when connected hardware stops delivering new source frames', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+    engine.isHardwareConnected = true;
+    engine.getBandPowerProvenance.mockReturnValue({ algorithm: 'welch-psd', version: 'test', source: 'brainflow' });
+    const onComplete = vi.fn(async () => undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+    });
+    await act(async () => {
+      renderer.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady();
+    });
+    await act(async () => { button(renderer, 'Begin Training').props.onClick(); });
+
+    stream.sourceState = { sequence: 1, lastFrameAtMs: Date.now() };
+    await act(async () => {
+      stream.callback?.({
+        timestamp: Date.now(), rawSignal: 1,
+        bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
+        bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
+        bandRatios: {}, thetaBetaRatio: 0.4, thetaBetaRatioAvailable: true,
+        coherence: 40, coherenceAvailable: true, inZone: true, inZoneAvailable: true, zoneScore: 1,
+        signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+        artifacts: { blink: false, clench: false }, trainingMetric: { score: 70, baselineReady: true },
+      });
+      vi.advanceTimersByTime(1_000);
+    });
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(text(renderer)).toContain('Verified EEG is unavailable. Training is paused');
+    expect(button(renderer, 'Resume')).toBeTruthy();
+
+    await act(async () => { vi.advanceTimersByTime(2_001); });
+    await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
+    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    expect(text(renderer)).toContain('Live EEG data has stopped');
     expect(onComplete).not.toHaveBeenCalled();
     await act(async () => { renderer.unmount(); });
   });

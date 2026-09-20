@@ -48,10 +48,10 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   // Form State
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
-  const [formCondition, setFormCondition] = useState<ClientProfile['condition']>('ADHD (Inattentive)');
-  const [formProtocol, setFormProtocol] = useState<ProtocolType>('theta-beta-ratio');
+  const [formCondition, setFormCondition] = useState<ClientProfile['condition']>(undefined);
+  const [formProtocol, setFormProtocol] = useState<ProtocolType | undefined>(undefined);
   const [formStatus, setFormStatus] = useState<'active' | 'paused' | 'completed'>('active');
-  const [formSessionsPerWeek, setFormSessionsPerWeek] = useState(4);
+  const [formSessionsPerWeek, setFormSessionsPerWeek] = useState<number | ''>('');
   const [formNotes, setFormNotes] = useState('');
   const [createdInvitation, setCreatedInvitation] = useState<PatientInvitation | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -73,10 +73,10 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setEditingClient(null);
     setFormName('');
     setFormEmail('');
-    setFormCondition('ADHD (Inattentive)');
-    setFormProtocol('theta-beta-ratio');
+    setFormCondition(undefined);
+    setFormProtocol(undefined);
     setFormStatus('active');
-    setFormSessionsPerWeek(4);
+    setFormSessionsPerWeek('');
     setFormNotes('');
     setCreatedInvitation(null);
     setFormError(null);
@@ -89,10 +89,10 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setEditingClient(client);
     setFormName(client.name);
     setFormEmail(client.email);
-    setFormCondition(client.condition ?? 'Peak Performance');
-    setFormProtocol(client.assignedProtocol ?? 'theta-beta-ratio');
+    setFormCondition(client.condition);
+    setFormProtocol(client.assignedProtocol);
     setFormStatus(client.status);
-    setFormSessionsPerWeek(client.prescribedSessionsPerWeek || 4);
+    setFormSessionsPerWeek(client.prescribedSessionsPerWeek ?? '');
     setFormNotes(client.notes || '');
     setShowAddModal(true);
   };
@@ -128,6 +128,10 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
+    if (!editingClient && (!formCondition || !formProtocol || formSessionsPerWeek === '')) {
+      setFormError('Select a clinical indication, protocol, and weekly target before creating the invitation.');
+      return;
+    }
     setIsSaving(true);
     setFormError(null);
     try {
@@ -139,7 +143,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           condition: formCondition,
           assignedProtocol: formProtocol,
           status: formStatus,
-          prescribedSessionsPerWeek: Number(formSessionsPerWeek),
+          prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
         });
         setShowAddModal(false);
@@ -150,7 +154,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           condition: formCondition,
           status: formStatus,
           assignedProtocol: formProtocol,
-          prescribedSessionsPerWeek: Number(formSessionsPerWeek),
+          prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
         });
         setCreatedInvitation(invitation);
@@ -537,8 +541,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   Primary Clinical Indication
                 </label>
                 <select
-                  value={formCondition}
-                  onChange={(e) => setFormCondition(e.target.value as any)}
+                  value={formCondition ?? ''}
+                  onChange={(e) => setFormCondition((e.target.value || undefined) as ClientProfile['condition'])}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -549,6 +553,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     background: '#FFFFFF',
                   }}
                 >
+                  <option value="">Unavailable</option>
                   <option value="ADHD (Inattentive)">ADHD (Inattentive)</option>
                   <option value="ADHD (Combined)">ADHD (Combined)</option>
                   <option value="Generalized Anxiety">Generalized Anxiety</option>
@@ -563,8 +568,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     Assigned Protocol
                   </label>
                   <select
-                    value={formProtocol}
-                    onChange={(e) => setFormProtocol(e.target.value as any)}
+                    value={formProtocol ?? ''}
+                    onChange={(e) => setFormProtocol((e.target.value || undefined) as ProtocolType | undefined)}
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -574,6 +579,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       background: '#FFFFFF',
                     }}
                   >
+                    <option value="">Unassigned</option>
                     <option value="theta-beta-ratio">Theta/Beta (Lubar)</option>
                     <option value="smr-enhancement">SMR (Sterman)</option>
                     <option value="alpha-enhancement">Alpha (Hardt)</option>
@@ -602,6 +608,21 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     <option value="completed">Completed</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Weekly Training Target
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={formSessionsPerWeek}
+                  onChange={(e) => setFormSessionsPerWeek(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Unavailable"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
+                />
               </div>
 
               <div>

@@ -132,7 +132,7 @@ describe('mounted App account/workspace lifecycle', () => {
     storage.createPatientInvitation.mockResolvedValueOnce({ id: 'INVITE' });
     await act(async () => { renderer = create(<App />); await flush(); });
     await act(async () => {
-      await shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient' });
+      await shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 4 });
     });
     expect(storage.createPatientInvitation).toHaveBeenCalledWith(expect.objectContaining({ clinicId: 'clinic-one' }));
     renderer.unmount();
@@ -145,7 +145,7 @@ describe('mounted App account/workspace lifecycle', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
 
-    await expect(shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient' }))
+    await expect(shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 4 }))
       .rejects.toThrow('Complete clinic setup');
     act(() => {
       shell(renderer).props.onClinicSettingsSaved({
@@ -153,7 +153,7 @@ describe('mounted App account/workspace lifecycle', () => {
       });
     });
     await act(async () => {
-      await shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient' });
+      await shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 4 });
     });
     expect(storage.createPatientInvitation).toHaveBeenCalledWith(expect.objectContaining({ clinicId: 'clinic-new' }));
     renderer.unmount();
@@ -168,7 +168,7 @@ describe('mounted App account/workspace lifecycle', () => {
     await act(async () => { renderer = create(<App />); await flush(); });
     let invitationPromise!: Promise<unknown>;
     act(() => {
-      invitationPromise = shell(renderer).props.onAddClient({ email: 'private@example.com', name: 'Private Patient' });
+      invitationPromise = shell(renderer).props.onAddClient({ email: 'private@example.com', name: 'Private Patient', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 4 });
       shell(renderer).props.onOpenRebrand();
     });
     const staleBrandCallback = renderer.root.find((node) => (node.type as unknown) === 'brand-modal').props.onSave;
@@ -217,6 +217,23 @@ describe('mounted App account/workspace lifecycle', () => {
 
     await expect(shell(renderer).props.onUpdateClient({ ...original, name: 'Unsaved' })).rejects.toThrow('save offline');
     expect(shell(renderer).props.clients).toEqual([original]);
+    renderer.unmount();
+  });
+
+  it('shows and retries invitation-list load failures without publishing stale results', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getClients.mockResolvedValue([]);
+    storage.getPatientInvitationsForClinician.mockRejectedValueOnce(new Error('invitation query offline'));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(JSON.stringify(renderer.toJSON())).toContain('invitation query offline');
+
+    storage.getPatientInvitationsForClinician.mockResolvedValueOnce([{ id: 'retry-invitation' }]);
+    const retry = renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Retry');
+    expect(retry).toBeDefined();
+    await act(async () => { retry!.props.onClick(); await flush(); });
+    expect(shell(renderer).props.patientInvitations).toEqual([{ id: 'retry-invitation' }]);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('invitation query offline');
     renderer.unmount();
   });
 });

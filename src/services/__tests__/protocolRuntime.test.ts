@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { BandPowers, ClientProfile, MetricProvenance, ProtocolTemplate, ProtocolType } from '../../types';
 import {
   AdaptiveDifficultyEngine,
@@ -207,16 +207,42 @@ describe('protocol runtime assignment', () => {
     expect(id).toMatch(/^sess-[0-9a-f-]{36}$/i);
     expect(assessSessionCompletionReadiness({
       isDemo: false, elapsedSeconds: 10, verifiedSeconds: 7, verifiedBandSamples: 70, hardwareConnected: true,
+      sourceFresh: true,
     })).toMatchObject({ ok: false });
     expect(assessSessionCompletionReadiness({
       isDemo: false, elapsedSeconds: 10, verifiedSeconds: 8, verifiedBandSamples: 1, hardwareConnected: true,
+      sourceFresh: true,
     })).toEqual({ ok: true });
     expect(assessSessionCompletionReadiness({
       isDemo: false, elapsedSeconds: 10, verifiedSeconds: 10, verifiedBandSamples: 10, hardwareConnected: false,
+      sourceFresh: true,
     })).toMatchObject({ ok: false, error: expect.stringContaining('disconnected') });
     expect(assessSessionCompletionReadiness({
       isDemo: true, elapsedSeconds: 0, verifiedSeconds: 0, verifiedBandSamples: 0, hardwareConnected: false,
+      sourceFresh: false,
     })).toEqual({ ok: true });
+    expect(assessSessionCompletionReadiness({
+      isDemo: false, elapsedSeconds: 10, verifiedSeconds: 10, verifiedBandSamples: 10, hardwareConnected: true,
+      sourceFresh: false,
+    })).toMatchObject({ ok: false, error: expect.stringContaining('stopped') });
+  });
+
+  it('exposes monotonic source-frame evidence independently of the UI publish timer', () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new EEGEngine();
+      expect(engine.getHardwareSourceState()).toEqual({ sequence: 0, lastFrameAtMs: 0 });
+      const stop = engine.simulateMuseBluetoothPackets(0);
+      vi.advanceTimersByTime(47);
+      const first = engine.getHardwareSourceState();
+      expect(first.sequence).toBeGreaterThan(0);
+      expect(first.lastFrameAtMs).toBe(Date.now());
+      vi.advanceTimersByTime(47);
+      expect(engine.getHardwareSourceState().sequence).toBeGreaterThan(first.sequence);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('completes a one-minute session on tick 60 with an exact 60-second saved duration', () => {

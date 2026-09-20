@@ -278,6 +278,28 @@ describe('role-aware session repository', () => {
     expect(firestore.getDocs).not.toHaveBeenCalled();
   });
 
+  it('constrains an authorized clinic patient session query by both patient and clinic', async () => {
+    state.auth.currentUser = { uid: 'practitioner-1' };
+    firestore.getDoc
+      .mockResolvedValueOnce({
+        id: 'clinic-1', exists: () => true,
+        data: () => ({ id: 'clinic-1', name: 'Clinic', timezone: 'UTC', practitionerIds: ['practitioner-1'] }),
+      })
+      .mockResolvedValueOnce({
+        id: 'patient-1', exists: () => true, data: () => ({ clinicId: 'clinic-1' }),
+      });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [sessionDocument('clinic-session', 'patient-1')] });
+
+    await expect(storageEngine.getSessionsFor({
+      role: 'clinic', clinicId: 'clinic-1', patientId: 'patient-1',
+    })).resolves.toEqual([expect.objectContaining({ id: 'clinic-session' })]);
+    const queryArg = firestore.getDocs.mock.calls[0][0] as { constraints: Array<{ field: string; value: string }> };
+    expect(queryArg.constraints).toEqual(expect.arrayContaining([
+      { field: 'patientId', op: '==', value: 'patient-1' },
+      { field: 'clinicId', op: '==', value: 'clinic-1' },
+    ]));
+  });
+
   it('allows an authenticated clinic member to query the clinic scope', async () => {
     state.auth.currentUser = { uid: 'practitioner-1' };
     firestore.getDoc.mockResolvedValueOnce({
@@ -297,6 +319,7 @@ describe('role-aware session repository', () => {
     const sessionQuery = firestore.getDocs.mock.calls[1][0] as { source: { path: string }; constraints: Array<{ field: string; value: string }> };
     expect(sessionQuery.source.path).toBe('sessions');
     expect(sessionQuery.constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
+    expect(sessionQuery.constraints).toContainEqual({ field: 'clinicId', op: '==', value: 'clinic-1' });
   });
 });
 
@@ -398,6 +421,22 @@ describe('production and sample workspace separation', () => {
     });
     firestore.setDoc.mockRejectedValueOnce(new Error('profile enrichment unavailable'));
     await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile enrichment unavailable');
+  });
+
+  it('enriches an existing blank display name with a minimal server-safe patch', async () => {
+    const user = { uid: 'patient-1', email: 'patient@example.com', displayName: 'patient.one' };
+    firestore.getDoc.mockResolvedValueOnce({
+      id: user.uid,
+      exists: () => true,
+      data: () => ({ id: user.uid, email: user.email, name: '', status: 'active' }),
+    });
+
+    await expect(storageEngine.getCurrentClient(user)).resolves.toMatchObject({ name: 'Patient One' });
+    expect(firestore.setDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: user.uid },
+      { name: 'Patient One' },
+      { merge: true },
+    );
   });
 
   it('blocks sample resets from a production account', () => {

@@ -1179,11 +1179,12 @@ class StorageEngine {
       if (snap.exists()) {
         const existing = readClientProfile(snap.data(), snap.id);
         if (!existing.name && user.displayName) {
-          existing.name = user.displayName
+          const name = user.displayName
             .trim()
             .replace(/[._]/g, ' ')
             .replace(/\b\w/g, (c) => c.toUpperCase());
-          await setDoc(clientRef, existing, { merge: true });
+          await setDoc(clientRef, { name }, { merge: true });
+          existing.name = name;
         }
         return existing;
       }
@@ -1249,7 +1250,11 @@ class StorageEngine {
       } else if (scope.patientId) {
         const patient = await getDoc(doc(db, 'clients', scope.patientId));
         if (!patient.exists() || readClientProfile(patient.data(), patient.id).clinicId !== scope.clinicId) return [];
-        snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
+        snapshots.push(await getDocs(query(
+          collection(db, 'sessions'),
+          where('patientId', '==', scope.patientId),
+          where('clinicId', '==', scope.clinicId),
+        )));
       } else {
         // As above, clinic authorization follows current patient tenancy rather
         // than a historical session field.
@@ -1258,7 +1263,11 @@ class StorageEngine {
         );
         snapshots.push(...await Promise.all(
           roster.docs.map((client) =>
-            getDocs(query(collection(db, 'sessions'), where('patientId', '==', client.id)))
+            getDocs(query(
+              collection(db, 'sessions'),
+              where('patientId', '==', client.id),
+              where('clinicId', '==', scope.clinicId),
+            ))
           )
         ));
       }

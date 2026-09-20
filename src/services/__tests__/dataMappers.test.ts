@@ -124,6 +124,20 @@ describe('production data migration readers', () => {
     expect(legacy.assignedProtocol).toBe('theta-beta-ratio');
   });
 
+  it('does not invent a protocol for an incomplete unrecognized custom template', () => {
+    const raw = {
+      ...clientFixture(),
+      assignedProtocol: undefined,
+      customProtocolConfig: {
+        id: 'legacy-unknown',
+        name: '',
+        clinicalName: '',
+      },
+    };
+
+    expect(readClientProfile(raw).assignedProtocol).toBeUndefined();
+  });
+
   it('prefers completedAt over legacy epoch timestamps and fills safe collection defaults', () => {
     const migrated = readSessionRecord({
       ...sessionFixture(),

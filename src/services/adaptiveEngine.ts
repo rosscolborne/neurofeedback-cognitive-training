@@ -162,6 +162,7 @@ export interface SessionMeasurementCoverage {
   verifiedSeconds: number;
   verifiedBandSamples: number;
   hardwareConnected: boolean;
+  sourceFresh: boolean;
 }
 
 export type SessionCompletionReadiness =
@@ -180,6 +181,9 @@ export function assessSessionCompletionReadiness(
   if (coverage.isDemo) return { ok: true };
   if (!coverage.hardwareConnected) {
     return { ok: false, error: 'Your headset is disconnected. Reconnect it before saving this session.' };
+  }
+  if (!coverage.sourceFresh) {
+    return { ok: false, error: 'Live EEG data has stopped. Resume only after new headset data is arriving.' };
   }
   if (coverage.elapsedSeconds < 1) {
     return { ok: false, error: 'No verified training time was recorded yet.' };

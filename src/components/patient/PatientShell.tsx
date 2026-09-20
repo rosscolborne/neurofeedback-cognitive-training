@@ -24,7 +24,9 @@ import {
 interface PatientShellProps {
   brand: ClinicBrandConfig;
   client: ClientProfile;
-  onUpdateClient: (updated: ClientProfile) => void;
+  onUpdateClient: (updated: ClientProfile) => Promise<void>;
+  /** Update local UI for data already persisted by an atomic repository operation. */
+  onClientPersistedElsewhere: (updated: ClientProfile) => void;
   onOpenRebrand: () => void;
   initialInvitationCode?: string;
   onInvitationAccepted?: () => void;
@@ -34,6 +36,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   brand,
   client,
   onUpdateClient,
+  onClientPersistedElsewhere,
   initialInvitationCode,
   onInvitationAccepted,
 }) => {
@@ -48,6 +51,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [pendingProfileUpdate, setPendingProfileUpdate] = useState<ClientProfile | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
   const protocolAlias = client.customProtocolConfig && client.assignedProtocol
     ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
@@ -65,7 +71,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setLinkError(null);
     try {
       const linkedClient = await storageEngine.acceptPatientInvitation(invitationCode, client);
-      await onUpdateClient(linkedClient);
+      onClientPersistedElsewhere(linkedClient);
       onInvitationAccepted?.();
       setInvitationCode('');
       setShowClinicianLink(false);
@@ -97,7 +103,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const handleSessionComplete = async (session: SessionRecord) => {
     await storageEngine.saveSession(session);
     const persistedClient = await storageEngine.getClient(client.id);
-    if (persistedClient) onUpdateClient(persistedClient);
+    if (!persistedClient) throw new Error('The saved session could not be reloaded. Try again.');
+    onClientPersistedElsewhere(persistedClient);
     setActiveSessionExp(null);
     setCompletedSession(session);
   };
@@ -235,8 +242,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     return (
       <OnboardingFlow
         client={client}
-        onFinish={updated => {
-          onUpdateClient({ ...client, ...updated });
+        onFinish={async updated => {
+          await onUpdateClient({ ...client, ...updated });
           setShowOnboarding(false);
         }}
       />
@@ -444,15 +451,26 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                         return;
                       }
                       const reader = new FileReader();
-                      reader.onloadend = () => {
+                      reader.onloadend = async () => {
                         const base64 = reader.result as string;
-                        onUpdateClient({ ...client, avatarUrl: base64 });
+                        const updated = { ...client, avatarUrl: base64 };
+                        setIsSavingProfile(true);
+                        setProfileSaveError(null);
+                        try {
+                          await onUpdateClient(updated);
+                          setPendingProfileUpdate(null);
+                        } catch (error) {
+                          setPendingProfileUpdate(updated);
+                          setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
+                        } finally {
+                          setIsSavingProfile(false);
+                        }
                       };
                       reader.readAsDataURL(file);
                     }
                   };
                   input.click();
-                }}>
+                }} role="button" aria-label="Upload profile photo" aria-disabled={isSavingProfile}>
                   {client.avatarUrl && (client.avatarUrl.startsWith('data:') || client.avatarUrl.startsWith('blob:')) ? (
                     <img
                       src={client.avatarUrl}
@@ -501,6 +519,31 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{client.email}</div>
                 </div>
               </div>
+
+              {profileSaveError && (
+                <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '12px' }}>
+                  {profileSaveError}
+                  <button
+                    type="button"
+                    disabled={isSavingProfile || !pendingProfileUpdate}
+                    onClick={async () => {
+                      if (!pendingProfileUpdate) return;
+                      setIsSavingProfile(true);
+                      setProfileSaveError(null);
+                      try {
+                        await onUpdateClient(pendingProfileUpdate);
+                        setPendingProfileUpdate(null);
+                      } catch (error) {
+                        setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
+                      } finally {
+                        setIsSavingProfile(false);
+                      }
+                    }}
+                    className="btn btn-ghost"
+                    style={{ marginLeft: '8px' }}
+                  >Retry</button>
+                </div>
+              )}
 
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div><strong>Goal:</strong> {client.condition || 'Unavailable'}</div>

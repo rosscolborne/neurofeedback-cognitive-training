@@ -122,6 +122,7 @@ const DEMO_STATES = [
 
 type DemoState = (typeof DEMO_STATES)[number]['id'];
 const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
+const HARDWARE_SOURCE_MAX_AGE_MS = 2_000;
 interface SessionRunnerProps {
   client: ClientProfile;
   selectedExperience: ExperienceType;
@@ -203,6 +204,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     trainingCount: 0,
   });
   const peakTrainingScoreRef = useRef<number | null>(null);
+  const lastAccumulatedSourceSequenceRef = useRef(0);
+  const lastCoveredSourceSequenceRef = useRef(0);
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const inZoneObservationsRef = useRef<InZoneObservation[]>([]);
   const [recentInZonePercent, setRecentInZonePercent] = useState<number | null>(null);
@@ -244,12 +247,17 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     }
 
     const completedDuration = getCompletedSessionDuration(completedDurationSeconds, totalSecondsElapsedRef.current);
+    const sourceState = eegEngine.getHardwareSourceState();
     const readiness = assessSessionCompletionReadiness({
       isDemo: isDemoSession,
       elapsedSeconds: completedDuration,
       verifiedSeconds: inZoneMeasuredSeconds,
       verifiedBandSamples: bandAccumulatorRef.current.sampleCount,
       hardwareConnected: eegEngine.isHardwareConnected,
+      sourceFresh: isDemoSession || (
+        sourceState.sequence > 0
+        && Date.now() - sourceState.lastFrameAtMs <= HARDWARE_SOURCE_MAX_AGE_MS
+      ),
     });
     if (!readiness.ok) {
       setSaveError(readiness.error);
@@ -322,6 +330,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const unsubscribe = eegEngine.subscribe(data => {
       eegDataRef.current = data;
       setEegData(data);
+      const sourceState = eegEngine.getHardwareSourceState();
+      const hasNewHardwareSourceFrame = isDemoSession || sourceState.sequence > lastAccumulatedSourceSequenceRef.current;
+      if (!isDemoSession && hasNewHardwareSourceFrame) {
+        lastAccumulatedSourceSequenceRef.current = sourceState.sequence;
+      }
 
       // Recent in-zone is a live trailing metric. Calibration observations are
       // valid EEG feedback too, so begin its window as soon as fit is accepted
@@ -352,7 +365,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         peakTrainingScoreRef.current = Math.max(peakTrainingScoreRef.current ?? data.trainingMetric.score, data.trainingMetric.score);
       }
 
-      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
+      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration' && hasNewHardwareSourceFrame) {
         // Collect rolling band averages
         accumulateVerifiedBands(
           bandAccumulatorRef.current,
@@ -407,10 +420,16 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const interval = window.setInterval(() => {
       const currentData = eegDataRef.current;
       const bandProvenance = eegEngine.getBandPowerProvenance();
+      const sourceState = eegEngine.getHardwareSourceState();
+      const sourceAdvanced = sourceState.sequence > lastCoveredSourceSequenceRef.current;
+      const sourceFresh = sourceState.sequence > 0
+        && sourceAdvanced
+        && Date.now() - sourceState.lastFrameAtMs <= HARDWARE_SOURCE_MAX_AGE_MS;
       const hasVerifiedHardwareFrame = Boolean(
         currentData?.inZoneAvailable
         && currentData.signalQuality !== 'disconnected'
         && bandProvenance
+        && sourceFresh
         && (Object.keys(bandAccumulatorRef.current.sums) as Array<keyof typeof bandAccumulatorRef.current.sums>)
           .every((band) => currentData.bandAvailability[band] && Number.isFinite(currentData.bands[band])),
       );
@@ -423,6 +442,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         setIsPaused(true);
         return;
       }
+      if (!isDemoSession) lastCoveredSourceSequenceRef.current = sourceState.sequence;
 
       const tick = advanceSessionClock(totalSecondsElapsedRef.current, sessionTotalDuration, isDemoSession);
       totalSecondsElapsedRef.current = tick.elapsed;
@@ -506,11 +526,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     if (!isDemoSession) {
       const currentData = eegDataRef.current;
       const provenance = eegEngine.getBandPowerProvenance();
+      const sourceState = eegEngine.getHardwareSourceState();
       const hasVerifiedSignal = Boolean(
         eegEngine.isHardwareConnected
         && currentData?.inZoneAvailable
         && currentData.signalQuality !== 'disconnected'
         && provenance
+        && sourceState.sequence > lastCoveredSourceSequenceRef.current
+        && Date.now() - sourceState.lastFrameAtMs <= HARDWARE_SOURCE_MAX_AGE_MS
         && (Object.keys(bandAccumulatorRef.current.sums) as Array<keyof typeof bandAccumulatorRef.current.sums>)
           .every((band) => currentData.bandAvailability[band] && Number.isFinite(currentData.bands[band])),
       );

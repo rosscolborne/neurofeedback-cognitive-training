@@ -41,6 +41,8 @@ export class EEGEngine {
   public deviceName: string | null = null;
   public batteryLevel: number | null = null;
   public packetsReceivedCount = 0;
+  private sourceFrameSequence = 0;
+  private lastSourceFrameAtMs = 0;
   
   // Real-time raw signal storage buffers (256 samples = 1 sec at 256Hz)
   public rawBuffers: Record<keyof MuseChannelQuality, number[]> = {
@@ -176,6 +178,16 @@ export class EEGEngine {
   public getBandPowerProvenance(): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null {
     if (this.isDemoMode || !this.isHardwareConnected || !this.latestServerBands || !this.latestBandPowerProvenance) return null;
     return { ...this.latestBandPowerProvenance };
+  }
+
+  /** Monotonic evidence from the acquisition transport, never from the UI publish timer. */
+  public getHardwareSourceState(): { sequence: number; lastFrameAtMs: number } {
+    return { sequence: this.sourceFrameSequence, lastFrameAtMs: this.lastSourceFrameAtMs };
+  }
+
+  private markSourceFrameReceived(): void {
+    this.sourceFrameSequence += 1;
+    this.lastSourceFrameAtMs = Date.now();
   }
 
   public getLatestBands(): BandPowers | null {
@@ -422,6 +434,7 @@ export class EEGEngine {
               const output = athenaDecoder.decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
               const channels = output.eeg_channel_count;
               const samples = output.eeg_samples;
+              if (samples.length > 0) this.markSourceFrameReceived();
               for (let index = 0; index + channels <= samples.length && channels >= 4; index += channels) {
                 this.rawBuffers.tp9.push(samples[index]);
                 this.rawBuffers.af7.push(samples[index + 1]);
@@ -753,6 +766,7 @@ export class EEGEngine {
         session.sessionId,
         (frame) => {
           this.packetsReceivedCount++;
+          this.markSourceFrameReceived();
           if (frame.samples && frame.samples.length > 0) {
             const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
             frame.samples.forEach((row: number[]) => {
@@ -879,6 +893,7 @@ export class EEGEngine {
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
+    this.lastSourceFrameAtMs = 0;
     this.localFitStableSince = null;
     this.serverFitState = null;
     this.resetState();
@@ -940,6 +955,7 @@ export class EEGEngine {
   private parseChannelPacket(channel: keyof MuseChannelQuality, dataView: DataView) {
     const samples = EEGEngine.decodeChannelPacket(dataView);
     if (samples.length === 0) return;
+    this.markSourceFrameReceived();
 
     const buffer = this.rawBuffers[channel];
     buffer.push(...samples);
@@ -1508,6 +1524,7 @@ export class EEGEngine {
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
+    this.lastSourceFrameAtMs = 0;
     if (this.hostedAnalysisFailures < 3 || !this.fitSessionId) return;
 
     const unavailableSessionId = this.fitSessionId;
