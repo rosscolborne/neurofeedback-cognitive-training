@@ -8,7 +8,7 @@ import { X, Upload, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface ClinicCustomizerModalProps {
   currentBrand: ClinicBrandConfig;
-  onSave: (newBrand: ClinicBrandConfig) => void;
+  onSave: (newBrand: ClinicBrandConfig) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -95,16 +95,33 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
   const handleSave = async () => {
     setSaveState('saving');
     setStatusMessage('');
+    let savedBrand: ClinicBrandConfig;
     try {
       const finalBrand = createBrandPalette(accentColor, clinicName, logoUrl);
       finalBrand.tagline = tagline.trim();
-      const savedBrand = await clinicSettingsRepository.saveBrand(finalBrand);
-      applyBrandToDOM(savedBrand);
-      onSave(savedBrand);
-      onClose();
+      savedBrand = await clinicSettingsRepository.saveBrand(finalBrand);
     } catch (error) {
       setSaveState('error');
       setStatusMessage(errorMessage(error, 'Clinic branding could not be saved. Try again.'));
+      return;
+    }
+
+    // Persistence above is authoritative. Shell preview/cache callbacks are deliberately
+    // best-effort and must never turn a completed Firestore write into a reported save failure.
+    try {
+      applyBrandToDOM(savedBrand);
+    } catch (error) {
+      console.warn('Clinic branding was saved, but the local preview could not be applied.', error);
+    }
+    try {
+      await onSave(savedBrand);
+    } catch (error) {
+      console.warn('Clinic branding was saved, but the local callback/cache update failed.', error);
+    }
+    try {
+      onClose();
+    } catch (error) {
+      console.warn('Clinic branding was saved, but the customizer could not close cleanly.', error);
     }
   };
 

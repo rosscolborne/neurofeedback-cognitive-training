@@ -24,6 +24,57 @@ export const primaryLicenseIdentifier = (practitioner: PractitionerProfile | nul
   return typeof identifier === 'string' ? identifier : '';
 };
 
+export interface PrimaryLicensePresentation {
+  persistedStatusLabel: string | null;
+  guidance: string;
+  identifierChanged: boolean;
+}
+
+const credentialStatusLabel = (status: PractitionerProfile['credentials'][number]['status']): string => ({
+  verified: 'Verified',
+  pending: 'Pending verification',
+  unverified: 'Unverified',
+  expired: 'Expired',
+  revoked: 'Revoked',
+})[status] ?? 'Unverified';
+
+/** Describes the persisted primary credential separately from the effect of the current draft. */
+export const primaryLicensePresentation = (
+  practitioner: PractitionerProfile | null,
+  draftIdentifier: string,
+): PrimaryLicensePresentation => {
+  const credential = practitioner?.credentials.find((candidate) => candidate.id === 'primary-license');
+  if (!credential) {
+    return {
+      persistedStatusLabel: null,
+      identifierChanged: draftIdentifier.trim().length > 0,
+      guidance: draftIdentifier.trim()
+        ? 'This new identifier will be saved as Unverified. Verification is a separate process.'
+        : 'New identifiers are saved as Unverified. Verification is a separate process.',
+    };
+  }
+
+  const persistedIdentifier = typeof credential.identifier === 'string' ? credential.identifier.trim() : '';
+  const identifierChanged = draftIdentifier.trim() !== persistedIdentifier;
+  const persistedStatusLabel = credentialStatusLabel(credential.status);
+
+  if (identifierChanged) {
+    return {
+      persistedStatusLabel,
+      identifierChanged,
+      guidance: 'Changing or clearing the identifier will save the replacement as Unverified. The existing verification metadata is preserved only when the identifier is unchanged.',
+    };
+  }
+
+  return {
+    persistedStatusLabel,
+    identifierChanged,
+    guidance: credential.status === 'verified'
+      ? 'Saving this identifier unchanged preserves its Verified status and verification metadata.'
+      : `Saving this identifier unchanged preserves its current ${persistedStatusLabel} status.`,
+  };
+};
+
 export const settingsNotice = (state: SettingsLoadState): string | null => {
   if (state.status === 'loading') return 'Loading clinic settings…';
   if (state.status === 'error') return state.message;

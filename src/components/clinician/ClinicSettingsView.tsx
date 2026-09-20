@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ClinicBrandConfig } from '../../types';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
-import { errorMessage, primaryLicenseIdentifier, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
+import { errorMessage, primaryLicenseIdentifier, primaryLicensePresentation, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
 import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
@@ -52,6 +52,10 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
   };
 
   const notice = settingsNotice(loadState);
+  const licensePresentation = primaryLicensePresentation(
+    loadState.status === 'ready' ? loadState.snapshot.practitioner : null,
+    licenseIdentifier,
+  );
   const isUnavailable = loadState.status === 'error';
   const isLoading = loadState.status === 'loading';
   const markEdited = (update: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +89,14 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
             <label style={labelStyle}>Practitioner name and titles<input required maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={practitionerName} onChange={markEdited(setPractitionerName)} placeholder="Enter your professional display name" style={inputStyle} /></label>
             <label style={labelStyle}>License or certification identifier (optional)<input maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={licenseIdentifier} onChange={markEdited(setLicenseIdentifier)} placeholder="Enter an identifier; verification is separate" style={inputStyle} /></label>
           </div>
-          <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-tertiary)' }}>Entered credentials are stored as unverified until a separate verification process is available.</p>
+          <div style={{ margin: 0, fontSize: '11px', color: 'var(--text-tertiary)' }}>
+            {licensePresentation.persistedStatusLabel && (
+              <div role="status" style={{ marginBottom: '2px', color: licensePresentation.persistedStatusLabel === 'Verified' && !licensePresentation.identifierChanged ? 'var(--status-active)' : 'var(--text-secondary)' }}>
+                Current saved credential status: <strong>{licensePresentation.persistedStatusLabel}</strong>
+              </div>
+            )}
+            <div>{licensePresentation.guidance}</div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button type="submit" disabled={isLoading || isUnavailable || saveState === 'saving'} className="btn btn-dense" style={{ padding: '7px 14px', fontSize: '12px' }}>{saveState === 'saving' ? 'Saving…' : 'Save profile'}</button>
             {saveState === 'saved' && <span role="status" style={{ fontSize: '12px', color: 'var(--status-active)', display: 'flex', gap: '4px', alignItems: 'center' }}><CheckCircle2 size={14} /> Saved</span>}

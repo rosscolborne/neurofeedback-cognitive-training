@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAND_COLOR_PRESETS, createBrandPalette, getOnPrimaryColor, getWorstBrandAccentContrast, isBrandAccentUsable, isValidHexColor } from '../brandEngine';
-import { errorMessage, primaryLicenseIdentifier, settingsNotice, transitionSettingsSaveState } from '../clinicSettingsState';
+import { errorMessage, primaryLicenseIdentifier, primaryLicensePresentation, settingsNotice, transitionSettingsSaveState } from '../clinicSettingsState';
 
 describe('clinic settings display contracts', () => {
   it('distinguishes loading, onboarding, migration, and error copy', () => {
@@ -41,5 +41,22 @@ describe('clinic settings display contracts', () => {
       id: 'p', userId: 'p', clinicId: 'c', displayName: 'Name',
       credentials: [{ id: 'primary-license', type: 'other', label: 'Legacy', identifier: 42 as unknown as string, status: 'unverified' }],
     })).toBe('');
+  });
+
+  it('presents preserved verification separately from changed-identifier consequences', () => {
+    const practitioner = {
+      id: 'p', userId: 'p', clinicId: 'c', displayName: 'Name',
+      credentials: [{ id: 'primary-license', type: 'medical-license' as const, label: 'Ontario', identifier: 'ON-123', status: 'verified' as const, verifiedAt: { seconds: 10 } }],
+    };
+
+    expect(primaryLicensePresentation(practitioner, 'ON-123')).toEqual(expect.objectContaining({
+      persistedStatusLabel: 'Verified', identifierChanged: false,
+    }));
+    expect(primaryLicensePresentation(practitioner, 'ON-123').guidance).toContain('preserves');
+    expect(primaryLicensePresentation(practitioner, 'ON-999')).toEqual(expect.objectContaining({
+      persistedStatusLabel: 'Verified', identifierChanged: true,
+    }));
+    expect(primaryLicensePresentation(practitioner, 'ON-999').guidance).toContain('Unverified');
+    expect(primaryLicensePresentation(null, 'NEW-1').guidance).toContain('new identifier');
   });
 });
