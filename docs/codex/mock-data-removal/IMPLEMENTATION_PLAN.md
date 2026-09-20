@@ -503,7 +503,8 @@ independent workstream immediately when a slot opens.
 - **Worktree:** `../neurasticity-mockdata-messaging`
 - **Final commit:** `9e85241c07237bad66c483935229dd2a9f94bbc7`,
   `a471c4584e7f1af0861520c0959ad686c8a3bdda`,
-  `2c84096e79417dbb46627d61fec23393942a0352`
+  `2c84096e79417dbb46627d61fec23393942a0352`,
+  `c26a9b489a3b8491303a9674444503bc6202f8d4`
 - **Owned files:** `src/components/clinician/MessagingView.tsx`, a new patient
   messaging surface, new message repository/mappers/tests. No independent changes
   to shared rules/types/storage.
@@ -532,11 +533,14 @@ independent workstream immediately when a slot opens.
   completed at `2c84096e`: relationship-scoped paths, exact R1 precedence, secured
   read-only legacy compatibility, patient-keyed retry/load state, stale/disposal
   guards, and mounted tests. Focused tests passed 20/20, the full suite passed
-  221/221, targeted lint was clean, and the build passed; re-review is pending.
+  221/221, targeted lint was clean, and the build passed. Re-review then required
+  removal of stale clinician discovery, fail-safe legacy denial, and synchronous/
+  paginated switch guards. Those fixes completed at `c26a9b48`, with 24/24 focused
+  and 225/225 full tests passing; final re-review is pending.
 
 ### A1 — Production Appointments
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
@@ -568,7 +572,9 @@ independent workstream immediately when a slot opens.
   cancellation requests, read-only timezone-unknown legacy records, strict
   timestamp validation, keyed/stale-safe UI operations, and mounted tests. Focused
   tests passed 31/31, the full suite passed 233/233, lint and build passed, and
-  re-review is pending. Strict authorization rules remain central.
+  re-review found remaining safe legacy-query, status/date validation, and patient
+  mounted-state coverage gaps; fixes are assigned to the original agent. Strict
+  authorization rules remain central.
 
 ### T1 — Protocol Runtime Consumption
 
@@ -621,7 +627,7 @@ independent workstream immediately when a slot opens.
 
 ### D1 — Production/Demo Data Separation
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** no; begin after R1 and S1 review due to overlapping files
 - **Branch:** `codex/mockdata-demo-separation`
 - **Worktree:** `../neurasticity-mockdata-demo-separation`
@@ -646,7 +652,9 @@ independent workstream immediately when a slot opens.
   records, production reset wiring is removed, and patient training Demo/debug
   simulators remain available. Focused tests passed 46/46, the full suite passed
   252/252, targeted lint and the production build passed. M1/A1 legacy adapters
-  require central cleanup after their integration; independent review is pending.
+  require central cleanup after their integration. Independent review found auth
+  session/workspace split-brain, stale account state, overly broad persisted-data
+  filtering, and lifecycle-test gaps; fixes are assigned to the original agent.
 
 ### I1 — Integration, Review, and Release Candidate
 
@@ -906,6 +914,17 @@ independent workstream immediately when a slot opens.
   252/252 full tests passing, targeted lint clean apart from pre-existing warnings,
   and a passing build. It entered independent review; M1/A1 legacy adapter cleanup
   remains a central post-integration task.
+- **2026-09-19:** M1 re-review required removal of stale collection-group discovery,
+  fail-safe handling of denied former-owner legacy history, and complete switch/
+  pagination generation guards. Fixes completed at Git-verified `c26a9b48`, with
+  24/24 focused and 225/225 full tests passing; final re-review started.
+- **2026-09-19:** A1 re-review returned the stream to IN PROGRESS for a rules-
+  provable explicit-null legacy query, non-fabricated legacy status, strict literal
+  date/time validation, and deeper patient mounted coverage.
+- **2026-09-19:** D1 review returned the stream to IN PROGRESS for an authoritative
+  fail-closed demo/auth boundary, synchronous account-state clearing with guarded
+  independent loads, removal of broad persisted-data filters, and mounted lifecycle
+  coverage. Findings were returned to the original agent.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
