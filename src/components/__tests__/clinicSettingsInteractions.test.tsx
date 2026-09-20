@@ -145,8 +145,6 @@ const mount = (component: () => ReactElement) => {
 const settings = () => mount(() => ClinicSettingsView({
   brand: safeBrand,
   onOpenRebrand: vi.fn(),
-  onClearDemoData: vi.fn(),
-  onResetDemoData: vi.fn(),
 }) as ReactElement);
 const customizer = (onSave = vi.fn(), onClose = vi.fn()) => ({
   mounted: mount(() => ClinicCustomizerModal({ currentBrand: safeBrand, onSave, onClose }) as ReactElement),

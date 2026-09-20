@@ -7,10 +7,6 @@ import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-reac
 interface ClinicSettingsViewProps {
   brand: ClinicBrandConfig;
   onOpenRebrand: () => void;
-  /** Retained temporarily for shell compatibility; production settings no longer expose demo-data controls. */
-  onClearDemoData: () => void;
-  /** Retained temporarily for shell compatibility; production settings no longer expose demo-data controls. */
-  onResetDemoData: () => void;
 }
 
 export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, onOpenRebrand }) => {

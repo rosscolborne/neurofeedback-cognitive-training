@@ -46,8 +46,9 @@ const sessionDocument = (id: string, patientId: string) => ({
 describe('role-aware session repository', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.auth.currentUser = { uid: 'clinician-1' };
+    state.auth.currentUser = { uid: 'demo-clinician' };
     storageEngine.resetToDefaultSeed();
+    state.auth.currentUser = { uid: 'clinician-1' };
   });
 
   it('rejects a clinician scope that does not match the authenticated clinician', async () => {
@@ -292,6 +293,67 @@ describe('idempotent compatibility session saves', () => {
     const sessions = await storageEngine.getSessions(patient.id);
     expect(updatedPatient?.completedSessionsCount).toBe(startingCount + 1);
     expect(sessions.find((entry) => entry.id === session.id)?.patientNotes).toBe('Updated once');
+  });
+});
+
+describe('production and sample workspace separation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.auth.currentUser = { uid: 'demo-clinician' };
+    storageEngine.resetToDefaultSeed();
+    state.auth.currentUser = { uid: 'clinician-1', email: 'clinician@example.com' };
+  });
+
+  it('never returns seeded records to a production account, even for sample-shaped identifiers', async () => {
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ id: INITIAL_DEMO_CLIENTS[0].id, data: () => ({ ...INITIAL_DEMO_CLIENTS[0], clinicianId: 'clinician-1' }) }] })
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ docs: [{ data: () => ({ clientId: INITIAL_DEMO_CLIENTS[0].id, isDemo: true, messages: [] }) }] })
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ docs: [{ data: () => ({ id: 'appt-001', clientId: INITIAL_DEMO_CLIENTS[0].id, isDemo: true }) }] })
+      .mockResolvedValueOnce({ docs: [] });
+
+    await expect(storageEngine.getClients()).resolves.toEqual([]);
+    await expect(storageEngine.getClient(INITIAL_DEMO_CLIENTS[0].id)).resolves.toBeNull();
+    await expect(storageEngine.getSessionsFor({
+      role: 'clinician', clinicianId: 'clinician-1', patientId: INITIAL_DEMO_CLIENTS[0].id,
+    })).resolves.toEqual([]);
+    await expect(storageEngine.getMessages()).resolves.toEqual([]);
+    await expect(storageEngine.getAppointments()).resolves.toEqual([]);
+
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+  });
+
+  it('blocks sample resets and sample writes from a production account', async () => {
+    expect(() => storageEngine.clearDemoData()).toThrow('isolated sample clinician workspace');
+    expect(() => storageEngine.resetToDefaultSeed()).toThrow('isolated sample clinician workspace');
+    await expect(storageEngine.saveClient(INITIAL_DEMO_CLIENTS[0])).rejects.toThrow('Sample patient records');
+    await expect(storageEngine.createSession({
+      ...sessionDocument('sample-write', INITIAL_DEMO_CLIENTS[0].id).data(), isDemo: true,
+    })).rejects.toThrow('Sample sessions');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('filters legacy sample-patient sessions returned by a production Firestore query', async () => {
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [sessionDocument('legacy-sample', INITIAL_DEMO_CLIENTS[0].id)] })
+      .mockResolvedValueOnce({ docs: [] });
+
+    await expect(storageEngine.getSessionsFor({
+      role: 'clinician', clinicianId: 'clinician-1',
+    })).resolves.toEqual([]);
+  });
+
+  it('keeps sample records available only inside the explicit demo workspace', async () => {
+    state.auth.currentUser = { uid: 'demo-clinician' };
+
+    await expect(storageEngine.getClients()).resolves.toHaveLength(INITIAL_DEMO_CLIENTS.length);
+    storageEngine.clearDemoData();
+    await expect(storageEngine.getClients()).resolves.toEqual([]);
+    storageEngine.resetToDefaultSeed();
+    await expect(storageEngine.getClients()).resolves.toHaveLength(INITIAL_DEMO_CLIENTS.length);
+    expect(firestore.getDocs).not.toHaveBeenCalled();
   });
 });
 

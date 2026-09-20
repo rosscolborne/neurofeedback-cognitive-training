@@ -16,6 +16,7 @@ import { RoleSelection } from './pages/onboarding/RoleSelection';
 import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
+import { DEMO_CLINICIAN_ID } from './services/clinicianDemoBoundary';
 
 function InvitationEntryRedirect() {
   const { invitationCode } = useParams();
@@ -231,26 +232,6 @@ export function App() {
     await storageEngine.deleteAppointment(id);
   };
 
-  const handleClearDemoData = async () => {
-    storageEngine.clearDemoData();
-    const cls = await storageEngine.getClients();
-    setClients(cls);
-    const msgs = await storageEngine.getMessages();
-    setMessages(msgs);
-    const appts = await storageEngine.getAppointments();
-    setAppointments(appts);
-  };
-
-  const handleResetDemoData = async () => {
-    storageEngine.resetToDefaultSeed();
-    const cls = await storageEngine.getClients();
-    setClients(cls);
-    const msgs = await storageEngine.getMessages();
-    setMessages(msgs);
-    const appts = await storageEngine.getAppointments();
-    setAppointments(appts);
-  };
-
   const handleSaveBrand = (newBrand: ClinicBrandConfig) => {
     setBrand(newBrand);
     storageEngine.saveBrandConfig(newBrand);
@@ -297,6 +278,7 @@ export function App() {
       <ClinicianShell
         brand={brand}
         clinicianLabel={user?.displayName || user?.email || undefined}
+        isDemoWorkspace={user?.uid === DEMO_CLINICIAN_ID}
         clients={clients}
         patientInvitations={patientInvitations}
         messages={messages}
@@ -309,8 +291,6 @@ export function App() {
         onSendMessage={handleSendMessage}
         onSaveAppointment={handleSaveAppointment}
         onDeleteAppointment={handleDeleteAppointment}
-        onClearDemoData={handleClearDemoData}
-        onResetDemoData={handleResetDemoData}
         onOpenRebrand={() => setShowRebrandModal(true)}
         onLogout={logout}
       />

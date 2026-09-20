@@ -28,6 +28,7 @@ import {
 interface ClinicianShellProps {
   brand: ClinicBrandConfig;
   clinicianLabel?: string;
+  isDemoWorkspace?: boolean;
   clients: ClientProfile[];
   patientInvitations: PatientInvitation[];
   messages: MessageThread[];
@@ -40,8 +41,6 @@ interface ClinicianShellProps {
   onSendMessage: (clientId: string, text: string) => void;
   onSaveAppointment: (appt: CalendarAppointment) => void;
   onDeleteAppointment: (id: string) => void;
-  onClearDemoData: () => void;
-  onResetDemoData: () => void;
   onOpenRebrand: () => void;
   onLogout: () => Promise<void>;
 }
@@ -56,6 +55,7 @@ interface ClinicianNavItem {
 export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   brand,
   clinicianLabel,
+  isDemoWorkspace = false,
   clients,
   patientInvitations,
   messages,
@@ -68,8 +68,6 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   onSendMessage,
   onSaveAppointment,
   onDeleteAppointment,
-  onClearDemoData,
-  onResetDemoData,
   onOpenRebrand,
   onLogout,
 }) => {
@@ -99,6 +97,11 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
   return (
     <div className="clinician-shell-container">
+      {isDemoWorkspace && (
+        <div role="status" style={{ position: 'fixed', zIndex: 1000, top: 0, left: 0, right: 0, padding: '6px 12px', textAlign: 'center', background: '#7C2D12', color: '#FFFFFF', fontSize: '12px', fontWeight: 700, letterSpacing: '0.02em' }}>
+          Sample clinician workspace · fictional demonstration data · isolated from production accounts
+        </div>
+      )}
       {/* Mobile Top Header (iPhone only) */}
       <header className="clinician-mobile-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -330,8 +333,6 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           <ClinicSettingsView
             brand={brand}
             onOpenRebrand={onOpenRebrand}
-            onClearDemoData={onClearDemoData}
-            onResetDemoData={onResetDemoData}
           />
         )}
       </main>

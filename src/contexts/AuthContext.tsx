@@ -9,6 +9,12 @@ import {
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  CLINICIAN_DEMO_AVAILABLE,
+  DEMO_AUTH_STORAGE_KEY,
+  DEMO_CLINICIAN_ID,
+  clearUnavailableDemoMarker,
+} from '../services/clinicianDemoBoundary';
 
 export type UserRole = 'patient' | 'clinician' | null;
 
@@ -51,7 +57,7 @@ const fetchUserRole = async (uid: string): Promise<UserRole> => {
 };
 
 const DEMO_CLINICIAN_USER = {
-  uid: 'demo-clinician',
+  uid: DEMO_CLINICIAN_ID,
   email: 'dr.vance@waveable.clinic',
   displayName: 'Dr. Evelyn Vance, Ph.D.',
   emailVerified: true,
@@ -72,13 +78,14 @@ const DEMO_CLINICIAN_USER = {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+    clearUnavailableDemoMarker();
+    if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
       return DEMO_CLINICIAN_USER;
     }
     return null;
   });
   const [role, setRole] = useState<UserRole>(() => {
-    if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+    if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
       return 'clinician';
     }
     return null;
@@ -89,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
 
     // If already in demo clinician mode, skip firebase check
-    if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+    if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
       setUser(DEMO_CLINICIAN_USER);
       setRole('clinician');
       setLoading(false);
@@ -105,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       auth,
       async (currentUser) => {
         if (!isMounted) return;
-        if (localStorage.getItem('neura_demo_auth') === 'clinician') {
+        if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
           setUser(DEMO_CLINICIAN_USER);
           setRole('clinician');
           setLoading(false);
@@ -143,7 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signup = async (email: string, pass: string, displayName?: string) => {
-    localStorage.removeItem('neura_demo_auth');
+    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
     const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
 
     // Set displayName on the Firebase Auth profile
@@ -169,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, pass: string) => {
-    localStorage.removeItem('neura_demo_auth');
+    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
     const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
     setUser(cred.user);
     const userRole = await fetchUserRole(cred.user.uid);
@@ -177,7 +184,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginAsDemoClinician = () => {
-    localStorage.setItem('neura_demo_auth', 'clinician');
+    if (!CLINICIAN_DEMO_AVAILABLE) {
+      throw new Error('The sample clinician workspace is not available in this deployment');
+    }
+    localStorage.setItem(DEMO_AUTH_STORAGE_KEY, 'clinician');
     setUser(DEMO_CLINICIAN_USER);
     setRole('clinician');
   };
@@ -185,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const selectRole = async (newRole: UserRole) => {
     if (!user) return;
     setRole(newRole);
-    if (user.uid !== 'demo-clinician') {
+    if (user.uid !== DEMO_CLINICIAN_ID) {
       // Accounts created while Firestore was temporarily unavailable may not
       // have their profile document yet. A merge write both recovers those
       // accounts and keeps existing profile fields intact.
@@ -203,7 +213,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    localStorage.removeItem('neura_demo_auth');
+    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
     await signOut(auth).catch(() => {});
     setUser(null);
     setRole(null);

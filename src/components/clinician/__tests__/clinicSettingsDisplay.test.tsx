@@ -16,8 +16,6 @@ describe('ClinicSettingsView initial state', () => {
     const html = renderToStaticMarkup(<ClinicSettingsView
       brand={safeBrand}
       onOpenRebrand={() => undefined}
-      onClearDemoData={() => undefined}
-      onResetDemoData={() => undefined}
     />);
 
     expect(html).toContain('Loading clinic settings');
