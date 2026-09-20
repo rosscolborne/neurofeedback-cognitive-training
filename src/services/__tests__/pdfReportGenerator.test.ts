@@ -46,17 +46,16 @@ describe('deterministic PDF report text', () => {
     expect(content.metrics).toContain('Device snapshot coverage: 50% (1/2 eligible sessions recorded)');
   });
 
-  it('excludes Demo activity from PDF evidence and reports it separately', () => {
+  it('includes persisted training Demo activity and labels its provenance', () => {
     const analytics = buildClinicalReportAnalytics([client], [
       session({ id: 'real-zero', timeInZonePercent: 0, device: undefined }),
       session({ id: 'demo', isDemo: true, timeInZonePercent: 100, device: { model: 'Synthetic Headset' } }),
     ], interval);
     const content = buildPatientReportText(client, analytics, brand, generatedAt);
-    expect(content.metrics).toContain('Clinical sessions: 1');
-    expect(content.metrics).toContain('Training Demo/sample completions: 1 (excluded from clinical measurements and adherence)');
-    expect(content.metrics).toContain('Average in-zone time: 0% (1/1 eligible sessions recorded)');
-    expect(content.tableRows).toEqual(['Sep 19, 2026, 10:00 AM | 10 min | 0% | Unavailable']);
-    expect(content.tableRows.join(' ')).not.toContain('Synthetic Headset');
+    expect(content.metrics).toContain('Clinical sessions: 2');
+    expect(content.metrics).toContain('Training Demo completions: 1 (included in aggregates; synthetic provenance)');
+    expect(content.metrics).toContain('Average in-zone time: 50% (2/2 eligible sessions recorded)');
+    expect(content.tableRows).toContain('Sep 19, 2026, 10:00 AM | 10 min | 100% | Synthetic Headset');
   });
 
   it('retains explicit legacy selections with an invalid timestamp and renders date unavailable', () => {

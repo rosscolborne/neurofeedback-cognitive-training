@@ -125,7 +125,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
           </div>
         </div>
         <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-          Interval: {intervalText} · Source: authenticated session repository fields · Training Demo/sample sessions are labeled and excluded from clinical metrics · Adherence: clinical interval sessions ÷ scheduled sessions (weekly prescription × {interval.dayCount}/7)
+          Interval: {intervalText} · Source: authenticated session repository fields · Intentional training Demo sessions remain included and are labeled by provenance · Adherence: persisted interval sessions ÷ scheduled sessions (weekly prescription × {interval.dayCount}/7)
         </div>
       </div>
 
@@ -141,7 +141,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '12px' }}>
         <MetricCard label="Selected Cohort" value={available ? `${analytics.clients.length}` : 'Unavailable'} detail="Patient profiles in the selected cohort" icon={<Users size={16} />} />
         <MetricCard label="Clinical Sessions" value={available ? `${analytics.totalSessions}` : 'Unavailable'} detail={`${metric(analytics.averageDurationMinutes.value, ' min')} average duration (${available ? `${analytics.averageDurationMinutes.recordedSessions}/${analytics.averageDurationMinutes.eligibleSessions}` : 'unavailable'} recorded)`} icon={<Activity size={16} />} />
-        <MetricCard label="Training Demo Completions" value={available ? `${analytics.demoSessionCount}` : 'Unavailable'} detail="Excluded from adherence, measurements, trends, and device coverage" icon={<Activity size={16} />} />
+        <MetricCard label="Training Demo Completions" value={available ? `${analytics.demoSessionCount}` : 'Unavailable'} detail="Included in aggregates; labeled as synthetic acquisition" icon={<Activity size={16} />} />
         <MetricCard label="Interval Adherence" value={metric(analytics.adherencePercent, '%')} detail={available && analytics.expectedSessions != null ? `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions` : 'Schedule unavailable'} icon={<CheckCircle2 size={16} />} />
         <MetricCard label="Average In-Zone Time" value={metric(analytics.averageInZonePercent.value, '%')} detail={available ? `${analytics.averageInZonePercent.recordedSessions}/${analytics.averageInZonePercent.eligibleSessions} sessions recorded` : 'Coverage unavailable'} icon={<Target size={16} />} />
         <MetricCard label="Device Snapshot Coverage" value={metric(analytics.deviceCoverage.value, '%')} detail={available ? `${analytics.deviceCoverage.recordedSessions}/${analytics.deviceCoverage.eligibleSessions} sessions identify a device` : 'Coverage unavailable'} icon={<HardDrive size={16} />} />
@@ -173,7 +173,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : row.client.assignedProtocol.replace(/-/g, ' ')}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Excluded from clinical metrics' : ''}</div></td>
+                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Included · synthetic provenance' : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} / ${row.expectedSessions} scheduled` : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>

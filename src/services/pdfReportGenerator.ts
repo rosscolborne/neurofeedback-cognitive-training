@@ -60,7 +60,7 @@ export function buildPracticeReportText(
     metrics: [
       `Selected cohort: ${analytics.clients.length} patient profiles`,
       `Clinical sessions: ${analytics.totalSessions}`,
-      `Training Demo/sample completions: ${analytics.demoSessionCount} (excluded from clinical measurements and adherence)`,
+      `Training Demo completions: ${analytics.demoSessionCount} (included in aggregates; synthetic provenance)`,
       `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
       `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
       `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'schedule unavailable' : `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions`})`,
@@ -111,7 +111,7 @@ export function buildPatientReportText(
     ],
     metrics: [
       `Clinical sessions: ${row?.sessionCount ?? 0}`,
-      `Training Demo/sample completions: ${row?.demoSessionCount ?? 0} (excluded from clinical measurements and adherence)`,
+      `Training Demo completions: ${row?.demoSessionCount ?? 0} (included in aggregates; synthetic provenance)`,
       `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
       `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`,
       `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,

@@ -71,7 +71,7 @@ describe('clinical report aggregation contracts', () => {
     expect(result.deviceModels).toEqual([{ model: 'Muse S', sessions: 1 }]);
   });
 
-  it('separates real zero-valued evidence from synthetic Demo activity', () => {
+  it('includes intentional training Demo results in aggregates while retaining provenance', () => {
     const interval = createReportInterval('30d', Date.parse('2026-09-19T12:00:00Z'), 'UTC');
     const realZero = session({ id: 'real-zero', timeInZonePercent: 0, device: undefined });
     const demo = session({
@@ -79,14 +79,15 @@ describe('clinical report aggregation contracts', () => {
       device: { model: 'Synthetic Headset' },
     });
     const result = buildClinicalReportAnalytics([client({ prescribedSessionsPerWeek: 1 })], [realZero, demo], interval);
-    expect(result.totalSessions).toBe(1);
+    expect(result.totalSessions).toBe(2);
     expect(result.demoSessionCount).toBe(1);
-    expect(result.averageInZonePercent).toEqual({ value: 0, recordedSessions: 1, eligibleSessions: 1 });
-    expect(result.totalDurationMinutes).toBe(10);
-    expect(result.deviceCoverage).toEqual({ value: 0, recordedSessions: 0, eligibleSessions: 1 });
-    expect(result.deviceModels).toEqual([]);
-    expect(result.adherencePercent).toBe(23);
+    expect(result.averageInZonePercent).toEqual({ value: 50, recordedSessions: 2, eligibleSessions: 2 });
+    expect(result.totalDurationMinutes).toBe(70);
+    expect(result.deviceCoverage).toEqual({ value: 50, recordedSessions: 1, eligibleSessions: 2 });
+    expect(result.deviceModels).toEqual([{ model: 'Synthetic Headset', sessions: 1 }]);
+    expect(result.adherencePercent).toBe(47);
     expect(result.patientRows[0].demoSessionCount).toBe(1);
+    expect(result.patientRows[0].sessionCount).toBe(2);
   });
 
   it('treats every sample-patient session as Demo activity even when legacy isDemo is absent', () => {

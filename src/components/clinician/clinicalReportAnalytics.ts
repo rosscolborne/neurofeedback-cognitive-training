@@ -25,9 +25,9 @@ export interface CoveredMetric {
 
 export interface PatientReportRow {
   client: ClientProfile;
-  /** Non-synthetic sessions eligible for clinical measurements and adherence. */
+  /** Persisted sessions eligible for aggregates, including intentional training Demo sessions. */
   sessions: SessionRecord[];
-  /** Training Demo/sample sessions, always excluded from clinical measurements. */
+  /** Intentional training Demo sessions retained as an overlapping provenance subset. */
   demoSessions: SessionRecord[];
   sessionCount: number;
   demoSessionCount: number;
@@ -246,9 +246,9 @@ export function buildClinicalReportAnalytics(
           return aTime - bTime;
         })
     : filterSessionsForReport(allSessions, interval, clientIds);
-  const isSynthetic = (session: SessionRecord) => session.isDemo === true || clientById.get(session.patientId)?.isDemo === true;
-  const sessions = eligibleSessions.filter(session => !isSynthetic(session));
-  const demoSessions = eligibleSessions.filter(isSynthetic);
+  const isSampleWorkspaceSession = (session: SessionRecord) => clientById.get(session.patientId)?.isDemo === true;
+  const sessions = eligibleSessions.filter(session => !isSampleWorkspaceSession(session));
+  const demoSessions = eligibleSessions.filter(session => session.isDemo === true || isSampleWorkspaceSession(session));
   const patientRows = clients.map(client => buildPatientRow(
     client,
     sessions.filter(session => session.patientId === client.id),
