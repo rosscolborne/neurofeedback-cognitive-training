@@ -10,6 +10,7 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
+import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
@@ -568,6 +569,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 </button>
               </div>
             </div>
+
+            <ChangePasswordForm variant="patient" />
           </div>
         )}
       </main>

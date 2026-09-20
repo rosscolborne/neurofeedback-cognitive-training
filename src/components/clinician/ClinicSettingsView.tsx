@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { ClinicBrandConfig } from '../../types';
+import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import {
-  Settings,
   Sliders,
   ShieldCheck,
   RefreshCw,
   Trash2,
   CheckCircle2,
-  Key,
   HardDrive,
   Activity,
   Award,
@@ -250,6 +249,8 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({
           </button>
         </div>
       </div>
+
+      <ChangePasswordForm variant="clinician" />
 
       {/* 5. HIPAA Compliance Assurance */}
       <div

@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
+  EmailAuthProvider,
   User,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  reauthenticateWithCredential,
   signOut,
+  updatePassword,
   updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
@@ -18,6 +21,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, displayName?: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
   loginAsDemoClinician: () => void;
   logout: () => Promise<void>;
@@ -29,6 +33,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   login: async () => {},
   signup: async () => {},
+  changePassword: async () => {},
   selectRole: async () => {},
   loginAsDemoClinician: () => {},
   logout: async () => {},
@@ -176,6 +181,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRole(userRole);
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    if (!user || !user.email) {
+      throw new Error('A signed-in email account is required to change your password.');
+    }
+    if (user.uid === DEMO_CLINICIAN_USER.uid) {
+      throw new Error('Password changes are not available for the demo account.');
+    }
+
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  };
+
   const loginAsDemoClinician = () => {
     localStorage.setItem('neura_demo_auth', 'clinician');
     setUser(DEMO_CLINICIAN_USER);
@@ -210,7 +228,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, loginAsDemoClinician, logout }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, selectRole, loginAsDemoClinician, logout }}>
       {children}
     </AuthContext.Provider>
   );
