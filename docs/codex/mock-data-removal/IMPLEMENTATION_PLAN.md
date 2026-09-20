@@ -536,12 +536,13 @@ independent workstream immediately when a slot opens.
 
 ### A1 — Production Appointments
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
 - **Worktree:** `../neurasticity-mockdata-appointments`
-- **Final commit:** `93788ecb927c32524f7bffe59b1b13eff1a031aa`
+- **Final commit:** `93788ecb927c32524f7bffe59b1b13eff1a031aa`,
+  `c45618ab48ae8838921646dfc463d6fdfe855ed5`
 - **Owned files:** `src/components/clinician/ClinicalCalendarView.tsx`, a new
   patient appointment surface, new appointment repository/mappers/tests. No
   independent changes to shared rules/types/storage.
@@ -563,7 +564,11 @@ independent workstream immediately when a slot opens.
   review required optimistic revision conflicts, truthful read-only legacy
   compatibility, stricter timestamp validation, keyed cancellation state, mounted
   interaction coverage, and the centrally reserved strict authorization rules.
-  Owned fixes are assigned to the original agent.
+  Owned fixes completed at `c45618ab`: optimistic revision conflicts, idempotent
+  cancellation requests, read-only timezone-unknown legacy records, strict
+  timestamp validation, keyed/stale-safe UI operations, and mounted tests. Focused
+  tests passed 31/31, the full suite passed 233/233, lint and build passed, and
+  re-review is pending. Strict authorization rules remain central.
 
 ### T1 — Protocol Runtime Consumption
 
@@ -887,6 +892,10 @@ independent workstream immediately when a slot opens.
   history, relationship-keyed retry/load state, stale/disposal guards, and mounted
   interaction coverage. Focused tests passed 20/20, the full suite passed 221/221,
   targeted lint and build passed, and M1 entered independent re-review.
+- **2026-09-19:** A1 completed owned review fixes at Git-verified `c45618ab`;
+  focused tests passed 31/31, the full suite passed 233/233, lint and build passed,
+  and A1 entered independent re-review. Strict rules and shell/App wiring remain
+  centrally reserved.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
