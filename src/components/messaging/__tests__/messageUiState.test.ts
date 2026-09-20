@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getMessageSendViewState } from '../messageUiState';
 
-const attempt = { id: 'opaque-id', threadId: 'patient-1', patientId: 'patient-1', text: 'Hello' };
+const attempt = { id: 'opaque-id', relationship: { patientId: 'patient-1', clinicianId: 'clinician-1', key: 'patient-1/clinician-1' }, text: 'Hello' };
 
 describe('message send display contract', () => {
   it('does not enable blank or in-flight sends', () => {
