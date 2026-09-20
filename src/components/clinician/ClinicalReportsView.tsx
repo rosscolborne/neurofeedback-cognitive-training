@@ -140,8 +140,9 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '12px' }}>
         <MetricCard label="Selected Cohort" value={available ? `${analytics.clients.length}` : 'Unavailable'} detail="Patient profiles in the selected cohort" icon={<Users size={16} />} />
-        <MetricCard label="Clinical Sessions" value={available ? `${analytics.totalSessions}` : 'Unavailable'} detail={`${metric(analytics.averageDurationMinutes.value, ' min')} average duration (${available ? `${analytics.averageDurationMinutes.recordedSessions}/${analytics.averageDurationMinutes.eligibleSessions}` : 'unavailable'} recorded)`} icon={<Activity size={16} />} />
+        <MetricCard label="Persisted Sessions" value={available ? `${analytics.totalSessions}` : 'Unavailable'} detail={`${metric(analytics.averageDurationMinutes.value, ' min')} average duration (${available ? `${analytics.averageDurationMinutes.recordedSessions}/${analytics.averageDurationMinutes.eligibleSessions}` : 'unavailable'} recorded)`} icon={<Activity size={16} />} />
         <MetricCard label="Training Demo Completions" value={available ? `${analytics.demoSessionCount}` : 'Unavailable'} detail="Included in aggregates; labeled as synthetic acquisition" icon={<Activity size={16} />} />
+        <MetricCard label="Sample Workspace Records" value={available ? `${analytics.sampleSessionCount}` : 'Unavailable'} detail="Fictional sample cohort; excluded from persisted-session aggregates" icon={<Activity size={16} />} />
         <MetricCard label="Interval Adherence" value={metric(analytics.adherencePercent, '%')} detail={available && analytics.expectedSessions != null ? `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions` : 'Schedule unavailable'} icon={<CheckCircle2 size={16} />} />
         <MetricCard label="Average In-Zone Time" value={metric(analytics.averageInZonePercent.value, '%')} detail={available ? `${analytics.averageInZonePercent.recordedSessions}/${analytics.averageInZonePercent.eligibleSessions} sessions recorded` : 'Coverage unavailable'} icon={<Target size={16} />} />
         <MetricCard label="Device Snapshot Coverage" value={metric(analytics.deviceCoverage.value, '%')} detail={available ? `${analytics.deviceCoverage.recordedSessions}/${analytics.deviceCoverage.eligibleSessions} sessions identify a device` : 'Coverage unavailable'} icon={<HardDrive size={16} />} />
@@ -167,13 +168,14 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Clinical sessions', 'Demo completions', 'Duration', 'Adherence', 'In-zone average', 'Device coverage', 'Export'].map(label => <th key={label} style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{label}</th>)}</tr></thead>
+            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Persisted sessions', 'Training Demo', 'Sample workspace', 'Duration', 'Adherence', 'In-zone average', 'Device coverage', 'Export'].map(label => <th key={label} style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{label}</th>)}</tr></thead>
             <tbody>
               {analytics.patientRows.map(row => (
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : row.client.assignedProtocol.replace(/-/g, ' ')}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Included · synthetic provenance' : ''}</div></td>
+                  <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.sampleSessionCount > 0 ? 'Fictional · excluded' : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} / ${row.expectedSessions} scheduled` : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>
@@ -181,7 +183,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
                   <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={viewModel.exportDisabled} onClick={() => void exportReport(row.client)}><FileText size={13} /> PDF</button></td>
                 </tr>
               ))}
-              {available && analytics.patientRows.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No patients are in this cohort.</td></tr>}
+              {available && analytics.patientRows.length === 0 && <tr><td colSpan={9} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No patients are in this cohort.</td></tr>}
             </tbody>
           </table>
         </div>

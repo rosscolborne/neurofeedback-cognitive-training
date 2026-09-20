@@ -41,6 +41,15 @@ describe('patient metrics', () => {
     expect(generateTimeInZoneChart(sessions, 360, 120).points).toHaveLength(1);
   });
 
+  it('includes persisted training Demo sessions in progress aggregates', () => {
+    const demo = session({ id: 'demo-session', isDemo: true, durationSeconds: 900, timeInZonePercent: 80 });
+    const summary = summarizeSessions([demo]);
+    expect(summary.sessions).toEqual([demo]);
+    expect(summary.sessionCount).toBe(1);
+    expect(summary.totalDurationSeconds).toBe(900);
+    expect(summary.averageTimeInZonePercent).toBe(80);
+  });
+
   it('does not substitute malformed or partial legacy values', () => {
     const partial = session({ timeInZonePercent: undefined as unknown as number, durationSeconds: Number.NaN });
     const invalidDate = session({ id: 'invalid-date', timestamp: 0 });

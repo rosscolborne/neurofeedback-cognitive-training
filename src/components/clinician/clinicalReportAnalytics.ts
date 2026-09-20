@@ -29,8 +29,11 @@ export interface PatientReportRow {
   sessions: SessionRecord[];
   /** Intentional training Demo sessions retained as an overlapping provenance subset. */
   demoSessions: SessionRecord[];
+  /** Fictional clinician sample-workspace activity, excluded from persisted-session aggregates. */
+  sampleSessions: SessionRecord[];
   sessionCount: number;
   demoSessionCount: number;
+  sampleSessionCount: number;
   durationMinutes: number | null;
   averageInZonePercent: number | null;
   inZoneRecordedSessions: number;
@@ -44,9 +47,11 @@ export interface ClinicalReportAnalytics {
   clients: ClientProfile[];
   sessions: SessionRecord[];
   demoSessions: SessionRecord[];
+  sampleSessions: SessionRecord[];
   patientRows: PatientReportRow[];
   totalSessions: number;
   demoSessionCount: number;
+  sampleSessionCount: number;
   totalDurationMinutes: number | null;
   averageDurationMinutes: CoveredMetric;
   averageInZonePercent: CoveredMetric;
@@ -203,6 +208,7 @@ function buildPatientRow(
   client: ClientProfile,
   sessions: SessionRecord[],
   demoSessions: SessionRecord[],
+  sampleSessions: SessionRecord[],
   interval: ReportInterval,
 ): PatientReportRow {
   const durations = sessions
@@ -216,8 +222,10 @@ function buildPatientRow(
     client,
     sessions,
     demoSessions,
+    sampleSessions,
     sessionCount: sessions.length,
     demoSessionCount: demoSessions.length,
+    sampleSessionCount: sampleSessions.length,
     durationMinutes: durations.length === 0 ? null : Math.round(durations.reduce((a, b) => a + b, 0) / 60),
     averageInZonePercent: roundedAverage(inZone),
     inZoneRecordedSessions: inZone.length,
@@ -248,11 +256,13 @@ export function buildClinicalReportAnalytics(
     : filterSessionsForReport(allSessions, interval, clientIds);
   const isSampleWorkspaceSession = (session: SessionRecord) => clientById.get(session.patientId)?.isDemo === true;
   const sessions = eligibleSessions.filter(session => !isSampleWorkspaceSession(session));
-  const demoSessions = eligibleSessions.filter(session => session.isDemo === true || isSampleWorkspaceSession(session));
+  const demoSessions = sessions.filter(session => session.isDemo === true);
+  const sampleSessions = eligibleSessions.filter(isSampleWorkspaceSession);
   const patientRows = clients.map(client => buildPatientRow(
     client,
     sessions.filter(session => session.patientId === client.id),
     demoSessions.filter(session => session.patientId === client.id),
+    sampleSessions.filter(session => session.patientId === client.id),
     interval,
   ));
   const durations = sessions
@@ -284,9 +294,11 @@ export function buildClinicalReportAnalytics(
     clients,
     sessions,
     demoSessions,
+    sampleSessions,
     patientRows,
     totalSessions: sessions.length,
     demoSessionCount: demoSessions.length,
+    sampleSessionCount: sampleSessions.length,
     totalDurationMinutes: durations.length === 0 ? null : Math.round(durations.reduce((a, b) => a + b, 0) / 60),
     averageDurationMinutes: {
       value: roundedAverage(durations.map(seconds => seconds / 60), 1),
@@ -339,7 +351,7 @@ export function buildClinicalReportViewModel(input: {
     interval,
   );
   const exportState = input.exportState ?? 'idle';
-  const hasActivity = analytics.totalSessions + analytics.demoSessionCount > 0;
+  const hasActivity = analytics.totalSessions + analytics.sampleSessionCount > 0;
   const presentation: ClinicalReportPresentation = input.loadState === 'loading'
     ? 'loading'
     : input.loadState === 'error'

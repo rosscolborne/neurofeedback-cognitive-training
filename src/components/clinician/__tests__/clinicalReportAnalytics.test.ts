@@ -81,6 +81,7 @@ describe('clinical report aggregation contracts', () => {
     const result = buildClinicalReportAnalytics([client({ prescribedSessionsPerWeek: 1 })], [realZero, demo], interval);
     expect(result.totalSessions).toBe(2);
     expect(result.demoSessionCount).toBe(1);
+    expect(result.sampleSessionCount).toBe(0);
     expect(result.averageInZonePercent).toEqual({ value: 50, recordedSessions: 2, eligibleSessions: 2 });
     expect(result.totalDurationMinutes).toBe(70);
     expect(result.deviceCoverage).toEqual({ value: 50, recordedSessions: 1, eligibleSessions: 2 });
@@ -90,7 +91,7 @@ describe('clinical report aggregation contracts', () => {
     expect(result.patientRows[0].sessionCount).toBe(2);
   });
 
-  it('treats every sample-patient session as Demo activity even when legacy isDemo is absent', () => {
+  it('counts fictional sample-workspace activity separately from training Demo sessions', () => {
     const interval = createReportInterval('30d', Date.parse('2026-09-19T12:00:00Z'), 'UTC');
     const sampleClient = client({ id: 'sample', isDemo: true });
     const result = buildClinicalReportAnalytics(
@@ -99,7 +100,9 @@ describe('clinical report aggregation contracts', () => {
       interval,
     );
     expect(result.totalSessions).toBe(0);
-    expect(result.demoSessionCount).toBe(1);
+    expect(result.demoSessionCount).toBe(0);
+    expect(result.sampleSessionCount).toBe(1);
+    expect(result.patientRows[0].sampleSessionCount).toBe(1);
     expect(result.adherencePercent).toBeNull();
     expect(result.patientRows[0].expectedSessions).toBeNull();
   });
@@ -178,8 +181,9 @@ describe('clinical report display-model contract', () => {
       range: '90d', loadState: 'ready', nowMs: now, timeZone: 'UTC', exportState: 'exporting',
     });
     expect(all90.analytics.totalSessions).toBe(2);
-    expect(all90.analytics.demoSessionCount).toBe(1);
-    expect(all90.analytics.patientRows.find(row => row.client.id === 'sample')?.demoSessionCount).toBe(1);
+    expect(all90.analytics.demoSessionCount).toBe(0);
+    expect(all90.analytics.sampleSessionCount).toBe(1);
+    expect(all90.analytics.patientRows.find(row => row.client.id === 'sample')?.sampleSessionCount).toBe(1);
     expect(all90.exportDisabled).toBe(true);
   });
 });

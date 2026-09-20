@@ -59,8 +59,9 @@ export function buildPracticeReportText(
     ],
     metrics: [
       `Selected cohort: ${analytics.clients.length} patient profiles`,
-      `Clinical sessions: ${analytics.totalSessions}`,
+      `Persisted sessions: ${analytics.totalSessions}`,
       `Training Demo completions: ${analytics.demoSessionCount} (included in aggregates; synthetic provenance)`,
+      `Sample workspace records: ${analytics.sampleSessionCount} (fictional; excluded from persisted-session aggregates)`,
       `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
       `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
       `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'schedule unavailable' : `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions`})`,
@@ -70,17 +71,18 @@ export function buildPracticeReportText(
       trend,
     ],
     notes: [
-      `Adherence formula: non-Demo interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
-      'Training Demo and sample-record sessions use synthetic input and are excluded from durations, adherence, in-zone measurements, trends, device coverage, device models, and clinical session rows.',
+      `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Intentional training Demo sessions are included in aggregates and labeled as synthetic. Fictional sample-workspace records are counted separately and excluded.',
       'In-zone values and their change are descriptive session measurements, not diagnoses, benchmark comparisons, treatment outcomes, or statistical significance claims.',
       'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
       'Unavailable values are not replaced with cohort defaults or zero.',
     ],
-    tableHeader: 'Patient | Clinical sessions | Demo completions | Duration | Adherence | In-zone | Device snapshots',
+    tableHeader: 'Patient | Persisted sessions | Training Demo | Sample workspace | Duration | Adherence | In-zone | Device snapshots',
     tableRows: analytics.patientRows.map(row => [
       `${row.client.name}${row.client.isDemo ? ' (Sample record)' : ''}`,
       row.sessionCount,
       row.demoSessionCount,
+      row.sampleSessionCount,
       formatMetric(row.durationMinutes, ' min'),
       formatMetric(row.adherencePercent, '%'),
       `${formatMetric(row.averageInZonePercent, '%')} (${row.inZoneRecordedSessions}/${row.sessionCount})`,
@@ -110,20 +112,21 @@ export function buildPatientReportText(
       'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
     ],
     metrics: [
-      `Clinical sessions: ${row?.sessionCount ?? 0}`,
+      `Persisted sessions: ${row?.sessionCount ?? 0}`,
       `Training Demo completions: ${row?.demoSessionCount ?? 0} (included in aggregates; synthetic provenance)`,
+      `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from persisted-session aggregates)`,
       `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
       `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`,
       `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
       `Device snapshot coverage: ${row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'} (${coverage(row?.deviceRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
     ],
     notes: [
-      `Adherence formula: non-Demo interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
-      'Training Demo and sample-record sessions use synthetic input and are excluded from durations, adherence, in-zone measurements, trends, device coverage, device models, and clinical session rows.',
+      `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Intentional training Demo sessions are included and labeled as synthetic. Fictional sample-workspace records are separate and excluded.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
       'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
     ],
-    tableHeader: 'Date/time | Duration | In-zone | Device',
+    tableHeader: 'Date/time | Source | Duration | In-zone | Device',
     tableRows: sessions.map(session => {
       const when = typeof session.timestamp === 'number' && Number.isFinite(session.timestamp) && session.timestamp > 0
         ? new Intl.DateTimeFormat('en-US', {
@@ -137,7 +140,8 @@ export function buildPatientReportText(
       const inZone = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100
         ? `${session.timeInZonePercent}%`
         : 'Unavailable';
-      return `${when} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
+      const source = session.isDemo === true ? 'Training Demo (synthetic)' : 'Non-Demo';
+      return `${when} | ${source} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
     }),
   };
 }
