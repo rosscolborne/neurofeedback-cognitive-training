@@ -90,6 +90,22 @@ describe('protocol runtime assignment', () => {
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customThresholdBounds: { min: 12, max: 13 } }))).toMatchObject({ ok: false });
   });
 
+  it('rejects sub-cent adaptive precision and accepts an exact 0.01 step without log divergence', () => {
+    const tooFine = resolveProtocolRuntime(client('alpha-enhancement', {
+      customProtocolConfig: identicalCustom('alpha-enhancement', { adaptiveStep: 0.004 }),
+    }));
+    expect(tooFine).toMatchObject({ ok: false, error: expect.stringContaining('0.01') });
+
+    const accepted = resolveProtocolRuntime(client('alpha-enhancement', {
+      customProtocolConfig: identicalCustom('alpha-enhancement', { adaptiveStep: 0.01 }),
+    }));
+    if (!accepted.ok) throw new Error(accepted.error);
+    const engine = new AdaptiveDifficultyEngine(accepted.config.protocol, accepted.config.initialThreshold, accepted.config);
+    const adjustment = samples(engine, true);
+    expect(adjustment.log).toMatchObject({ previousThreshold: 11, newThreshold: 11.01 });
+    expect(engine.getCurrentThreshold()).toBe(11.01);
+  });
+
   it('discloses every valid-session limitation explicitly', () => {
     for (const term of ['Reward-band', 'inhibit bands', 'montage', 'device mapping', 'sensitivity', 'clinical notes', 'rationale', 'recommended experiences', 'custom alias', 'unsupported']) {
       expect(PROTOCOL_RUNTIME_LIMITATIONS).toContain(term);
@@ -109,6 +125,28 @@ describe('protocol runtime assignment', () => {
     expect(demo.evaluateFeedbackForBands(bands, available)).toEqual(evaluateProtocolFeedback('theta-beta-ratio', 1.85, bands, available));
     expect(evaluateProtocolFeedback('alpha-enhancement', 0, bands, available)).toMatchObject({ available: true, inZone: true });
     expect(evaluateProtocolFeedback('alpha-enhancement', 0, bands, { ...available, alpha: false })).toMatchObject({ available: false });
+  });
+
+  it('keeps missing production SMR unavailable without alpha/beta proxy reward or display', () => {
+    const resolution = resolveProtocolRuntime(client('smr-enhancement'));
+    if (!resolution.ok) throw new Error(resolution.error);
+    const engine = new EEGEngine();
+    engine.configureProtocol(resolution.config);
+    engine.isHardwareConnected = true;
+    const internal = engine as unknown as {
+      latestServerBands: BandPowers;
+      latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>>;
+      latestTrainingFeedback: { ratio: number; inZone: boolean; zoneScore: number };
+      generateSample: (dt: number) => { bands: BandPowers; bandAvailability: Partial<Record<keyof BandPowers, boolean>>; inZone: boolean; inZoneAvailable: boolean };
+    };
+    internal.latestServerBands = { ...bands, smr: 0 };
+    internal.latestServerBandAvailability = { ...available, smr: false };
+    internal.latestTrainingFeedback = { ratio: bands.theta / bands.beta, inZone: true, zoneScore: 1 };
+    const sample = internal.generateSample(0.1);
+    expect(sample.bands.smr).toBe(0);
+    expect(sample.bandAvailability.smr).toBe(false);
+    expect(sample.inZoneAvailable).toBe(false);
+    expect(sample.inZone).toBe(false);
   });
 
   it('applies canonical step, lower/higher directions, easing, and explicit bounds in absolute units', () => {

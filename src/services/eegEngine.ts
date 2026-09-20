@@ -1449,17 +1449,11 @@ export class EEGEngine {
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
             const abs = f.bandPowers.absolute;
-            const smrPower = typeof abs.smr === 'number'
-              ? abs.smr
-              : typeof abs.alpha === 'number' && typeof abs.beta === 'number'
-                ? abs.alpha * 0.45 + abs.beta * 0.55
-                : 0;
-
             this.latestServerBands = {
               delta: abs.delta ?? 0,
               theta: abs.theta ?? 0,
               alpha: abs.alpha ?? 0,
-              smr: smrPower,
+              smr: abs.smr ?? 0,
               beta: abs.beta ?? 0,
               gamma: abs.gamma ?? 0,
             };
@@ -1577,13 +1571,6 @@ export class EEGEngine {
         bandAvailability = { ...this.latestServerBandAvailability };
       } else {
         bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
-      }
-
-      if (!bandAvailability.smr || bands.smr === 0) {
-        if (bands.alpha > 0 || bands.beta > 0) {
-          bands.smr = Number(((bands.alpha * 0.45) + (bands.beta * 0.55)).toFixed(1));
-          bandAvailability.smr = true;
-        }
       }
 
       if (brainFlowScores?.mindfulnessScore != null && brainFlowScores.mindfulnessScore >= 98) {
@@ -1734,6 +1721,8 @@ export class EEGEngine {
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
     const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
+    const localFeedback = this.evaluateFeedbackForBands(bands, bandAvailability);
+    if (!localFeedback.available) trainingFeedback = localFeedback;
     let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
     let inZone = trainingFeedback?.inZone ?? false;
     let zoneScore = trainingFeedback?.zoneScore ?? 0;

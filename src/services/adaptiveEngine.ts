@@ -17,6 +17,7 @@ export type ProtocolRuntimeResolution =
   | { ok: false; error: string };
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const hasSupportedThresholdPrecision = (value: number) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-9;
 const DEFAULT_THRESHOLD_BOUNDS = { min: 0, max: 1000 } as const;
 const LOWER_IS_BETTER: Record<ProtocolType, boolean> = {
   'theta-beta-ratio': true,
@@ -81,8 +82,9 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
   if (!finite(custom.sessionDurationMinutes) || custom.sessionDurationMinutes < 1 || custom.sessionDurationMinutes > 180) {
     return { ok: false, error: 'Session duration must be between 1 and 180 minutes.' };
   }
-  if (!finite(custom.adaptiveStep) || custom.adaptiveStep <= 0 || custom.adaptiveStep > 100) {
-    return { ok: false, error: 'The saved adaptive step is invalid.' };
+  if (!finite(custom.adaptiveStep) || custom.adaptiveStep < 0.01 || custom.adaptiveStep > 100
+    || !hasSupportedThresholdPrecision(custom.adaptiveStep)) {
+    return { ok: false, error: 'Adaptive step must be between 0.01 and 100 with at most two decimal places.' };
   }
 
   return {
@@ -295,7 +297,8 @@ export class AdaptiveDifficultyEngine {
       }
 
       if (adjusted) {
-        const absoluteChange = Math.round(Math.abs(newThreshold - this.currentThreshold) * 100) / 100;
+        const appliedThreshold = Math.round(newThreshold * 100) / 100;
+        const absoluteChange = Math.round(Math.abs(appliedThreshold - this.currentThreshold) * 100) / 100;
         reason = direction === 'tightened'
           ? `High time-in-zone (${percent.toFixed(0)}% > 80%). Threshold changed by ${absoluteChange} absolute units.`
           : `Low time-in-zone (${percent.toFixed(0)}% < 40%). Threshold changed by ${absoluteChange} absolute units to ease the target.`;
@@ -303,11 +306,11 @@ export class AdaptiveDifficultyEngine {
           timestamp: Date.now(),
           direction,
           previousThreshold: this.currentThreshold,
-          newThreshold: Math.round(newThreshold * 100) / 100,
+          newThreshold: appliedThreshold,
           timeInZoneWindowPercent: Math.round(percent),
           reason,
         };
-        this.currentThreshold = newThreshold;
+        this.currentThreshold = appliedThreshold;
         this.adjustmentsCount++;
         this.adjustmentLogs.push(log);
         // Clear half the window to let the brain adapt to new threshold before next test
