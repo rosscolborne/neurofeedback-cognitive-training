@@ -436,11 +436,12 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
-- **Final commit:** `0fbc281a115effe529c54d9f0ff04e8b375cbae8`
+- **Final commit:** `0fbc281a115effe529c54d9f0ff04e8b375cbae8`,
+  `19c2514ab84b8d8fea7ad05b99d04bfccd351672`
 - **Owned files:** `src/components/clinician/ClinicSettingsView.tsx`,
   `src/components/brand/ClinicCustomizerModal.tsx`, `src/services/brandEngine.ts`,
   new dedicated clinic/practitioner repository/helper/tests. `App.tsx` wiring is
@@ -466,7 +467,8 @@ independent workstream immediately when a slot opens.
   branding validation/contrast safety, elimination of new global cache writes,
   primary-credential selection, atomic Firestore writes, server-owned branding
   creation metadata, complete onboarding detection, and stronger state tests.
-  Owned fixes are pending; shared rules/app/clinic-link changes remain central.
+  Owned fixes completed with 18/18 focused and 157/157 full tests passing; re-review
+  is pending. Shared rules/app/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
@@ -729,6 +731,10 @@ independent workstream immediately when a slot opens.
   filter/export coverage was insufficient. Fixes were sent to the original agent.
 - **2026-09-19:** T1 completed review fixes at verified commit `7dea986f`, with
   13/13 focused and 175/175 full tests passing, and entered independent re-review.
+- **2026-09-19:** S1 completed owned review fixes at `19c2514`, with 18/18 focused
+  and 157/157 full tests passing, and entered independent re-review. Shared
+  clinician bootstrap rules, App brand hydration, and patient clinic propagation
+  remain central integration work.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
