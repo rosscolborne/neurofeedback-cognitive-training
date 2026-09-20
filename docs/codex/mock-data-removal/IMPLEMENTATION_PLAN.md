@@ -72,8 +72,10 @@ The project is done when:
 
 - **Keep intentional patient training Demo mode.** It exists to test training
   games without a headset and should continue to generate simulated EEG/game
-  input. Demo sessions should still save like headset sessions when the signed-in
-  user chooses to save them.
+  input. Completed Demo sessions must persist like headset sessions, retain clear
+  synthetic/Demo provenance, appear in Progress/History after reload, and remain
+  included in session aggregates. A non-Demo session with unavailable EEG must
+  fail visibly and must never silently switch to synthetic input.
 - Keep explicitly labeled developer debug/replay/simulator tools and providers.
 - Static educational copy, experience catalog metadata, evidence-based protocol
   catalog definitions, badge/milestone definitions, design tokens, and truthful
@@ -434,9 +436,12 @@ independent workstream immediately when a slot opens.
   `d445528`. Independent review required Demo-session separation from clinical
   evidence/adherence, retention of explicitly selected invalid-timestamp legacy
   sessions in compatibility PDFs, and stronger UI state/filter/export coverage.
-  Fixes now separate and label Demo/sample completion counts, exclude them from
-  clinical evidence/adherence, retain explicit invalid-timestamp legacy rows as
-  unavailable-dated, and use a tested complete report view model. Focused tests
+  Fixes separated and labeled Demo/sample completion counts and originally
+  excluded them from clinical evidence/adherence. That exclusion is superseded by
+  the D1 clarification below: persisted intentional training Demo sessions remain
+  included in aggregates while retaining visible synthetic provenance. The fixes
+  also retain explicit invalid-timestamp legacy rows as unavailable-dated and use
+  a tested complete report view model. Focused tests
   passed 15/15 and full tests passed 136/136; re-review passed without findings and
   the branch merged. Integrated focused tests passed 15/15.
 
@@ -646,12 +651,18 @@ independent workstream immediately when a slot opens.
   clients/messages/sessions/appointments; reset/wipe actions cannot target real
   tenant data from ordinary UI; if the sample clinician portal remains, isolate it
   behind an explicit non-production/demo boundary and label it. Preserve patient
-  training Demo mode and developer debug simulators.
+  training Demo mode and developer debug simulators. Intentional patient Demo
+  training completions must persist, reload into Progress/History, contribute to
+  session aggregates, and retain explicit synthetic/Demo provenance. Non-Demo
+  acquisition failure must remain an error and never activate synthetic EEG.
 - **Acceptance:** fresh real accounts show empty production data; no sample cohort
   can leak into Firestore-backed views; production reset controls are absent or
-  protected; training games still work without a headset.
+  protected; training games still work without a headset; saved Demo results are
+  visible after reload and distinguishable from real-hardware results.
 - **Tests:** production-mode no-fallback tests; explicit demo-boundary tests;
-  regression test for training Demo mode; manual fresh clinician/patient checks.
+  regression test for `Try Demo Mode → complete → save → reload → Progress/History`
+  and aggregate inclusion; non-Demo missing-EEG no-fallback regression; manual
+  fresh clinician/patient checks.
 - **Implementation report:** clinician seed/reset access is isolated behind an
   explicit development/demo workspace, production views filter sample-shaped
   records, production reset wiring is removed, and patient training Demo/debug
@@ -727,6 +738,12 @@ independent workstream immediately when a slot opens.
 
 ## Project log
 
+- **2026-09-19:** User clarified D1 semantics: intentional patient training Demo
+  sessions are supported persisted sessions, must appear in Progress/History and
+  aggregates after reload, and must retain visible synthetic provenance. Only the
+  clinician sample workspace is isolated; non-Demo missing EEG must fail rather
+  than silently switching to simulation. D1 and integrated analytics regressions
+  were updated accordingly.
 - **2026-09-19:** Handoff reconciled against Git. The integration worktree was
   clean at `fill-in-mocked-data@414f507`; `main` and `origin/main` remained at
   `8bab4b8`; the foundation history was present; no downstream worktrees or remote
