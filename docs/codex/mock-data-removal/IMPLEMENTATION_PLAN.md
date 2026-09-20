@@ -442,7 +442,7 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
@@ -485,8 +485,11 @@ independent workstream immediately when a slot opens.
   fixed by the original implementation agent at `018ebb80`, with persisted
   credential status, authoritative branding-save semantics, and mounted async
   interaction coverage. The full suite passed 173/173, lint and the production
-  build passed, and final re-review is pending. The central atomic-onboarding rule
-  is committed separately; shared App/clinic-link changes remain central.
+  build passed. Final re-review found inaccurate presentation for cleared/malformed
+  legacy credentials and a post-save close-failure path that could leave the brand
+  modal locked; those owned fixes are assigned to the original agent. The central
+  atomic-onboarding rule is committed separately; shared App/clinic-link changes
+  remain central.
 
 ### M1 — Production Messaging
 
@@ -827,6 +830,10 @@ independent workstream immediately when a slot opens.
   branding callback failures from authoritative persistence, and adding mounted
   async state/interaction tests. The full suite passed 173/173, lint passed, and
   the production build passed; S1 entered final independent re-review.
+- **2026-09-19:** S1 final re-review returned it to IN PROGRESS for two owned
+  edge cases: truthful cleared/malformed credential presentation and recoverable
+  modal state when preview/save/close callbacks fail after authoritative branding
+  persistence. The findings were returned to the original implementation agent.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
