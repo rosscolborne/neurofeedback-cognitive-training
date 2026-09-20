@@ -505,7 +505,7 @@ independent workstream immediately when a slot opens.
 
 ### A1 — Production Appointments
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
@@ -788,6 +788,13 @@ independent workstream immediately when a slot opens.
   passed 68/68, the full suite passed 202/202, and the production build passed;
   final independent re-review is pending. Dynamic rules execution still requires
   Java or another configured emulator environment.
+- **2026-09-19:** Final independent shared-contract re-review passed without
+  findings at `4d65e30`; focused tests passed 68/68 and the production build
+  passed. Dynamic Firestore emulator validation remains pending because Java is
+  unavailable in this worktree environment.
+- **2026-09-19:** A1 started from the clean `fill-in-mocked-data@4d65e30` integration
+  branch after R1 authorization review and merge. Its implementation remains
+  isolated from centrally owned shared rules, types, storage, and shell wiring.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
