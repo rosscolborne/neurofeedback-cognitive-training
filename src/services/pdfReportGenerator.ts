@@ -59,7 +59,8 @@ export function buildPracticeReportText(
     ],
     metrics: [
       `Selected cohort: ${analytics.clients.length} patient profiles`,
-      `Completed sessions: ${analytics.totalSessions}`,
+      `Clinical sessions: ${analytics.totalSessions}`,
+      `Training Demo/sample completions: ${analytics.demoSessionCount} (excluded from clinical measurements and adherence)`,
       `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
       `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
       `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'schedule unavailable' : `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions`})`,
@@ -69,15 +70,17 @@ export function buildPracticeReportText(
       trend,
     ],
     notes: [
-      `Adherence formula: interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      `Adherence formula: non-Demo interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Training Demo and sample-record sessions use synthetic input and are excluded from durations, adherence, in-zone measurements, trends, device coverage, device models, and clinical session rows.',
       'In-zone values and their change are descriptive session measurements, not diagnoses, benchmark comparisons, treatment outcomes, or statistical significance claims.',
       'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
       'Unavailable values are not replaced with cohort defaults or zero.',
     ],
-    tableHeader: 'Patient | Sessions | Duration | Adherence | In-zone | Device snapshots',
+    tableHeader: 'Patient | Clinical sessions | Demo completions | Duration | Adherence | In-zone | Device snapshots',
     tableRows: analytics.patientRows.map(row => [
       `${row.client.name}${row.client.isDemo ? ' (Sample record)' : ''}`,
       row.sessionCount,
+      row.demoSessionCount,
       formatMetric(row.durationMinutes, ' min'),
       formatMetric(row.adherencePercent, '%'),
       `${formatMetric(row.averageInZonePercent, '%')} (${row.inZoneRecordedSessions}/${row.sessionCount})`,
@@ -107,23 +110,27 @@ export function buildPatientReportText(
       'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
     ],
     metrics: [
-      `Completed sessions: ${row?.sessionCount ?? 0}`,
+      `Clinical sessions: ${row?.sessionCount ?? 0}`,
+      `Training Demo/sample completions: ${row?.demoSessionCount ?? 0} (excluded from clinical measurements and adherence)`,
       `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
       `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`,
       `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
       `Device snapshot coverage: ${row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'} (${coverage(row?.deviceRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
     ],
     notes: [
-      `Adherence formula: interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      `Adherence formula: non-Demo interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Training Demo and sample-record sessions use synthetic input and are excluded from durations, adherence, in-zone measurements, trends, device coverage, device models, and clinical session rows.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
       'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
     ],
     tableHeader: 'Date/time | Duration | In-zone | Device',
     tableRows: sessions.map(session => {
-      const when = new Intl.DateTimeFormat('en-US', {
-        timeZone: analytics.interval.timeZone,
-        year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-      }).format(new Date(session.timestamp));
+      const when = typeof session.timestamp === 'number' && Number.isFinite(session.timestamp) && session.timestamp > 0
+        ? new Intl.DateTimeFormat('en-US', {
+            timeZone: analytics.interval.timeZone,
+            year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          }).format(new Date(session.timestamp))
+        : 'Unavailable';
       const duration = typeof session.durationSeconds === 'number' && Number.isFinite(session.durationSeconds) && session.durationSeconds >= 0
         ? `${Math.round(session.durationSeconds / 60)} min`
         : 'Unavailable';
@@ -207,7 +214,7 @@ export async function generatePatientClinicalPDF(
 ): Promise<void> {
   const generatedAt = Date.now();
   const analytics = Array.isArray(analyticsOrSessions)
-    ? buildLegacyPatientExportAnalytics(client, analyticsOrSessions, generatedAt)
+    ? buildPatientSelectionReportAnalytics(client, analyticsOrSessions, generatedAt)
     : analyticsOrSessions;
   const doc = renderReport(buildPatientReportText(client, analytics, brand, generatedAt));
   const filename = `Session_Activity_${(client.name || 'Patient').replace(/\s+/g, '_')}_${new Date(generatedAt).toISOString().slice(0, 10)}.pdf`;
@@ -219,7 +226,7 @@ export async function generatePatientClinicalPDF(
  * explicit session selection rather than a report window, so adherence is kept
  * unavailable instead of being inferred from an arbitrary subset.
  */
-function buildLegacyPatientExportAnalytics(
+export function buildPatientSelectionReportAnalytics(
   client: ClientProfile,
   sessions: SessionRecord[],
   generatedAt: number,
@@ -239,7 +246,7 @@ function buildLegacyPatientExportAnalytics(
     endLabel: label(endMs),
     dayCount: Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1),
     timeZone: 'UTC',
-  });
+  }, { mode: 'explicit-selection' });
   return {
     ...analytics,
     adherencePercent: null,

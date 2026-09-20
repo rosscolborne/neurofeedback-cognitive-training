@@ -1,6 +1,10 @@
 import type { ClientProfile, SessionRecord } from '../../types';
 
 export type ClinicalReportRange = '30d' | '90d' | 'ytd';
+export type ClinicalReportCohortFilter = 'all' | 'real' | 'demo';
+export type ClinicalReportLoadState = 'loading' | 'ready' | 'error';
+export type ClinicalReportExportState = 'idle' | 'exporting' | 'error';
+export type ClinicalReportPresentation = 'loading' | 'error' | 'empty' | 'data';
 
 export interface ReportInterval {
   range: ClinicalReportRange;
@@ -21,8 +25,12 @@ export interface CoveredMetric {
 
 export interface PatientReportRow {
   client: ClientProfile;
+  /** Non-synthetic sessions eligible for clinical measurements and adherence. */
   sessions: SessionRecord[];
+  /** Training Demo/sample sessions, always excluded from clinical measurements. */
+  demoSessions: SessionRecord[];
   sessionCount: number;
+  demoSessionCount: number;
   durationMinutes: number | null;
   averageInZonePercent: number | null;
   inZoneRecordedSessions: number;
@@ -35,8 +43,10 @@ export interface ClinicalReportAnalytics {
   interval: ReportInterval;
   clients: ClientProfile[];
   sessions: SessionRecord[];
+  demoSessions: SessionRecord[];
   patientRows: PatientReportRow[];
   totalSessions: number;
+  demoSessionCount: number;
   totalDurationMinutes: number | null;
   averageDurationMinutes: CoveredMetric;
   averageInZonePercent: CoveredMetric;
@@ -50,6 +60,19 @@ export interface ClinicalReportAnalytics {
     change: number;
     recordedSessions: number;
   } | null;
+}
+
+export interface ClinicalReportViewModel {
+  presentation: ClinicalReportPresentation;
+  loadState: ClinicalReportLoadState;
+  exportState: ClinicalReportExportState;
+  exportDisabled: boolean;
+  retryVisible: boolean;
+  exportError: string | null;
+  filteredClients: ClientProfile[];
+  interval: ReportInterval;
+  intervalText: string;
+  analytics: ClinicalReportAnalytics;
 }
 
 const DAY_MS = 86_400_000;
@@ -179,6 +202,7 @@ function expectedSessions(client: ClientProfile, interval: ReportInterval): numb
 function buildPatientRow(
   client: ClientProfile,
   sessions: SessionRecord[],
+  demoSessions: SessionRecord[],
   interval: ReportInterval,
 ): PatientReportRow {
   const durations = sessions
@@ -187,11 +211,13 @@ function buildPatientRow(
   const inZone = sessions
     .map(session => numeric(session.timeInZonePercent, 0, 100))
     .filter((value): value is number => value != null);
-  const expected = expectedSessions(client, interval);
+  const expected = client.isDemo ? null : expectedSessions(client, interval);
   return {
     client,
     sessions,
+    demoSessions,
     sessionCount: sessions.length,
+    demoSessionCount: demoSessions.length,
     durationMinutes: durations.length === 0 ? null : Math.round(durations.reduce((a, b) => a + b, 0) / 60),
     averageInZonePercent: roundedAverage(inZone),
     inZoneRecordedSessions: inZone.length,
@@ -207,12 +233,26 @@ export function buildClinicalReportAnalytics(
   clients: ClientProfile[],
   allSessions: SessionRecord[],
   interval: ReportInterval,
+  options: { mode?: 'interval' | 'explicit-selection' } = {},
 ): ClinicalReportAnalytics {
   const clientIds = new Set(clients.map(client => client.id));
-  const sessions = filterSessionsForReport(allSessions, interval, clientIds);
+  const clientById = new Map(clients.map(client => [client.id, client]));
+  const eligibleSessions = options.mode === 'explicit-selection'
+    ? allSessions
+        .filter(session => clientIds.has(session.patientId))
+        .sort((a, b) => {
+          const aTime = numeric(a.timestamp, 1) ?? Number.POSITIVE_INFINITY;
+          const bTime = numeric(b.timestamp, 1) ?? Number.POSITIVE_INFINITY;
+          return aTime - bTime;
+        })
+    : filterSessionsForReport(allSessions, interval, clientIds);
+  const isSynthetic = (session: SessionRecord) => session.isDemo === true || clientById.get(session.patientId)?.isDemo === true;
+  const sessions = eligibleSessions.filter(session => !isSynthetic(session));
+  const demoSessions = eligibleSessions.filter(isSynthetic);
   const patientRows = clients.map(client => buildPatientRow(
     client,
     sessions.filter(session => session.patientId === client.id),
+    demoSessions.filter(session => session.patientId === client.id),
     interval,
   ));
   const durations = sessions
@@ -225,7 +265,8 @@ export function buildClinicalReportAnalytics(
   const expectedValues = patientRows
     .map(row => row.expectedSessions)
     .filter((value): value is number => value != null);
-  const expectedTotal = expectedValues.length === clients.length
+  const clinicalClientCount = clients.filter(client => !client.isDemo).length;
+  const expectedTotal = expectedValues.length === clinicalClientCount
     ? Math.round(expectedValues.reduce((a, b) => a + b, 0) * 10) / 10
     : null;
   const deviceSessions = sessions.filter(session => Boolean(session.device?.model?.trim()));
@@ -242,8 +283,10 @@ export function buildClinicalReportAnalytics(
     interval,
     clients,
     sessions,
+    demoSessions,
     patientRows,
     totalSessions: sessions.length,
+    demoSessionCount: demoSessions.length,
     totalDurationMinutes: durations.length === 0 ? null : Math.round(durations.reduce((a, b) => a + b, 0) / 60),
     averageDurationMinutes: {
       value: roundedAverage(durations.map(seconds => seconds / 60), 1),
@@ -270,6 +313,51 @@ export function buildClinicalReportAnalytics(
     timeInZoneTrend: first == null || recent == null
       ? null
       : { firstAverage: first, recentAverage: recent, change: recent - first, recordedSessions: inZone.length },
+  };
+}
+
+export function buildClinicalReportViewModel(input: {
+  clients: ClientProfile[];
+  sessions: SessionRecord[];
+  cohortFilter: ClinicalReportCohortFilter;
+  range: ClinicalReportRange;
+  loadState: ClinicalReportLoadState;
+  exportState?: ClinicalReportExportState;
+  nowMs?: number;
+  timeZone?: string;
+}): ClinicalReportViewModel {
+  const filteredClients = input.clients.filter(client => {
+    if (input.cohortFilter === 'real') return !client.isDemo;
+    if (input.cohortFilter === 'demo') return client.isDemo === true;
+    return true;
+  });
+  const interval = createReportInterval(input.range, input.nowMs, input.timeZone);
+  // Never expose stale/partial evidence while loading or after a rejected read.
+  const analytics = buildClinicalReportAnalytics(
+    filteredClients,
+    input.loadState === 'ready' ? input.sessions : [],
+    interval,
+  );
+  const exportState = input.exportState ?? 'idle';
+  const hasActivity = analytics.totalSessions + analytics.demoSessionCount > 0;
+  const presentation: ClinicalReportPresentation = input.loadState === 'loading'
+    ? 'loading'
+    : input.loadState === 'error'
+      ? 'error'
+      : hasActivity
+        ? 'data'
+        : 'empty';
+  return {
+    presentation,
+    loadState: input.loadState,
+    exportState,
+    exportDisabled: input.loadState !== 'ready' || exportState === 'exporting',
+    retryVisible: input.loadState === 'error',
+    exportError: exportState === 'error' ? 'The PDF could not be created. Please try again.' : null,
+    filteredClients,
+    interval,
+    intervalText: `${interval.startLabel} – ${interval.endLabel} (${interval.timeZone})`,
+    analytics,
   };
 }
 

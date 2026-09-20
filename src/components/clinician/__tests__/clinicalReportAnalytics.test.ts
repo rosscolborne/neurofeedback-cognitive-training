@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../../types';
 import {
   buildClinicalReportAnalytics,
+  buildClinicalReportViewModel,
   createReportInterval,
   filterSessionsForReport,
 } from '../clinicalReportAnalytics';
@@ -70,6 +71,38 @@ describe('clinical report aggregation contracts', () => {
     expect(result.deviceModels).toEqual([{ model: 'Muse S', sessions: 1 }]);
   });
 
+  it('separates real zero-valued evidence from synthetic Demo activity', () => {
+    const interval = createReportInterval('30d', Date.parse('2026-09-19T12:00:00Z'), 'UTC');
+    const realZero = session({ id: 'real-zero', timeInZonePercent: 0, device: undefined });
+    const demo = session({
+      id: 'demo', isDemo: true, timeInZonePercent: 100, durationSeconds: 3600,
+      device: { model: 'Synthetic Headset' },
+    });
+    const result = buildClinicalReportAnalytics([client({ prescribedSessionsPerWeek: 1 })], [realZero, demo], interval);
+    expect(result.totalSessions).toBe(1);
+    expect(result.demoSessionCount).toBe(1);
+    expect(result.averageInZonePercent).toEqual({ value: 0, recordedSessions: 1, eligibleSessions: 1 });
+    expect(result.totalDurationMinutes).toBe(10);
+    expect(result.deviceCoverage).toEqual({ value: 0, recordedSessions: 0, eligibleSessions: 1 });
+    expect(result.deviceModels).toEqual([]);
+    expect(result.adherencePercent).toBe(23);
+    expect(result.patientRows[0].demoSessionCount).toBe(1);
+  });
+
+  it('treats every sample-patient session as Demo activity even when legacy isDemo is absent', () => {
+    const interval = createReportInterval('30d', Date.parse('2026-09-19T12:00:00Z'), 'UTC');
+    const sampleClient = client({ id: 'sample', isDemo: true });
+    const result = buildClinicalReportAnalytics(
+      [sampleClient],
+      [session({ patientId: 'sample', isDemo: undefined })],
+      interval,
+    );
+    expect(result.totalSessions).toBe(0);
+    expect(result.demoSessionCount).toBe(1);
+    expect(result.adherencePercent).toBeNull();
+    expect(result.patientRows[0].expectedSessions).toBeNull();
+  });
+
   it('derives full aggregates, adherence, and descriptive trend only from interval sessions', () => {
     const interval = createReportInterval('30d', Date.parse('2026-09-19T12:00:00Z'), 'UTC');
     const sessions = [
@@ -95,5 +128,57 @@ describe('clinical report aggregation contracts', () => {
     const older = session({ id: 'older', timestamp: now - 60 * 86_400_000 });
     expect(buildClinicalReportAnalytics([client()], [recent, older], createReportInterval('30d', now, 'UTC')).totalSessions).toBe(1);
     expect(buildClinicalReportAnalytics([client()], [recent, older], createReportInterval('90d', now, 'UTC')).totalSessions).toBe(2);
+  });
+});
+
+describe('clinical report display-model contract', () => {
+  const now = Date.parse('2026-09-19T12:00:00Z');
+
+  it('keeps loading and rejected reads distinct from resolved empty, with retry/export states', () => {
+    const base = { clients: [client()], sessions: [session()], cohortFilter: 'real' as const, range: '30d' as const, nowMs: now, timeZone: 'UTC' };
+    const loading = buildClinicalReportViewModel({ ...base, loadState: 'loading' });
+    expect(loading.presentation).toBe('loading');
+    expect(loading.analytics.totalSessions).toBe(0);
+    expect(loading.exportDisabled).toBe(true);
+    expect(loading.retryVisible).toBe(false);
+
+    const rejected = buildClinicalReportViewModel({ ...base, loadState: 'error' });
+    expect(rejected.presentation).toBe('error');
+    expect(rejected.analytics.totalSessions).toBe(0);
+    expect(rejected.exportDisabled).toBe(true);
+    expect(rejected.retryVisible).toBe(true);
+
+    const retry = buildClinicalReportViewModel({ ...base, loadState: 'loading', exportState: 'idle' });
+    expect(retry.presentation).toBe('loading');
+    const empty = buildClinicalReportViewModel({ ...base, sessions: [], loadState: 'ready' });
+    expect(empty.presentation).toBe('empty');
+    expect(empty.exportDisabled).toBe(false);
+  });
+
+  it('models partial/full data, selected cohort/range, Demo labeling, and export failure', () => {
+    const sampleClient = client({ id: 'sample', name: 'Sample Patient', isDemo: true });
+    const old = session({ id: 'old', timestamp: now - 60 * 86_400_000 });
+    const demo = session({ id: 'demo', patientId: 'sample', isDemo: true });
+    const recent = session({ id: 'recent', device: undefined, timeInZonePercent: 0 });
+    const real30 = buildClinicalReportViewModel({
+      clients: [client(), sampleClient], sessions: [old, demo, recent], cohortFilter: 'real',
+      range: '30d', loadState: 'ready', nowMs: now, timeZone: 'UTC', exportState: 'error',
+    });
+    expect(real30.presentation).toBe('data');
+    expect(real30.filteredClients.map(item => item.id)).toEqual(['patient-1']);
+    expect(real30.analytics.totalSessions).toBe(1);
+    expect(real30.analytics.demoSessionCount).toBe(0);
+    expect(real30.analytics.averageInZonePercent.value).toBe(0);
+    expect(real30.exportError).toBe('The PDF could not be created. Please try again.');
+    expect(real30.exportDisabled).toBe(false);
+
+    const all90 = buildClinicalReportViewModel({
+      clients: [client(), sampleClient], sessions: [old, demo, recent], cohortFilter: 'all',
+      range: '90d', loadState: 'ready', nowMs: now, timeZone: 'UTC', exportState: 'exporting',
+    });
+    expect(all90.analytics.totalSessions).toBe(2);
+    expect(all90.analytics.demoSessionCount).toBe(1);
+    expect(all90.analytics.patientRows.find(row => row.client.id === 'sample')?.demoSessionCount).toBe(1);
+    expect(all90.exportDisabled).toBe(true);
   });
 });
