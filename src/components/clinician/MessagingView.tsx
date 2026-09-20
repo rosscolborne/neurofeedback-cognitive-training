@@ -5,12 +5,18 @@ import { messageRepository, type MessagePageCursor, type MessageRepository, type
 import { compareMessagesAscending, formatMessageTime, type ProductionMessage, type ProductionMessageThread } from '../../services/messageMappers';
 import { getMessageSendViewState } from '../messaging/messageUiState';
 
+export interface MessagingParticipant {
+  patientId: string;
+  name: string;
+}
+
 interface MessagingViewProps {
   /** Legacy metadata only. Canonical messages are always loaded from the repository. */
   threads?: MessageThread[];
   selectedClientId?: string;
   /** Retained until central App/ClinicianShell wiring removes the legacy callback. */
   onSendMessage?: (clientId: string, text: string) => void | Promise<void>;
+  participants?: MessagingParticipant[];
   repository?: MessageRepository;
 }
 
@@ -23,7 +29,7 @@ const QUICK_TEMPLATES = [
 type SendState = 'idle' | 'sending' | 'failed';
 
 export const MessagingView: React.FC<MessagingViewProps> = ({
-  threads = [], selectedClientId, repository = messageRepository,
+  threads = [], participants = [], selectedClientId, repository = messageRepository,
 }) => {
   const [threadSummaries, setThreadSummaries] = useState<ProductionMessageThread[]>([]);
   const [activePatientId, setActivePatientId] = useState<string | null>(selectedClientId ?? null);
@@ -74,16 +80,18 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
   useEffect(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
 
   const legacyMetadata = useMemo(() => new Map(threads.map((thread) => [thread.clientId, thread])), [threads]);
+  const participantNames = useMemo(() => new Map(participants.map((participant) => [participant.patientId, participant.name])), [participants]);
   const conversationIds = useMemo(() => {
     const ids = new Set(threadSummaries.map((thread) => thread.patientId));
+    participants.forEach((participant) => ids.add(participant.patientId));
     if (selectedClientId) ids.add(selectedClientId);
     return [...ids];
-  }, [threadSummaries, selectedClientId]);
+  }, [participants, threadSummaries, selectedClientId]);
   const filteredConversationIds = conversationIds.filter((patientId) => {
-    const name = legacyMetadata.get(patientId)?.clientName || 'Patient';
+    const name = participantNames.get(patientId) || legacyMetadata.get(patientId)?.clientName || 'Patient';
     return name.toLowerCase().includes(searchQuery.trim().toLowerCase());
   });
-  const activeName = activePatientId ? legacyMetadata.get(activePatientId)?.clientName || 'Patient' : null;
+  const activeName = activePatientId ? participantNames.get(activePatientId) || legacyMetadata.get(activePatientId)?.clientName || 'Patient' : null;
   const sendView = getMessageSendViewState(inputText, sendState === 'sending', failedAttempt, sendError);
   const visibleMessages = activePatientId ? messages.filter((message) => message.patientId === activePatientId) : [];
 
@@ -145,7 +153,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
             const summary = threadSummaries.find((thread) => thread.patientId === patientId);
             return (
               <button key={patientId} type="button" onClick={() => setActivePatientId(patientId)} style={{ width: '100%', padding: '12px 16px', border: 0, borderBottom: '1px solid var(--border-subtle)', background: patientId === activePatientId ? 'var(--surface-patient-base)' : '#fff', textAlign: 'left', cursor: 'pointer' }}>
-                <strong style={{ display: 'block', fontSize: 13 }}>{metadata?.clientName || 'Patient'}</strong>
+                <strong style={{ display: 'block', fontSize: 13 }}>{participantNames.get(patientId) || metadata?.clientName || 'Patient'}</strong>
                 <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{summary?.lastMessageText || 'No messages yet'}</span>
                 {summary?.lastMessageAt && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{formatMessageTime(summary.lastMessageAt)}</span>}
               </button>

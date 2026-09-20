@@ -243,6 +243,7 @@ export const messageRepository: MessageRepository = {
         clinicianId: relationship.clinicianId,
         participantIds: [relationship.patientId, relationship.clinicianId],
         lastMessageText: text,
+        lastMessageId: prepared.id,
         lastSenderId: relationship.senderId,
         lastMessageAt: timestamp,
         updatedAt: timestamp,

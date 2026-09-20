@@ -59,6 +59,7 @@ describe('production message repository', () => {
     const sent = await messageRepository.sendPreparedMessage(attempt);
     expect(sent).toMatchObject({ id: 'generated-1', text: 'Hello', senderRole: 'clinician', createdAt: null });
     expect(set).toHaveBeenCalledTimes(2);
+    expect(set.mock.calls[0][1]).toMatchObject({ lastMessageId: 'generated-1' });
     expect(set.mock.calls[1][1]).toMatchObject({ id: 'generated-1', createdAt: { server: true }, senderId: 'clinician-1' });
   });
 

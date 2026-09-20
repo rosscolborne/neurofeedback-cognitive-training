@@ -18,6 +18,7 @@ export interface ProductionMessageThread {
   patientId: string;
   clinicianId: string;
   lastMessageText: string | null;
+  lastMessageId: string | null;
   lastSenderId: string | null;
   lastMessageAt: Date | null;
   createdAt: Date | null;
@@ -99,6 +100,7 @@ export function mapThreadDocument(
     patientId,
     clinicianId,
     lastMessageText,
+    lastMessageId: typeof data.lastMessageId === 'string' && data.lastMessageId.trim() ? data.lastMessageId : null,
     lastSenderId,
     lastMessageAt: mapMessageDate(data.lastMessageAt),
     createdAt: mapMessageDate(data.createdAt),
