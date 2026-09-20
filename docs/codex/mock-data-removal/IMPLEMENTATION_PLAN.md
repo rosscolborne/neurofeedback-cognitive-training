@@ -442,7 +442,7 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
@@ -473,8 +473,10 @@ independent workstream immediately when a slot opens.
   branding validation/contrast safety, elimination of new global cache writes,
   primary-credential selection, atomic Firestore writes, server-owned branding
   creation metadata, complete onboarding detection, and stronger state tests.
-  Owned fixes completed with 18/18 focused and 157/157 full tests passing; re-review
-  is pending. Shared rules/app/clinic-link changes remain central.
+  Owned fixes completed with 18/18 focused and 157/157 full tests passing. Re-review
+  found residual credential-preservation, actual-surface contrast, cache-failure,
+  timestamp-shape, and test-depth issues; those fixes are assigned to the original
+  implementation agent. Shared rules/app/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
@@ -763,6 +765,12 @@ independent workstream immediately when a slot opens.
   C1's measured average-band provenance dependency is now satisfied.
 - **2026-09-19:** M1 started from the clean post-T1 integration branch after R1
   relationship rules/contracts were reviewed and merged.
+- **2026-09-19:** S1 re-review found residual owned-scope issues in verified primary
+  credential preservation, contrast checks against actual product surfaces,
+  best-effort cache access, server timestamp preservation, and interaction/state
+  test depth. S1 returned to IN PROGRESS and the findings were assigned to its
+  original implementation agent; shared rules, app hydration, and clinic-link
+  propagation remain centrally reserved.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
