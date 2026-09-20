@@ -58,10 +58,14 @@ export function createCancellationRequestId(): string {
 }
 
 export class AppointmentRepository {
-  async list(role: AppointmentListRole): Promise<AppointmentRecord[]> {
+  async list(role: AppointmentListRole, currentPatientIds: string[] = []): Promise<AppointmentRecord[]> {
     const uid = signedInUserId();
+    const patientIds = [...new Set(currentPatientIds.filter((id) => typeof id === 'string' && id.trim() === id && id.length > 0))];
     const constraints = role === 'clinician'
-      ? [[where('clinicianId', '==', uid)]]
+      ? patientIds.flatMap((patientId) => [
+          [where('clinicianId', '==', uid), where('patientId', '==', patientId)],
+          [where('clinicianId', '==', uid), where('clientId', '==', patientId), where('patientId', '==', null)],
+        ])
       : [
           [where('patientId', '==', uid)],
           // Canonical ownership takes precedence. Firestore does not match a
@@ -69,6 +73,7 @@ export class AppointmentRepository {
           // `patientId: null` backfill before patient-side enumeration.
           [where('clientId', '==', uid), where('patientId', '==', null)],
         ];
+    if (constraints.length === 0) return [];
     const snapshots = await Promise.all(constraints.map((filters) => getDocs(query(collection(db, 'appointments'), ...filters))));
     const documents = new Map<string, { id: string; data: () => unknown }>();
     for (const snapshot of snapshots) for (const item of snapshot.docs) documents.set(item.id, item);

@@ -35,15 +35,21 @@ describe('production appointment repository', () => {
   it('queries only the authenticated participant and returns stable ordering', async () => {
     firestore.getDocs.mockResolvedValueOnce({ docs: [
       document('later', canonical({ startsAt: 200 })), document('same-b', canonical({ startsAt: 100 })), document('same-a', canonical({ startsAt: 100 })),
-    ] });
-    expect((await repository.list('clinician')).map((item) => item.id)).toEqual(['same-a', 'same-b', 'later']);
+    ] }).mockResolvedValueOnce({ docs: [] });
+    expect((await repository.list('clinician', ['patient-1'])).map((item) => item.id)).toEqual(['same-a', 'same-b', 'later']);
     expect(firestore.getDocs.mock.calls[0][0].constraints).toContainEqual({ field: 'clinicianId', op: '==', value: 'clinician-1' });
+    expect(firestore.getDocs.mock.calls[0][0].constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
+    expect(firestore.getDocs.mock.calls[1][0].constraints).toEqual([
+      { field: 'clinicianId', op: '==', value: 'clinician-1' },
+      { field: 'clientId', op: '==', value: 'patient-1' },
+      { field: 'patientId', op: '==', value: null },
+    ]);
 
     state.auth.currentUser = { uid: 'patient-1' };
     firestore.getDocs.mockResolvedValueOnce({ docs: [] }).mockResolvedValueOnce({ docs: [] });
     await repository.list('patient');
-    expect(firestore.getDocs.mock.calls[1][0].constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
-    expect(firestore.getDocs.mock.calls[2][0].constraints).toEqual([
+    expect(firestore.getDocs.mock.calls[2][0].constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
+    expect(firestore.getDocs.mock.calls[3][0].constraints).toEqual([
       { field: 'clientId', op: '==', value: 'patient-1' },
       { field: 'patientId', op: '==', value: null },
     ]);
@@ -51,12 +57,12 @@ describe('production appointment repository', () => {
 
   it('propagates query failures instead of presenting an empty calendar', async () => {
     firestore.getDocs.mockRejectedValueOnce(new Error('offline'));
-    await expect(repository.list('clinician')).rejects.toThrow('offline');
+    await expect(repository.list('clinician', ['patient-1'])).rejects.toThrow('offline');
   });
 
   it('reports malformed persisted data rather than disguising it as an empty calendar', async () => {
-    firestore.getDocs.mockResolvedValueOnce({ docs: [document('broken', { clinicianId: 'clinician-1' })] });
-    await expect(repository.list('clinician')).rejects.toThrow(/broken.*invalid persisted data/);
+    firestore.getDocs.mockResolvedValueOnce({ docs: [document('broken', { clinicianId: 'clinician-1' })] }).mockResolvedValueOnce({ docs: [] });
+    await expect(repository.list('clinician', ['patient-1'])).rejects.toThrow(/broken.*invalid persisted data/);
   });
 
   it('creates a linked-patient appointment with normalized time and server-owned metadata', async () => {
