@@ -6,6 +6,10 @@ import { Capacitor } from '@capacitor/core';
 import { AthenaWasmDecoder, BleTransport } from '@elata-biosciences/eeg-web-ble';
 import { initEegWasm, type HeadbandFrameV1 } from '@elata-biosciences/eeg-web';
 import eegWasmUrl from '@elata-biosciences/eeg-web/wasm/eeg_wasm_bg.wasm?url';
+import {
+  evaluateProtocolFeedback,
+  type ProtocolRuntimeConfig,
+} from './adaptiveEngine';
 
 // Muse's EEG data service contains the 273e0001–273e0006 control and signal
 // characteristics. It is also the service advertised during device discovery.
@@ -37,6 +41,8 @@ export class EEGEngine {
   public deviceName: string | null = null;
   public batteryLevel: number | null = null;
   public packetsReceivedCount = 0;
+  private sourceFrameSequence = 0;
+  private lastSourceFrameAtMs = 0;
   
   // Real-time raw signal storage buffers (256 samples = 1 sec at 256Hz)
   public rawBuffers: Record<keyof MuseChannelQuality, number[]> = {
@@ -74,12 +80,13 @@ export class EEGEngine {
   public latestFftSpectrum: Array<{ freq: number; power: number }> = [];
   public latestPeakAlphaHz = 10.0;
   private latestServerBandAvailability: Partial<Record<keyof BandPowers, boolean>> = {};
+  private latestBandPowerProvenance: { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null = null;
   private latestServerRatios: Record<string, number> = {};
   private latestMetricCalibration: { status: 'off' | 'collecting' | 'active'; progress: number; required: number } = { status: 'off', progress: 0, required: 24 };
   private latestRawMetrics: Record<string, number> = {};
   private latestBaselineRelativeMetrics: Record<string, number> = {};
   private latestInterhemisphericCoherence: number | null = null;
-  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null } | null = null;
+  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null; available?: boolean } | null = null;
   private localFitStableSince: number | null = null;
 
   private gattServer: any = null;
@@ -142,6 +149,12 @@ export class EEGEngine {
     this.syncProtocolToBrainflowSession();
   }
 
+  public configureProtocol(config: ProtocolRuntimeConfig) {
+    this.currentProtocol = config.protocol;
+    this.targetThreshold = config.initialThreshold;
+    this.syncProtocolToBrainflowSession();
+  }
+
   public setThreshold(threshold: number) {
     this.targetThreshold = threshold;
     this.syncProtocolToBrainflowSession();
@@ -153,6 +166,28 @@ export class EEGEngine {
 
   public getProtocol(): ProtocolType {
     return this.currentProtocol;
+  }
+
+  public evaluateFeedbackForBands(
+    bands: BandPowers,
+    availability: Partial<Record<keyof BandPowers, boolean>>,
+  ) {
+    return evaluateProtocolFeedback(this.currentProtocol, this.targetThreshold, bands, availability);
+  }
+
+  public getBandPowerProvenance(): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null {
+    if (this.isDemoMode || !this.isHardwareConnected || !this.latestServerBands || !this.latestBandPowerProvenance) return null;
+    return { ...this.latestBandPowerProvenance };
+  }
+
+  /** Monotonic evidence from the acquisition transport, never from the UI publish timer. */
+  public getHardwareSourceState(): { sequence: number; lastFrameAtMs: number } {
+    return { sequence: this.sourceFrameSequence, lastFrameAtMs: this.lastSourceFrameAtMs };
+  }
+
+  private markSourceFrameReceived(): void {
+    this.sourceFrameSequence += 1;
+    this.lastSourceFrameAtMs = Date.now();
   }
 
   public getLatestBands(): BandPowers | null {
@@ -399,6 +434,7 @@ export class EEGEngine {
               const output = athenaDecoder.decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
               const channels = output.eeg_channel_count;
               const samples = output.eeg_samples;
+              if (samples.length > 0) this.markSourceFrameReceived();
               for (let index = 0; index + channels <= samples.length && channels >= 4; index += channels) {
                 this.rawBuffers.tp9.push(samples[index]);
                 this.rawBuffers.af7.push(samples[index + 1]);
@@ -674,6 +710,7 @@ export class EEGEngine {
 
   private ingestDecodedMuseFrame(frame: HeadbandFrameV1) {
     const eeg = frame.eegRaw ?? frame.eeg;
+    let ingestedUsableSamples = false;
     const channelIndices: Record<keyof MuseChannelQuality, number> = {
       tp9: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'tp9'),
       af7: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'af7'),
@@ -690,10 +727,12 @@ export class EEGEngine {
 
       const buffer = this.rawBuffers[channel];
       buffer.push(...samples);
+      ingestedUsableSamples = true;
       if (buffer.length > this.maxBufferSize) {
         this.rawBuffers[channel] = buffer.slice(buffer.length - this.maxBufferSize);
       }
     }
+    if (ingestedUsableSamples) this.markSourceFrameReceived();
   }
 
   /**
@@ -731,6 +770,7 @@ export class EEGEngine {
         (frame) => {
           this.packetsReceivedCount++;
           if (frame.samples && frame.samples.length > 0) {
+            this.markSourceFrameReceived();
             const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
             frame.samples.forEach((row: number[]) => {
               channels.forEach((ch, idx) => {
@@ -763,7 +803,14 @@ export class EEGEngine {
                 beta: typeof absoluteBands.beta === 'number',
                 gamma: typeof absoluteBands.gamma === 'number',
               };
+              this.latestBandPowerProvenance = Object.values(this.latestServerBandAvailability).every(Boolean)
+                ? { algorithm: 'welch-psd', version: 'brainflow-service-v0.5', source: 'brainflow' }
+                : null;
               this.latestServerRatios = frame.features.bandPowers?.ratios ?? {};
+            } else {
+              this.latestServerBands = null;
+              this.latestServerBandAvailability = {};
+              this.latestBandPowerProvenance = null;
             }
 
             this.latestBrainFlowScores = {
@@ -845,9 +892,11 @@ export class EEGEngine {
     this.latestTrainingMetric = null;
     this.latestServerBands = null;
     this.latestServerBandAvailability = {};
+    this.latestBandPowerProvenance = null;
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
+    this.lastSourceFrameAtMs = 0;
     this.localFitStableSince = null;
     this.serverFitState = null;
     this.resetState();
@@ -909,6 +958,7 @@ export class EEGEngine {
   private parseChannelPacket(channel: keyof MuseChannelQuality, dataView: DataView) {
     const samples = EEGEngine.decodeChannelPacket(dataView);
     if (samples.length === 0) return;
+    this.markSourceFrameReceived();
 
     const buffer = this.rawBuffers[channel];
     buffer.push(...samples);
@@ -1007,6 +1057,7 @@ export class EEGEngine {
         beta: true,
         gamma: true,
       };
+      this.latestBandPowerProvenance = { algorithm: 'browser-band-dft', version: '1', source: 'browser-dsp' };
 
       const ratio = (numerator: number, denominator: number) => numerator / Math.max(1e-9, denominator);
       const thetaBeta = ratio(bands.theta, bands.beta);
@@ -1295,38 +1346,14 @@ export class EEGEngine {
     this.latestBaselineRelativeMetrics = {};
   }
 
-  private calculateBrowserFeedback(bands: BandPowers, thetaBeta: number) {
-    let metric = thetaBeta;
-    let inZone = false;
-    let zoneScore = 0;
-    switch (this.currentProtocol) {
-      case 'theta-beta-ratio':
-        inZone = metric <= this.targetThreshold;
-        zoneScore = 1 - (metric - this.targetThreshold) / 1.5;
-        break;
-      case 'smr-enhancement':
-        metric = bands.smr;
-        inZone = metric >= this.targetThreshold;
-        zoneScore = (metric - this.targetThreshold + 1.5) / 3;
-        break;
-      case 'alpha-enhancement':
-      case 'individualized-upper-alpha':
-        metric = bands.alpha;
-        inZone = metric >= this.targetThreshold;
-        zoneScore = (metric - this.targetThreshold + 2) / 4;
-        break;
-      case 'alpha-theta-crossover':
-        metric = bands.theta / Math.max(1e-9, bands.alpha);
-        inZone = metric >= this.targetThreshold;
-        zoneScore = (metric - this.targetThreshold + 0.5) / 1.5;
-        break;
-      case 'beta-downtraining':
-        metric = bands.beta;
-        inZone = metric <= this.targetThreshold;
-        zoneScore = 1 - (metric - this.targetThreshold) / 5;
-        break;
-    }
-    return { ratio: thetaBeta, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)) };
+  private calculateBrowserFeedback(
+    bands: BandPowers,
+    _thetaBeta: number,
+    availability: Partial<Record<keyof BandPowers, boolean>> = {
+      delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true,
+    },
+  ) {
+    return this.evaluateFeedbackForBands(bands, availability);
   }
 
   /**
@@ -1441,17 +1468,11 @@ export class EEGEngine {
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
             const abs = f.bandPowers.absolute;
-            const smrPower = typeof abs.smr === 'number'
-              ? abs.smr
-              : typeof abs.alpha === 'number' && typeof abs.beta === 'number'
-                ? abs.alpha * 0.45 + abs.beta * 0.55
-                : 0;
-
             this.latestServerBands = {
               delta: abs.delta ?? 0,
               theta: abs.theta ?? 0,
               alpha: abs.alpha ?? 0,
-              smr: smrPower,
+              smr: abs.smr ?? 0,
               beta: abs.beta ?? 0,
               gamma: abs.gamma ?? 0,
             };
@@ -1459,11 +1480,18 @@ export class EEGEngine {
               delta: typeof abs.delta === 'number',
               theta: typeof abs.theta === 'number',
               alpha: typeof abs.alpha === 'number',
-              smr: true,
+              smr: typeof abs.smr === 'number',
               beta: typeof abs.beta === 'number',
               gamma: typeof abs.gamma === 'number',
             };
+            this.latestBandPowerProvenance = Object.values(this.latestServerBandAvailability).every(Boolean)
+              ? { algorithm: 'welch-psd', version: 'brainflow-service-v0.5', source: 'brainflow' }
+              : null;
             this.latestServerRatios = f.bandPowers.ratios ?? {};
+          } else {
+            this.latestServerBands = null;
+            this.latestServerBandAvailability = {};
+            this.latestBandPowerProvenance = null;
           }
         }
 
@@ -1495,9 +1523,11 @@ export class EEGEngine {
     this.latestTrainingMetric = null;
     this.latestServerBands = null;
     this.latestServerBandAvailability = {};
+    this.latestBandPowerProvenance = null;
     this.latestServerRatios = {};
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
+    this.lastSourceFrameAtMs = 0;
     if (this.hostedAnalysisFailures < 3 || !this.fitSessionId) return;
 
     const unavailableSessionId = this.fitSessionId;
@@ -1561,13 +1591,6 @@ export class EEGEngine {
         bandAvailability = { ...this.latestServerBandAvailability };
       } else {
         bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
-      }
-
-      if (!bandAvailability.smr || bands.smr === 0) {
-        if (bands.alpha > 0 || bands.beta > 0) {
-          bands.smr = Number(((bands.alpha * 0.45) + (bands.beta * 0.55)).toFixed(1));
-          bandAvailability.smr = true;
-        }
       }
 
       if (brainFlowScores?.mindfulnessScore != null && brainFlowScores.mindfulnessScore >= 98) {
@@ -1687,7 +1710,7 @@ export class EEGEngine {
         valence: ratio(bands.alpha, bands.theta + bands.beta),
         betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
       };
-      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
+      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta, bandAvailability);
       brainFlowScores = {
         mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
         restfulnessScore: Math.round(this.userCalm),
@@ -1718,16 +1741,18 @@ export class EEGEngine {
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
     const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
-    let inZoneAvailable = trainingFeedback?.inZone != null;
+    const localFeedback = this.evaluateFeedbackForBands(bands, bandAvailability);
+    if (!localFeedback.available) trainingFeedback = localFeedback;
+    let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
     let inZone = trainingFeedback?.inZone ?? false;
     let zoneScore = trainingFeedback?.zoneScore ?? 0;
 
     // Fallback: If server has not yet returned inZone for this window, compute from live bands & protocol
     if (!inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
-      const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio);
+      const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
       inZone = fb.inZone;
       zoneScore = fb.zoneScore;
-      inZoneAvailable = true;
+      inZoneAvailable = fb.available;
     }
 
     // Hardware values come from the server's cross-spectral AF7↔AF8 /

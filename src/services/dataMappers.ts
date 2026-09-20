@@ -1,9 +1,10 @@
 import type {
   ClientProfile,
+  PatientInvitation,
   PersistedTimestamp,
   SessionRecord,
 } from '../types';
-import { getProtocolTypeForTemplate } from './protocols';
+import { inferProtocolTypeForTemplate } from './protocols';
 
 const LEGACY_EXPERIENCE_RENAMES: Record<string, string> = {
   'spatial-audio': 'generative-music',
@@ -51,7 +52,7 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
   // Treat the saved custom configuration as authoritative when reading those
   // records, matching the protocol catalog's existing override semantics.
   const assignedProtocol = raw.customProtocolConfig
-    ? getProtocolTypeForTemplate(raw.customProtocolConfig, raw.assignedProtocol)
+    ? inferProtocolTypeForTemplate(raw.customProtocolConfig) ?? raw.assignedProtocol
     : raw.assignedProtocol;
 
   return {
@@ -63,6 +64,40 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
     badges: Array.isArray(raw.badges) ? raw.badges : [],
     schemaVersion: raw.schemaVersion ?? 1,
   };
+}
+
+/** Return the canonical owner while retaining legacy link fields on the profile itself. */
+export function getPatientClinicianId(profile: Pick<ClientProfile, 'clinicianId' | 'linkedClinicianCode'>): string | undefined {
+  return profile.clinicianId || profile.linkedClinicianCode;
+}
+
+export function isPatientInvitationExpired(
+  invitation: Pick<PatientInvitation, 'expiresAt'>,
+  now = Date.now()
+): boolean {
+  const expiresAt = timestampToMillis(invitation.expiresAt);
+  return expiresAt != null && expiresAt <= now;
+}
+
+/** Read current and pre-expiry invitation documents without rewriting them. */
+export function readPatientInvitation(
+  data: unknown,
+  documentId: string,
+  now = Date.now()
+): PatientInvitation {
+  const raw = { ...(data as Record<string, unknown>) } as unknown as PatientInvitation;
+  const invitation: PatientInvitation = {
+    ...raw,
+    id: raw.id || documentId,
+    clinicId: typeof raw.clinicId === 'string' && raw.clinicId.trim() ? raw.clinicId.trim() : undefined,
+    clinicianName: raw.clinicianName ?? '',
+    patientName: raw.patientName ?? '',
+    schemaVersion: raw.schemaVersion ?? 1,
+  };
+  if (invitation.status === 'pending' && isPatientInvitationExpired(invitation, now)) {
+    return { ...invitation, status: 'expired' };
+  }
+  return invitation;
 }
 
 /** Normalize Firestore Timestamp fields while retaining legacy numeric timestamps for the UI. */
@@ -111,11 +146,15 @@ export function applySessionCompletionToClient(
   const client: ClientProfile = {
     ...current,
     badges: [...(current.badges ?? [])],
-    skylineBiomesUnlocked: [...(current.skylineBiomesUnlocked ?? [])],
-    tidalGardenState: {
-      ...current.tidalGardenState,
-      plantsUnlocked: [...(current.tidalGardenState?.plantsUnlocked ?? [])],
-    },
+    ...(current.skylineBiomesUnlocked
+      ? { skylineBiomesUnlocked: [...current.skylineBiomesUnlocked] }
+      : {}),
+    ...(current.tidalGardenState
+      ? { tidalGardenState: {
+          ...current.tidalGardenState,
+          plantsUnlocked: [...current.tidalGardenState.plantsUnlocked],
+        } }
+      : {}),
     recentCompletedSessionIds: [
       session.id,
       ...(current.recentCompletedSessionIds ?? []).filter((id) => id !== session.id),
@@ -124,14 +163,12 @@ export function applySessionCompletionToClient(
 
   client.completedSessionsCount = (client.completedSessionsCount || 0) + 1;
   client.lastSessionDate = new Date(session.timestamp).toISOString();
-  client.currentStreak = (client.currentStreak || 0) + 1;
 
   const addBadge = (badge: string) => {
     if (!client.badges.includes(badge)) client.badges.push(badge);
   };
 
   if (client.completedSessionsCount >= 1) addBadge('first-light');
-  if (client.currentStreak >= 7) addBadge('steady-state');
   if (session.protocol === 'theta-beta-ratio' && session.timeInZonePercent >= 80) addBadge('deep-focus');
   if (
     session.protocol === 'alpha-enhancement' &&
@@ -139,17 +176,7 @@ export function applySessionCompletionToClient(
     session.timeInZonePercent >= 60
   ) addBadge('still-waters');
 
-  const prescription = Math.max(1, client.prescribedSessionsPerWeek || 0);
-  const consistency = Math.min(100, (client.currentStreak / prescription) * 100);
-  const newScore = Math.round(
-    session.timeInZonePercent * 0.4 +
-      consistency * 0.3 +
-      session.peakFocusScore * 0.2 +
-      (session.averageCoherence ?? 0) * 0.1
-  );
-  client.brainCapacityScore = Math.max(30, Math.min(99, newScore));
-
-  if (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement') {
+  if (client.tidalGardenState && (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement')) {
     client.tidalGardenState.growthPoints += Math.round(session.timeInZonePercent * 1.5);
     if (client.tidalGardenState.growthPoints > 300 && client.tidalGardenState.stage < 2) {
       client.tidalGardenState.stage = 2;
@@ -163,6 +190,6 @@ export function applySessionCompletionToClient(
     if (client.tidalGardenState.stage >= 3) addBadge('garden-keeper');
   }
 
-  if (client.skylineBiomesUnlocked.length >= 5) addBadge('skyline-explorer');
+  if ((client.skylineBiomesUnlocked?.length ?? 0) >= 5) addBadge('skyline-explorer');
   return client;
 }

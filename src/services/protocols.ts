@@ -28,6 +28,14 @@ export function getProtocolTypeForTemplate(
   template: ProtocolTemplate,
   fallback: ProtocolType = 'theta-beta-ratio'
 ): ProtocolType {
+  return inferProtocolTypeForTemplate(template) ?? fallback;
+}
+
+/**
+ * Infer only values supported by persisted evidence. Unlike the UI-oriented
+ * resolver above, this never invents a default for incomplete legacy records.
+ */
+export function inferProtocolTypeForTemplate(template: ProtocolTemplate): ProtocolType | undefined {
   if (template.protocolType) return template.protocolType;
 
   const identity = `${template.id} ${template.name} ${template.clinicalName}`.toLowerCase();
@@ -47,5 +55,5 @@ export function getProtocolTypeForTemplate(
   if (identity.includes('lubar') || identity.includes('theta/beta') || identity.includes('theta-beta')) {
     return 'theta-beta-ratio';
   }
-  return fallback;
+  return undefined;
 }

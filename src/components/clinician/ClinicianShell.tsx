@@ -1,17 +1,12 @@
 import React, { useState } from 'react';
-import {
-  CalendarAppointment,
-  ClientProfile,
-  ClinicBrandConfig,
-  MessageThread,
-  PatientInvitation,
-} from '../../types';
+import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } from '../../types';
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
 import { MessagingView } from './MessagingView';
 import { ClinicalCalendarView } from './ClinicalCalendarView';
 import { ClinicalReportsView } from './ClinicalReportsView';
 import { ClinicSettingsView } from './ClinicSettingsView';
+import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { BrandLogo } from '../brand/BrandLogo';
 import {
   Users,
@@ -20,27 +15,22 @@ import {
   BarChart3,
   Settings,
   Sliders,
-  ShieldCheck,
   LogOut,
 } from 'lucide-react';
 
 interface ClinicianShellProps {
   brand: ClinicBrandConfig;
   clinicianLabel?: string;
+  isDemoWorkspace?: boolean;
   clients: ClientProfile[];
   patientInvitations: PatientInvitation[];
-  messages: MessageThread[];
-  appointments: CalendarAppointment[];
-  onUpdateClient: (updated: ClientProfile) => void;
-  onDeleteClient?: (clientId: string) => void;
+  onUpdateClient: (updated: ClientProfile) => Promise<void>;
+  onAppendBrainMap: (patientId: string, map: QEEGBrainMap) => Promise<QEEGBrainMap>;
+  onDeleteClient?: (clientId: string) => void | Promise<void>;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelPatientInvitation: (invitationId: string) => Promise<void>;
-  onSendMessage: (clientId: string, text: string) => void;
-  onSaveAppointment: (appt: CalendarAppointment) => void;
-  onDeleteAppointment: (id: string) => void;
-  onClearDemoData: () => void;
-  onResetDemoData: () => void;
   onOpenRebrand: () => void;
+  onClinicSettingsSaved?: (snapshot: ClinicSettingsSnapshot) => void | Promise<void>;
   onLogout: () => Promise<void>;
 }
 
@@ -54,30 +44,24 @@ interface ClinicianNavItem {
 export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   brand,
   clinicianLabel,
+  isDemoWorkspace = false,
   clients,
   patientInvitations,
-  messages,
-  appointments,
   onUpdateClient,
+  onAppendBrainMap,
   onDeleteClient,
   onAddClient,
   onCancelPatientInvitation,
-  onSendMessage,
-  onSaveAppointment,
-  onDeleteAppointment,
-  onClearDemoData,
-  onResetDemoData,
   onOpenRebrand,
+  onClinicSettingsSaved,
   onLogout,
 }) => {
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
 
-  const totalUnread = messages.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
-
   const navItems: ClinicianNavItem[] = [
     { id: 'clients', label: 'Patients', icon: Users },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnread },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -96,6 +80,11 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
   return (
     <div className="clinician-shell-container">
+      {isDemoWorkspace && (
+        <div role="status" style={{ position: 'fixed', zIndex: 1000, top: 0, left: 0, right: 0, padding: '6px 12px', textAlign: 'center', background: '#7C2D12', color: '#FFFFFF', fontSize: '12px', fontWeight: 700, letterSpacing: '0.02em' }}>
+          Sample clinician workspace · fictional demonstration data · isolated from production accounts
+        </div>
+      )}
       {/* Mobile Top Header (iPhone only) */}
       <header className="clinician-mobile-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -253,10 +242,6 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             <Sliders size={16} /> Clinic Theme Settings
           </button>
 
-          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ShieldCheck size={13} color="var(--status-active)" />
-            <span>HIPAA Compliant Security</span>
-          </div>
         </div>
       </aside>
 
@@ -285,10 +270,11 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             client={selectedClient}
             brand={brand}
             onBack={() => setSelectedClient(null)}
-            onUpdateClient={(c) => {
-              onUpdateClient(c);
+            onUpdateClient={async (c) => {
+              await onUpdateClient(c);
               setSelectedClient(c);
             }}
+            onAppendBrainMap={(map) => onAppendBrainMap(selectedClient.id, map)}
             onSendMessage={() => {
               setActiveNav('messages');
             }}
@@ -297,20 +283,15 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
         {activeNav === 'messages' && (
           <MessagingView
-            threads={messages}
+            participants={clients.map((client) => ({ patientId: client.id, name: client.name }))}
             selectedClientId={selectedClient?.id}
-            onSendMessage={onSendMessage}
           />
         )}
 
         {activeNav === 'calendar' && (
           <ClinicalCalendarView
             clients={clients}
-            appointments={appointments}
-            onSaveAppointment={onSaveAppointment}
-            onDeleteAppointment={onDeleteAppointment}
-            onSelectClient={handleSelectClient}
-            onOpenMessages={handleOpenMessagesForClient}
+            preSelectedClientId={selectedClient?.id}
           />
         )}
 
@@ -326,8 +307,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           <ClinicSettingsView
             brand={brand}
             onOpenRebrand={onOpenRebrand}
-            onClearDemoData={onClearDemoData}
-            onResetDemoData={onResetDemoData}
+            onSettingsSaved={onClinicSettingsSaved}
           />
         )}
       </main>

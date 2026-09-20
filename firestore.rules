@@ -27,16 +27,61 @@ service cloud.firestore {
           .data.get('practitionerIds', []).hasAny([request.auth.uid]);
     }
 
+    // Atomic onboarding creates the clinician-owned clinic and practitioner in
+    // one batch, so membership must be checked against the post-write clinic.
+    function isClinicMemberAfter(clinicId) {
+      return isAuthenticated() && clinicId != null &&
+        existsAfter(/databases/$(database)/documents/clinics/$(clinicId)) &&
+        getAfter(/databases/$(database)/documents/clinics/$(clinicId))
+          .data.get('practitionerIds', []).hasAny([request.auth.uid]);
+    }
+
+    function isAuthenticatedPractitionerForClinic(clinicId) {
+      return isAuthenticated() && clinicId != null &&
+        exists(/databases/$(database)/documents/practitioners/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/practitioners/$(request.auth.uid))
+          .data.get('userId', null) == request.auth.uid &&
+        get(/databases/$(database)/documents/practitioners/$(request.auth.uid))
+          .data.get('clinicId', null) == clinicId &&
+        isClinicMember(clinicId);
+    }
+
     function patientExists(patientId) {
       return patientId != null &&
         exists(/databases/$(database)/documents/clients/$(patientId));
     }
 
     function isPatientClinician(patientId) {
-      return isAuthenticated() && patientExists(patientId) && (
-        get(/databases/$(database)/documents/clients/$(patientId)).data.get('clinicianId', null) == request.auth.uid ||
-        get(/databases/$(database)/documents/clients/$(patientId)).data.get('linkedClinicianCode', null) == request.auth.uid
-      );
+      return isAuthenticated() && patientExists(patientId) &&
+        isCanonicalPatientClinician(
+          get(/databases/$(database)/documents/clients/$(patientId)).data
+        );
+    }
+
+    function isCurrentPatientClinician(patientId, clinicianId) {
+      return isAuthenticated() && patientExists(patientId) &&
+        isCanonicalPatientClinicianId(
+          get(/databases/$(database)/documents/clients/$(patientId)).data,
+          clinicianId
+        );
+    }
+
+    // Canonical ownership always wins. The legacy field is consulted only when
+    // clinicianId is absent, preventing mixed documents from authorizing twice.
+    function isCanonicalPatientClinician(patient) {
+      return patient.get('clinicianId', null) == request.auth.uid ||
+        (
+          patient.get('clinicianId', null) == null &&
+          patient.get('linkedClinicianCode', null) == request.auth.uid
+        );
+    }
+
+    function isCanonicalPatientClinicianId(patient, clinicianId) {
+      return patient.get('clinicianId', null) == clinicianId ||
+        (
+          patient.get('clinicianId', null) == null &&
+          patient.get('linkedClinicianCode', null) == clinicianId
+        );
     }
 
     function isPatientInClinic(patientId, clinicId) {
@@ -66,16 +111,34 @@ service cloud.firestore {
       function isInvitedPatient() {
         return isAuthenticated() &&
           request.auth.token.email != null &&
-          resource.data.patientEmail == request.auth.token.email;
+          resource.data.patientEmail == request.auth.token.email.lower();
+      }
+
+      function uniquenessReleased() {
+        let claimId = resource.data.get('uniquenessClaimId', null);
+        return claimId == null ||
+          !existsAfter(/databases/$(database)/documents/patientInvitationClaims/$(resource.data.clinicianId)/emails/$(claimId));
       }
 
       allow create: if isClinician() &&
         request.resource.data.id == invitationId &&
         request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.clinicId is string &&
+        isAuthenticatedPractitionerForClinic(request.resource.data.clinicId) &&
         request.resource.data.status == 'pending' &&
         request.resource.data.patientEmail is string &&
         request.resource.data.patientEmail.size() > 3 &&
-        request.resource.data.patientName is string;
+        request.resource.data.patientEmail == request.resource.data.patientEmail.lower() &&
+        request.auth.token.email != null &&
+        request.resource.data.patientEmail != request.auth.token.email.lower() &&
+        request.resource.data.patientName is string &&
+        request.resource.data.uniquenessClaimId is string &&
+        request.resource.data.uniquenessClaimId == request.resource.data.patientEmail &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
+        getAfter(/databases/$(database)/documents/patientInvitationClaims/$(request.auth.uid)/emails/$(request.resource.data.uniquenessClaimId))
+          .data.get('invitationId', null) == invitationId;
       allow read: if isAuthenticated() && (
         resource.data.clinicianId == request.auth.uid || isInvitedPatient()
       );
@@ -85,10 +148,13 @@ service cloud.firestore {
           resource.data.status == 'pending' &&
           request.resource.data.status == 'cancelled' &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'updatedAt'])
+            .hasOnly(['status', 'updatedAt']) &&
+          uniquenessReleased()
         ) || (
           isInvitedPatient() &&
           resource.data.status == 'pending' &&
+          resource.data.clinicianId != request.auth.uid &&
+          resource.data.get('expiresAt', request.time + duration.value(1, 's')) > request.time &&
           request.resource.data.status == 'accepted' &&
           request.resource.data.patientId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys()
@@ -96,51 +162,241 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
             .data.get('clinicianId', null) == resource.data.clinicianId &&
           getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
-            .data.get('acceptedInvitationId', null) == invitationId
+            .data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+          getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
+            .data.get('acceptedInvitationId', null) == invitationId &&
+          uniquenessReleased()
         )
       );
       allow delete: if false;
     }
 
+    // One live claim exists for each clinician + normalized patient email.
+    // It is created atomically with an invitation and released on cancel/accept.
+    match /patientInvitationClaims/{clinicianId}/emails/{emailKey} {
+      function matchesPendingInvitation() {
+        let invitation = getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.invitationId)).data;
+        return invitation.get('status', null) == 'pending' &&
+          invitation.get('clinicianId', null) == request.auth.uid &&
+          invitation.get('clinicId', null) == request.resource.data.get('clinicId', null) &&
+          invitation.get('patientEmail', null) == request.resource.data.patientEmail &&
+          invitation.get('expiresAt', null) == request.resource.data.expiresAt &&
+          invitation.get('uniquenessClaimId', null) == emailKey;
+      }
+
+      allow read: if isAuthenticated() &&
+        clinicianId == request.auth.uid &&
+        resource.data.clinicianId == request.auth.uid;
+      allow create: if isClinician() &&
+        clinicianId == request.auth.uid &&
+        emailKey == request.resource.data.patientEmail &&
+        request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.clinicId is string &&
+        isAuthenticatedPractitionerForClinic(request.resource.data.clinicId) &&
+        request.resource.data.patientEmail is string &&
+        request.resource.data.patientEmail == request.resource.data.patientEmail.lower() &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
+        matchesPendingInvitation();
+      allow update: if isClinician() &&
+        clinicianId == request.auth.uid &&
+        emailKey == request.resource.data.patientEmail &&
+        resource.data.clinicianId == request.auth.uid &&
+        (
+          resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null) ||
+          resource.data.get('clinicId', null) == null
+        ) &&
+        resource.data.expiresAt <= request.time &&
+        request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.clinicId is string &&
+        isAuthenticatedPractitionerForClinic(request.resource.data.clinicId) &&
+        request.resource.data.patientEmail == resource.data.patientEmail &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
+        matchesPendingInvitation();
+      allow delete: if isAuthenticated() && (
+        (
+          resource.data.clinicianId == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+            .data.get('status', null) == 'cancelled'
+        ) || (
+          request.auth.token.email != null &&
+          resource.data.patientEmail == request.auth.token.email.lower() &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+            .data.get('status', null) == 'accepted' &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+            .data.get('patientId', null) == request.auth.uid
+        )
+      );
+    }
+
     // Patient Profiles & Clinician Records (clients/{clientId})
     match /clients/{clientId} {
+      function relationshipUnchanged() {
+        return request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) &&
+          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null) &&
+          request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null);
+      }
+
+      function acceptsValidInvitation() {
+        let invitationId = request.resource.data.get('acceptedInvitationId', null);
+        return invitationId is string &&
+          request.resource.data.get('clinicianId', null) != request.auth.uid &&
+          resource.data.get('clinicianId', null) == null &&
+          resource.data.get('clinicId', null) == null &&
+          resource.data.get('linkedClinicianCode', null) == null &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('status', null) == 'accepted' &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('patientId', null) == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null) &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicId', null) == request.resource.data.get('clinicId', null);
+      }
+
+      function createsWithValidInvitation() {
+        let invitationId = request.resource.data.get('acceptedInvitationId', null);
+        return invitationId is string &&
+          request.resource.data.get('clinicianId', null) != request.auth.uid &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('status', null) == 'accepted' &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('patientId', null) == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null) &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicId', null) == request.resource.data.get('clinicId', null);
+      }
+
+      function unlinksOwningClinician() {
+        return isCanonicalPatientClinician(resource.data) &&
+          request.resource.data.get('clinicId', null) == null &&
+          request.resource.data.get('clinicianId', null) == null &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          request.resource.data.get('acceptedInvitationId', null) == null;
+      }
+
       allow read: if isAuthenticated() && (
         request.auth.uid == clientId ||
-        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-        resource.data.get('clinicianId', null) == request.auth.uid ||
+        isCanonicalPatientClinician(resource.data) ||
         isClinicMember(resource.data.get('clinicId', null))
       );
-      allow create: if isAuthenticated() && (
-        request.auth.uid == clientId ||
-        request.resource.data.id == request.auth.uid
-      );
-      allow update: if isAuthenticated() && (
+      allow create: if isAuthenticated() &&
+        request.auth.uid == clientId &&
+        request.resource.data.id == clientId &&
         (
-          request.auth.uid == clientId && (
-            request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) ||
+          (
+            request.resource.data.get('clinicId', null) == null &&
+            request.resource.data.get('clinicianId', null) == null &&
+            request.resource.data.get('linkedClinicianCode', null) == null &&
+            request.resource.data.get('acceptedInvitationId', null) == null
+          ) || createsWithValidInvitation()
+        );
+      allow update: if isAuthenticated() &&
+        (
+        (
+          request.auth.uid == clientId &&
+          (
             (
-              request.resource.data.get('acceptedInvitationId', null) is string &&
-              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
-                .data.get('status', null) == 'accepted' &&
-              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
-                .data.get('patientId', null) == request.auth.uid &&
-              getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.acceptedInvitationId))
-                .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null)
-            )
+              request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+              relationshipUnchanged()
+            ) || acceptsValidInvitation()
           )
         ) ||
-        resource.data.get('linkedClinicianCode', null) == request.auth.uid ||
-        resource.data.get('clinicianId', null) == request.auth.uid ||
+        (
+          isCanonicalPatientClinician(resource.data) &&
+          (
+            (
+              request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+              relationshipUnchanged()
+            ) || unlinksOwningClinician()
+          )
+        ) ||
         (
           isClinicMember(resource.data.get('clinicId', null)) &&
           request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
           request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) &&
-          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null)
+          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null) &&
+          request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null)
         )
       );
       allow delete: if isAuthenticated() && (
-        request.auth.uid == clientId
+        request.auth.uid == clientId &&
+        resource.data.get('clinicianId', null) == null &&
+        resource.data.get('linkedClinicianCode', null) == null &&
+        resource.data.get('acceptedInvitationId', null) == null
       );
+
+      // Canonical clinician-entered QEEG records are append-only. Legacy records
+      // embedded on the patient profile remain readable through tolerant mappers.
+      match /brainMaps/{brainMapId} {
+        allow read: if isAuthenticated() && (
+          request.auth.uid == clientId || isPatientClinician(clientId)
+        );
+        allow create: if isClinician() &&
+          isPatientClinician(clientId) &&
+          request.resource.data.keys().hasOnly([
+            'id', 'uploadDate', 'fileName', 'recordingDate', 'deviceSource',
+            'technicianNotes', 'zScores', 'dominantAlphaPeakHz', 'createdBy',
+            'createdAt', 'updatedAt', 'schemaVersion'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'id', 'uploadDate', 'fileName', 'recordingDate', 'deviceSource',
+            'technicianNotes', 'zScores', 'dominantAlphaPeakHz', 'createdBy',
+            'createdAt', 'updatedAt', 'schemaVersion'
+          ]) &&
+          request.resource.data.id == brainMapId &&
+          brainMapId.matches('^[A-Za-z0-9_-]{1,128}$') &&
+          request.resource.data.uploadDate == request.time &&
+          request.resource.data.fileName == '' &&
+          request.resource.data.recordingDate is timestamp &&
+          request.resource.data.recordingDate <= request.time &&
+          request.resource.data.deviceSource is string &&
+          request.resource.data.deviceSource.size() > 0 &&
+          request.resource.data.deviceSource.matches('.*\\S.*') &&
+          request.resource.data.deviceSource.size() <= 200 &&
+          request.resource.data.technicianNotes is string &&
+          request.resource.data.technicianNotes.size() <= 5000 &&
+          request.resource.data.zScores is map &&
+          request.resource.data.zScores.keys().hasOnly([
+            'frontalTheta', 'centralBeta', 'occipitalAlpha',
+            'temporalDelta', 'sensorimotorSMR'
+          ]) &&
+          request.resource.data.zScores.keys().hasAll([
+            'frontalTheta', 'centralBeta', 'occipitalAlpha',
+            'temporalDelta', 'sensorimotorSMR'
+          ]) &&
+          request.resource.data.zScores.frontalTheta is number &&
+          request.resource.data.zScores.frontalTheta >= -10 &&
+          request.resource.data.zScores.frontalTheta <= 10 &&
+          request.resource.data.zScores.centralBeta is number &&
+          request.resource.data.zScores.centralBeta >= -10 &&
+          request.resource.data.zScores.centralBeta <= 10 &&
+          request.resource.data.zScores.occipitalAlpha is number &&
+          request.resource.data.zScores.occipitalAlpha >= -10 &&
+          request.resource.data.zScores.occipitalAlpha <= 10 &&
+          request.resource.data.zScores.temporalDelta is number &&
+          request.resource.data.zScores.temporalDelta >= -10 &&
+          request.resource.data.zScores.temporalDelta <= 10 &&
+          request.resource.data.zScores.sensorimotorSMR is number &&
+          request.resource.data.zScores.sensorimotorSMR >= -10 &&
+          request.resource.data.zScores.sensorimotorSMR <= 10 &&
+          request.resource.data.dominantAlphaPeakHz is number &&
+          request.resource.data.dominantAlphaPeakHz > 0 &&
+          request.resource.data.dominantAlphaPeakHz <= 30 &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.updatedAt == request.time &&
+          request.resource.data.schemaVersion == 1;
+        allow update, delete: if false;
+      }
     }
 
     // Neurofeedback Session Records (sessions/{sessionId})
@@ -193,52 +449,291 @@ service cloud.firestore {
       );
     }
 
-    // Messaging Threads (messages/{messageId})
-    match /messages/{messageId} {
+    // A canonical conversation is scoped to one patient/clinician relationship.
+    // Its summary and new immutable message are committed atomically.
+    match /messageThreads/{patientId}/relationships/{clinicianId} {
+      function isCurrentParticipant() {
+        return isCurrentPatientClinician(patientId, clinicianId) &&
+          (request.auth.uid == patientId || request.auth.uid == clinicianId);
+      }
+
+      function validMessageText(text) {
+        return text is string &&
+          text.size() > 0 &&
+          text.size() <= 4000 &&
+          text.matches('^\\S([\\s\\S]*\\S)?$');
+      }
+
+      function validSummary() {
+        let messageId = request.resource.data.lastMessageId;
+        let message = getAfter(/databases/$(database)/documents/messageThreads/$(patientId)/relationships/$(clinicianId)/messages/$(messageId)).data;
+        return request.resource.data.keys().hasOnly([
+            'patientId', 'clinicianId', 'participantIds', 'lastMessageId',
+            'lastMessageText', 'lastSenderId', 'lastMessageAt', 'createdAt',
+            'updatedAt', 'schemaVersion'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'patientId', 'clinicianId', 'participantIds', 'lastMessageId',
+            'lastMessageText', 'lastSenderId', 'lastMessageAt', 'createdAt',
+            'updatedAt', 'schemaVersion'
+          ]) &&
+          request.resource.data.patientId == patientId &&
+          request.resource.data.clinicianId == clinicianId &&
+          request.resource.data.participantIds == [patientId, clinicianId] &&
+          messageId is string &&
+          messageId.matches('^[A-Za-z0-9_-]{1,128}$') &&
+          validMessageText(request.resource.data.lastMessageText) &&
+          request.resource.data.lastSenderId == request.auth.uid &&
+          request.resource.data.lastMessageAt == request.time &&
+          request.resource.data.createdAt is timestamp &&
+          request.resource.data.updatedAt == request.time &&
+          request.resource.data.schemaVersion == 1 &&
+          message.id == messageId &&
+          message.patientId == patientId &&
+          message.clinicianId == clinicianId &&
+          message.senderId == request.auth.uid &&
+          (
+            (request.auth.uid == patientId && message.senderRole == 'patient') ||
+            (request.auth.uid == clinicianId && message.senderRole == 'clinician')
+          ) &&
+          message.text == request.resource.data.lastMessageText &&
+          message.createdAt == request.time &&
+          message.schemaVersion == 1;
+      }
+
       allow read: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid ||
-        resource.data.patientId == request.auth.uid
+        request.auth.uid == patientId ||
+        (request.auth.uid == clinicianId && isPatientClinician(patientId))
       );
-      allow create: if isAuthenticated() && (
-        request.resource.data.clientId == request.auth.uid ||
-        request.resource.data.clinicianId == request.auth.uid ||
-        request.resource.data.patientId == request.auth.uid
-      );
-      allow update: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid ||
-        resource.data.patientId == request.auth.uid
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid ||
-        resource.data.patientId == request.auth.uid
-      );
+      allow create: if isCurrentParticipant() &&
+        request.resource.data.createdAt == request.time &&
+        validSummary();
+      allow update: if isCurrentParticipant() &&
+        resource.data.patientId == patientId &&
+        resource.data.clinicianId == clinicianId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        validSummary();
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function validPostWriteSummary() {
+          let summaryPath = /databases/$(database)/documents/messageThreads/$(patientId)/relationships/$(clinicianId);
+          let summary = getAfter(summaryPath).data;
+          return existsAfter(summaryPath) &&
+            summary.patientId == patientId &&
+            summary.clinicianId == clinicianId &&
+            summary.participantIds == [patientId, clinicianId] &&
+            summary.lastMessageId == messageId &&
+            summary.lastMessageText == request.resource.data.text &&
+            summary.lastSenderId == request.auth.uid &&
+            summary.lastMessageAt == request.time &&
+            summary.updatedAt == request.time &&
+            summary.schemaVersion == 1;
+        }
+
+        allow read: if isAuthenticated() && (
+          request.auth.uid == patientId ||
+          (request.auth.uid == clinicianId && isPatientClinician(patientId))
+        );
+        allow create: if isCurrentPatientClinician(patientId, clinicianId) &&
+          (request.auth.uid == patientId || request.auth.uid == clinicianId) &&
+          request.resource.data.keys().hasOnly([
+            'id', 'patientId', 'clinicianId', 'senderId', 'senderRole',
+            'text', 'createdAt', 'schemaVersion'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'id', 'patientId', 'clinicianId', 'senderId', 'senderRole',
+            'text', 'createdAt', 'schemaVersion'
+          ]) &&
+          messageId.matches('^[A-Za-z0-9_-]{1,128}$') &&
+          request.resource.data.id == messageId &&
+          request.resource.data.patientId == patientId &&
+          request.resource.data.clinicianId == clinicianId &&
+          request.resource.data.senderId == request.auth.uid &&
+          (
+            (request.auth.uid == patientId && request.resource.data.senderRole == 'patient') ||
+            (request.auth.uid == clinicianId && request.resource.data.senderRole == 'clinician')
+          ) &&
+          validMessageText(request.resource.data.text) &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.schemaVersion == 1 &&
+          validPostWriteSummary();
+        allow update, delete: if false;
+      }
     }
 
-    // Clinical Appointments (appointments/{appointmentId})
-    match /appointments/{appointmentId} {
+    // Temporary whole-array message history remains read-only. Canonical owner
+    // precedence is enforced through the current patient relationship.
+    match /messages/{patientId} {
       allow read: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid ||
-        resource.data.patientId == request.auth.uid
+        request.auth.uid == patientId ||
+        (
+          resource.data.get('patientId', resource.data.get('clientId', null)) == patientId &&
+          resource.data.get('clinicianId', null) == request.auth.uid &&
+          isPatientClinician(patientId)
+        )
       );
-      allow create: if isAuthenticated() && (
-        request.resource.data.clientId == request.auth.uid ||
-        request.resource.data.clinicianId == request.auth.uid ||
-        request.resource.data.patientId == request.auth.uid
+      allow write: if false;
+    }
+
+    // Canonical appointments use patientId; temporary legacy rows are explicitly
+    // backfilled with patientId: null so list queries can prove their shape.
+    match /appointments/{appointmentId} {
+      function validBoundedText(value, maxSize, allowEmpty) {
+        return value is string &&
+          value.size() <= maxSize &&
+          (
+            (allowEmpty && value.size() == 0) ||
+            (value.size() > 0 && value.matches('^\\S([\\s\\S]*\\S)?$'))
+          );
+      }
+
+      function validOptionalText(key, maxSize, allowEmpty) {
+        return !(key in request.resource.data) ||
+          validBoundedText(request.resource.data.get(key, null), maxSize, allowEmpty);
+      }
+
+      function validAppointmentType(value) {
+        return value in [
+          'remote-training', 'in-clinic-evaluation', 'qeeg-mapping',
+          'protocol-review', 'consultation'
+        ];
+      }
+
+      function validCanonicalAppointmentFields() {
+        return request.resource.data.clinicianId is string &&
+          request.resource.data.patientId is string &&
+          request.resource.data.patientId.size() > 0 &&
+          request.resource.data.patientId.size() <= 128 &&
+          validBoundedText(request.resource.data.patientDisplayName, 160, false) &&
+          validOptionalText('clinicianDisplayName', 160, false) &&
+          request.resource.data.startsAt is timestamp &&
+          validBoundedText(request.resource.data.timezone, 100, false) &&
+          request.resource.data.durationMinutes is int &&
+          request.resource.data.durationMinutes >= 15 &&
+          request.resource.data.durationMinutes <= 240 &&
+          validAppointmentType(request.resource.data.type) &&
+          validOptionalText('notes', 2000, true) &&
+          request.resource.data.createdAt is timestamp &&
+          request.resource.data.updatedAt == request.time &&
+          request.resource.data.createdBy is string &&
+          request.resource.data.revision is int &&
+          request.resource.data.schemaVersion == 1;
+      }
+
+      function validScheduledAppointment() {
+        return request.resource.data.keys().hasOnly([
+            'clinicianId', 'patientId', 'patientDisplayName',
+            'clinicianDisplayName', 'startsAt', 'timezone', 'durationMinutes',
+            'type', 'status', 'notes', 'createdAt', 'updatedAt', 'createdBy',
+            'revision', 'schemaVersion'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'clinicianId', 'patientId', 'patientDisplayName', 'startsAt',
+            'timezone', 'durationMinutes', 'type', 'status', 'createdAt',
+            'updatedAt', 'createdBy', 'revision', 'schemaVersion'
+          ]) &&
+          request.resource.data.status == 'scheduled' &&
+          validCanonicalAppointmentFields();
+      }
+
+      function isExplicitLegacyAppointment() {
+        return resource.data.keys().hasAll(['patientId', 'clientId']) &&
+          resource.data.patientId == null &&
+          resource.data.clientId is string &&
+          resource.data.clientId.size() > 0;
+      }
+
+      function isCanonicalAppointment() {
+        return resource.data.get('patientId', null) is string;
+      }
+
+      allow read: if isAuthenticated() && (
+        (
+          isCanonicalAppointment() &&
+          (
+            resource.data.patientId == request.auth.uid ||
+            (
+              resource.data.clinicianId == request.auth.uid &&
+              isPatientClinician(resource.data.patientId)
+            )
+          )
+        ) ||
+        (
+          isExplicitLegacyAppointment() &&
+          (
+            resource.data.clientId == request.auth.uid ||
+            (
+              resource.data.get('clinicianId', null) == request.auth.uid &&
+              isPatientClinician(resource.data.clientId)
+            )
+          )
+        )
       );
-      allow update: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid ||
-        resource.data.patientId == request.auth.uid
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid ||
-        resource.data.clinicianId == request.auth.uid ||
-        resource.data.patientId == request.auth.uid
-      );
+      allow create: if isClinician() &&
+        appointmentId.matches('^[A-Za-z0-9_-]{20,100}$') &&
+        request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.createdBy == request.auth.uid &&
+        isPatientClinician(request.resource.data.patientId) &&
+        request.resource.data.patientDisplayName ==
+          get(/databases/$(database)/documents/clients/$(request.resource.data.patientId)).data.name &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.revision == 1 &&
+        validScheduledAppointment();
+      allow update: if isClinician() &&
+        isCanonicalAppointment() &&
+        resource.data.clinicianId == request.auth.uid &&
+        isPatientClinician(resource.data.patientId) &&
+        resource.data.status == 'scheduled' &&
+        request.resource.data.clinicianId == resource.data.clinicianId &&
+        request.resource.data.patientId == resource.data.patientId &&
+        request.resource.data.patientDisplayName == resource.data.patientDisplayName &&
+        request.resource.data.get('clinicianDisplayName', null) == resource.data.get('clinicianDisplayName', null) &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.schemaVersion == resource.data.schemaVersion &&
+        request.resource.data.revision == resource.data.revision + 1 &&
+        (
+          (
+            validScheduledAppointment() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'startsAt', 'timezone', 'durationMinutes', 'type', 'notes',
+              'updatedAt', 'revision'
+            ])
+          ) ||
+          (
+            request.resource.data.keys().hasOnly([
+              'clinicianId', 'patientId', 'patientDisplayName',
+              'clinicianDisplayName', 'startsAt', 'timezone', 'durationMinutes',
+              'type', 'status', 'notes', 'createdAt', 'updatedAt', 'createdBy',
+              'cancelledAt', 'cancelledBy', 'cancellationRequestId', 'revision',
+              'schemaVersion'
+            ]) &&
+            request.resource.data.keys().hasAll([
+              'clinicianId', 'patientId', 'patientDisplayName', 'startsAt',
+              'timezone', 'durationMinutes', 'type', 'status', 'createdAt',
+              'updatedAt', 'createdBy', 'cancelledAt', 'cancelledBy',
+              'cancellationRequestId', 'revision', 'schemaVersion'
+            ]) &&
+            validCanonicalAppointmentFields() &&
+            request.resource.data.status == 'cancelled' &&
+            request.resource.data.cancelledAt == request.time &&
+            request.resource.data.cancelledBy == request.auth.uid &&
+            request.resource.data.cancellationRequestId is string &&
+            request.resource.data.cancellationRequestId.matches('^cancel_[A-Za-z0-9_-]{20,100}$') &&
+            request.resource.data.updatedAt == request.time &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'cancelledAt', 'cancelledBy', 'cancellationRequestId',
+              'updatedAt', 'revision'
+            ]) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasAll([
+              'status', 'cancelledAt', 'cancelledBy', 'cancellationRequestId',
+              'updatedAt', 'revision'
+            ])
+          )
+        );
+      allow delete: if false;
     }
 
     // Clinic Brand Configurations (brands/{brandId})
@@ -250,24 +745,29 @@ service cloud.firestore {
     // Production tenant records. Practitioner IDs are Firebase user IDs until
     // role claims are introduced by the authentication backend.
     match /clinics/{clinicId} {
-      allow read: if isClinicMember(clinicId) || isClinicPatient(clinicId);
-      allow create: if isAuthenticated() &&
+      allow get: if (isClinician() && (
+        clinicId == request.auth.uid || isClinicMember(clinicId)
+      )) || isClinicPatient(clinicId);
+      allow list: if (isClinician() && isClinicMember(clinicId)) || isClinicPatient(clinicId);
+      allow create: if isClinician() &&
+        clinicId == request.auth.uid &&
         request.resource.data.practitionerIds.hasAny([request.auth.uid]);
-      allow update: if isAuthenticated() &&
+      allow update: if isClinician() &&
         resource.data.practitionerIds.hasAny([request.auth.uid]) &&
         request.resource.data.practitionerIds == resource.data.practitionerIds;
       allow delete: if false;
     }
 
     match /practitioners/{practitionerId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)
+      allow get: if isClinician() && (
+        practitionerId == request.auth.uid || isClinicMember(resource.data.clinicId)
       );
-      allow create: if isAuthenticated() &&
+      allow list: if isClinician() && isClinicMember(resource.data.clinicId);
+      allow create: if isClinician() &&
         practitionerId == request.auth.uid &&
         request.resource.data.userId == request.auth.uid &&
-        isClinicMember(request.resource.data.clinicId);
-      allow update: if isAuthenticated() &&
+        isClinicMemberAfter(request.resource.data.clinicId);
+      allow update: if isClinician() &&
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.clinicId == resource.data.clinicId && (
           resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)

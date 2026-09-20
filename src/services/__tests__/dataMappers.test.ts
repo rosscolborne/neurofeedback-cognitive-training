@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../types';
 import {
   applySessionCompletionToClient,
+  getPatientClinicianId,
+  isPatientInvitationExpired,
   readClientProfile,
+  readPatientInvitation,
   readSessionRecord,
   removeUndefined,
   timestampToIso,
@@ -32,7 +35,7 @@ const clientFixture = (): ClientProfile => ({
   badges: [],
 });
 
-const sessionFixture = (): SessionRecord => ({
+const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 'session-1',
   patientId: 'patient-1',
   patientName: 'Patient One',
@@ -50,6 +53,7 @@ const sessionFixture = (): SessionRecord => ({
   timeSeries: [],
   adaptiveAdjustmentsCount: 0,
   finalThreshold: 1.8,
+  ...overrides,
 });
 
 describe('production data migration readers', () => {
@@ -71,6 +75,35 @@ describe('production data migration readers', () => {
     expect(migrated.schemaVersion).toBe(1);
   });
 
+  it('preserves and resolves legacy clinician relationship fields', () => {
+    const legacy = { ...clientFixture(), clinicianId: undefined, linkedClinicianCode: 'legacy-clinician' };
+    const migrated = readClientProfile(legacy);
+
+    expect(migrated.linkedClinicianCode).toBe('legacy-clinician');
+    expect(migrated.clinicianId).toBeUndefined();
+    expect(getPatientClinicianId(migrated)).toBe('legacy-clinician');
+    expect(getPatientClinicianId({ clinicianId: 'canonical', linkedClinicianCode: 'legacy' })).toBe('canonical');
+  });
+
+  it('marks current expired invitations while tolerating legacy invitations without expiry', () => {
+    const expired = readPatientInvitation({
+      clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: 99,
+    }, 'CODE', 100);
+    const legacy = readPatientInvitation({
+      clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending',
+    }, 'LEGACY', 100);
+    const canonical = readPatientInvitation({
+      clinicianId: 'clinician-1', clinicId: ' clinic-1 ', patientEmail: 'patient@example.com', status: 'pending',
+    }, 'CANONICAL', 100);
+
+    expect(expired.status).toBe('expired');
+    expect(isPatientInvitationExpired(expired, 100)).toBe(true);
+    expect(legacy.status).toBe('pending');
+    expect(legacy.clinicId).toBeUndefined();
+    expect(canonical.clinicId).toBe('clinic-1');
+    expect(legacy.schemaVersion).toBe(1);
+  });
+
   it('repairs the broad mode for legacy custom protocol records on read', () => {
     const sterman = CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.id === 'proto-sterman-smr');
     expect(sterman).toBeDefined();
@@ -89,6 +122,20 @@ describe('production data migration readers', () => {
 
     expect(migrated.assignedProtocol).toBe('smr-enhancement');
     expect(legacy.assignedProtocol).toBe('theta-beta-ratio');
+  });
+
+  it('does not invent a protocol for an incomplete unrecognized custom template', () => {
+    const raw = {
+      ...clientFixture(),
+      assignedProtocol: undefined,
+      customProtocolConfig: {
+        id: 'legacy-unknown',
+        name: '',
+        clinicalName: '',
+      },
+    };
+
+    expect(readClientProfile(raw).assignedProtocol).toBeUndefined();
   });
 
   it('prefers completedAt over legacy epoch timestamps and fills safe collection defaults', () => {
@@ -127,7 +174,24 @@ describe('session aggregate migration behavior', () => {
     expect(updated.completedSessionsCount).toBe(1);
     expect(updated.badges).toContain('first-light');
     expect(updated.badges).toContain('deep-focus');
+    expect(updated.brainCapacityScore).toBe(client.brainCapacityScore);
     expect(client.completedSessionsCount).toBe(0);
     expect(client.badges).toEqual([]);
+  });
+
+  it('does not invent score, streak, or garden state for a blank profile', () => {
+    const blank = {
+      ...clientFixture(),
+      brainCapacityScore: undefined,
+      currentStreak: 0,
+      tidalGardenState: undefined,
+      skylineBiomesUnlocked: undefined,
+    };
+    const updated = applySessionCompletionToClient(blank, sessionFixture({ experience: 'tidal-garden' }));
+
+    expect(updated.brainCapacityScore).toBeUndefined();
+    expect(updated.currentStreak).toBe(0);
+    expect(updated.tidalGardenState).toBeUndefined();
+    expect(updated.skylineBiomesUnlocked).toBeUndefined();
   });
 });

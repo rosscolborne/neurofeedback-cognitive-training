@@ -21,8 +21,8 @@ interface ClientRosterViewProps {
   onSelectClient: (client: ClientProfile) => void;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelInvitation: (invitationId: string) => Promise<void>;
-  onUpdateClient?: (updated: ClientProfile) => void;
-  onDeleteClient?: (id: string) => void;
+  onUpdateClient?: (updated: ClientProfile) => Promise<void>;
+  onDeleteClient?: (id: string) => void | Promise<void>;
   onScheduleClient?: (clientId: string) => void;
   onMessageClient?: (clientId: string) => void;
 }
@@ -40,7 +40,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'completed'>('all');
-  const [cohortFilter, setCohortFilter] = useState<'all' | 'real' | 'demo'>('all');
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -49,38 +48,35 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   // Form State
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
-  const [formCondition, setFormCondition] = useState<ClientProfile['condition']>('ADHD (Inattentive)');
-  const [formProtocol, setFormProtocol] = useState<ProtocolType>('theta-beta-ratio');
+  const [formCondition, setFormCondition] = useState<ClientProfile['condition']>(undefined);
+  const [formProtocol, setFormProtocol] = useState<ProtocolType | undefined>(undefined);
   const [formStatus, setFormStatus] = useState<'active' | 'paused' | 'completed'>('active');
-  const [formSessionsPerWeek, setFormSessionsPerWeek] = useState(4);
+  const [formSessionsPerWeek, setFormSessionsPerWeek] = useState<number | ''>('');
   const [formNotes, setFormNotes] = useState('');
   const [createdInvitation, setCreatedInvitation] = useState<PatientInvitation | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
 
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.condition.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.condition ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    const matchesCohort =
-      cohortFilter === 'all' ||
-      (cohortFilter === 'real' && !c.isDemo) ||
-      (cohortFilter === 'demo' && !!c.isDemo);
-
-    return matchesSearch && matchesStatus && matchesCohort;
+    return matchesSearch && matchesStatus;
   });
 
   const handleOpenAdd = () => {
     setEditingClient(null);
     setFormName('');
     setFormEmail('');
-    setFormCondition('ADHD (Inattentive)');
-    setFormProtocol('theta-beta-ratio');
+    setFormCondition(undefined);
+    setFormProtocol(undefined);
     setFormStatus('active');
-    setFormSessionsPerWeek(4);
+    setFormSessionsPerWeek('');
     setFormNotes('');
     setCreatedInvitation(null);
     setFormError(null);
@@ -96,35 +92,65 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setFormCondition(client.condition);
     setFormProtocol(client.assignedProtocol);
     setFormStatus(client.status);
-    setFormSessionsPerWeek(client.prescribedSessionsPerWeek || 4);
+    setFormSessionsPerWeek(client.prescribedSessionsPerWeek ?? '');
     setFormNotes(client.notes || '');
     setShowAddModal(true);
   };
 
-  const handleDelete = (clientId: string, e: React.MouseEvent) => {
+  const handleDelete = async (clientId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to remove this patient from the roster?')) {
-      if (onDeleteClient) onDeleteClient(clientId);
+      if (!onDeleteClient) return;
+      setActionError(null);
+      setPendingActionId(clientId);
+      try {
+        await onDeleteClient(clientId);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Could not remove this patient. Try again.');
+      } finally {
+        setPendingActionId(null);
+      }
+    }
+  };
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    setActionError(null);
+    setPendingActionId(invitationId);
+    try {
+      await onCancelInvitation(invitationId);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not cancel this invitation. Try again.');
+    } finally {
+      setPendingActionId(null);
     }
   };
 
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
+    if (!editingClient && (!formCondition || !formProtocol || formSessionsPerWeek === '')) {
+      setFormError('Select a clinical indication, protocol, and weekly target before creating the invitation.');
+      return;
+    }
     setIsSaving(true);
     setFormError(null);
     try {
       if (editingClient && onUpdateClient) {
-        await Promise.resolve(onUpdateClient({
+        await onUpdateClient({
           ...editingClient,
           name: formName,
           email: formEmail || editingClient.email,
           condition: formCondition,
           assignedProtocol: formProtocol,
+          customProtocolConfig:
+            formProtocol &&
+            formProtocol === editingClient.assignedProtocol
+              ? editingClient.customProtocolConfig
+              : undefined,
           status: formStatus,
-          prescribedSessionsPerWeek: Number(formSessionsPerWeek),
+          prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
-        }));
+        });
         setShowAddModal(false);
       } else {
         const invitation = await onAddClient({
@@ -133,7 +159,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           condition: formCondition,
           status: formStatus,
           assignedProtocol: formProtocol,
-          prescribedSessionsPerWeek: Number(formSessionsPerWeek),
+          prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
         });
         setCreatedInvitation(invitation);
@@ -166,6 +192,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </button>
       </div>
 
+      {actionError && <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '12px' }}>{actionError}</div>}
+
       {invitations.some((invitation) => invitation.status === 'pending') && (
         <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700 }}>
@@ -178,7 +206,9 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{invitation.patientEmail}</div>
                 <div className="font-mono" style={{ marginTop: '3px', fontSize: '11px', color: 'var(--brand-primary)' }}>{invitation.id}</div>
               </div>
-              <button onClick={() => void onCancelInvitation(invitation.id)} className="btn btn-ghost" style={{ fontSize: '12px', flexShrink: 0 }}>Cancel</button>
+              <button onClick={() => void handleCancelInvitation(invitation.id)} disabled={pendingActionId === invitation.id} className="btn btn-ghost" style={{ fontSize: '12px', flexShrink: 0 }}>
+                {pendingActionId === invitation.id ? 'Cancelling…' : 'Cancel'}
+              </button>
             </div>
           ))}
         </section>
@@ -216,32 +246,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
               fontFamily: 'var(--font-body)',
             }}
           />
-        </div>
-
-        {/* Cohort Toggle */}
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'real', label: 'Enrolled' },
-            { id: 'demo', label: 'Sample' },
-          ].map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setCohortFilter(c.id as any)}
-              style={{
-                background: cohortFilter === c.id ? '#3A4B58' : 'var(--surface-clinician-card)',
-                color: cohortFilter === c.id ? '#FFFFFF' : 'var(--text-secondary)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 10px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
         </div>
 
         {/* Filter Chips */}
@@ -313,28 +317,14 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 >
                   <td style={{ padding: '14px 16px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <img
+                      {client.avatarUrl ? <img
                         src={client.avatarUrl}
                         alt={client.name}
                         style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
-                      />
+                      /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '34px', height: '34px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700 }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{client.name}</span>
-                          {client.isDemo && (
-                            <span
-                              style={{
-                                fontSize: '9px',
-                                background: 'var(--surface-clinician-sidebar)',
-                                color: 'var(--text-tertiary)',
-                                padding: '1px 5px',
-                                borderRadius: '4px',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Sample
-                            </span>
-                          )}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 400 }}>
                           {client.email}
@@ -348,21 +338,17 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 500 }}>{client.condition}</div>
+                    <div style={{ fontWeight: 500 }}>{client.condition || 'Condition unavailable'}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {client.assignedProtocol.replace(/-/g, ' ')}
+                      {client.assignedProtocol?.replace(/-/g, ' ') || 'Protocol unavailable'}
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                    {client.lastSessionDate}
+                    {client.lastSessionDate || 'No recorded session'}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span className="font-mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
-                      {client.brainCapacityScore}%
-                    </span>
-                  </td>
+                  <td style={{ padding: '14px 16px', color: 'var(--text-tertiary)' }}>Unavailable</td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
-                    {client.completedSessionsCount}
+                    {client.completedSessionsCount ?? 0}
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
@@ -376,12 +362,13 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       </button>
                       {onDeleteClient && (
                         <button
-                          onClick={(e) => handleDelete(client.id, e)}
+                          onClick={(e) => void handleDelete(client.id, e)}
+                          disabled={pendingActionId === client.id}
                           className="btn btn-ghost"
                           style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--status-alert)' }}
                           title="Remove Patient"
                         >
-                          <Trash2 size={14} />
+                          {pendingActionId === client.id ? 'Removing…' : <Trash2 size={14} />}
                         </button>
                       )}
                     </div>
@@ -412,19 +399,14 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img
+                {client.avatarUrl ? <img
                   src={client.avatarUrl}
                   alt={client.name}
                   style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
-                />
+                /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '42px', height: '42px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700 }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
                 <div>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>{client.name}</span>
-                    {client.isDemo && (
-                      <span style={{ fontSize: '9px', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-tertiary)', padding: '1px 5px', borderRadius: '4px' }}>
-                        Sample
-                      </span>
-                    )}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{client.email}</div>
                 </div>
@@ -436,21 +418,18 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
               <span style={{ background: 'var(--surface-clinician-sidebar)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
-                {client.condition}
+                {client.condition || 'Condition unavailable'}
               </span>
               <span style={{ color: 'var(--text-secondary)' }}>
-                Protocol: <strong>{client.assignedProtocol.replace(/-/g, ' ')}</strong>
+                Protocol: <strong>{client.assignedProtocol?.replace(/-/g, ' ') || 'unavailable'}</strong>
               </span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
               <div>
-                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: </span>
-                <span className="font-mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
-                  {client.brainCapacityScore}%
-                </span>
+                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: unavailable</span>
                 <span style={{ color: 'var(--text-tertiary)', marginLeft: '12px' }}>Sessions: </span>
-                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount}</span>
+                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
               </div>
               <button
                 onClick={(e) => handleOpenEdit(client, e)}
@@ -498,14 +477,15 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)' }}>
                   <CheckCircle2 size={20} />
-                  <div style={{ fontSize: '13px' }}>Share this code with {createdInvitation.patientName}. They must sign in with {createdInvitation.patientEmail} and accept it from their Profile.</div>
+                  <div style={{ fontSize: '13px' }}>Share this secure link with {createdInvitation.patientName}. They must sign in with {createdInvitation.patientEmail}. The invitation expires after 14 days.</div>
                 </div>
                 <div className="font-mono" style={{ padding: '16px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', textAlign: 'center', fontSize: '20px', letterSpacing: '0.08em' }}>{createdInvitation.id}</div>
                 <button
                   type="button"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(createdInvitation.id);
+                      const invitationUrl = `${window.location.origin}/connect/${createdInvitation.id}`;
+                      await navigator.clipboard.writeText(invitationUrl);
                       setCopiedCode(true);
                     } catch {
                       setFormError('Copy was blocked by your browser. Select the code above and copy it manually.');
@@ -513,7 +493,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   }}
                   className="btn btn-secondary"
                 >
-                  <Copy size={15} /> {copiedCode ? 'Copied' : 'Copy invitation code'}
+                  <Copy size={15} /> {copiedCode ? 'Link copied' : 'Copy invitation link'}
                 </button>
                 {formError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{formError}</div>}
                 <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-dense">Done</button>
@@ -566,8 +546,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   Primary Clinical Indication
                 </label>
                 <select
-                  value={formCondition}
-                  onChange={(e) => setFormCondition(e.target.value as any)}
+                  value={formCondition ?? ''}
+                  onChange={(e) => setFormCondition((e.target.value || undefined) as ClientProfile['condition'])}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -578,6 +558,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     background: '#FFFFFF',
                   }}
                 >
+                  <option value="">Unavailable</option>
                   <option value="ADHD (Inattentive)">ADHD (Inattentive)</option>
                   <option value="ADHD (Combined)">ADHD (Combined)</option>
                   <option value="Generalized Anxiety">Generalized Anxiety</option>
@@ -592,8 +573,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     Assigned Protocol
                   </label>
                   <select
-                    value={formProtocol}
-                    onChange={(e) => setFormProtocol(e.target.value as any)}
+                    value={formProtocol ?? ''}
+                    onChange={(e) => setFormProtocol((e.target.value || undefined) as ProtocolType | undefined)}
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -603,6 +584,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       background: '#FFFFFF',
                     }}
                   >
+                    <option value="">Unassigned</option>
                     <option value="theta-beta-ratio">Theta/Beta (Lubar)</option>
                     <option value="smr-enhancement">SMR (Sterman)</option>
                     <option value="alpha-enhancement">Alpha (Hardt)</option>
@@ -631,6 +613,21 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     <option value="completed">Completed</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Weekly Training Target
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={formSessionsPerWeek}
+                  onChange={(e) => setFormSessionsPerWeek(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Unavailable"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
+                />
               </div>
 
               <div>

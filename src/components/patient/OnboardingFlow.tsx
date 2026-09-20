@@ -3,11 +3,11 @@ import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { BrandLogo } from '../brand/BrandLogo';
-import { ArrowRight, Check, Wifi, ShieldCheck, Target, Waves, Moon, Activity } from 'lucide-react';
+import { ArrowRight, Check, Wifi, Target, Waves, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
   client: ClientProfile;
-  onFinish: (updatedClient: Partial<ClientProfile>) => void;
+  onFinish: (updatedClient: Partial<ClientProfile>) => Promise<void>;
 }
 
 export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish }) => {
@@ -18,6 +18,8 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
   const [pairedDeviceName, setPairedDeviceName] = useState<string | null>(null);
   const [showFitModal, setShowFitModal] = useState(false);
   const [pairingError, setPairingError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handlePairHeadband = async () => {
     setIsPairing(true);
@@ -33,15 +35,21 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     let assignedProtocol: ProtocolType = 'theta-beta-ratio';
     if (selectedGoal === 'calm') assignedProtocol = 'alpha-enhancement';
     if (selectedGoal === 'sleep') assignedProtocol = 'beta-downtraining';
     if (selectedGoal === 'performance') assignedProtocol = 'smr-enhancement';
 
-    onFinish({
-      assignedProtocol,
-    });
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onFinish({ assignedProtocol });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Your assessment could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -268,30 +276,28 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-            <ShieldCheck size={14} />
-            <span>Clinical HIPAA & GDPR Compliant Telemetry</span>
-          </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
             <button
-              onClick={handleComplete}
+              onClick={() => void handleComplete()}
+              disabled={isSaving}
               className="btn btn-primary"
               style={{ width: '100%', padding: '16px', fontSize: '16px' }}
             >
-              Enter Patient Portal
+              {isSaving ? 'Saving…' : 'Enter Patient Portal'}
             </button>
             
             {!isPaired && (
               <button
-                onClick={handleComplete}
+                onClick={() => void handleComplete()}
+                disabled={isSaving}
                 className="btn btn-ghost"
                 style={{ width: '100%', fontSize: '14px' }}
               >
-                Continue without Headband (Audio-Only Mode)
+                {isSaving ? 'Saving…' : 'Continue without Headband (Audio-Only Mode)'}
               </button>
             )}
           </div>
+          {saveError && <div role="alert" style={{ fontSize: '13px', color: 'var(--status-alert)', textAlign: 'center' }}>{saveError} Select Continue to retry.</div>}
         </div>
       )}
 

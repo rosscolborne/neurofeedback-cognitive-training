@@ -1,7 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ClientProfile, EEGDataPoint, ExperienceType, SessionPhase, SessionRecord } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
-import { AdaptiveDifficultyEngine, AdaptiveAdjustmentLog } from '../../services/adaptiveEngine';
+import {
+  AdaptiveDifficultyEngine,
+  AdaptiveAdjustmentLog,
+  accumulateVerifiedBands,
+  advanceSessionClock,
+  assessSessionCompletionReadiness,
+  createSessionCompletionId,
+  createVerifiedBandAccumulator,
+  getCompletedSessionDuration,
+  PROTOCOL_RUNTIME_LIMITATIONS,
+  resolveProtocolRuntime,
+  summarizeVerifiedBands,
+} from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
@@ -110,6 +122,7 @@ const DEMO_STATES = [
 
 type DemoState = (typeof DEMO_STATES)[number]['id'];
 const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
+const HARDWARE_SOURCE_MAX_AGE_MS = 2_000;
 interface SessionRunnerProps {
   client: ClientProfile;
   selectedExperience: ExperienceType;
@@ -117,37 +130,68 @@ interface SessionRunnerProps {
   onCancel: () => void;
 }
 
+export const resolveSessionCareProvenance = (client: ClientProfile): Pick<SessionRecord, 'clinicId' | 'clinicianId'> => {
+  const clinicianId = client.clinicianId || client.linkedClinicianCode || undefined;
+  return {
+    // Legacy linked profiles can lack clinicId. Keep that provenance explicitly
+    // unavailable instead of misclassifying a clinician-linked session as self-guided.
+    clinicId: client.clinicId || (clinicianId ? '' : 'self-guided'),
+    clinicianId,
+  };
+};
+
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
   selectedExperience,
   onComplete,
   onCancel,
 }) => {
+  const [isDemoSession, setIsDemoSession] = useState(() => {
+    // Patient Demo mode is owned by this mounted runner only. Never inherit the
+    // singleton engine flag from a previous completed/cancelled session.
+    eegEngine.isDemoMode = false;
+    return false;
+  });
+  const [completionIdentity] = useState<{ id: string | null; error: string | null }>(() => {
+    try {
+      return { id: createSessionCompletionId(), error: null };
+    } catch (error) {
+      return {
+        id: null,
+        error: error instanceof Error ? error.message : 'Secure session completion IDs are unavailable.',
+      };
+    }
+  });
   const [phase, setPhase] = useState<SessionPhase>('calibration');
   const [eegData, setEegData] = useState<EEGDataPoint | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isSavingSession, setIsSavingSession] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isFitAccepted, setIsFitAccepted] = useState(eegEngine.isDemoMode);
-  const [isSessionStarted, setIsSessionStarted] = useState(eegEngine.isDemoMode);
+  const [acquisitionError, setAcquisitionError] = useState<string | null>(null);
+  const [isFitAccepted, setIsFitAccepted] = useState(false);
+  const [isSessionStarted, setIsSessionStarted] = useState(false);
   const [showFitModal, setShowFitModal] = useState(false);
   const [muted, setMuted] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState<AdaptiveAdjustmentLog | null>(null);
   const [demoState, setDemoState] = useState<DemoState | null>(
     eegEngine.demoState === 'auto' ? null : eegEngine.demoState,
   );
+  const runtimeResolution = React.useMemo(() => resolveProtocolRuntime(client), [client]);
+  const runtimeConfig = runtimeResolution.ok ? runtimeResolution.config : null;
 
   // Timers (in seconds)
-  // Standard duration: 25 mins total (60s calib, 120s warmup, 1140s training, 120s cooldown, 60s debrief)
-  const sessionTotalDuration = 1500; // 25 minutes = 1500 seconds
+  const sessionTotalDuration = runtimeConfig?.durationSeconds ?? 0;
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
+  const totalSecondsElapsedRef = useRef(0);
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
   const [inZoneMeasuredSeconds, setInZoneMeasuredSeconds] = useState(0);
 
-  const adaptiveEngineRef = useRef<AdaptiveDifficultyEngine>(new AdaptiveDifficultyEngine(client.assignedProtocol));
+  const [adaptiveEngine] = useState<AdaptiveDifficultyEngine | null>(() => runtimeConfig
+    ? new AdaptiveDifficultyEngine(runtimeConfig.protocol, runtimeConfig.initialThreshold, runtimeConfig)
+    : null);
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
-  const bandAccumulatorRef = useRef({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0, count: 0 });
+  const bandAccumulatorRef = useRef(createVerifiedBandAccumulator());
   const coherenceAccumulatorRef = useRef({ total: 0, count: 0 });
   const brainflowAccRef = useRef({
     mindfulness: 0,
@@ -159,6 +203,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     training: 0,
     trainingCount: 0,
   });
+  const peakTrainingScoreRef = useRef<number | null>(null);
+  const lastAccumulatedSourceSequenceRef = useRef(0);
+  const lastCoveredSourceSequenceRef = useRef(0);
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const inZoneObservationsRef = useRef<InZoneObservation[]>([]);
   const [recentInZonePercent, setRecentInZonePercent] = useState<number | null>(null);
@@ -179,82 +226,120 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     phaseRef.current = phase;
   }, [phase]);
 
-  // If in simulator demo mode, instantly ready the state
   useEffect(() => {
-    if (eegEngine.isDemoMode) {
-      setIsFitAccepted(true);
-      setIsSessionStarted(true);
-      setPhase('training');
-    }
+    return () => {
+      eegEngine.isDemoMode = false;
+    };
   }, []);
 
-  const finishSession = React.useCallback(async () => {
+  const cancelSession = React.useCallback(() => {
+    eegEngine.isDemoMode = false;
+    setIsDemoSession(false);
+    onCancel();
+  }, [onCancel]);
+
+  const finishSession = React.useCallback(async (completedDurationSeconds?: number) => {
     if (isSavingSession) return;
-    setIsSavingSession(true);
     setSaveError(null);
+    if (!runtimeConfig || !adaptiveEngine) {
+      setSaveError('A valid clinician-assigned protocol is required before this session can be saved.');
+      return;
+    }
+
+    const completedDuration = getCompletedSessionDuration(completedDurationSeconds, totalSecondsElapsedRef.current);
+    const sourceState = eegEngine.getHardwareSourceState();
+    const readiness = assessSessionCompletionReadiness({
+      isDemo: isDemoSession,
+      elapsedSeconds: completedDuration,
+      verifiedSeconds: inZoneMeasuredSeconds,
+      verifiedBandSamples: bandAccumulatorRef.current.sampleCount,
+      hardwareConnected: eegEngine.isHardwareConnected,
+      sourceFresh: isDemoSession || (
+        sourceState.sequence > 0
+        && Date.now() - sourceState.lastFrameAtMs <= HARDWARE_SOURCE_MAX_AGE_MS
+      ),
+    });
+    if (!readiness.ok) {
+      setSaveError(readiness.error);
+      setAcquisitionError(readiness.error);
+      setIsPaused(true);
+      return;
+    }
+    if (!completionIdentity.id) {
+      setSaveError(completionIdentity.error ?? 'This session cannot be saved securely.');
+      return;
+    }
+
+    setIsSavingSession(true);
 
     const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
-    const acc = bandAccumulatorRef.current;
-    const count = Math.max(1, acc.count);
+    const bandSummary = summarizeVerifiedBands(bandAccumulatorRef.current);
+    const careProvenance = resolveSessionCareProvenance(client);
 
     const bfAcc = brainflowAccRef.current;
     const summary: SessionRecord = {
-      id: 'sess-' + Date.now(),
+      id: completionIdentity.id,
       patientId: client.id,
       patientName: client.name,
-      clinicId: client.linkedClinicianCode || 'self-guided',
+      ...careProvenance,
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: Date.now(),
-      protocol: client.assignedProtocol,
+      protocol: runtimeConfig.protocol,
       experience: selectedExperience,
-      durationSeconds: totalSecondsElapsed,
+      durationSeconds: completedDuration,
       timeInZonePercent,
       averageCoherence: coherenceAccumulatorRef.current.count > 0
         ? Math.round(coherenceAccumulatorRef.current.total / coherenceAccumulatorRef.current.count)
         : null,
-      peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
-      averageBands: {
-        delta: count > 0 ? Math.round((acc.delta / count) * 10) / 10 : 0,
-        theta: count > 0 ? Math.round((acc.theta / count) * 10) / 10 : 0,
-        alpha: count > 0 ? Math.round((acc.alpha / count) * 10) / 10 : 0,
-        smr: count > 0 ? Math.round((acc.smr / count) * 10) / 10 : 0,
-        beta: count > 0 ? Math.round((acc.beta / count) * 10) / 10 : 0,
-        gamma: count > 0 ? Math.round((acc.gamma / count) * 10) / 10 : 0,
-      },
+      peakFocusScore: peakTrainingScoreRef.current == null
+        ? undefined
+        : Math.round(peakTrainingScoreRef.current),
+      averageBands: bandSummary.bands,
       timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
-      adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
-      finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
-      isDemo: eegEngine.isDemoMode,
+      adaptiveAdjustmentsCount: adaptiveEngine.getAdjustmentsCount(),
+      finalThreshold: adaptiveEngine.getCurrentThreshold(),
+      isDemo: isDemoSession,
       averageTrainingScore: bfAcc.trainingCount > 0 ? Math.round(bfAcc.training / bfAcc.trainingCount) : null,
       averageMindfulness: bfAcc.mindfulnessCount > 0 ? Math.round(bfAcc.mindfulness / bfAcc.mindfulnessCount) : undefined,
       averageValence: bfAcc.valenceCount > 0 ? Math.round((bfAcc.valence / bfAcc.valenceCount) * 100) / 100 : undefined,
       averageArousal: bfAcc.arousalCount > 0 ? Math.round((bfAcc.arousal / bfAcc.arousalCount) * 100) / 100 : undefined,
+      metricProvenance: bandSummary.provenance
+        ? { averageBands: bandSummary.provenance }
+        : undefined,
     };
 
     try {
       await onComplete(summary);
+      eegEngine.isDemoMode = false;
+      setIsDemoSession(false);
       audioEngine.playChime('complete');
     } catch (error) {
       console.error('Failed to save completed session:', error);
       setSaveError("We couldn't save this session. Check your connection and try again.");
       setIsSavingSession(false);
     }
-  }, [client.assignedProtocol, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isSavingSession, onComplete, selectedExperience, totalSecondsElapsed]);
+  }, [adaptiveEngine, client, completionIdentity, inZoneMeasuredSeconds, inZoneSeconds, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {
-    eegEngine.setProtocol(client.assignedProtocol);
+    if (!runtimeConfig) return;
+    eegEngine.configureProtocol(runtimeConfig);
     eegEngine.start(100);
 
     const unsubscribe = eegEngine.subscribe(data => {
       eegDataRef.current = data;
       setEegData(data);
+      const sourceState = eegEngine.getHardwareSourceState();
+      const hasNewHardwareSourceFrame = isDemoSession || sourceState.sequence > lastAccumulatedSourceSequenceRef.current;
+      if (!isDemoSession && hasNewHardwareSourceFrame) {
+        lastAccumulatedSourceSequenceRef.current = sourceState.sequence;
+      }
 
       // Recent in-zone is a live trailing metric. Calibration observations are
       // valid EEG feedback too, so begin its window as soon as fit is accepted
       // rather than holding the display and experience feedback for one minute.
-      if (!isPausedRef.current && (isFitAccepted || eegEngine.isHardwareConnected || eegEngine.isDemoMode)) {
+      if (!isPausedRef.current && (isFitAccepted || eegEngine.isHardwareConnected || isDemoSession)) {
         const observations = inZoneObservationsRef.current;
         observations.push({
           timestamp: data.timestamp,
@@ -277,18 +362,17 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         const bfAcc = brainflowAccRef.current;
         bfAcc.training += data.trainingMetric.score;
         bfAcc.trainingCount += 1;
+        peakTrainingScoreRef.current = Math.max(peakTrainingScoreRef.current ?? data.trainingMetric.score, data.trainingMetric.score);
       }
 
-      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
+      if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration' && hasNewHardwareSourceFrame) {
         // Collect rolling band averages
-        const acc = bandAccumulatorRef.current;
-        acc.delta += data.bands.delta;
-        acc.theta += data.bands.theta;
-        acc.alpha += data.bands.alpha;
-        acc.smr += data.bands.smr;
-        acc.beta += data.bands.beta;
-        acc.gamma += data.bands.gamma;
-        acc.count += 1;
+        accumulateVerifiedBands(
+          bandAccumulatorRef.current,
+          data.bands,
+          data.bandAvailability,
+          eegEngine.getBandPowerProvenance(),
+        );
         if (data.coherenceAvailable && data.coherence != null) {
           coherenceAccumulatorRef.current.total += data.coherence;
           coherenceAccumulatorRef.current.count += 1;
@@ -312,8 +396,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
         // Feed adaptive difficulty engine during Core Training
         if (phaseRef.current === 'training' && data.inZoneAvailable) {
-          const result = adaptiveEngineRef.current.addSample(data.inZone);
-          if (result.adjusted && result.log) {
+          const result = adaptiveEngine?.addSample(data.inZone);
+          if (result?.adjusted && result.log) {
             eegEngine.setThreshold(result.log.newThreshold);
             setAdjustmentNotice(result.log);
             setTimeout(() => setAdjustmentNotice(null), 5000);
@@ -327,53 +411,61 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegEngine.stop();
       audioEngine.stopAll();
     };
-  }, [client.assignedProtocol, isFitAccepted]);
+  }, [adaptiveEngine, isDemoSession, isFitAccepted, runtimeConfig]);
 
   // Main session timer interval
   useEffect(() => {
-    if (isPaused || !isSessionStarted) return;
+    if (isPaused || !isSessionStarted || !runtimeConfig) return;
 
     const interval = window.setInterval(() => {
-      setTotalSecondsElapsed(prev => {
-        const next = prev + 1;
-
-        // Phase transitions (accelerated in demo mode)
-        if (eegEngine.isDemoMode) {
-          if (phaseRef.current === 'calibration') {
-            setPhase('training');
-          }
-        } else {
-          if (next >= 60 && phaseRef.current === 'calibration') {
-            setPhase('warmup');
-            audioEngine.playChime('success');
-          } else if (next >= 180 && phaseRef.current === 'warmup') {
-            setPhase('training');
-          } else if (next >= 1320 && phaseRef.current === 'training') {
-            setPhase('cooldown');
-          } else if (next >= 1440 && phaseRef.current === 'cooldown') {
-            setPhase('debrief');
-          } else if (next >= sessionTotalDuration) {
-            finishSession();
-          }
-        }
-
-        // Periodic time-series capture every 10 seconds
-        const currentData = eegDataRef.current;
-        if (next % 10 === 0 && currentData) {
-          timeSeriesRef.current.push({
-            t: next,
-            thetaBetaRatio: currentData.thetaBetaRatio,
-            alpha: currentData.bands.alpha,
-            smr: currentData.bands.smr,
-            beta: currentData.bands.beta,
-            inZone: currentData.inZone,
-          });
-        }
-
-        return next;
-      });
-
       const currentData = eegDataRef.current;
+      const bandProvenance = eegEngine.getBandPowerProvenance();
+      const sourceState = eegEngine.getHardwareSourceState();
+      const sourceAdvanced = sourceState.sequence > lastCoveredSourceSequenceRef.current;
+      const sourceFresh = sourceState.sequence > 0
+        && sourceAdvanced
+        && Date.now() - sourceState.lastFrameAtMs <= HARDWARE_SOURCE_MAX_AGE_MS;
+      const hasVerifiedHardwareFrame = Boolean(
+        currentData?.inZoneAvailable
+        && currentData.signalQuality !== 'disconnected'
+        && bandProvenance
+        && sourceFresh
+        && (Object.keys(bandAccumulatorRef.current.sums) as Array<keyof typeof bandAccumulatorRef.current.sums>)
+          .every((band) => currentData.bandAvailability[band] && Number.isFinite(currentData.bands[band])),
+      );
+      if (!isDemoSession && (!eegEngine.isHardwareConnected || !hasVerifiedHardwareFrame)) {
+        setAcquisitionError(
+          eegEngine.isHardwareConnected
+            ? 'Verified EEG is unavailable. Training is paused until a valid signal returns.'
+            : 'Your headset disconnected. Training is paused and cannot be saved until it reconnects.',
+        );
+        setIsPaused(true);
+        return;
+      }
+      if (!isDemoSession) lastCoveredSourceSequenceRef.current = sourceState.sequence;
+
+      const tick = advanceSessionClock(totalSecondsElapsedRef.current, sessionTotalDuration, isDemoSession);
+      totalSecondsElapsedRef.current = tick.elapsed;
+      setTotalSecondsElapsed(tick.elapsed);
+      if (tick.phase === 'complete') {
+        void finishSession(tick.elapsed);
+      } else if (tick.phase !== phaseRef.current) {
+        if (tick.phase === 'warmup') audioEngine.playChime('success');
+        setPhase(tick.phase);
+      }
+
+      // Periodic time-series capture every 10 seconds
+      if (tick.elapsed % 10 === 0 && currentData && (isDemoSession || hasVerifiedHardwareFrame)) {
+        timeSeriesRef.current.push({
+          t: tick.elapsed,
+          thetaBetaRatio: currentData.thetaBetaRatio,
+          alpha: currentData.bands.alpha,
+          smr: currentData.bands.smr,
+          beta: currentData.bands.beta,
+          inZone: currentData.inZone,
+        });
+      }
+
       // The live in-zone display should reflect every valid observation as
       // soon as a session begins. Calibration is real EEG data too; only an
       // unavailable protocol metric should keep this value indeterminate.
@@ -386,7 +478,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [finishSession, isFitAccepted, isPaused, isSessionStarted, sessionTotalDuration]);
+  }, [finishSession, isDemoSession, isFitAccepted, isPaused, isSessionStarted, runtimeConfig, sessionTotalDuration]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -414,7 +506,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   };
 
   const handleStartDemoMode = () => {
+    if (!runtimeConfig) return;
+    eegEngine.configureProtocol(runtimeConfig);
     eegEngine.isDemoMode = true;
+    setIsDemoSession(true);
     eegEngine.setSimulatedState('auto');
     setDemoState(null);
     setIsFitAccepted(true);
@@ -423,8 +518,59 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     forceUpdate({});
   };
 
+  const toggleSessionPause = () => {
+    if (!isPaused) {
+      setIsPaused(true);
+      return;
+    }
+    if (!isDemoSession) {
+      const currentData = eegDataRef.current;
+      const provenance = eegEngine.getBandPowerProvenance();
+      const sourceState = eegEngine.getHardwareSourceState();
+      const hasVerifiedSignal = Boolean(
+        eegEngine.isHardwareConnected
+        && currentData?.inZoneAvailable
+        && currentData.signalQuality !== 'disconnected'
+        && provenance
+        && sourceState.sequence > lastCoveredSourceSequenceRef.current
+        && Date.now() - sourceState.lastFrameAtMs <= HARDWARE_SOURCE_MAX_AGE_MS
+        && (Object.keys(bandAccumulatorRef.current.sums) as Array<keyof typeof bandAccumulatorRef.current.sums>)
+          .every((band) => currentData.bandAvailability[band] && Number.isFinite(currentData.bands[band])),
+      );
+      if (!hasVerifiedSignal) {
+        setAcquisitionError('Verified EEG is still unavailable. Check headset fit and connection before resuming.');
+        return;
+      }
+    }
+    setAcquisitionError(null);
+    setIsPaused(false);
+  };
+
+  if (!runtimeResolution.ok) {
+    return (
+      <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
+        <h1 style={{ fontSize: '22px' }}>Protocol unavailable</h1>
+        <p>{runtimeResolution.error}</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+          {PROTOCOL_RUNTIME_LIMITATIONS}
+        </p>
+        <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
+      </div>
+    );
+  }
+
+  if (completionIdentity.error) {
+    return (
+      <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
+        <h1 style={{ fontSize: '22px' }}>Session unavailable</h1>
+        <p>{completionIdentity.error}</p>
+        <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
+      </div>
+    );
+  }
+
   // Connection Gate Screen
-  if (!eegEngine.isHardwareConnected && !eegEngine.isDemoMode) {
+  if (!eegEngine.isHardwareConnected && !isDemoSession) {
     return (
       <div
         style={{
@@ -479,16 +625,24 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             {isPairing ? 'Connecting...' : 'Connect Muse Headband'}
           </button>
 
-          <button
-            onClick={handleStartDemoMode}
-            className="btn btn-secondary"
-            style={{ padding: '12px', fontSize: '13px' }}
-          >
-            Try Demo Mode
-          </button>
+          {!isSessionStarted && (
+            <button
+              onClick={handleStartDemoMode}
+              className="btn btn-secondary"
+              style={{ padding: '12px', fontSize: '13px' }}
+            >
+              Try Demo Mode
+            </button>
+          )}
+
+          {isSessionStarted && (
+            <div role="alert" style={{ color: '#B91C1C', fontSize: '13px', lineHeight: 1.5 }}>
+              Headset connection was lost. This real-EEG session is paused; Demo data cannot replace it.
+            </div>
+          )}
 
           <button
-            onClick={onCancel}
+            onClick={cancelSession}
             className="btn btn-ghost"
             style={{ padding: '10px', fontSize: '13px' }}
           >
@@ -500,6 +654,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <ShieldCheck size={14} />
           <span>Runs 100% in your browser. No server downloads required.</span>
         </div>
+        <p style={{ fontSize: '10px', color: 'var(--text-tertiary)', lineHeight: 1.4, margin: 0 }}>
+          {PROTOCOL_RUNTIME_LIMITATIONS}
+        </p>
       </div>
     );
   }
@@ -512,7 +669,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           setIsFitAccepted(true);
           setShowFitModal(false);
         }}
-        onClose={onCancel}
+        onClose={cancelSession}
       />
     );
   }
@@ -680,6 +837,16 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         </div>
       </header>
 
+      <div role="status" style={{ padding: '5px 14px', fontSize: '9px', lineHeight: 1.3, color: 'var(--text-tertiary)' }}>
+        {PROTOCOL_RUNTIME_LIMITATIONS}
+      </div>
+
+      {acquisitionError && (
+        <div role="alert" style={{ padding: '8px 14px', color: '#B91C1C', background: '#FEE2E2', fontSize: '12px', lineHeight: 1.4 }}>
+          {acquisitionError}
+        </div>
+      )}
+
       {/* Adaptive Threshold Notification Banner */}
       {adjustmentNotice && (
         <div
@@ -716,12 +883,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           {selectedExperience === 'skyline-drift' && (
             <SkylineDriftCanvas
               eegData={eegData}
-              assignedProtocol={client.assignedProtocol}
+              assignedProtocol={runtimeConfig!.protocol}
               recentInZonePercent={inZonePercent}
               isPaused={isPaused}
             />
           )}
-          {selectedExperience === 'tidal-garden' && (
+          {selectedExperience === 'tidal-garden' && client.tidalGardenState && (
             <TidalGardenCanvas 
               eegData={eegData} 
               stage={client.tidalGardenState.stage} 
@@ -729,6 +896,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               inZonePercent={inZonePercent ?? undefined}
               isPaused={isPaused} 
             />
+          )}
+          {selectedExperience === 'tidal-garden' && !client.tidalGardenState && (
+            <div role="status" style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', padding: '24px', textAlign: 'center' }}>
+              Garden progress is unavailable for this account. Return to the dashboard and ask your clinician to review the training assignment.
+            </div>
           )}
           {selectedExperience === 'breath-weave' && (
             <BreathWeaveCanvas eegData={eegData} isPaused={isPaused} />
@@ -769,7 +941,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           )}
         </div>
 
-        {eegEngine.isDemoMode && (
+        {isDemoSession && (
           <section
             aria-label="Demo state controls"
             className="card-patient-recessed"
@@ -939,7 +1111,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         }}
       >
         <button
-          onClick={() => setIsPaused(!isPaused)}
+          onClick={toggleSessionPause}
           className="btn btn-secondary"
           style={{ flex: 1, padding: '10px' }}
         >
@@ -1017,7 +1189,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
                 Continue Training
               </button>
               <button
-                onClick={onCancel}
+                onClick={cancelSession}
                 disabled={isSavingSession}
                 className="btn btn-ghost"
                 style={{ width: '100%', color: '#D32F2F' }}

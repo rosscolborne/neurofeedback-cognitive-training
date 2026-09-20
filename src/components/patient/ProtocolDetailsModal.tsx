@@ -13,11 +13,12 @@ interface ProtocolDetailsModalProps {
   onClose: () => void;
 }
 
-const formatIdentifier = (value: string) =>
+const formatIdentifier = (value?: string) =>
+  value ?
   value
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+    .join(' ') : 'Unavailable';
 
 function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
   const saved = client.customProtocolConfig;
@@ -45,8 +46,8 @@ const Detail: React.FC<{ label: string; value: React.ReactNode }> = ({ label, va
 
 export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ client, onClose }) => {
   const protocol = getDisplayedProtocol(client);
-  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
-  const assignmentAlias = protocol
+  const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
+  const assignmentAlias = protocol && client.assignedProtocol
     ? getProtocolAssignmentAlias(protocol, client.assignedProtocol)
     : undefined;
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(client.assignedProtocol);

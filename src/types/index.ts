@@ -295,6 +295,12 @@ export interface QEEGBrainMap {
     sensorimotorSMR: number;
   };
   dominantAlphaPeakHz: number;
+  /** Authenticated clinician who persisted this record. */
+  createdBy?: string;
+  /** Server-owned creation time for canonical records. */
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  schemaVersion?: number;
   topographyColorMap?: string;
   rawTelemetrySnippet?: string;
 }
@@ -349,8 +355,8 @@ export interface SessionRecord {
   timeInZonePercent: number;
   /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
   averageCoherence: number | null;
-  peakFocusScore: number;
-  averageBands: BandPowers;
+  peakFocusScore?: number;
+  averageBands?: BandPowers;
   timeSeries: Array<{
     t: number;
     thetaBetaRatio: number;
@@ -394,11 +400,13 @@ export interface SessionCreateResult {
   session: SessionRecord;
 }
 
-export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled';
+export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled' | 'expired';
 
 export interface PatientInvitation {
   id: string;
   clinicianId: string;
+  /** Owning clinic for canonical invitations; absent only on legacy records. */
+  clinicId?: string;
   clinicianName: string;
   patientEmail: string;
   patientName: string;
@@ -411,44 +419,48 @@ export interface PatientInvitation {
   createdAt?: PersistedTimestamp;
   updatedAt?: PersistedTimestamp;
   acceptedAt?: PersistedTimestamp;
+  expiresAt?: PersistedTimestamp;
+  /** Normalized email key under patientInvitationClaims/{clinicianId}/emails. */
+  uniquenessClaimId?: string;
   schemaVersion: number;
 }
 
 export type PatientInvitationInput = Pick<
   PatientInvitation,
   'patientEmail' | 'patientName' | 'condition' | 'assignedProtocol' | 'prescribedSessionsPerWeek' | 'notes'
-> & { clinicianName: string };
+> & { clinicianName: string; clinicId: string };
 
 export interface ClientProfile {
   id: string;
   name: string;
   email: string;
-  avatarUrl: string;
-  condition: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
+  avatarUrl?: string;
+  condition?: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
   status: 'active' | 'paused' | 'completed';
-  assignedProtocol: ProtocolType;
+  assignedProtocol?: ProtocolType;
   customProtocolConfig?: ProtocolTemplate;
   individualBaselineModel?: IndividualBaselineModel;
   brainMaps: QEEGBrainMap[];
   allowedExperiences: ExperienceType[];
-  prescribedSessionsPerWeek: number;
+  prescribedSessionsPerWeek?: number;
   completedSessionsCount: number;
   currentStreak: number;
-  streakFreezeRemaining: number;
-  brainCapacityScore: number; // 0 - 100
-  lastSessionDate: string;
-  nextSessionDate: string;
+  streakFreezeRemaining?: number;
+  /** Legacy-only until a clinically/product-validated score definition exists. */
+  brainCapacityScore?: number | null;
+  lastSessionDate?: string;
+  nextSessionDate?: string;
   customThresholdBounds?: {
     min: number;
     max: number;
   };
-  tidalGardenState: {
+  tidalGardenState?: {
     stage: number;
     plantsUnlocked: string[];
     growthPoints: number;
     lastWatered: string;
   };
-  skylineBiomesUnlocked: string[];
+  skylineBiomesUnlocked?: string[];
   badges: string[];
   linkedClinicianCode?: string;
   clinicianId?: string;

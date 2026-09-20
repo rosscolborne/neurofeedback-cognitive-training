@@ -1,0 +1,31 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import { MessagingView } from '../../clinician/MessagingView';
+import { PatientMessagingView } from '../../patient/PatientMessagingView';
+import type { MessageRepository } from '../../../services/messageRepository';
+
+const repository: MessageRepository = {
+  resolveActiveRelationship: vi.fn(async (patientId) => ({ patientId, clinicianId: 'clinician-1', key: `${patientId}/clinician-1` })),
+  getRelationshipThread: vi.fn(async () => null),
+  listMessages: vi.fn(async () => ({ messages: [], nextCursor: null })),
+  listLegacyMessages: vi.fn(async () => []),
+  subscribeToMessages: vi.fn(() => () => {}),
+  prepareMessage: vi.fn((relationship, text) => ({ id: 'opaque-1', relationship, text: text.trim() })),
+  sendPreparedMessage: vi.fn(async () => { throw new Error('offline'); }),
+};
+
+describe('production messaging surfaces', () => {
+  it('builds clinician choices only from supplied linked participants', () => {
+    const markup = renderToStaticMarkup(<MessagingView threads={[]} repository={repository} />);
+    expect(markup).toContain('No linked patients');
+    expect(markup).not.toContain('Just now');
+  });
+
+  it('shows explicit patient initial loading and a patient compose control', () => {
+    const markup = renderToStaticMarkup(<PatientMessagingView patientId="patient-1" repository={repository} />);
+    expect(markup).toContain('Loading messages');
+    expect(markup).toContain('Message your clinician');
+    expect(markup).not.toContain('Just now');
+  });
+});

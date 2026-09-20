@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { EEGEngine } from '../eegEngine';
+import { brainflowService } from '../brainflowService';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('EEGEngine Muse Packet Bit-Unpacker (decodeChannelPacket)', () => {
   it('returns empty array when byteLength < 2', () => {
@@ -127,5 +132,49 @@ describe('EEGEngine Muse Packet Bit-Unpacker (decodeChannelPacket)', () => {
     expect(headsetSample.trainingMetric).toBeUndefined();
     expect(headsetSample.batteryLevel).toBeUndefined();
     expect(headsetSample.artifacts.clench).toBe(false);
+  });
+
+  it('advances browser Muse source freshness only after usable decoded EEG samples are ingested', () => {
+    const engine = new EEGEngine();
+    const ingest = (engine as unknown as { ingestDecodedMuseFrame: (frame: unknown) => void }).ingestDecodedMuseFrame.bind(engine);
+    const emptyFrame = {
+      eeg: { channelNames: ['TP9', 'AF7', 'AF8', 'TP10'], samples: [[NaN, NaN, NaN, NaN]] },
+    };
+    ingest(emptyFrame);
+    expect(engine.getHardwareSourceState()).toEqual({ sequence: 0, lastFrameAtMs: 0 });
+
+    ingest({
+      eeg: { channelNames: ['TP9', 'AF7', 'AF8', 'TP10'], samples: [[1, 2, 3, 4], [5, 6, 7, 8]] },
+    });
+    const first = engine.getHardwareSourceState();
+    expect(first.sequence).toBe(1);
+    expect(first.lastFrameAtMs).toBeGreaterThan(0);
+    expect(engine.rawBuffers).toMatchObject({ tp9: [1, 5], af7: [2, 6], af8: [3, 7], tp10: [4, 8] });
+
+    ingest({ eeg: { channelNames: ['TP9'], samples: [[9]] } });
+    expect(engine.getHardwareSourceState().sequence).toBe(2);
+  });
+
+  it('does not treat empty BrainFlow service heartbeats as source EEG frames', async () => {
+    let onFrame: ((frame: unknown) => void) | null = null;
+    vi.spyOn(brainflowService, 'startSession').mockResolvedValue({
+      sessionId: 'session-1', deviceInfo: { label: 'Muse Athena' },
+    });
+    vi.spyOn(brainflowService, 'streamSession').mockImplementation((_id, callback) => {
+      onFrame = callback;
+      return vi.fn();
+    });
+    vi.spyOn(brainflowService, 'stopSession').mockResolvedValue();
+
+    const engine = new EEGEngine();
+    await expect(engine.connectBrainflowSession('brainflow-muse-athena')).resolves.toMatchObject({ success: true });
+    const emit = onFrame as unknown as (frame: unknown) => void;
+    emit({ features: { stateLabel: 'heartbeat' } });
+    emit({ samples: [] });
+    expect(engine.getHardwareSourceState()).toEqual({ sequence: 0, lastFrameAtMs: 0 });
+
+    emit({ samples: [[1, 2, 3, 4]] });
+    expect(engine.getHardwareSourceState().sequence).toBe(1);
+    engine.disconnectHardware();
   });
 });

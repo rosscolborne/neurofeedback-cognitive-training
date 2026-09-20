@@ -1,275 +1,143 @@
-import React, { useState } from 'react';
-import { ClinicBrandConfig } from '../../types';
+import React, { useEffect, useState } from 'react';
+import type { ClinicBrandConfig } from '../../types';
+import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
+import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
+import { errorMessage, primaryLicenseIdentifier, primaryLicensePresentation, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
-import {
-  Sliders,
-  ShieldCheck,
-  RefreshCw,
-  Trash2,
-  CheckCircle2,
-  HardDrive,
-  Activity,
-  Award,
-} from 'lucide-react';
+import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
   brand: ClinicBrandConfig;
   onOpenRebrand: () => void;
-  onClearDemoData: () => void;
-  onResetDemoData: () => void;
+  onSettingsSaved?: (snapshot: ClinicSettingsSnapshot) => void | Promise<void>;
 }
 
-export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({
-  brand,
-  onOpenRebrand,
-  onClearDemoData,
-  onResetDemoData,
-}) => {
-  const [physicianName, setPhysicianName] = useState('Dr. Vance Aris, MD, BCN');
-  const [licenseNumber, setLicenseNumber] = useState('NFB-88421');
-  const [saveSuccess, setSaveSuccess] = useState(false);
+export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, onOpenRebrand, onSettingsSaved }) => {
+  const [loadState, setLoadState] = useState<SettingsLoadState>({ status: 'loading' });
+  const [clinicName, setClinicName] = useState('');
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const [practitionerName, setPractitionerName] = useState('');
+  const [licenseIdentifier, setLicenseIdentifier] = useState('');
+  const [saveState, setSaveState] = useState<SettingsSaveState>('idle');
+  const [saveError, setSaveError] = useState('');
 
-  const handleSaveCredentials = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
-  };
+  useEffect(() => {
+    let active = true;
+    clinicSettingsRepository.load().then((snapshot) => {
+      if (!active) return;
+      setClinicName(snapshot.clinic?.name ?? '');
+      setTimezone(snapshot.clinic?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+      setPractitionerName(snapshot.practitioner?.displayName ?? '');
+      setLicenseIdentifier(primaryLicenseIdentifier(snapshot.practitioner));
+      setLoadState({ status: 'ready', snapshot });
+    }).catch((error: unknown) => {
+      if (active) setLoadState({ status: 'error', message: errorMessage(error, 'Clinic settings could not be loaded.') });
+    });
+    return () => { active = false; };
+  }, []);
 
-  const handleWipeDemo = () => {
-    if (window.confirm('Are you sure you want to remove sample demo patient records? Real enrolled patients will not be affected.')) {
-      onClearDemoData();
-      alert('Sample demo data wiped. You now have a clean clinician workspace.');
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaveState((current) => transitionSettingsSaveState(current, 'submit'));
+    setSaveError('');
+    try {
+      const snapshot = await clinicSettingsRepository.saveSettings({ clinicName, timezone, practitionerName, licenseIdentifier });
+      setLoadState({ status: 'ready', snapshot });
+      setSaveState((current) => transitionSettingsSaveState(current, 'success'));
+      try {
+        await onSettingsSaved?.(snapshot);
+      } catch (callbackError) {
+        // The repository write is authoritative; a consumer callback must not
+        // turn a persisted save into a false failure state.
+        console.warn('Clinic settings saved, but the workspace could not refresh immediately.', callbackError);
+      }
+    } catch (error) {
+      setSaveError(errorMessage(error, 'Clinic settings could not be saved. Try again.'));
+      setSaveState((current) => transitionSettingsSaveState(current, 'failure'));
     }
   };
 
-  const handleRestoreDemo = () => {
-    if (window.confirm('Restore sample practice cohort with realistic clinical records?')) {
-      onResetDemoData();
-      alert('Sample practice cohort restored.');
-    }
+  const notice = settingsNotice(loadState);
+  const licensePresentation = primaryLicensePresentation(
+    loadState.status === 'ready' ? loadState.snapshot.practitioner : null,
+    licenseIdentifier,
+  );
+  const isUnavailable = loadState.status === 'error';
+  const isLoading = loadState.status === 'loading';
+  const markEdited = (update: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    update(event.target.value);
+    setSaveState((current) => transitionSettingsSaveState(current, 'edit'));
+    setSaveError('');
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '900px' }}>
-      {/* Header */}
       <div>
-        <h1 className="font-body" style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-          Clinic Platform Settings & Hardware
-        </h1>
-        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-          Manage attending practitioner credentials, Muse S Athena EEG hardware profiles, branding, and workspace data.
-        </p>
+        <h1 className="font-body" style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic and practitioner settings</h1>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Manage the clinic identity and practitioner details used in your workspace and reports.</p>
       </div>
 
-      {/* 1. Practitioner & Board Certification Credentials */}
+      {notice && (
+        <div role={loadState.status === 'error' ? 'alert' : 'status'} style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-recessed)', fontSize: '12px', color: loadState.status === 'error' ? 'var(--status-alert)' : 'var(--text-secondary)' }}>
+          {notice}
+        </div>
+      )}
+
       <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
           <Award size={18} color="var(--brand-primary)" />
-          <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Attending Neurotherapist Credentials
-          </h2>
+          <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic and practitioner profile</h2>
         </div>
-
-        <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Attending Clinician Name & Titles
-              </label>
-              <input
-                type="text"
-                value={physicianName}
-                onChange={(e) => setPhysicianName(e.target.value)}
-                placeholder="e.g. Dr. Vance Aris, MD, BCN"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-default)',
-                  fontSize: '13px',
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                BCIA / Medical Board License #
-              </label>
-              <input
-                type="text"
-                value={licenseNumber}
-                onChange={(e) => setLicenseNumber(e.target.value)}
-                placeholder="e.g. NFB-88421"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-default)',
-                  fontSize: '13px',
-                }}
-              />
-            </div>
+            <label style={labelStyle}>Clinic name<input required maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={clinicName} onChange={markEdited(setClinicName)} placeholder="Enter your clinic name" style={inputStyle} /></label>
+            <label style={labelStyle}>Clinic timezone<input required maxLength={80} disabled={isLoading || isUnavailable || saveState === 'saving'} value={timezone} onChange={markEdited(setTimezone)} placeholder="e.g. America/Toronto" style={inputStyle} /></label>
+            <label style={labelStyle}>Practitioner name and titles<input required maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={practitionerName} onChange={markEdited(setPractitionerName)} placeholder="Enter your professional display name" style={inputStyle} /></label>
+            <label style={labelStyle}>License or certification identifier (optional)<input maxLength={120} disabled={isLoading || isUnavailable || saveState === 'saving'} value={licenseIdentifier} onChange={markEdited(setLicenseIdentifier)} placeholder="Enter an identifier; verification is separate" style={inputStyle} /></label>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
-            <button type="submit" className="btn btn-dense" style={{ padding: '7px 14px', fontSize: '12px' }}>
-              Save Credentials for Reports
-            </button>
-            {saveSuccess && (
-              <span style={{ fontSize: '12px', color: 'var(--status-active)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <CheckCircle2 size={14} /> Saved for PDF Reports
-              </span>
+          <div style={{ margin: 0, fontSize: '11px', color: 'var(--text-tertiary)' }}>
+            {licensePresentation.persistedStatusLabel && (
+              <div role="status" style={{ marginBottom: '2px', color: licensePresentation.persistedStatusLabel === 'Verified' && !licensePresentation.identifierChanged ? 'var(--status-active)' : 'var(--text-secondary)' }}>
+                Current saved credential status: <strong>{licensePresentation.persistedStatusLabel}</strong>
+              </div>
             )}
+            <div>{licensePresentation.guidance}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button type="submit" disabled={isLoading || isUnavailable || saveState === 'saving'} className="btn btn-dense" style={{ padding: '7px 14px', fontSize: '12px' }}>{saveState === 'saving' ? 'Saving…' : 'Save profile'}</button>
+            {saveState === 'saved' && <span role="status" style={{ fontSize: '12px', color: 'var(--status-active)', display: 'flex', gap: '4px', alignItems: 'center' }}><CheckCircle2 size={14} /> Saved</span>}
+            {saveState === 'error' && <span role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)' }}>{saveError}</span>}
           </div>
         </form>
       </div>
 
-      {/* 2. Muse S (Athena) EEG Hardware Profile & Driver */}
       <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Activity size={18} color="var(--brand-primary)" />
-            <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                Muse S (Athena) Biosensing Subsystem
-              </h2>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                Bluetooth Low Energy GATT 256 Hz Telemetry & In-Browser FFT Engine
-              </div>
-            </div>
-          </div>
-          <span className="status-tag status-tag-active" style={{ fontSize: '11px' }}>
-            ● Web-BLE Driver Ready
-          </span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '14px' }}>
+          <Activity size={18} color="var(--brand-primary)" />
+          <div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Supported hardware reference</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Product capability information only — not a live device or patient assignment status.</div></div>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-          <div className="card-patient-recessed" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Frontal Sensors</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-              AF7 (L) & AF8 (R)
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-              Virtual Fz Midline Theta/Beta
-            </div>
-          </div>
-
-          <div className="card-patient-recessed" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Temporoparietal Sensors</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-              TP9 (L) & TP10 (R)
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-              Posterior Alpha & SMR Coherence
-            </div>
-          </div>
-
-          <div className="card-patient-recessed" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Active Reference</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-              Fpz Midline
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-              Common mode noise suppression
-            </div>
-          </div>
-
-          <div className="card-patient-recessed" style={{ padding: '12px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Sampling Rate</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-              256 Samples / Sec
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-              12-bit delta ADC resolution
-            </div>
-          </div>
+        <div style={{ padding: '12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-recessed)' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>Muse-compatible browser training</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>The application includes browser Bluetooth support for compatible devices. No device assignment, connection, firmware, signal quality, or readiness information is available on this settings page.</div>
         </div>
       </div>
 
-      {/* 3. Clinic White-Label Theme Customizer */}
       <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sliders size={18} color="var(--brand-primary)" />
-            <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                Clinic Branding & White-Label Theme
-              </h2>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                Active Theme: <strong>{brand.name}</strong> • Accent: <span style={{ color: brand.primaryAccent, fontWeight: 700 }}>{brand.primaryAccent}</span>
-              </div>
-            </div>
-          </div>
-          <button onClick={onOpenRebrand} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>
-            Open Theme Customizer
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Demo Data & Workspace Controls */}
-      <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <HardDrive size={18} color="var(--text-secondary)" />
-          <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Demo Data & Workspace Management
-          </h2>
-        </div>
-        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-          Manage sample patients, test sessions, and demo appointment records. Clear demo data when onboarding real clinical clients.
-        </p>
-
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            onClick={handleWipeDemo}
-            className="btn btn-ghost"
-            style={{
-              padding: '8px 14px',
-              fontSize: '12px',
-              border: '1px solid var(--border-default)',
-              color: 'var(--status-alert)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <Trash2 size={14} /> Wipe Sample Demo Data
-          </button>
-          <button
-            onClick={handleRestoreDemo}
-            className="btn btn-ghost"
-            style={{
-              padding: '8px 14px',
-              fontSize: '12px',
-              border: '1px solid var(--border-default)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <RefreshCw size={14} /> Restore Sample Practice Cohort
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Sliders size={18} color="var(--brand-primary)" /><div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic branding</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Current preview: <strong>{brand.name}</strong> · <span style={{ fontWeight: 700 }}>{brand.primaryAccent}</span></div></div></div>
+          <button onClick={onOpenRebrand} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>Open theme customizer</button>
         </div>
       </div>
 
       <ChangePasswordForm variant="clinician" />
 
-      {/* 5. HIPAA Compliance Assurance */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderRadius: 'var(--radius-md)',
-          backgroundColor: 'var(--surface-patient-recessed)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '11px',
-          color: 'var(--text-secondary)',
-        }}
-      >
-        <ShieldCheck size={20} color="var(--status-active)" />
-        <div>
-          <strong>HIPAA Compliant Data Architecture:</strong> All clinical EEG time-series, patient communications, and QEEG normative files are isolated and encrypted in client-side secure storage.
-        </div>
+      <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-patient-recessed)', display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+        <ShieldCheck size={20} color="var(--text-secondary)" />
+        <div><strong>Access boundary:</strong> clinic and practitioner records are loaded through the signed-in account and clinic membership. Compliance certification is not inferred from this screen.</div>
       </div>
     </div>
   );
 };
+
+const labelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' };
+const inputStyle: React.CSSProperties = { display: 'block', width: '100%', marginTop: '4px', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' };

@@ -10,7 +10,7 @@ import { getProtocolTypeForTemplate } from '../../services/protocols';
 
 interface ProtocolBuilderModalProps {
   initialProtocol?: ProtocolTemplate;
-  onSave: (template: ProtocolTemplate) => void;
+  onSave: (template: ProtocolTemplate) => Promise<void>;
   onClose: () => void;
 }
 
@@ -38,6 +38,8 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const [rewardThreshold, setRewardThreshold] = useState(initialProtocol?.rewardBand.targetThreshold || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.targetThreshold);
   const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || CLINICAL_PROTOCOL_TEMPLATES[0].sessionDurationMinutes);
   const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || CLINICAL_PROTOCOL_TEMPLATES[0].clinicalNotes);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSelectTemplate = (tmpl: ProtocolTemplate) => {
     setSelectedTemplate(tmpl);
@@ -50,7 +52,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     setClinicalNotes(tmpl.clinicalNotes);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const updated: ProtocolTemplate = {
       ...selectedTemplate,
@@ -67,8 +69,16 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
       sessionDurationMinutes: Number(durationMins),
       clinicalNotes,
     };
-    onSave(updated);
-    onClose();
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await onSave(updated);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'The protocol assignment could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -274,10 +284,12 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             />
           </div>
 
+          {saveError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{saveError}</div>}
+
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
-            <button type="submit" className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
-              Assign Protocol Configuration
+            <button type="submit" disabled={isSaving} className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
+              {isSaving ? 'Saving…' : 'Assign Protocol Configuration'}
             </button>
             <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>
               Cancel
