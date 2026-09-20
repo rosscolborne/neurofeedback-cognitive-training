@@ -2,7 +2,7 @@
 
 Last reconciled: 2026-09-19  
 Integration branch: `fill-in-mocked-data`  
-Last application-code baseline: `035c3cae8cf6770ed5127a5877024b6035828f1c`
+Last application-code baseline: `a52e43b`
 
 ## How to use and maintain this document
 
@@ -694,7 +694,8 @@ independent workstream immediately when a slot opens.
   review, but final validation waits for all required workstreams
 - **Branch:** `fill-in-mocked-data` (integration target; no separate feature work)
 - **Worktree:** repository root
-- **Current integration commit:** `035c3ca` (under independent review; not a
+- **Current integration commit:** `a52e43b` (passed focused independent re-review;
+  final repository-wide audit remains pending; not a
   final release-candidate approval)
 - **Owned files:** shared wiring and plan updates only after reviewing incoming
   branches; conflict resolution must preserve original ownership decisions.
@@ -715,10 +716,14 @@ independent workstream immediately when a slot opens.
   demo mode fails closed before canonical care repositories can access production
   network data; brand hydration is account-scoped; invitation clinic identity is
   propagated and enforced; and obsolete profile/global fallback paths are removed.
-  The integrated suite passed 353/353, production build passed, and lint passed
-  with only existing non-blocking warnings. Independent integrated review is in
-  progress. Firestore emulator authorization execution remains blocked locally by
-  the unavailable Java runtime.
+  Initial independent review required fixes for patient-profile failure handling,
+  fresh-clinic invitation readiness, linked-session clinic provenance, stale
+  account mutation results, and expired legacy invitation claims. Fix commit
+  `a52e43b` addressed every finding and passed both independent Sol/High
+  re-reviews. The post-fix integrated suite passed 362/362, production build and
+  quiet lint passed, and focused re-review suites passed 121/121 and 144/144.
+  Firestore emulator authorization execution remains blocked locally by the
+  unavailable Java runtime.
 
 ## Integration and review procedure
 
@@ -764,6 +769,14 @@ independent workstream immediately when a slot opens.
 
 ## Project log
 
+- **2026-09-19:** Integrated review fixes landed in `a52e43b`: patient-profile
+  read/create failures are visible and retryable rather than replaced by defaults;
+  fresh clinic setup immediately enables invitations; real and Training Demo
+  sessions retain canonical clinic/clinician provenance; stale account mutation
+  callbacks cannot leak data across sign-in changes; and tightly scoped legacy
+  invitation claims can adopt the authenticated current clinic. Both independent
+  Sol/High re-reviews passed. The full suite passed 362/362, build and quiet lint
+  passed, and dynamic rules execution remains pending on a Java-capable host.
 - **2026-09-19:** Central messaging/appointment security work landed in
   `b35fe35` and `6ffb345`, then merged by `63f860b`. It hardens the canonical
   rules, requires atomic two-way message-summary updates, and preserves exact R1
