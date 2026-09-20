@@ -501,7 +501,7 @@ independent workstream immediately when a slot opens.
 
 ### M1 — Production Messaging
 
-- **Status:** IN PROGRESS
+- **Status:** MERGED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-messaging`
@@ -509,7 +509,8 @@ independent workstream immediately when a slot opens.
 - **Final commit:** `9e85241c07237bad66c483935229dd2a9f94bbc7`,
   `a471c4584e7f1af0861520c0959ad686c8a3bdda`,
   `2c84096e79417dbb46627d61fec23393942a0352`,
-  `c26a9b489a3b8491303a9674444503bc6202f8d4`
+  `c26a9b489a3b8491303a9674444503bc6202f8d4`,
+  `6b6d4d2357024678a75baf34d52ca954325d1efc`
 - **Owned files:** `src/components/clinician/MessagingView.tsx`, a new patient
   messaging surface, new message repository/mappers/tests. No independent changes
   to shared rules/types/storage.
@@ -542,7 +543,9 @@ independent workstream immediately when a slot opens.
   removal of stale clinician discovery, fail-safe legacy denial, and synchronous/
   paginated switch guards. Those fixes completed at `c26a9b48`, with 24/24 focused
   and 225/225 full tests passing. Final re-review found one remaining stale
-  pagination rejection/finally guard; a narrow fix is in progress.
+  pagination rejection/finally guard. That fix completed at `6b6d4d23`; focused
+  tests passed 26/26 and final re-review passed without findings. M1 merged into
+  `fill-in-mocked-data` via `0410f93`; integrated focused tests passed 26/26.
 
 ### A1 — Production Appointments
 
@@ -750,6 +753,10 @@ independent workstream immediately when a slot opens.
   `fill-in-mocked-data` via `4b9e4a7`; integrated appointment tests passed 37/37.
   The root dependency install required the repository's existing legacy-peer mode.
   Central appointment rules, App cleanup, and patient routing remain pending.
+- **2026-09-19:** M1 completed its final pagination guard at Git-verified
+  `6b6d4d23`, passed final independent re-review without findings, and merged into
+  `fill-in-mocked-data` via `0410f93`; integrated messaging tests passed 26/26.
+  Central rules and shell/App cutover remain pending.
 - **2026-09-19:** Handoff reconciled against Git. The integration worktree was
   clean at `fill-in-mocked-data@414f507`; `main` and `origin/main` remained at
   `8bab4b8`; the foundation history was present; no downstream worktrees or remote
