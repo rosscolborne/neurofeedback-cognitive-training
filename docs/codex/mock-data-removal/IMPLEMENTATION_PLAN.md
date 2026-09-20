@@ -521,13 +521,14 @@ independent workstream immediately when a slot opens.
 
 ### T1 — Protocol Runtime Consumption
 
-- **Status:** IMPLEMENTED
+- **Status:** MERGED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
 - **Final commit:** `8963f02d382b4fee2c951207b3cb52ccaef69f5c`,
   `7dea986f0dc1443bfadbc6112c48f84642950fbc`,
-  `2dbdb8e6a128ffae201aaef0f92af76e6f481626`
+  `2dbdb8e6a128ffae201aaef0f92af76e6f481626`; merged by
+  `d0fe1d92c814600de6f823d9b7a6a983cab48ff1`
 - **Owned files:** protocol-consumption portions of
   `src/components/patient/SessionRunner.tsx`, `src/services/adaptiveEngine.ts`, and
   `src/services/eegEngine.ts`; focused tests. Do not change the catalog or shared
@@ -564,7 +565,8 @@ independent workstream immediately when a slot opens.
   hardware SMR synthesis and sub-cent adaptive-step precision divergence; focused
   fixes now keep missing hardware SMR unavailable/non-rewarding and restrict steps
   to exact supported two-decimal precision. Focused tests passed 15/15 and full
-  tests passed 177/177; re-review is pending.
+  tests passed 177/177; final re-review passed without findings and the branch
+  merged. Integrated focused tests passed 15/15.
 
 ### D1 — Production/Demo Data Separation
 
@@ -756,6 +758,9 @@ independent workstream immediately when a slot opens.
   The shared session-error contract now has compatible report error handling.
 - **2026-09-19:** T1 completed its residual fixes at Git-verified `2dbdb8e6`, with
   15/15 focused and 177/177 full tests passing, and entered focused re-review.
+- **2026-09-19:** T1 final re-review passed without findings and merged into
+  `fill-in-mocked-data` via `d0fe1d9`; integrated focused tests passed 15/15.
+  C1's measured average-band provenance dependency is now satisfied.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
