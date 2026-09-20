@@ -36,6 +36,16 @@ service cloud.firestore {
           .data.get('practitionerIds', []).hasAny([request.auth.uid]);
     }
 
+    function isAuthenticatedPractitionerForClinic(clinicId) {
+      return isAuthenticated() && clinicId != null &&
+        exists(/databases/$(database)/documents/practitioners/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/practitioners/$(request.auth.uid))
+          .data.get('userId', null) == request.auth.uid &&
+        get(/databases/$(database)/documents/practitioners/$(request.auth.uid))
+          .data.get('clinicId', null) == clinicId &&
+        isClinicMember(clinicId);
+    }
+
     function patientExists(patientId) {
       return patientId != null &&
         exists(/databases/$(database)/documents/clients/$(patientId));
@@ -113,6 +123,8 @@ service cloud.firestore {
       allow create: if isClinician() &&
         request.resource.data.id == invitationId &&
         request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.clinicId is string &&
+        isAuthenticatedPractitionerForClinic(request.resource.data.clinicId) &&
         request.resource.data.status == 'pending' &&
         request.resource.data.patientEmail is string &&
         request.resource.data.patientEmail.size() > 3 &&
@@ -150,6 +162,8 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
             .data.get('clinicianId', null) == resource.data.clinicianId &&
           getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
+            .data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+          getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))
             .data.get('acceptedInvitationId', null) == invitationId &&
           uniquenessReleased()
         )
@@ -164,6 +178,7 @@ service cloud.firestore {
         let invitation = getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.invitationId)).data;
         return invitation.get('status', null) == 'pending' &&
           invitation.get('clinicianId', null) == request.auth.uid &&
+          invitation.get('clinicId', null) == request.resource.data.get('clinicId', null) &&
           invitation.get('patientEmail', null) == request.resource.data.patientEmail &&
           invitation.get('expiresAt', null) == request.resource.data.expiresAt &&
           invitation.get('uniquenessClaimId', null) == emailKey;
@@ -176,6 +191,8 @@ service cloud.firestore {
         clinicianId == request.auth.uid &&
         emailKey == request.resource.data.patientEmail &&
         request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.clinicId is string &&
+        isAuthenticatedPractitionerForClinic(request.resource.data.clinicId) &&
         request.resource.data.patientEmail is string &&
         request.resource.data.patientEmail == request.resource.data.patientEmail.lower() &&
         request.resource.data.status == 'pending' &&
@@ -187,8 +204,11 @@ service cloud.firestore {
         clinicianId == request.auth.uid &&
         emailKey == request.resource.data.patientEmail &&
         resource.data.clinicianId == request.auth.uid &&
+        resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null) &&
         resource.data.expiresAt <= request.time &&
         request.resource.data.clinicianId == request.auth.uid &&
+        request.resource.data.clinicId is string &&
+        isAuthenticatedPractitionerForClinic(request.resource.data.clinicId) &&
         request.resource.data.patientEmail == resource.data.patientEmail &&
         request.resource.data.status == 'pending' &&
         request.resource.data.expiresAt is timestamp &&
@@ -224,6 +244,7 @@ service cloud.firestore {
         return invitationId is string &&
           request.resource.data.get('clinicianId', null) != request.auth.uid &&
           resource.data.get('clinicianId', null) == null &&
+          resource.data.get('clinicId', null) == null &&
           resource.data.get('linkedClinicianCode', null) == null &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
@@ -231,7 +252,9 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
             .data.get('patientId', null) == request.auth.uid &&
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
-            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null);
+            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null) &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicId', null) == request.resource.data.get('clinicId', null);
       }
 
       function createsWithValidInvitation() {
@@ -244,11 +267,14 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
             .data.get('patientId', null) == request.auth.uid &&
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
-            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null);
+            .data.get('clinicianId', null) == request.resource.data.get('clinicianId', null) &&
+          getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
+            .data.get('clinicId', null) == request.resource.data.get('clinicId', null);
       }
 
       function unlinksOwningClinician() {
         return isCanonicalPatientClinician(resource.data) &&
+          request.resource.data.get('clinicId', null) == null &&
           request.resource.data.get('clinicianId', null) == null &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
           request.resource.data.get('acceptedInvitationId', null) == null;
@@ -262,23 +288,33 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.auth.uid == clientId &&
         request.resource.data.id == clientId &&
-        request.resource.data.get('clinicId', null) == null &&
         (
           (
+            request.resource.data.get('clinicId', null) == null &&
             request.resource.data.get('clinicianId', null) == null &&
             request.resource.data.get('linkedClinicianCode', null) == null &&
             request.resource.data.get('acceptedInvitationId', null) == null
           ) || createsWithValidInvitation()
         );
       allow update: if isAuthenticated() &&
-        request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) && (
+        (
         (
           request.auth.uid == clientId &&
-          (relationshipUnchanged() || acceptsValidInvitation())
+          (
+            (
+              request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+              relationshipUnchanged()
+            ) || acceptsValidInvitation()
+          )
         ) ||
         (
           isCanonicalPatientClinician(resource.data) &&
-          (relationshipUnchanged() || unlinksOwningClinician())
+          (
+            (
+              request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
+              relationshipUnchanged()
+            ) || unlinksOwningClinician()
+          )
         ) ||
         (
           isClinicMember(resource.data.get('clinicId', null)) &&

@@ -348,7 +348,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                       </span>
                       {s.isDemo && (
                         <span className="status-tag" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                          Training Demo · synthetic
+                            Training Demo · Synthetic acquisition
                         </span>
                       )}
                       {s.moodRating && (

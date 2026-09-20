@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { relationshipKey, type MessageRelationship } from '../messageMappers';
 
-const state = vi.hoisted(() => ({ auth: { currentUser: { uid: 'clinician-1' } as null | { uid: string } }, generated: 0 }));
+const state = vi.hoisted(() => ({ auth: { currentUser: { uid: 'clinician-1' } as null | { uid: string } }, generated: 0, demoWorkspace: false }));
 const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), getDocs: vi.fn(), runTransaction: vi.fn(), onSnapshot: vi.fn((..._args: unknown[]) => vi.fn()), serverTimestamp: vi.fn(() => ({ server: true })) }));
 vi.mock('../firebase', () => ({ auth: state.auth, db: { type: 'db' } }));
+vi.mock('../clinicianDemoBoundary', () => ({ isClinicianDemoWorkspace: () => state.demoWorkspace }));
 vi.mock('firebase/firestore', () => ({
   collection: (_parent: unknown, ...segments: string[]) => ({ type: 'collection', path: segments.join('/') }),
   collectionGroup: (_db: unknown, name: string) => ({ type: 'collectionGroup', path: name }),
@@ -21,7 +22,16 @@ const client = (clinicianId: unknown, linkedClinicianCode?: unknown) => ({ exist
 const missing = () => ({ exists: () => false, data: () => ({}) });
 
 describe('relationship-scoped message repository', () => {
-  beforeEach(() => { vi.clearAllMocks(); state.auth.currentUser = { uid: 'clinician-1' }; state.generated = 0; });
+  beforeEach(() => { vi.clearAllMocks(); state.auth.currentUser = { uid: 'clinician-1' }; state.generated = 0; state.demoWorkspace = false; });
+
+  it('fails closed in the sample clinician workspace before auth or Firestore access', async () => {
+    state.demoWorkspace = true;
+    state.auth.currentUser = null;
+    await expect(messageRepository.resolveActiveRelationship('sample-patient')).rejects.toThrow(/sample clinician workspace/);
+    expect(() => messageRepository.prepareMessage(rel('sample-patient', 'demo-clinician'), 'Hello')).toThrow(/sample clinician workspace/);
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
 
   it('matches R1 fallback exactly and rejects malformed non-null canonical ownership', async () => {
     firestore.getDoc.mockResolvedValueOnce(client(null, 'clinician-1'));
@@ -97,9 +107,16 @@ describe('relationship-scoped message repository', () => {
     expect(firestore.runTransaction).not.toHaveBeenCalled();
   });
 
-  it('excludes demo and mismatched legacy arrays', async () => {
+  it('excludes mismatched legacy arrays without treating mutable demo-shaped fields as authorization', async () => {
     firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockResolvedValueOnce({ exists: () => true, data: () => ({ patientId: 'patient-1', clinicianId: 'other', messages: [{ sender: 'patient', text: 'private' }] }) });
     await expect(messageRepository.listLegacyMessages(rel())).resolves.toEqual([]);
+
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockResolvedValueOnce({ exists: () => true, data: () => ({ patientId: 'patient-1', clinicianId: 'clinician-1', isDemo: true, messages: [{ sender: 'patient', text: 'Existing note' }] }) });
+    await expect(messageRepository.listLegacyMessages(rel())).resolves.toMatchObject([{ text: 'Existing note' }]);
+
+    state.auth.currentUser = { uid: 'demo-looking-patient' };
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1')).mockResolvedValueOnce({ exists: () => true, data: () => ({ patientId: 'demo-looking-patient', clinicianId: 'clinician-1', messages: [{ sender: 'patient', text: 'Legitimate ID' }] }) });
+    await expect(messageRepository.listLegacyMessages(rel('demo-looking-patient'))).resolves.toMatchObject([{ text: 'Legitimate ID' }]);
   });
 
   it('keeps canonical history available when a former-clinician legacy read is denied', async () => {

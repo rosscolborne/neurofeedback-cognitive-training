@@ -89,6 +89,7 @@ export function readPatientInvitation(
   const invitation: PatientInvitation = {
     ...raw,
     id: raw.id || documentId,
+    clinicId: typeof raw.clinicId === 'string' && raw.clinicId.trim() ? raw.clinicId.trim() : undefined,
     clinicianName: raw.clinicianName ?? '',
     patientName: raw.patientName ?? '',
     schemaVersion: raw.schemaVersion ?? 1,

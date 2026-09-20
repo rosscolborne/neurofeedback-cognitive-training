@@ -78,6 +78,42 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain("request.resource.data.expiresAt <= request.time + duration.value(30, 'd')");
   });
 
+  it('binds new invitations and uniqueness claims to the clinicians authenticated clinic membership', () => {
+    expect(rules).toContain('function isAuthenticatedPractitionerForClinic(clinicId)');
+    expect(rules).toContain('exists(/databases/$(database)/documents/practitioners/$(request.auth.uid))');
+    expect(rules).toContain(".data.get('clinicId', null) == clinicId");
+    expect(rules).toContain('isClinicMember(clinicId)');
+
+    const invitationsBlock = rules.slice(
+      rules.indexOf('match /patientInvitations/{invitationId}'),
+      rules.indexOf('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}'),
+    );
+    expect(invitationsBlock).toContain('request.resource.data.clinicId is string');
+    expect(invitationsBlock).toContain('isAuthenticatedPractitionerForClinic(request.resource.data.clinicId)');
+
+    const claimsBlock = rules.slice(
+      rules.indexOf('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}'),
+      rules.indexOf('match /clients/{clientId}'),
+    );
+    expect(claimsBlock).toContain("invitation.get('clinicId', null) == request.resource.data.get('clinicId', null)");
+    expect(claimsBlock).toContain("resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null)");
+    expect(claimsBlock).toContain('isAuthenticatedPractitionerForClinic(request.resource.data.clinicId)');
+  });
+
+  it('copies exactly the invitation clinic on acceptance while preserving ordinary clinic immutability', () => {
+    const invitationsBlock = rules.slice(
+      rules.indexOf('match /patientInvitations/{invitationId}'),
+      rules.indexOf('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}'),
+    );
+    expect(invitationsBlock).toContain(".data.get('clinicId', null) == resource.data.get('clinicId', null)");
+
+    const clientsBlock = rules.slice(rules.indexOf('match /clients/{clientId}'), rules.indexOf('// Neurofeedback Session Records'));
+    expect(clientsBlock).toContain("resource.data.get('clinicId', null) == null");
+    expect(clientsBlock).toContain(".data.get('clinicId', null) == request.resource.data.get('clinicId', null)");
+    expect(clientsBlock).toContain("request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&\n              relationshipUnchanged()");
+    expect(clientsBlock).toContain("request.resource.data.get('clinicId', null) == null &&\n            request.resource.data.get('clinicianId', null) == null");
+  });
+
   it('uses canonical clinician ownership before the legacy fallback', () => {
     expect(rules).toContain('function isCanonicalPatientClinician(patient)');
     expect(rules).toContain("patient.get('clinicianId', null) == null");
@@ -114,8 +150,8 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain('function acceptsValidInvitation()');
     expect(rules).toContain('function createsWithValidInvitation()');
     expect(rules).toContain('function unlinksOwningClinician()');
-    expect(rules).toContain('(relationshipUnchanged() || acceptsValidInvitation())');
-    expect(rules).toContain('(relationshipUnchanged() || unlinksOwningClinician())');
+    expect(rules).toContain(') || acceptsValidInvitation()');
+    expect(rules).toContain(') || unlinksOwningClinician()');
     expect(rules).toContain("request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null)");
   });
 

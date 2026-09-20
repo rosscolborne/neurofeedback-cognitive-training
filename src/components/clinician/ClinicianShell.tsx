@@ -1,12 +1,5 @@
 import React, { useState } from 'react';
-import {
-  CalendarAppointment,
-  ClientProfile,
-  ClinicBrandConfig,
-  MessageThread,
-  PatientInvitation,
-  QEEGBrainMap,
-} from '../../types';
+import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } from '../../types';
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
 import { MessagingView } from './MessagingView';
@@ -31,16 +24,11 @@ interface ClinicianShellProps {
   isDemoWorkspace?: boolean;
   clients: ClientProfile[];
   patientInvitations: PatientInvitation[];
-  messages: MessageThread[];
-  appointments: CalendarAppointment[];
   onUpdateClient: (updated: ClientProfile) => void;
   onAppendBrainMap: (patientId: string, map: QEEGBrainMap) => Promise<QEEGBrainMap>;
   onDeleteClient?: (clientId: string) => void | Promise<void>;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelPatientInvitation: (invitationId: string) => Promise<void>;
-  onSendMessage: (clientId: string, text: string) => void;
-  onSaveAppointment: (appt: CalendarAppointment) => void;
-  onDeleteAppointment: (id: string) => void;
   onOpenRebrand: () => void;
   onLogout: () => Promise<void>;
 }
@@ -58,27 +46,20 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   isDemoWorkspace = false,
   clients,
   patientInvitations,
-  messages,
-  appointments,
   onUpdateClient,
   onAppendBrainMap,
   onDeleteClient,
   onAddClient,
   onCancelPatientInvitation,
-  onSendMessage,
-  onSaveAppointment,
-  onDeleteAppointment,
   onOpenRebrand,
   onLogout,
 }) => {
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
 
-  const totalUnread = messages.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
-
   const navItems: ClinicianNavItem[] = [
     { id: 'clients', label: 'Patients', icon: Users },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnread },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -304,20 +285,15 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
         {activeNav === 'messages' && (
           <MessagingView
-            threads={messages}
+            participants={clients.map((client) => ({ patientId: client.id, name: client.name }))}
             selectedClientId={selectedClient?.id}
-            onSendMessage={onSendMessage}
           />
         )}
 
         {activeNav === 'calendar' && (
           <ClinicalCalendarView
             clients={clients}
-            appointments={appointments}
-            onSaveAppointment={onSaveAppointment}
-            onDeleteAppointment={onDeleteAppointment}
-            onSelectClient={handleSelectClient}
-            onOpenMessages={handleOpenMessagesForClient}
+            preSelectedClientId={selectedClient?.id}
           />
         )}
 

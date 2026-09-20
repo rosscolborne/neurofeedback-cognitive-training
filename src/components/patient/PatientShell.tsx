@@ -10,8 +10,10 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
+import { PatientMessagingView } from './PatientMessagingView';
+import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import {
@@ -36,7 +38,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   initialInvitationCode,
   onInvitationAccepted,
 }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -426,6 +428,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
+        {activeTab === 'messages' && (isClinicianLinked
+          ? <PatientMessagingView patientId={client.id} />
+          : <UnlinkedCareFeature feature="messages" />)}
+
+        {activeTab === 'appointments' && (isClinicianLinked
+          ? <PatientAppointmentsView />
+          : <UnlinkedCareFeature feature="appointments" />)}
+
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
             {/* Profile Info Card */}
@@ -626,6 +636,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           { id: 'sessions', label: 'Train', icon: Compass },
           { id: 'education', label: 'Science', icon: BookOpen },
           { id: 'progress', label: 'Progress', icon: Activity },
+          { id: 'messages', label: 'Messages', icon: MessageSquare },
+          { id: 'appointments', label: 'Visits', icon: CalendarDays },
           { id: 'profile', label: 'Profile', icon: User },
         ].map(tab => {
           const Icon = tab.icon;
@@ -655,3 +667,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </div>
   );
 };
+
+const UnlinkedCareFeature: React.FC<{ feature: 'messages' | 'appointments' }> = ({ feature }) => (
+  <section className="card-patient" role="status" style={{ padding: '28px 22px', textAlign: 'center' }}>
+    <h1 style={{ margin: 0, fontSize: '22px', textTransform: 'capitalize' }}>{feature}</h1>
+    <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.5 }}>
+      Connect your account with a clinician before using {feature}. You can enter an invitation code from Home or Profile.
+    </p>
+  </section>
+);

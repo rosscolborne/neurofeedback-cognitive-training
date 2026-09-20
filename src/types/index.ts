@@ -405,6 +405,8 @@ export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled' | 'ex
 export interface PatientInvitation {
   id: string;
   clinicianId: string;
+  /** Owning clinic for canonical invitations; absent only on legacy records. */
+  clinicId?: string;
   clinicianName: string;
   patientEmail: string;
   patientName: string;
@@ -426,7 +428,7 @@ export interface PatientInvitation {
 export type PatientInvitationInput = Pick<
   PatientInvitation,
   'patientEmail' | 'patientName' | 'condition' | 'assignedProtocol' | 'prescribedSessionsPerWeek' | 'notes'
-> & { clinicianName: string };
+> & { clinicianName: string; clinicId: string };
 
 export interface ClientProfile {
   id: string;

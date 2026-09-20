@@ -43,6 +43,7 @@ import {
   timestampToIso,
 } from './dataMappers';
 import { DEMO_CLINICIAN_ID, isClinicianDemoWorkspace } from './clinicianDemoBoundary';
+import { mapClinicBrand } from './clinicSettingsRepository';
 
 const STORAGE_KEYS = {
   BRAND: 'waveable_brand_config',
@@ -681,7 +682,9 @@ class StorageEngine {
 
   public async getClinicBrandConfig(clinicId: string): Promise<ClinicBrandConfig> {
     const clinic = await this.getClinic(clinicId);
-    return clinic?.branding ?? this.getBrandConfig();
+    // Never fall back to the historical global browser key here: it is not
+    // account/tenant scoped and can leak the previous account's branding.
+    return mapClinicBrand(clinic?.branding, clinicId) ?? BRAND_PRESETS[0];
   }
 
   public async saveClinicBrandConfig(brand: ClinicBrandConfig): Promise<void> {
@@ -860,6 +863,10 @@ class StorageEngine {
       throw new Error('You cannot invite your own clinician account as a patient');
     }
     if (!input.patientName.trim()) throw new Error('Patient name is required');
+    const clinicId = input.clinicId.trim();
+    if (!clinicId || clinicId.includes('/')) {
+      throw new Error('Complete clinic setup before inviting a patient');
+    }
     if (!Number.isInteger(input.prescribedSessionsPerWeek) || input.prescribedSessionsPerWeek < 1) {
       throw new Error('Weekly sessions must be a positive whole number');
     }
@@ -870,6 +877,7 @@ class StorageEngine {
     const invitation: PatientInvitation = {
       id: createInvitationCode(),
       clinicianId: clinician.uid,
+      clinicId,
       clinicianName: input.clinicianName.trim() || clinician.email || 'Clinician',
       patientEmail,
       patientName: input.patientName.trim(),
@@ -905,6 +913,7 @@ class StorageEngine {
       }));
       transaction.set(claimRef, {
         clinicianId: clinician.uid,
+        clinicId,
         patientEmail,
         invitationId: invitation.id,
         status: 'pending',
@@ -960,7 +969,7 @@ class StorageEngine {
     }
     await setDoc(
       patientRef,
-      { clinicianId: null, linkedClinicianCode: null, acceptedInvitationId: null, updatedAt: serverTimestamp() },
+      { clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp() },
       { merge: true }
     );
   }
@@ -990,6 +999,9 @@ class StorageEngine {
         if (normalizeEmail(invitation.patientEmail) !== normalizeEmail(patientEmail)) {
           throw new Error('This invitation was sent to a different email address');
         }
+        if (invitation.clinicId && invitation.clinicId.includes('/')) {
+          throw new Error('This invitation contains an invalid clinic assignment');
+        }
         const clientSnapshot = await transaction.get(clientRef);
         const current = clientSnapshot.exists()
           ? readClientProfile(clientSnapshot.data(), clientSnapshot.id)
@@ -1000,6 +1012,7 @@ class StorageEngine {
           if (
             invitation.patientId === patient.uid &&
             currentClinicianId === invitation.clinicianId &&
+            (!invitation.clinicId || current.clinicId === invitation.clinicId) &&
             current.acceptedInvitationId === invitation.id
           ) {
             return current;
@@ -1024,6 +1037,7 @@ class StorageEngine {
           email: patientEmail,
           name: current.name || invitation.patientName,
           clinicianId: invitation.clinicianId,
+          clinicId: invitation.clinicId ?? current.clinicId,
           acceptedInvitationId: invitation.id,
           condition: invitation.condition,
           assignedProtocol: invitation.assignedProtocol,

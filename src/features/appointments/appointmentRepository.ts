@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
+import { isClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
 import { readAnyAppointmentDocument, readAppointmentDocument, sortAppointments } from './appointmentMappers';
 import { resolveAppointmentInstant } from './appointmentTime';
 import type { AppointmentDraft, AppointmentEdit, AppointmentListRole, AppointmentRecord, ProductionAppointment } from './appointmentTypes';
@@ -19,8 +20,9 @@ const CANCELLATION_ID_PATTERN = /^cancel_[A-Za-z0-9_-]{20,100}$/;
 const APPOINTMENT_TYPES = ['remote-training', 'in-clinic-evaluation', 'qeeg-mapping', 'protocol-review', 'consultation'];
 
 function signedInUserId(): string {
+  if (isClinicianDemoWorkspace()) throw new Error('Appointments are unavailable in the sample clinician workspace');
   const uid = auth.currentUser?.uid;
-  if (!uid || uid === 'demo-clinician') throw new Error('Sign in to manage appointments');
+  if (!uid) throw new Error('Sign in to manage appointments');
   return uid;
 }
 
@@ -88,8 +90,8 @@ export class AppointmentRepository {
   async create(input: AppointmentDraft): Promise<ProductionAppointment> {
     const clinicianId = signedInUserId();
     if (!APPOINTMENT_ID_PATTERN.test(input.requestId)) throw new Error('Appointment request ID is invalid');
-    if (typeof input.patientId !== 'string' || !input.patientId || input.patientId.length > 128 || input.patientId.includes('/') || input.patientId.startsWith('demo-')) {
-      throw new Error('Select a linked production patient');
+    if (typeof input.patientId !== 'string' || !input.patientId || input.patientId.length > 128 || input.patientId.includes('/')) {
+      throw new Error('Select a linked patient');
     }
     const normalized = validateDraft(input);
     const appointmentRef = doc(db, 'appointments', input.requestId);

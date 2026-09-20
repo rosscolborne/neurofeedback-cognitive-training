@@ -91,10 +91,15 @@ describe('production data migration readers', () => {
     const legacy = readPatientInvitation({
       clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending',
     }, 'LEGACY', 100);
+    const canonical = readPatientInvitation({
+      clinicianId: 'clinician-1', clinicId: ' clinic-1 ', patientEmail: 'patient@example.com', status: 'pending',
+    }, 'CANONICAL', 100);
 
     expect(expired.status).toBe('expired');
     expect(isPatientInvitationExpired(expired, 100)).toBe(true);
     expect(legacy.status).toBe('pending');
+    expect(legacy.clinicId).toBeUndefined();
+    expect(canonical.clinicId).toBe('clinic-1');
     expect(legacy.schemaVersion).toBe(1);
   });
 

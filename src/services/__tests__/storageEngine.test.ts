@@ -32,6 +32,7 @@ vi.mock('firebase/firestore', () => ({
 import { INITIAL_DEMO_CLIENTS, createBlankProfile, storageEngine } from '../storageEngine';
 import { activateClinicianDemoWorkspace, deactivateClinicianDemoWorkspace } from '../clinicianDemoBoundary';
 import { buildPatientProgressDisplayModel } from '../../components/patient/patientMetrics';
+import { BRAND_PRESETS } from '../brandEngine';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
@@ -60,6 +61,16 @@ describe('role-aware session repository', () => {
     const sessions = await storageEngine.getSessionsFor({ role: 'clinician', clinicianId: 'clinician-2' });
     expect(sessions).toEqual([]);
     expect(firestore.getDocs).not.toHaveBeenCalled();
+  });
+
+  it('loads only the requested clinic brand and falls back to the product default', async () => {
+    const clinicBrand = { ...BRAND_PRESETS[0], clinicId: 'clinic-1', name: 'Clinic One' };
+    firestore.getDoc
+      .mockResolvedValueOnce({ id: 'clinic-1', exists: () => true, data: () => ({ id: 'clinic-1', practitionerIds: [], branding: clinicBrand }) })
+      .mockResolvedValueOnce({ id: 'clinic-2', exists: () => false });
+
+    await expect(storageEngine.getClinicBrandConfig('clinic-1')).resolves.toMatchObject({ clinicId: 'clinic-1', name: 'Clinic One' });
+    await expect(storageEngine.getClinicBrandConfig('clinic-2')).resolves.toEqual(BRAND_PRESETS[0]);
   });
 
   it('checks patient ownership before a clinician patient-scoped query', async () => {
@@ -381,6 +392,7 @@ describe('production and sample workspace separation', () => {
     await expect(storageEngine.getPractitioner('practitioner-1')).resolves.toBeNull();
     await expect(storageEngine.getPatientInvitationsForClinician()).resolves.toEqual([]);
     await expect(storageEngine.createPatientInvitation({
+      clinicId: 'clinic-1',
       clinicianName: 'Clinician', patientEmail: 'patient@example.com', patientName: 'Patient',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).rejects.toThrow('unavailable in the sample clinician workspace');
@@ -479,6 +491,7 @@ describe('patient invitation linking', () => {
     );
 
     const invitation = await storageEngine.createPatientInvitation({
+      clinicId: 'clinic-1',
       clinicianName: 'Dr. Example',
       patientName: 'Patient One',
       patientEmail: ' Patient@One.Example ',
@@ -488,20 +501,27 @@ describe('patient invitation linking', () => {
     });
 
     expect(invitation.id).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    expect(invitation).toMatchObject({ clinicianId: 'clinician-1', patientEmail: 'patient@one.example', status: 'pending' });
+    expect(invitation).toMatchObject({ clinicianId: 'clinician-1', clinicId: 'clinic-1', patientEmail: 'patient@one.example', status: 'pending' });
     expect(invitation.uniquenessClaimId).toBe('patient@one.example');
     expect(writes).toContainEqual({
       ref: { type: 'doc', path: 'patientInvitations', id: invitation.id },
-      payload: expect.objectContaining({ patientEmail: 'patient@one.example', status: 'pending', expiresAt: expect.any(Date) }),
+      payload: expect.objectContaining({ clinicId: 'clinic-1', patientEmail: 'patient@one.example', status: 'pending', expiresAt: expect.any(Date) }),
     });
     expect(writes).toContainEqual({
       ref: { type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: invitation.uniquenessClaimId },
-      payload: expect.objectContaining({ patientEmail: 'patient@one.example', invitationId: invitation.id }),
+      payload: expect.objectContaining({ clinicId: 'clinic-1', patientEmail: 'patient@one.example', invitationId: invitation.id }),
     });
   });
 
   it('rejects self invitations and duplicate pending invitations', async () => {
     await expect(storageEngine.createPatientInvitation({
+      clinicId: 'invalid/clinic',
+      clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'patient@example.com',
+      condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
+    })).rejects.toThrow('Complete clinic setup');
+
+    await expect(storageEngine.createPatientInvitation({
+      clinicId: 'clinic-1',
       clinicianName: 'Dr. Example', patientName: 'Self', patientEmail: 'CLINICIAN@example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).rejects.toThrow('cannot invite your own');
@@ -516,6 +536,7 @@ describe('patient invitation linking', () => {
       })
     );
     await expect(storageEngine.createPatientInvitation({
+      clinicId: 'clinic-1',
       clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'Patient@Example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).rejects.toThrow('pending invitation already exists');
@@ -534,6 +555,7 @@ describe('patient invitation linking', () => {
     );
 
     await expect(storageEngine.createPatientInvitation({
+      clinicId: 'clinic-1',
       clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'patient@example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).resolves.toMatchObject({ status: 'pending' });
@@ -553,11 +575,13 @@ describe('patient invitation linking', () => {
 
     state.auth.currentUser = { uid: 'alpha', email: 'clinician-a@example.com' };
     await storageEngine.createPatientInvitation({
+      clinicId: 'clinic-alpha',
       clinicianName: 'A', patientName: 'Patient', patientEmail: 'beta__gamma@example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     });
     state.auth.currentUser = { uid: 'alpha__beta', email: 'clinician-b@example.com' };
     await storageEngine.createPatientInvitation({
+      clinicId: 'clinic-alpha-beta',
       clinicianName: 'B', patientName: 'Patient', patientEmail: 'gamma@example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     });
@@ -577,7 +601,7 @@ describe('patient invitation linking', () => {
         get: vi.fn()
           .mockResolvedValueOnce({
             id: 'ABCD-EFGH-JKLM', exists: () => true,
-            data: () => ({ clinicianId: 'clinician-1', clinicianName: 'Dr. Example', patientEmail: 'patient@example.com', patientName: 'Patient One', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: 'claim-1', schemaVersion: 1 }),
+            data: () => ({ clinicianId: 'clinician-1', clinicId: 'clinic-1', clinicianName: 'Dr. Example', patientEmail: 'patient@example.com', patientName: 'Patient One', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: 'claim-1', schemaVersion: 1 }),
           })
           .mockResolvedValueOnce({
             id: 'patient-1', exists: () => true,
@@ -593,8 +617,8 @@ describe('patient invitation linking', () => {
       createBlankProfile('patient-1', 'patient@example.com', 'Patient One')
     );
 
-    expect(linked).toMatchObject({ id: 'patient-1', clinicianId: 'clinician-1', acceptedInvitationId: 'ABCD-EFGH-JKLM' });
-    expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1' }) });
+    expect(linked).toMatchObject({ id: 'patient-1', clinicianId: 'clinician-1', clinicId: 'clinic-1', acceptedInvitationId: 'ABCD-EFGH-JKLM' });
+    expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1', clinicId: 'clinic-1' }) });
     expect(writes[1]).toMatchObject({ ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' }, payload: expect.objectContaining({ status: 'accepted', patientId: 'patient-1' }) });
     expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
   });
@@ -652,7 +676,7 @@ describe('patient invitation linking', () => {
     state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.com' };
     const linked = {
       ...createBlankProfile('patient-1', 'patient@example.com'),
-      clinicianId: 'clinician-1', acceptedInvitationId: 'ABCD-EFGH-JKLM',
+      clinicianId: 'clinician-1', clinicId: 'clinic-1', acceptedInvitationId: 'ABCD-EFGH-JKLM',
     };
     const set = vi.fn();
     firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
@@ -660,7 +684,7 @@ describe('patient invitation linking', () => {
         get: vi.fn()
           .mockResolvedValueOnce({
             id: 'ABCD-EFGH-JKLM', exists: () => true,
-            data: () => ({ clinicianId: 'clinician-1', patientId: 'patient-1', patientEmail: 'patient@example.com', status: 'accepted' }),
+            data: () => ({ clinicianId: 'clinician-1', clinicId: 'clinic-1', patientId: 'patient-1', patientEmail: 'patient@example.com', status: 'accepted' }),
           })
           .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => linked }),
         set,
@@ -808,7 +832,7 @@ describe('patient invitation linking', () => {
     expect(firestore.deleteDoc).not.toHaveBeenCalled();
     expect(firestore.setDoc).toHaveBeenCalledWith(
       { type: 'doc', path: 'clients', id: 'patient-1' },
-      expect.objectContaining({ clinicianId: null, acceptedInvitationId: null }),
+      expect.objectContaining({ clinicianId: null, clinicId: null, acceptedInvitationId: null }),
       { merge: true }
     );
   });

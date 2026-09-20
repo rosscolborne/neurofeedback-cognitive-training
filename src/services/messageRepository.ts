@@ -9,6 +9,7 @@ import {
   relationshipKey, type MessageRelationship, type MessageSenderRole,
   type ProductionMessage, type ProductionMessageThread,
 } from './messageMappers';
+import { isClinicianDemoWorkspace } from './clinicianDemoBoundary';
 
 const MAX_MESSAGE_LENGTH = 4000; const DEFAULT_PAGE_SIZE = 30; const MAX_PAGE_SIZE = 100;
 export interface MessagePageCursor { relationshipKey: string; createdAt: unknown; id: string; }
@@ -26,7 +27,12 @@ export interface MessageRepository {
 
 interface AuthorizedRelationship extends MessageRelationship { senderId: string; senderRole: MessageSenderRole; }
 const asError = (error: unknown) => error instanceof Error ? error : new Error('Messaging is unavailable.');
-const currentUserId = () => { const uid = auth.currentUser?.uid; if (!uid) throw new Error('Sign in to use messaging.'); return uid; };
+const currentUserId = () => {
+  if (isClinicianDemoWorkspace()) throw new Error('Messaging is unavailable in the sample clinician workspace.');
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Sign in to use messaging.');
+  return uid;
+};
 const normalizeText = (text: string) => { const normalized = text.trim(); if (!normalized) throw new Error('Enter a message before sending.'); if (normalized.length > MAX_MESSAGE_LENGTH) throw new Error(`Messages must be ${MAX_MESSAGE_LENGTH.toLocaleString()} characters or fewer.`); return normalized; };
 
 function activeClinicianId(patient: DocumentData): string {

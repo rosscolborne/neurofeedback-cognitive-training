@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const state = vi.hoisted(() => ({ auth: { currentUser: { uid: 'clinician-1' } as null | { uid: string } } }));
+const state = vi.hoisted(() => ({ auth: { currentUser: { uid: 'clinician-1' } as null | { uid: string } }, demoWorkspace: false }));
 const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), getDocs: vi.fn(), runTransaction: vi.fn(), serverTimestamp: vi.fn(() => ({ __serverTimestamp: true })) }));
 
 vi.mock('../../../services/firebase', () => ({ auth: state.auth, db: { path: 'db' } }));
+vi.mock('../../../services/clinicianDemoBoundary', () => ({ isClinicianDemoWorkspace: () => state.demoWorkspace }));
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => ({ type: 'collection', path }),
   doc: (_db: unknown, path: string, id: string) => ({ type: 'doc', path, id }),
@@ -30,7 +31,22 @@ const draft = {
 
 describe('production appointment repository', () => {
   const repository = new AppointmentRepository();
-  beforeEach(() => { vi.clearAllMocks(); state.auth.currentUser = { uid: 'clinician-1' }; });
+  beforeEach(() => { vi.clearAllMocks(); state.auth.currentUser = { uid: 'clinician-1' }; state.demoWorkspace = false; });
+
+  it('fails closed in the sample clinician workspace before auth or Firestore access', async () => {
+    state.demoWorkspace = true;
+    state.auth.currentUser = null;
+    await expect(repository.list('clinician', ['sample-patient'])).rejects.toThrow(/sample clinician workspace/);
+    expect(firestore.getDocs).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not use a demo-looking identity as an authorization filter', async () => {
+    state.auth.currentUser = { uid: 'demo-clinician' };
+    firestore.getDocs.mockResolvedValueOnce({ docs: [] }).mockResolvedValueOnce({ docs: [] });
+    await expect(repository.list('clinician', ['demo-looking-patient'])).resolves.toEqual([]);
+    expect(firestore.getDocs.mock.calls[0][0].constraints).toContainEqual({ field: 'clinicianId', op: '==', value: 'demo-clinician' });
+  });
 
   it('queries only the authenticated participant and returns stable ordering', async () => {
     firestore.getDocs.mockResolvedValueOnce({ docs: [
