@@ -611,7 +611,7 @@ independent workstream immediately when a slot opens.
 
 ### D1 — Production/Demo Data Separation
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** no; begin after R1 and S1 review due to overlapping files
 - **Branch:** `codex/mockdata-demo-separation`
 - **Worktree:** `../neurasticity-mockdata-demo-separation`
@@ -873,6 +873,10 @@ independent workstream immediately when a slot opens.
   overlapping/stale UI operations, mounted component coverage, and strict central
   authorization rules. Owned findings were returned to the original agent; rules
   and shell/App wiring remain orchestrator-owned.
+- **2026-09-19:** D1 started from the clean post-S1 integration branch
+  `fill-in-mocked-data@17a4f5d` after R1 and S1 review/merge. It must coordinate
+  with the still-unmerged M1/A1 streams and preserve patient training Demo mode
+  and developer simulators.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
