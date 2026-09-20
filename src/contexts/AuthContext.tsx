@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
+  EmailAuthProvider,
   User,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  reauthenticateWithCredential,
   signOut,
+  updatePassword,
   updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
@@ -30,6 +33,7 @@ interface AuthContextType {
   isDemoWorkspace: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, displayName?: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
   loginAsDemoClinician: () => Promise<void>;
   logout: () => Promise<void>;
@@ -42,6 +46,7 @@ const AuthContext = createContext<AuthContextType>({
   isDemoWorkspace: false,
   login: async () => {},
   signup: async () => {},
+  changePassword: async () => {},
   selectRole: async () => {},
   loginAsDemoClinician: async () => {},
   logout: async () => {},
@@ -227,6 +232,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    if (!user || !user.email) {
+      throw new Error('A signed-in email account is required to change your password.');
+    }
+    if (isClinicianDemoWorkspace()) {
+      throw new Error('Password changes are not available for the demo account.');
+    }
+
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  };
+
   const loginAsDemoClinician = async () => {
     if (!CLINICIAN_DEMO_AVAILABLE) {
       throw new Error('The sample clinician workspace is not available in this deployment');
@@ -300,7 +318,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const demoWorkspace = isClinicianDemoWorkspace();
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
       {children}
     </AuthContext.Provider>
   );

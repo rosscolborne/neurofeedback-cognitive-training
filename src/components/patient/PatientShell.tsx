@@ -10,6 +10,7 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
+import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { PatientMessagingView } from './PatientMessagingView';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
@@ -642,6 +643,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 </button>
               </div>
             </div>
+
+            <ChangePasswordForm variant="patient" />
           </div>
         )}
       </main>

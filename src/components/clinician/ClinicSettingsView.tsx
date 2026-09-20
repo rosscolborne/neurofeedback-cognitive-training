@@ -3,6 +3,7 @@ import type { ClinicBrandConfig } from '../../types';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
 import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { errorMessage, primaryLicenseIdentifier, primaryLicensePresentation, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
+import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
@@ -127,6 +128,8 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
           <button onClick={onOpenRebrand} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>Open theme customizer</button>
         </div>
       </div>
+
+      <ChangePasswordForm variant="clinician" />
 
       <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-patient-recessed)', display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)' }}>
         <ShieldCheck size={20} color="var(--text-secondary)" />
