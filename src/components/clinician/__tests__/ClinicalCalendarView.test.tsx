@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import type { ClientProfile } from '../../../types';
 import type { AppointmentRepository } from '../../../features/appointments/appointmentRepository';
-import type { ProductionAppointment } from '../../../features/appointments/appointmentTypes';
+import type { AppointmentRecord, ProductionAppointment } from '../../../features/appointments/appointmentTypes';
 
 vi.mock('../../../services/firebase', () => ({ auth: { currentUser: { uid: 'clinician-1', displayName: 'Dr One' } }, db: {} }));
 
@@ -130,7 +130,7 @@ describe('mounted production appointment surfaces', () => {
     const records = [appointment(), {
       dataKind: 'legacy' as const, id: 'legacy-1', clinicianId: 'clinician-1', patientId: 'patient-1',
       patientDisplayName: 'Patient One', legacyDate: '2026-10-01', legacyTime: '09:00', durationMinutes: 45,
-      type: 'consultation' as const, status: 'scheduled' as const, readOnlyReason: 'Timezone unavailable — migration required',
+      type: 'consultation' as const, status: 'cancelled' as const, readOnlyReason: 'Timezone unavailable — migration required',
     }];
     const repo = repository({ list: vi.fn().mockResolvedValue(records) });
     const clinician = await mountClinician(repo);
@@ -140,6 +140,47 @@ describe('mounted production appointment surfaces', () => {
       expect(rendered).toContain('America/Toronto');
       expect(rendered).toContain('2026-10-01');
       expect(rendered).toContain('Timezone unavailable — migration required');
+      expect(rendered).toContain('cancelled');
     }
+  });
+
+  it('mounts the patient loading and empty states', async () => {
+    const pending = deferred<AppointmentRecord[]>();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientAppointmentsView repository={repository({ list: vi.fn(() => pending.promise) })} />); });
+    expect(text(renderer.root)).toContain('Loading appointments');
+    await act(async () => { pending.resolve([]); await pending.promise; });
+    expect(text(renderer.root)).toContain('No appointments scheduled');
+  });
+
+  it('mounts the patient error state and retries successfully', async () => {
+    const list = vi.fn().mockRejectedValueOnce(new Error('patient offline')).mockResolvedValueOnce([appointment({ status: 'cancelled' })]);
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientAppointmentsView repository={repository({ list })} />); });
+    expect(text(renderer.root)).toContain('patient offline');
+    await act(async () => { button(renderer.root, 'Retry').props.onClick(); await Promise.resolve(); });
+    expect(text(renderer.root)).toContain('cancelled');
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a stale patient load after the repository changes', async () => {
+    const stale = deferred<AppointmentRecord[]>();
+    const firstRepository = repository({ list: vi.fn(() => stale.promise) });
+    const currentRepository = repository({ list: vi.fn().mockResolvedValue([appointment()]) });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientAppointmentsView repository={firstRepository} />); });
+    await act(async () => { renderer.update(<PatientAppointmentsView repository={currentRepository} />); await Promise.resolve(); });
+    expect(text(renderer.root)).toContain('America/Toronto');
+    await act(async () => { stale.resolve([]); await stale.promise; });
+    expect(text(renderer.root)).toContain('America/Toronto');
+    expect(text(renderer.root)).not.toContain('No appointments scheduled');
+  });
+
+  it('ignores a patient load that completes after unmount', async () => {
+    const pending = deferred<AppointmentRecord[]>();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientAppointmentsView repository={repository({ list: vi.fn(() => pending.promise) })} />); });
+    await act(async () => { renderer.unmount(); pending.resolve([appointment()]); await pending.promise; });
+    expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining('unmounted'));
   });
 });

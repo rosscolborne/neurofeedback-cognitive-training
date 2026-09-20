@@ -43,7 +43,10 @@ describe('production appointment repository', () => {
     firestore.getDocs.mockResolvedValueOnce({ docs: [] }).mockResolvedValueOnce({ docs: [] });
     await repository.list('patient');
     expect(firestore.getDocs.mock.calls[1][0].constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
-    expect(firestore.getDocs.mock.calls[2][0].constraints).toContainEqual({ field: 'clientId', op: '==', value: 'patient-1' });
+    expect(firestore.getDocs.mock.calls[2][0].constraints).toEqual([
+      { field: 'clientId', op: '==', value: 'patient-1' },
+      { field: 'patientId', op: '==', value: null },
+    ]);
   });
 
   it('propagates query failures instead of presenting an empty calendar', async () => {

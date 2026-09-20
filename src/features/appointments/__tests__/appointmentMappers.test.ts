@@ -51,4 +51,20 @@ describe('appointment persistence mapper', () => {
     expect(legacy).not.toHaveProperty('timezone');
     expect(legacy).not.toHaveProperty('startsAtMillis');
   });
+
+  it('preserves recognized legacy statuses and rejects missing or invalid status', () => {
+    const base = { clinicianId: 'clinician-1', clientId: 'patient-1', clientName: 'Patient One', date: '2026-10-01', time: '09:00' };
+    expect(readAnyAppointmentDocument({ ...base, status: 'cancelled' }, 'cancelled')).toMatchObject({ dataKind: 'legacy', status: 'cancelled' });
+    expect(readAnyAppointmentDocument(base, 'missing')).toBeNull();
+    expect(readAnyAppointmentDocument({ ...base, status: 'unknown' }, 'invalid')).toBeNull();
+  });
+
+  it('rejects impossible legacy calendar dates and out-of-range wall times', () => {
+    const base = { clientId: 'patient-1', clientName: 'Patient One', status: 'scheduled' };
+    expect(readAnyAppointmentDocument({ ...base, date: '2026-02-29', time: '09:00' }, 'bad-date')).toBeNull();
+    expect(readAnyAppointmentDocument({ ...base, date: '2026-04-31', time: '09:00' }, 'bad-day')).toBeNull();
+    expect(readAnyAppointmentDocument({ ...base, date: '2028-02-29', time: '24:00' }, 'bad-hour')).toBeNull();
+    expect(readAnyAppointmentDocument({ ...base, date: '2028-02-29', time: '23:60' }, 'bad-minute')).toBeNull();
+    expect(readAnyAppointmentDocument({ ...base, date: '2028-02-29', time: '23:59' }, 'valid')).toMatchObject({ dataKind: 'legacy' });
+  });
 });

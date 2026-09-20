@@ -60,8 +60,16 @@ export function createCancellationRequestId(): string {
 export class AppointmentRepository {
   async list(role: AppointmentListRole): Promise<AppointmentRecord[]> {
     const uid = signedInUserId();
-    const fields = role === 'clinician' ? ['clinicianId'] : ['patientId', 'clientId'];
-    const snapshots = await Promise.all(fields.map((field) => getDocs(query(collection(db, 'appointments'), where(field, '==', uid)))));
+    const constraints = role === 'clinician'
+      ? [[where('clinicianId', '==', uid)]]
+      : [
+          [where('patientId', '==', uid)],
+          // Canonical ownership takes precedence. Firestore does not match a
+          // missing field to null, so legacy rows require a trusted
+          // `patientId: null` backfill before patient-side enumeration.
+          [where('clientId', '==', uid), where('patientId', '==', null)],
+        ];
+    const snapshots = await Promise.all(constraints.map((filters) => getDocs(query(collection(db, 'appointments'), ...filters))));
     const documents = new Map<string, { id: string; data: () => unknown }>();
     for (const snapshot of snapshots) for (const item of snapshot.docs) documents.set(item.id, item);
     const appointments = [...documents.values()].map((item) => {

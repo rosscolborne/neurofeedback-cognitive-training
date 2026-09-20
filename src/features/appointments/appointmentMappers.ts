@@ -89,11 +89,12 @@ export function readLegacyAppointmentDocument(raw: unknown, documentId: string):
   if (
     typeof value.clientId !== 'string' || !value.clientId ||
     typeof value.clientName !== 'string' || !value.clientName.trim() ||
-    typeof value.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) ||
-    typeof value.time !== 'string' || !/^\d{2}:\d{2}$/.test(value.time) ||
+    typeof value.date !== 'string' || !isValidLegacyDate(value.date) ||
+    typeof value.time !== 'string' || !isValidLegacyTime(value.time) ||
+    !STATUSES.includes(value.status as AppointmentStatus) ||
     value.startsAt !== undefined
   ) return null;
-  const status = STATUSES.includes(value.status as AppointmentStatus) ? value.status as AppointmentStatus : 'scheduled';
+  const status = value.status as AppointmentStatus;
   const type = TYPES.includes(value.type as AppointmentType) ? value.type as AppointmentType : null;
   const duration = Number(value.durationMinutes);
   return {
@@ -110,6 +111,23 @@ export function readLegacyAppointmentDocument(raw: unknown, documentId: string):
     notes: typeof value.notes === 'string' ? value.notes : undefined,
     readOnlyReason: 'Timezone unavailable — migration required',
   };
+}
+
+function isValidLegacyDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(0);
+  parsed.setUTCHours(0, 0, 0, 0);
+  parsed.setUTCFullYear(year, month - 1, day);
+  return year >= 1 && year <= 9999 && parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function isValidLegacyTime(value: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  return Boolean(match && Number(match[1]) <= 23 && Number(match[2]) <= 59);
 }
 
 export function readAnyAppointmentDocument(raw: unknown, documentId: string): AppointmentRecord | null {
