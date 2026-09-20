@@ -405,11 +405,12 @@ independent workstream immediately when a slot opens.
 
 ### C2 — Clinical Analytics and Reports
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinical-reports`
 - **Worktree:** `../neurasticity-mockdata-clinical-reports`
-- **Final commit:** `09d2c086ac0c654b730b6f81365eb98a0de5d34e`
+- **Final commit:** `09d2c086ac0c654b730b6f81365eb98a0de5d34e`,
+  `38e0398665e1a4314f97e3d28d8dc0acf3a35966`
 - **Owned files:** `src/components/clinician/ClinicalReportsView.tsx`,
   `src/services/pdfReportGenerator.ts`, a new isolated analytics helper/tests.
 - **Dependencies:** F0; R1 only for final authorization/E2E.
@@ -432,7 +433,10 @@ independent workstream immediately when a slot opens.
   `d445528`. Independent review required Demo-session separation from clinical
   evidence/adherence, retention of explicitly selected invalid-timestamp legacy
   sessions in compatibility PDFs, and stronger UI state/filter/export coverage.
-  Fixes are in progress.
+  Fixes now separate and label Demo/sample completion counts, exclude them from
+  clinical evidence/adherence, retain explicit invalid-timestamp legacy rows as
+  unavailable-dated, and use a tested complete report view model. Focused tests
+  passed 15/15 and full tests passed 136/136; re-review is pending.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
@@ -735,6 +739,8 @@ independent workstream immediately when a slot opens.
   and 157/157 full tests passing, and entered independent re-review. Shared
   clinician bootstrap rules, App brand hydration, and patient clinic propagation
   remain central integration work.
+- **2026-09-19:** C2 completed review fixes at `38e0398`, with 15/15 focused and
+  136/136 full tests passing, and entered independent re-review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
