@@ -486,12 +486,13 @@ independent workstream immediately when a slot opens.
 
 ### M1 — Production Messaging
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-messaging`
 - **Worktree:** `../neurasticity-mockdata-messaging`
-- **Final commit:** pending
+- **Final commit:** `9e85241c07237bad66c483935229dd2a9f94bbc7`,
+  `a471c4584e7f1af0861520c0959ad686c8a3bdda`
 - **Owned files:** `src/components/clinician/MessagingView.tsx`, a new patient
   messaging surface, new message repository/mappers/tests. No independent changes
   to shared rules/types/storage.
@@ -505,6 +506,13 @@ independent workstream immediately when a slot opens.
   failures do not appear sent; no placeholder conversation is shown.
 - **Tests:** repository/order/auth tests, component empty/send/failure tests,
   rules integration after R1, manual two-account exchange.
+- **Implementation report:** canonical per-patient threads and immutable message
+  subcollections, relationship re-resolution, stable opaque retry IDs, atomic
+  summary/message writes, stable pagination, and truthful loading/empty/error/
+  retry UI are implemented in owned files, including an unwired patient surface.
+  Focused tests passed 15/15, the full suite passed 216/216, targeted lint was
+  clean, and the production build passed. Shared rules/index/shell/App integration
+  is centrally reserved; independent review is pending.
 
 ### A1 — Production Appointments
 
@@ -805,6 +813,11 @@ independent workstream immediately when a slot opens.
   returned to the original S1 agent. The orchestrator began a role-gated `getAfter`
   onboarding rule and fresh-own-record read contract centrally; dynamic emulator
   validation remains pending in a Java-enabled environment.
+- **2026-09-19:** M1 completed at Git-verified commits `9e85241c` and
+  `a471c4584`, with 15/15 focused and 216/216 full tests passing, targeted lint
+  clean, and the production build passing. Its canonical repository, clinician
+  surface, and unwired patient surface entered independent review; shared rules,
+  index, and shell/App wiring remain centrally reserved.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
