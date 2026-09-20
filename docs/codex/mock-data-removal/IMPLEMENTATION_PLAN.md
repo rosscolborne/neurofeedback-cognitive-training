@@ -546,7 +546,7 @@ independent workstream immediately when a slot opens.
 
 ### A1 — Production Appointments
 
-- **Status:** IMPLEMENTED
+- **Status:** MERGED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
@@ -584,7 +584,9 @@ independent workstream immediately when a slot opens.
   query is rules-provable, invalid status/date/time is rejected without invention,
   status is consistent across surfaces, and patient lifecycle coverage is mounted.
   Focused tests passed 37/37, the full suite passed 239/239, lint/build passed, and
-  re-review is pending. Strict authorization rules remain central.
+  final re-review passed without findings. A1 merged into `fill-in-mocked-data` via
+  `4b9e4a7`; integrated focused tests passed 37/37. Strict authorization rules and
+  shell/App wiring remain central.
 
 ### T1 — Protocol Runtime Consumption
 
@@ -744,6 +746,10 @@ independent workstream immediately when a slot opens.
   clinician sample workspace is isolated; non-Demo missing EEG must fail rather
   than silently switching to simulation. D1 and integrated analytics regressions
   were updated accordingly.
+- **2026-09-19:** A1 final re-review passed without findings and merged into
+  `fill-in-mocked-data` via `4b9e4a7`; integrated appointment tests passed 37/37.
+  The root dependency install required the repository's existing legacy-peer mode.
+  Central appointment rules, App cleanup, and patient routing remain pending.
 - **2026-09-19:** Handoff reconciled against Git. The integration worktree was
   clean at `fill-in-mocked-data@414f507`; `main` and `origin/main` remained at
   `8bab4b8`; the foundation history was present; no downstream worktrees or remote
