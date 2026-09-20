@@ -48,6 +48,17 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain('request.resource.data.practitionerIds == resource.data.practitionerIds');
   });
 
+  it('supports role-gated atomic onboarding through post-write clinic membership', () => {
+    expect(rules).toContain('function isClinicMemberAfter(clinicId)');
+    expect(rules).toContain('existsAfter(/databases/$(database)/documents/clinics/$(clinicId))');
+    expect(rules).toContain('getAfter(/databases/$(database)/documents/clinics/$(clinicId))');
+    const clinics = rules.slice(rules.indexOf('match /clinics/{clinicId}'), rules.indexOf('match /protocolCatalog/{protocolId}'));
+    expect(clinics).toContain('allow get: if (isClinician()');
+    expect(clinics).toContain('clinicId == request.auth.uid');
+    expect(clinics).toContain('allow create: if isClinician()');
+    expect(clinics).toContain('isClinicMemberAfter(request.resource.data.clinicId)');
+  });
+
   it('allows clinic members to read clients but freezes client ownership fields on that path', () => {
     expect(rules).toContain("isClinicMember(resource.data.get('clinicId', null))");
     expect(rules).toContain("request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null)");

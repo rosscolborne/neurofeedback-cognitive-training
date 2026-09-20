@@ -27,6 +27,15 @@ service cloud.firestore {
           .data.get('practitionerIds', []).hasAny([request.auth.uid]);
     }
 
+    // Atomic onboarding creates the clinician-owned clinic and practitioner in
+    // one batch, so membership must be checked against the post-write clinic.
+    function isClinicMemberAfter(clinicId) {
+      return isAuthenticated() && clinicId != null &&
+        existsAfter(/databases/$(database)/documents/clinics/$(clinicId)) &&
+        getAfter(/databases/$(database)/documents/clinics/$(clinicId))
+          .data.get('practitionerIds', []).hasAny([request.auth.uid]);
+    }
+
     function patientExists(patientId) {
       return patientId != null &&
         exists(/databases/$(database)/documents/clients/$(patientId));
@@ -442,24 +451,29 @@ service cloud.firestore {
     // Production tenant records. Practitioner IDs are Firebase user IDs until
     // role claims are introduced by the authentication backend.
     match /clinics/{clinicId} {
-      allow read: if isClinicMember(clinicId) || isClinicPatient(clinicId);
-      allow create: if isAuthenticated() &&
+      allow get: if (isClinician() && (
+        clinicId == request.auth.uid || isClinicMember(clinicId)
+      )) || isClinicPatient(clinicId);
+      allow list: if (isClinician() && isClinicMember(clinicId)) || isClinicPatient(clinicId);
+      allow create: if isClinician() &&
+        clinicId == request.auth.uid &&
         request.resource.data.practitionerIds.hasAny([request.auth.uid]);
-      allow update: if isAuthenticated() &&
+      allow update: if isClinician() &&
         resource.data.practitionerIds.hasAny([request.auth.uid]) &&
         request.resource.data.practitionerIds == resource.data.practitionerIds;
       allow delete: if false;
     }
 
     match /practitioners/{practitionerId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)
+      allow get: if isClinician() && (
+        practitionerId == request.auth.uid || isClinicMember(resource.data.clinicId)
       );
-      allow create: if isAuthenticated() &&
+      allow list: if isClinician() && isClinicMember(resource.data.clinicId);
+      allow create: if isClinician() &&
         practitionerId == request.auth.uid &&
         request.resource.data.userId == request.auth.uid &&
-        isClinicMember(request.resource.data.clinicId);
-      allow update: if isAuthenticated() &&
+        isClinicMemberAfter(request.resource.data.clinicId);
+      allow update: if isClinician() &&
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.clinicId == resource.data.clinicId && (
           resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)

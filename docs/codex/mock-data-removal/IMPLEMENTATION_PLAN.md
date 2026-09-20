@@ -442,7 +442,7 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
@@ -479,7 +479,10 @@ independent workstream immediately when a slot opens.
   timestamp-shape, and test-depth issues. The original implementation agent fixed
   them at `e702e443`; focused tests passed 26/26, the full suite passed 165/165,
   focused lint was clean, and the production build passed. Independent final
-  re-review is pending. Shared rules/app/clinic-link changes remain central.
+  re-review found a central atomic-onboarding rules blocker plus owned copy,
+  authoritative-save callback, and mounted interaction-test gaps. Owned fixes are
+  assigned to the original implementation agent. The central rules fix is in
+  progress; shared App/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
@@ -795,6 +798,13 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** A1 started from the clean `fill-in-mocked-data@4d65e30` integration
   branch after R1 authorization review and merge. Its implementation remains
   isolated from centrally owned shared rules, types, storage, and shell wiring.
+- **2026-09-19:** S1 final re-review returned CHANGES_REQUIRED. Fresh clinician
+  onboarding could not atomically create clinic and practitioner under the current
+  pre-write membership rule; owned credential copy, mounted interaction coverage,
+  and post-persistence callback semantics also required fixes. Owned findings were
+  returned to the original S1 agent. The orchestrator began a role-gated `getAfter`
+  onboarding rule and fresh-own-record read contract centrally; dynamic emulator
+  validation remains pending in a Java-enabled environment.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
