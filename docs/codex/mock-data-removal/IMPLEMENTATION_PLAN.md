@@ -621,11 +621,11 @@ independent workstream immediately when a slot opens.
 
 ### D1 — Production/Demo Data Separation
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** no; begin after R1 and S1 review due to overlapping files
 - **Branch:** `codex/mockdata-demo-separation`
 - **Worktree:** `../neurasticity-mockdata-demo-separation`
-- **Final commit:** pending
+- **Final commit:** `404610b93de160d944779c4da61bbfd2e6c14fbe`
 - **Owned files:** seeded-demo/reset sections of `src/services/storageEngine.ts`;
   clinician sample-entry controls/routes in login/settings/App as assigned by the
   orchestrator after R1/S1 integration; focused tests.
@@ -641,6 +641,12 @@ independent workstream immediately when a slot opens.
   protected; training games still work without a headset.
 - **Tests:** production-mode no-fallback tests; explicit demo-boundary tests;
   regression test for training Demo mode; manual fresh clinician/patient checks.
+- **Implementation report:** clinician seed/reset access is isolated behind an
+  explicit development/demo workspace, production views filter sample-shaped
+  records, production reset wiring is removed, and patient training Demo/debug
+  simulators remain available. Focused tests passed 46/46, the full suite passed
+  252/252, targeted lint and the production build passed. M1/A1 legacy adapters
+  require central cleanup after their integration; independent review is pending.
 
 ### I1 — Integration, Review, and Release Candidate
 
@@ -896,6 +902,10 @@ independent workstream immediately when a slot opens.
   focused tests passed 31/31, the full suite passed 233/233, lint and build passed,
   and A1 entered independent re-review. Strict rules and shell/App wiring remain
   centrally reserved.
+- **2026-09-19:** D1 completed at Git-verified `404610b9`, with 46/46 focused and
+  252/252 full tests passing, targeted lint clean apart from pre-existing warnings,
+  and a passing build. It entered independent review; M1/A1 legacy adapter cleanup
+  remains a central post-integration task.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
