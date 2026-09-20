@@ -20,6 +20,7 @@ import { auth, db } from './firebase';
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -1063,7 +1064,11 @@ class StorageEngine {
 
     if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
-    await setDoc(doc(db, 'clients', client.id), removeUndefined(client), { merge: true });
+    const payload = removeUndefined(client) as unknown as Record<string, unknown>;
+    for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
+      if (client[field] === undefined) payload[field] = deleteField();
+    }
+    await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
   }
 
   public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {

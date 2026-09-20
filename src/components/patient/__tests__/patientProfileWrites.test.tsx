@@ -70,10 +70,18 @@ describe('PatientShell persisted profile writes', () => {
     });
 
     expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('avatar save offline');
+    const refreshedClient = { ...client, completedSessionsCount: 3, badges: ['first-light'] };
+    await act(async () => {
+      renderer.update(<PatientShell brand={brand} client={refreshedClient} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+    });
     const retry = renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Retry')!;
     await act(async () => { await retry.props.onClick(); });
     expect(onUpdateClient).toHaveBeenCalledTimes(2);
-    expect(onUpdateClient.mock.calls[1][0]).toMatchObject({ avatarUrl: 'data:image/png;base64,abc' });
+    expect(onUpdateClient.mock.calls[1][0]).toMatchObject({
+      avatarUrl: 'data:image/png;base64,abc',
+      completedSessionsCount: 3,
+      badges: ['first-light'],
+    });
 
     renderer.unmount();
     Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });

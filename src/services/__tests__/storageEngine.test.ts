@@ -10,6 +10,7 @@ const firestore = vi.hoisted(() => ({
   getDocs: vi.fn(),
   setDoc: vi.fn(),
   deleteDoc: vi.fn(),
+  deleteField: vi.fn(() => ({ __deleteField: true })),
   runTransaction: vi.fn(),
   onSnapshot: vi.fn(() => vi.fn()),
   serverTimestamp: vi.fn(() => ({ __serverTimestamp: true })),
@@ -404,6 +405,37 @@ describe('production and sample workspace separation', () => {
     await expect(storageEngine.deleteClient('patient-1')).rejects.toThrow('delete unavailable');
   });
 
+  it('persists explicit clinical-field clearing with Firestore deletion sentinels', async () => {
+    const cleared = {
+      ...INITIAL_DEMO_CLIENTS[0],
+      condition: undefined,
+      assignedProtocol: undefined,
+      prescribedSessionsPerWeek: undefined,
+      customProtocolConfig: undefined,
+    };
+    await storageEngine.saveClient(cleared);
+
+    expect(firestore.setDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: cleared.id },
+      expect.objectContaining({
+        condition: { __deleteField: true },
+        assignedProtocol: { __deleteField: true },
+        prescribedSessionsPerWeek: { __deleteField: true },
+        customProtocolConfig: { __deleteField: true },
+      }),
+      { merge: true },
+    );
+
+    firestore.getDoc.mockResolvedValueOnce({
+      id: cleared.id,
+      exists: () => true,
+      data: () => ({ id: cleared.id, name: cleared.name, email: cleared.email, status: 'active' }),
+    });
+    const reloaded = await storageEngine.getClient(cleared.id);
+    expect(reloaded?.assignedProtocol).toBeUndefined();
+    expect(reloaded?.condition).toBeUndefined();
+  });
+
   it('propagates patient profile read and initialization failures without fabricating a profile', async () => {
     const user = { uid: 'new-patient', email: 'new@example.com', displayName: 'New Patient' };
     firestore.getDoc.mockRejectedValueOnce(new Error('profile read unavailable'));
@@ -454,7 +486,7 @@ describe('production and sample workspace separation', () => {
     await storageEngine.saveClient(productionClient);
     expect(firestore.setDoc).toHaveBeenCalledWith(
       { type: 'doc', path: 'clients', id: productionClient.id },
-      productionClient,
+      expect.objectContaining({ ...productionClient, customProtocolConfig: { __deleteField: true } }),
       { merge: true },
     );
   });

@@ -142,6 +142,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           email: formEmail || editingClient.email,
           condition: formCondition,
           assignedProtocol: formProtocol,
+          customProtocolConfig: formProtocol ? editingClient.customProtocolConfig : undefined,
           status: formStatus,
           prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,

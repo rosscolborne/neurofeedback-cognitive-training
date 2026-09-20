@@ -75,4 +75,34 @@ describe('ClientRosterView blank-profile editing', () => {
     expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('Select a clinical indication');
     renderer.unmount();
   });
+
+  it('submits explicit clearing for persisted clinical assignment fields', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const assigned: ClientProfile = {
+      ...blankClient,
+      condition: 'Peak Performance',
+      assignedProtocol: 'theta-beta-ratio',
+      prescribedSessionsPerWeek: 4,
+    };
+    const onUpdateClient = vi.fn().mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ClientRosterView clients={[assigned]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} onUpdateClient={onUpdateClient} />);
+    });
+    act(() => renderer.root.findByProps({ title: 'Edit Patient' }).props.onClick({ stopPropagation: vi.fn() }));
+    const selects = renderer.root.findAllByType('select');
+    act(() => selects[0].props.onChange({ target: { value: '' } }));
+    act(() => selects[1].props.onChange({ target: { value: '' } }));
+    const weeklyTarget = renderer.root.findAllByType('input').find((input) => input.props.placeholder === 'Unavailable')!;
+    act(() => weeklyTarget.props.onChange({ target: { value: '' } }));
+    await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
+
+    expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
+      condition: undefined,
+      assignedProtocol: undefined,
+      prescribedSessionsPerWeek: undefined,
+      customProtocolConfig: undefined,
+    }));
+    renderer.unmount();
+  });
 });

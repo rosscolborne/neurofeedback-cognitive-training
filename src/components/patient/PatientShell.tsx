@@ -52,7 +52,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-  const [pendingProfileUpdate, setPendingProfileUpdate] = useState<ClientProfile | null>(null);
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
   const protocolAlias = client.customProtocolConfig && client.assignedProtocol
@@ -458,9 +458,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                         setProfileSaveError(null);
                         try {
                           await onUpdateClient(updated);
-                          setPendingProfileUpdate(null);
+                          setPendingAvatarUrl(null);
                         } catch (error) {
-                          setPendingProfileUpdate(updated);
+                          setPendingAvatarUrl(base64);
                           setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
                         } finally {
                           setIsSavingProfile(false);
@@ -525,14 +525,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   {profileSaveError}
                   <button
                     type="button"
-                    disabled={isSavingProfile || !pendingProfileUpdate}
+                    disabled={isSavingProfile || !pendingAvatarUrl}
                     onClick={async () => {
-                      if (!pendingProfileUpdate) return;
+                      if (!pendingAvatarUrl) return;
                       setIsSavingProfile(true);
                       setProfileSaveError(null);
                       try {
-                        await onUpdateClient(pendingProfileUpdate);
-                        setPendingProfileUpdate(null);
+                        await onUpdateClient({ ...client, avatarUrl: pendingAvatarUrl });
+                        setPendingAvatarUrl(null);
                       } catch (error) {
                         setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
                       } finally {

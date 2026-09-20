@@ -710,6 +710,7 @@ export class EEGEngine {
 
   private ingestDecodedMuseFrame(frame: HeadbandFrameV1) {
     const eeg = frame.eegRaw ?? frame.eeg;
+    let ingestedUsableSamples = false;
     const channelIndices: Record<keyof MuseChannelQuality, number> = {
       tp9: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'tp9'),
       af7: eeg.channelNames.findIndex((name) => name.toLowerCase() === 'af7'),
@@ -726,10 +727,12 @@ export class EEGEngine {
 
       const buffer = this.rawBuffers[channel];
       buffer.push(...samples);
+      ingestedUsableSamples = true;
       if (buffer.length > this.maxBufferSize) {
         this.rawBuffers[channel] = buffer.slice(buffer.length - this.maxBufferSize);
       }
     }
+    if (ingestedUsableSamples) this.markSourceFrameReceived();
   }
 
   /**
@@ -766,8 +769,8 @@ export class EEGEngine {
         session.sessionId,
         (frame) => {
           this.packetsReceivedCount++;
-          this.markSourceFrameReceived();
           if (frame.samples && frame.samples.length > 0) {
+            this.markSourceFrameReceived();
             const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
             frame.samples.forEach((row: number[]) => {
               channels.forEach((ch, idx) => {
