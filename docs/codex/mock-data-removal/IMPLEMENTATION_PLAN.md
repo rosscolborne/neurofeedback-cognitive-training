@@ -1,8 +1,8 @@
 # Production Data Replacement — Implementation Plan
 
-Last reconciled: 2026-09-19  
-Integration branch: `fill-in-mocked-data`  
-Last application-code baseline: `b0be0fb`
+Last reconciled: 2026-09-20
+Integration branch: `fill-in-mocked-data`
+Last application-code baseline: `c49180f`
 
 ## How to use and maintain this document
 
@@ -738,6 +738,43 @@ independent workstream immediately when a slot opens.
   verification passed 394/394 JavaScript tests, 58/58 Python tests, production
   build, quiet lint, and application-code diff validation.
 
+### E2 — Integrated Playwright Regression Coverage
+
+- **Status:** IN PROGRESS
+- **Branch:** `codex/mockdata-e2e-regression`
+- **Worktree:** `../neurasticity-mockdata-e2e`
+- **Base:** `fill-in-mocked-data@c49180f` after the validated Playwright harness
+  merged through PR #17.
+- **Ownership:** E2E specs, E2E-only fixtures/lifecycle helpers, Playwright config,
+  E2E documentation, and related package scripts. Production behavior must not be
+  weakened or changed merely to make a browser test pass. This plan remains
+  orchestrator-owned on `fill-in-mocked-data` until final E2 integration.
+- **Dependencies:** all application workstreams merged and repository-wide code
+  audit passed; authenticated Playwright harness merged. Real authenticated E2E
+  execution additionally requires isolated, deterministic E2E data lifecycle.
+- **Coverage matrix:**
+
+| Workstream / requirement | Playwright scenario | Existing lower-level coverage | Remaining manual / hardware coverage |
+| --- | --- | --- | --- |
+| R1 + S1 relationship and branding | Clinician invites the dedicated patient, patient accepts, both reload, then roster and clinic brand remain linked. | Relationship repository/UI/rules contracts; clinic repository and mounted settings tests. | Dynamic rules-emulator authorization and two-clinic visual isolation review. |
+| M1 messaging | Linked patient and clinician exchange uniquely tagged messages; both sides and reload state are verified. | Message repository, mapper, authorization-contract, retry, pagination, and mounted UI tests. | Live unrelated-account authorization denial. |
+| A1 appointments | Clinician creates and edits a deterministic future appointment; patient observes it after reload; clinician cancels it; patient observes cancellation. | Appointment mapper, timezone/DST, repository, rules-contract, and mounted UI tests. | Real timezone/DST visual confirmation. |
+| D1 + P1 Demo progress | Patient enters supported Training Demo, completes a short deterministic session, sees explicit synthetic provenance, reloads Progress/History, and observes the persisted session and aggregate increment. | Mounted Demo lifecycle, persistence, provenance, no-fallback, patient metric, and summary tests. | Physical Muse acquisition and signal quality. |
+| D1 non-Demo separation | Patient begins a non-Demo session without EEG and remains at the headset gate; no synthetic mode or fabricated result/session appears. | Session runner and storage no-fallback regressions. | Physical disconnect/stall/recovery. Demo Mode must never stand in for this hardware test. |
+| P1 + C1 + C2 truthful data | Fresh E2E patient/clinician identities show honest empty/unassigned states; linked detail, telemetry, QEEG, reports, and range behavior assert only persisted values or explicit unavailable states. | Extensive metric, QEEG, telemetry, analytics, PDF, empty/partial/error component tests. | Real QEEG source/parser, live telemetry, and PDF visual comparison. |
+| T1 runtime | A supported Demo journey proves the assigned protocol reaches the runtime UI and supported limitations remain visible; calculation boundaries stay at the lower test layer. | Deterministic protocol evaluator, parity, duration, provenance, and boundary tests. | Short real-device session using visibly distinct valid assignments. |
+| Cross-tenant denial | An unrelated clinician cannot discover or open the E2E patient's roster, sessions, messages, appointments, reports, or detail data. | Static Firestore rules contracts and repository ownership tests. | Dynamic emulator/browser denial until a dedicated third identity is configured. |
+
+- **Determinism requirement:** tests must use dedicated E2E identities, unique run
+  markers, observable setup assertions, and explicit cleanup or a privileged,
+  allow-listed E2E reset against only those identities. Append-only messages,
+  sessions, QEEG records, accepted invitations, and cancelled appointments must
+  not silently accumulate across runs. Credentials and storage-state contents
+  remain ignored and must never be logged or committed.
+- **Review gate:** independent Sol/High review must assess requirement proof,
+  missing coverage, false positives, selectors/timing, state contamination,
+  credentials/security, and correct Demo-versus-hardware semantics before merge.
+
 ## Integration and review procedure
 
 1. Reconcile Git and make sure `fill-in-mocked-data` is clean and contains F0.
@@ -781,6 +818,15 @@ independent workstream immediately when a slot opens.
   to track it when the first implementation wave started.
 
 ## Project log
+
+- **2026-09-20:** The validated Playwright harness merged into
+  `fill-in-mocked-data` through PR #17 at `c49180f`. E2 started from that clean
+  integration head. The first coverage audit found the harness correctly supports
+  public and real patient/clinician authentication and reusable storage state, but
+  currently has only a public smoke test and no deterministic Firestore fixture or
+  cleanup mechanism. The coverage matrix above deliberately combines realistic
+  journeys across workstreams and retains real-device disconnect/stall/recovery as
+  hardware/manual testing.
 
 - **2026-09-19:** Final-audit follow-up commits `3563f33`, `0dcb23f`, `06cfd36`,
   and `b0be0fb` closed the remaining review findings: stale/empty hardware frames no
