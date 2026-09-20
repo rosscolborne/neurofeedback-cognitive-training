@@ -478,7 +478,7 @@ independent workstream immediately when a slot opens.
 
 ### M1 — Production Messaging
 
-- **Status:** NOT STARTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-messaging`
@@ -761,6 +761,8 @@ independent workstream immediately when a slot opens.
 - **2026-09-19:** T1 final re-review passed without findings and merged into
   `fill-in-mocked-data` via `d0fe1d9`; integrated focused tests passed 15/15.
   C1's measured average-band provenance dependency is now satisfied.
+- **2026-09-19:** M1 started from the clean post-T1 integration branch after R1
+  relationship rules/contracts were reviewed and merged.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
