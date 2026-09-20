@@ -10,10 +10,15 @@ import {
 import { auth, db } from '../services/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
+  activateClinicianDemoWorkspace,
   CLINICIAN_DEMO_AVAILABLE,
-  DEMO_AUTH_STORAGE_KEY,
   DEMO_CLINICIAN_ID,
   clearUnavailableDemoMarker,
+  deactivateClinicianDemoWorkspace,
+  forgetClinicianDemoWorkspace,
+  isClinicianDemoRestoreRequested,
+  isClinicianDemoWorkspace,
+  rememberClinicianDemoWorkspace,
 } from '../services/clinicianDemoBoundary';
 
 export type UserRole = 'patient' | 'clinician' | null;
@@ -22,10 +27,11 @@ interface AuthContextType {
   user: User | null;
   role: UserRole;
   loading: boolean;
+  isDemoWorkspace: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, displayName?: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
-  loginAsDemoClinician: () => void;
+  loginAsDemoClinician: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -33,10 +39,11 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   loading: true,
+  isDemoWorkspace: false,
   login: async () => {},
   signup: async () => {},
   selectRole: async () => {},
-  loginAsDemoClinician: () => {},
+  loginAsDemoClinician: async () => {},
   logout: async () => {},
 });
 
@@ -79,46 +86,36 @@ const DEMO_CLINICIAN_USER = {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
     clearUnavailableDemoMarker();
-    if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
-      return DEMO_CLINICIAN_USER;
-    }
+    deactivateClinicianDemoWorkspace();
     return null;
   });
-  const [role, setRole] = useState<UserRole>(() => {
-    if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
-      return 'clinician';
-    }
-    return null;
-  });
+  const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
-    // If already in demo clinician mode, skip firebase check
-    if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
-      setUser(DEMO_CLINICIAN_USER);
-      setRole('clinician');
-      setLoading(false);
-      return;
-    }
-
-    // Safety fallback timer in case Firebase auth network completely hangs
-    const safetyTimer = setTimeout(() => {
-      if (isMounted) setLoading(false);
-    }, 1500);
-
     const unsubscribe = onAuthStateChanged(
       auth,
       async (currentUser) => {
         if (!isMounted) return;
-        if (CLINICIAN_DEMO_AVAILABLE && localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician') {
-          setUser(DEMO_CLINICIAN_USER);
-          setRole('clinician');
-          setLoading(false);
-          return;
+        if (isClinicianDemoRestoreRequested()) {
+          try {
+            if (currentUser) await signOut(auth);
+            if (!isMounted) return;
+            activateClinicianDemoWorkspace();
+            setUser(DEMO_CLINICIAN_USER);
+            setRole('clinician');
+            setLoading(false);
+            return;
+          } catch (error) {
+            console.warn('Unable to restore the sample clinician workspace:', error);
+            forgetClinicianDemoWorkspace();
+            deactivateClinicianDemoWorkspace();
+          }
         }
 
+        deactivateClinicianDemoWorkspace();
         setUser(currentUser);
 
         if (currentUser) {
@@ -129,14 +126,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (isMounted) {
-          clearTimeout(safetyTimer);
           setLoading(false);
         }
       },
       (error) => {
         console.warn('Auth state change listener notice:', error);
         if (isMounted) {
-          clearTimeout(safetyTimer);
+          deactivateClinicianDemoWorkspace();
           setLoading(false);
         }
       }
@@ -144,13 +140,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       isMounted = false;
-      clearTimeout(safetyTimer);
       unsubscribe();
     };
   }, []);
 
   const signup = async (email: string, pass: string, displayName?: string) => {
-    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
+    forgetClinicianDemoWorkspace();
+    deactivateClinicianDemoWorkspace();
     const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
 
     // Set displayName on the Firebase Auth profile
@@ -176,20 +172,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, pass: string) => {
-    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
+    forgetClinicianDemoWorkspace();
+    deactivateClinicianDemoWorkspace();
     const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
     setUser(cred.user);
     const userRole = await fetchUserRole(cred.user.uid);
     setRole(userRole);
   };
 
-  const loginAsDemoClinician = () => {
+  const loginAsDemoClinician = async () => {
     if (!CLINICIAN_DEMO_AVAILABLE) {
       throw new Error('The sample clinician workspace is not available in this deployment');
     }
-    localStorage.setItem(DEMO_AUTH_STORAGE_KEY, 'clinician');
-    setUser(DEMO_CLINICIAN_USER);
-    setRole('clinician');
+    setLoading(true);
+    forgetClinicianDemoWorkspace();
+    deactivateClinicianDemoWorkspace();
+    try {
+      await signOut(auth);
+      activateClinicianDemoWorkspace();
+      rememberClinicianDemoWorkspace();
+      setUser(DEMO_CLINICIAN_USER);
+      setRole('clinician');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const selectRole = async (newRole: UserRole) => {
@@ -213,14 +219,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
+    forgetClinicianDemoWorkspace();
+    deactivateClinicianDemoWorkspace();
     await signOut(auth).catch(() => {});
     setUser(null);
     setRole(null);
   };
 
+  const demoWorkspace = isClinicianDemoWorkspace() && user?.uid === DEMO_CLINICIAN_ID;
+
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, loginAsDemoClinician, logout }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
       {children}
     </AuthContext.Provider>
   );

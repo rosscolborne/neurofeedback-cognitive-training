@@ -648,9 +648,10 @@ class StorageEngine {
   private demoSessions: SessionRecord[] = [...INITIAL_DEMO_SESSIONS];
   private demoMessages: MessageThread[] = [...INITIAL_DEMO_MESSAGES];
   private demoAppointments: CalendarAppointment[] = [...INITIAL_DEMO_APPOINTMENTS];
+  private demoBrand: ClinicBrandConfig = BRAND_PRESETS[0];
 
   private isDemoWorkspace(): boolean {
-    return isClinicianDemoWorkspace(auth.currentUser?.uid);
+    return isClinicianDemoWorkspace();
   }
 
   private requireDemoWorkspace(action: string): void {
@@ -660,6 +661,7 @@ class StorageEngine {
   }
 
   public getBrandConfig(): ClinicBrandConfig {
+    if (this.isDemoWorkspace()) return this.demoBrand;
     const raw = localStorage.getItem(STORAGE_KEYS.BRAND) || localStorage.getItem('brainswell_brand_config') || localStorage.getItem('brainwell_brand_config');
     if (raw) {
       try {
@@ -670,6 +672,10 @@ class StorageEngine {
   }
 
   public saveBrandConfig(brand: ClinicBrandConfig) {
+    if (this.isDemoWorkspace()) {
+      this.demoBrand = brand;
+      return;
+    }
     localStorage.setItem(STORAGE_KEYS.BRAND, JSON.stringify(brand));
   }
 
@@ -680,7 +686,8 @@ class StorageEngine {
 
   public async saveClinicBrandConfig(brand: ClinicBrandConfig): Promise<void> {
     this.saveBrandConfig(brand);
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    if (this.isDemoWorkspace()) throw new Error('Clinic branding is unavailable in the sample clinician workspace');
+    if (!auth.currentUser) return;
     await setDoc(
       doc(db, 'clinics', brand.clinicId),
       { branding: removeUndefined({ ...brand, updatedAt: serverTimestamp() }), updatedAt: serverTimestamp() },
@@ -689,7 +696,7 @@ class StorageEngine {
   }
 
   public async getClinic(clinicId: string): Promise<ClinicProfile | null> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return null;
+    if (this.isDemoWorkspace() || !auth.currentUser) return null;
     const snapshot = await getDoc(doc(db, 'clinics', clinicId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<ClinicProfile>;
@@ -703,7 +710,8 @@ class StorageEngine {
   }
 
   public async saveClinic(clinic: ClinicProfile): Promise<void> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    if (this.isDemoWorkspace()) throw new Error('Clinic settings are unavailable in the sample clinician workspace');
+    if (!auth.currentUser) return;
     await setDoc(
       doc(db, 'clinics', clinic.id),
       removeUndefined({ ...clinic, updatedAt: serverTimestamp() }),
@@ -712,7 +720,7 @@ class StorageEngine {
   }
 
   public async getPractitioner(practitionerId: string): Promise<PractitionerProfile | null> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return null;
+    if (this.isDemoWorkspace() || !auth.currentUser) return null;
     const snapshot = await getDoc(doc(db, 'practitioners', practitionerId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<PractitionerProfile>;
@@ -727,7 +735,8 @@ class StorageEngine {
   }
 
   public async savePractitioner(practitioner: PractitionerProfile): Promise<void> {
-    if (!auth.currentUser || auth.currentUser.uid === 'demo-clinician') return;
+    if (this.isDemoWorkspace()) throw new Error('Practitioner settings are unavailable in the sample clinician workspace');
+    if (!auth.currentUser) return;
     await setDoc(
       doc(db, 'practitioners', practitioner.id),
       removeUndefined({ ...practitioner, updatedAt: serverTimestamp() }),
@@ -736,6 +745,7 @@ class StorageEngine {
   }
 
   private async canManagePatient(patientId: string): Promise<boolean> {
+    if (this.isDemoWorkspace()) return false;
     const currentUserId = auth.currentUser?.uid;
     if (!currentUserId) return false;
     if (currentUserId === patientId) return true;
@@ -751,7 +761,7 @@ class StorageEngine {
   }
 
   public async getDeviceAssignment(patientId: string): Promise<DeviceAssignment | null> {
-    if (patientId.startsWith('demo-') || !(await this.canManagePatient(patientId))) return null;
+    if (this.isDemoWorkspace() || !(await this.canManagePatient(patientId))) return null;
     const snapshot = await getDoc(doc(db, 'deviceAssignments', patientId));
     if (!snapshot.exists()) return null;
     const data = snapshot.data() as Partial<DeviceAssignment>;
@@ -760,8 +770,9 @@ class StorageEngine {
   }
 
   public async saveDeviceAssignment(assignment: DeviceAssignment): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Device assignments are unavailable in the sample clinician workspace');
     const currentUserId = auth.currentUser?.uid;
-    if (!currentUserId || assignment.patientId.startsWith('demo-')) return;
+    if (!currentUserId) return;
     if (!(await this.canManagePatient(assignment.patientId))) {
       throw new Error('Not authorized to manage this patient device assignment');
     }
@@ -781,10 +792,7 @@ class StorageEngine {
   }
 
   public async getClient(id: string): Promise<ClientProfile | null> {
-    if (id.startsWith('demo-')) {
-      if (!this.isDemoWorkspace()) return null;
-      return this.demoClients.find((c) => c.id === id) || null;
-    }
+    if (this.isDemoWorkspace()) return this.demoClients.find((client) => client.id === id) ?? null;
     if (!auth.currentUser) return null;
     try {
       const snap = await getDoc(doc(db, 'clients', id));
@@ -799,10 +807,7 @@ class StorageEngine {
 
   public async getClients(clinicianId?: string): Promise<ClientProfile[]> {
     const activeClinicianId = clinicianId || auth.currentUser?.uid;
-    if (this.isDemoWorkspace() && (!clinicianId || activeClinicianId === DEMO_CLINICIAN_ID)) {
-      return [...this.demoClients];
-    }
-    if (activeClinicianId === DEMO_CLINICIAN_ID) return [];
+    if (this.isDemoWorkspace()) return !clinicianId || clinicianId === DEMO_CLINICIAN_ID ? [...this.demoClients] : [];
     if (!activeClinicianId) {
       return [];
     }
@@ -814,11 +819,7 @@ class StorageEngine {
       );
       canonical.docs.forEach((entry) => {
         const profile = readClientProfile(entry.data(), entry.id);
-        if (
-          !profile.isDemo &&
-          !profile.id.startsWith('demo-') &&
-          getPatientClinicianId(profile) === activeClinicianId
-        ) owned.set(profile.id, profile);
+        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
       });
     } catch (err) {
       console.warn('Failed to fetch canonical clients from Firestore:', err);
@@ -837,11 +838,7 @@ class StorageEngine {
       ));
       legacy.docs.forEach((entry) => {
         const profile = readClientProfile(entry.data(), entry.id);
-        if (
-          !profile.isDemo &&
-          !profile.id.startsWith('demo-') &&
-          getPatientClinicianId(profile) === activeClinicianId
-        ) owned.set(profile.id, profile);
+        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
       });
     } catch (err) {
       console.warn('Failed to fetch legacy clients from Firestore:', err);
@@ -850,8 +847,9 @@ class StorageEngine {
   }
 
   public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
+    if (this.isDemoWorkspace()) throw new Error('Invitations are unavailable in the sample clinician workspace');
     const clinician = auth.currentUser;
-    if (!clinician || clinician.uid === 'demo-clinician') {
+    if (!clinician) {
       throw new Error('A real clinician account is required to invite a patient');
     }
 
@@ -918,8 +916,9 @@ class StorageEngine {
   }
 
   public async getPatientInvitationsForClinician(): Promise<PatientInvitation[]> {
+    if (this.isDemoWorkspace()) return [];
     const clinicianId = auth.currentUser?.uid;
-    if (!clinicianId || clinicianId === 'demo-clinician') return [];
+    if (!clinicianId) return [];
     const snapshot = await getDocs(
       query(collection(db, 'patientInvitations'), where('clinicianId', '==', clinicianId))
     );
@@ -929,6 +928,7 @@ class StorageEngine {
   }
 
   public async cancelPatientInvitation(invitationId: string): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Invitations are unavailable in the sample clinician workspace');
     const clinicianId = auth.currentUser?.uid;
     if (!clinicianId) throw new Error('Sign in to cancel an invitation');
     const invitationRef = doc(db, 'patientInvitations', invitationId);
@@ -948,6 +948,7 @@ class StorageEngine {
   }
 
   public async unlinkPatient(patientId: string): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Patient relationships are unavailable in the sample clinician workspace');
     const clinicianId = auth.currentUser?.uid;
     if (!clinicianId) throw new Error('Sign in to remove a patient from your roster');
     const patientRef = doc(db, 'clients', patientId);
@@ -965,6 +966,7 @@ class StorageEngine {
   }
 
   public async acceptPatientInvitation(invitationCode: string, fallbackClient: ClientProfile): Promise<ClientProfile> {
+    if (this.isDemoWorkspace()) throw new Error('Invitations are unavailable in the sample clinician workspace');
     const patient = auth.currentUser;
     if (!patient?.email) throw new Error('Sign in with the invited email address');
     const patientEmail = patient.email;
@@ -1065,9 +1067,6 @@ class StorageEngine {
       return;
     }
 
-    if (client.isDemo || client.id.startsWith('demo-')) {
-      throw new Error('Sample patient records cannot be saved from a production account');
-    }
     if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
     try {
@@ -1082,7 +1081,6 @@ class StorageEngine {
     if (this.isDemoWorkspace()) {
       return [...(demoClient?.brainMaps ?? [])];
     }
-    if (patientId.startsWith('demo-')) return [];
     if (!auth.currentUser) throw new Error('Sign in to load QEEG records');
 
     const snapshot = await getDocs(collection(db, 'clients', patientId, 'brainMaps'));
@@ -1126,9 +1124,6 @@ class StorageEngine {
       return canonical;
     }
 
-    if (patientId.startsWith('demo-')) {
-      throw new Error('Sample QEEG records cannot be saved from a production account');
-    }
     if (!currentUser) throw new Error('Sign in as the managing clinician to save QEEG records');
 
     const clientRef = doc(db, 'clients', patientId);
@@ -1171,10 +1166,6 @@ class StorageEngine {
       this.demoClients = clients;
       return;
     }
-    if (clients.some((client) => client.isDemo || client.id.startsWith('demo-'))) {
-      throw new Error('Sample patient records cannot be saved from a production account');
-    }
-
     for (const c of clients) {
       await this.saveClient(c);
     }
@@ -1185,7 +1176,6 @@ class StorageEngine {
       this.demoClients = this.demoClients.filter((c) => c.id !== id);
       return;
     }
-    if (id.startsWith('demo-')) throw new Error('Sample patients cannot be deleted from a production account');
     if (!auth.currentUser) throw new Error('Sign in to remove a patient');
 
     try {
@@ -1196,12 +1186,8 @@ class StorageEngine {
   }
 
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
+    if (this.isDemoWorkspace()) return this.demoClients[0] ?? null;
     if (user?.uid) {
-      if (user.uid === DEMO_CLINICIAN_ID) {
-        if (!this.isDemoWorkspace()) return null;
-        return this.demoClients[0] || null;
-      }
-
       try {
         const snap = await getDoc(doc(db, 'clients', user.uid));
         if (snap && snap.exists()) {
@@ -1239,9 +1225,6 @@ class StorageEngine {
 
   public async getSessionsFor(scope: SessionQueryScope): Promise<SessionRecord[]> {
     const demoPatientId = 'patientId' in scope ? scope.patientId : undefined;
-    const requestsDemoScope =
-      demoPatientId?.startsWith('demo-') ||
-      ('clinicianId' in scope && scope.clinicianId === DEMO_CLINICIAN_ID);
 
     if (this.isDemoWorkspace()) {
       const sessions = demoPatientId
@@ -1249,7 +1232,6 @@ class StorageEngine {
         : this.demoSessions;
       return [...sessions].sort((a, b) => b.timestamp - a.timestamp);
     }
-    if (requestsDemoScope) return [];
     if (!auth.currentUser) return [];
 
     const currentUserId = auth.currentUser.uid;
@@ -1297,7 +1279,7 @@ class StorageEngine {
       for (const snapshot of snapshots) {
         for (const entry of snapshot.docs) {
           const session = readSessionRecord(entry.data(), entry.id);
-          if (!session.patientId.startsWith('demo-')) unique.set(entry.id, session);
+          unique.set(entry.id, session);
         }
       }
       return [...unique.values()]
@@ -1350,9 +1332,6 @@ class StorageEngine {
       return { created: true, session: normalizedSession };
     }
 
-    if (session.patientId.startsWith('demo-')) {
-      throw new Error('Sample sessions cannot be saved from a production account');
-    }
     if (!auth.currentUser) throw new Error('Sign in to save a training session');
 
     const currentUserId = auth.currentUser?.uid;
@@ -1437,7 +1416,7 @@ class StorageEngine {
       this.demoSessions[demoIndex] = updated;
       return;
     }
-    if (sessionId.startsWith('demo-')) throw new Error('Sample sessions cannot be changed from a production account');
+    if (this.isDemoWorkspace()) throw new Error(`Sample session ${sessionId} does not exist`);
     if (!auth.currentUser) return;
 
     const sessionRef = doc(db, 'sessions', sessionId);
@@ -1504,9 +1483,7 @@ class StorageEngine {
         where('clinicianId', '==', auth.currentUser.uid)
       );
       const snap = await getDocs(q);
-      const docs = snap.docs
-        .map((d) => d.data() as MessageThread)
-        .filter((thread) => !thread.isDemo && !thread.clientId.startsWith('demo-'));
+      const docs = snap.docs.map((d) => d.data() as MessageThread);
       if (docs.length > 0) return docs;
     } catch (err) {
       console.warn('Failed to fetch messages for clinician from Firestore:', err);
@@ -1518,9 +1495,7 @@ class StorageEngine {
         where('clientId', '==', auth.currentUser.uid)
       );
       const snapPatient = await getDocs(qPatient);
-      const docsPatient = snapPatient.docs
-        .map((d) => d.data() as MessageThread)
-        .filter((thread) => !thread.isDemo && !thread.clientId.startsWith('demo-'));
+      const docsPatient = snapPatient.docs.map((d) => d.data() as MessageThread);
       if (docsPatient.length > 0) return docsPatient;
     } catch (err) {
       console.warn('Failed to fetch messages for patient from Firestore:', err);
@@ -1540,9 +1515,6 @@ class StorageEngine {
       return;
     }
 
-    if (thread.isDemo || thread.clientId.startsWith('demo-')) {
-      throw new Error('Sample messages cannot be saved from a production account');
-    }
     if (!auth.currentUser) throw new Error('Sign in to send a message');
 
     try {
@@ -1557,10 +1529,6 @@ class StorageEngine {
       this.demoMessages = threads;
       return;
     }
-    if (threads.some((thread) => thread.isDemo || thread.clientId.startsWith('demo-'))) {
-      throw new Error('Sample messages cannot be saved from a production account');
-    }
-
     for (const t of threads) {
       await this.saveMessageThread(t);
     }
@@ -1585,9 +1553,7 @@ class StorageEngine {
     const unsubscribe = onSnapshot(
       primaryQuery,
       (snapshot) => {
-        const docs = snapshot.docs
-          .map((d) => d.data() as MessageThread)
-          .filter((thread) => !thread.isDemo && !thread.clientId.startsWith('demo-'));
+        const docs = snapshot.docs.map((d) => d.data() as MessageThread);
         callback(docs);
       },
       () => {
@@ -1613,9 +1579,7 @@ class StorageEngine {
         where('clinicianId', '==', uid)
       );
       const snap = await getDocs(q);
-      const docs = snap.docs
-        .map((d) => d.data() as CalendarAppointment)
-        .filter((appointment) => !appointment.isDemo && !appointment.clientId.startsWith('demo-'));
+      const docs = snap.docs.map((d) => d.data() as CalendarAppointment);
       if (docs.length > 0) return docs;
     } catch (err) {
       console.warn('Failed to fetch appointments for clinician from Firestore:', err);
@@ -1627,9 +1591,7 @@ class StorageEngine {
         where('clientId', '==', uid)
       );
       const snapPatient = await getDocs(qPatient);
-      const docsPatient = snapPatient.docs
-        .map((d) => d.data() as CalendarAppointment)
-        .filter((appointment) => !appointment.isDemo && !appointment.clientId.startsWith('demo-'));
+      const docsPatient = snapPatient.docs.map((d) => d.data() as CalendarAppointment);
       if (docsPatient.length > 0) return docsPatient;
     } catch (err) {
       console.warn('Failed to fetch appointments for patient from Firestore:', err);
@@ -1649,9 +1611,6 @@ class StorageEngine {
       return;
     }
 
-    if (appt.isDemo || appt.clientId.startsWith('demo-')) {
-      throw new Error('Sample appointments cannot be saved from a production account');
-    }
     if (!auth.currentUser) throw new Error('Sign in to save an appointment');
 
     try {
@@ -1666,10 +1625,6 @@ class StorageEngine {
       this.demoAppointments = appts;
       return;
     }
-    if (appts.some((appointment) => appointment.isDemo || appointment.clientId.startsWith('demo-'))) {
-      throw new Error('Sample appointments cannot be saved from a production account');
-    }
-
     for (const a of appts) {
       await this.saveAppointment(a);
     }
@@ -1681,9 +1636,6 @@ class StorageEngine {
       return;
     }
 
-    if (id.startsWith('demo-')) {
-      throw new Error('Sample appointments cannot be deleted from a production account');
-    }
     if (!auth.currentUser) throw new Error('Sign in to delete an appointment');
 
     try {
@@ -1699,6 +1651,7 @@ class StorageEngine {
     this.demoSessions = [];
     this.demoMessages = [];
     this.demoAppointments = [];
+    this.demoBrand = BRAND_PRESETS[0];
   }
 
   public resetToDefaultSeed() {
@@ -1707,6 +1660,7 @@ class StorageEngine {
     this.demoSessions = [...INITIAL_DEMO_SESSIONS];
     this.demoMessages = [...INITIAL_DEMO_MESSAGES];
     this.demoAppointments = [...INITIAL_DEMO_APPOINTMENTS];
+    this.demoBrand = BRAND_PRESETS[0];
   }
 }
 

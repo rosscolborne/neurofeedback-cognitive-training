@@ -133,7 +133,6 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
       experience: formExperience,
       status: editingAppt ? editingAppt.status : 'scheduled',
       notes: formNotes,
-      isDemo: patient.isDemo || false,
       hardwareProfile: formHardware,
     };
 
@@ -264,7 +263,7 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
             <option value="all">All Patients ({clients.length})</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} {c.isDemo ? '(Sample)' : ''}
+                {c.name}
               </option>
             ))}
           </select>
@@ -529,19 +528,6 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
                         <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
                           {appt.clientName}
                         </span>
-                        {appt.isDemo && (
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              background: 'var(--surface-clinician-sidebar)',
-                              color: 'var(--text-tertiary)',
-                              padding: '1px 5px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            Sample
-                          </span>
-                        )}
                         {getStatusBadge(appt.status)}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -702,7 +688,7 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({
                 >
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} • {c.condition} {c.isDemo ? '(Sample)' : ''}
+                      {c.name} • {c.condition}
                     </option>
                   ))}
                 </select>

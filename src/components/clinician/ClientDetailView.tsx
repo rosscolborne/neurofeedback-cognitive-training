@@ -203,11 +203,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                 {client.name}
               </h1>
-              {client.isDemo && (
-                <span style={{ fontSize: '10px', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-tertiary)', padding: '2px 7px', borderRadius: '4px', fontWeight: 600 }}>
-                  Sample Record
-                </span>
-              )}
               <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '10px', padding: '2px 7px' }}>
                 ● {client.status.toUpperCase()}
               </span>

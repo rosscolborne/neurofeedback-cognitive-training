@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft, Stethoscope } from 'lucide-react';
-import { CLINICIAN_DEMO_AVAILABLE } from '../../services/clinicianDemoBoundary';
+import { shouldOfferClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -59,9 +59,17 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleDemoClinician = () => {
-    loginAsDemoClinician();
-    navigate('/');
+  const handleDemoClinician = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await loginAsDemoClinician();
+      navigate('/');
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -163,7 +171,7 @@ export const Login: React.FC = () => {
         </button>
       </form>
 
-      {CLINICIAN_DEMO_AVAILABLE && (
+      {shouldOfferClinicianDemoWorkspace() && (
         <section aria-label="Sample clinician workspace" style={{ marginTop: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '12px' }}>
             <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
@@ -172,7 +180,8 @@ export const Login: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={handleDemoClinician}
+            onClick={() => void handleDemoClinician()}
+            disabled={loading}
             style={{
               width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-md)',
               background: 'rgba(232, 150, 122, 0.12)', border: '1.5px dashed var(--brand-primary)',

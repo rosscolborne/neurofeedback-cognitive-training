@@ -2,6 +2,7 @@ import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/fires
 import type { ClinicBrandConfig, ClinicProfile, PersistedTimestamp, PractitionerCredential, PractitionerProfile } from '../types';
 import { auth, db } from './firebase';
 import { createBrandPalette, isBrandAccentUsable } from './brandEngine';
+import { isClinicianDemoWorkspace } from './clinicianDemoBoundary';
 
 const LEGACY_BRAND_KEYS = ['waveable_brand_config', 'brainswell_brand_config', 'brainwell_brand_config'] as const;
 const LEGACY_BRAND_OWNER_KEY = 'waveable_brand_config_owner';
@@ -178,8 +179,11 @@ export class ClinicSettingsRepository {
   }
 
   private requireUser(): CurrentUserLike {
+    if (isClinicianDemoWorkspace()) {
+      throw new Error('Clinic settings are unavailable in the sample clinician workspace.');
+    }
     const user = this.authState.currentUser;
-    if (!user || user.uid === 'demo-clinician') throw new Error('Sign in with a clinician account to manage clinic settings.');
+    if (!user) throw new Error('Sign in with a clinician account to manage clinic settings.');
     return user;
   }
 

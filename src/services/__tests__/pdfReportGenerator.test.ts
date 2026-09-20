@@ -30,9 +30,9 @@ describe('deterministic PDF report text', () => {
     const analytics = buildClinicalReportAnalytics([client], [session()], interval);
     const content = buildPatientReportText(client, analytics, brand, generatedAt);
     expect(content.metadata).toContain('Reporting timezone: UTC');
-    expect(content.metadata).toContain('Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.');
+    expect(content.metadata).toContain('Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, device snapshot, and acquisition mode).');
     expect(content.metrics).toContain('Average in-zone time: 0% (1/1 eligible sessions recorded)');
-    expect(content.tableRows).toEqual(['Sep 19, 2026, 10:00 AM | 10 min | 0% | Muse 2']);
+    expect(content.tableRows).toEqual(['Sep 19, 2026, 10:00 AM | 10 min | 0% | Muse 2 | Standard']);
   });
 
   it('reports partial coverage rather than substituting missing values', () => {
@@ -46,17 +46,19 @@ describe('deterministic PDF report text', () => {
     expect(content.metrics).toContain('Device snapshot coverage: 50% (1/2 eligible sessions recorded)');
   });
 
-  it('excludes Demo activity from PDF evidence and reports it separately', () => {
+  it('includes Demo activity in PDF evidence and preserves acquisition provenance', () => {
     const analytics = buildClinicalReportAnalytics([client], [
       session({ id: 'real-zero', timeInZonePercent: 0, device: undefined }),
       session({ id: 'demo', isDemo: true, timeInZonePercent: 100, device: { model: 'Synthetic Headset' } }),
     ], interval);
     const content = buildPatientReportText(client, analytics, brand, generatedAt);
-    expect(content.metrics).toContain('Clinical sessions: 1');
-    expect(content.metrics).toContain('Training Demo/sample completions: 1 (excluded from clinical measurements and adherence)');
-    expect(content.metrics).toContain('Average in-zone time: 0% (1/1 eligible sessions recorded)');
-    expect(content.tableRows).toEqual(['Sep 19, 2026, 10:00 AM | 10 min | 0% | Unavailable']);
-    expect(content.tableRows.join(' ')).not.toContain('Synthetic Headset');
+    expect(content.metrics).toContain('Sessions: 2');
+    expect(content.metrics).toContain('Training Demo acquisitions: 1 (included in history and aggregates)');
+    expect(content.metrics).toContain('Average in-zone time: 50% (2/2 eligible sessions recorded)');
+    expect(content.tableRows).toEqual([
+      'Sep 19, 2026, 10:00 AM | 10 min | 0% | Unavailable | Standard',
+      'Sep 19, 2026, 10:00 AM | 10 min | 100% | Synthetic Headset | Training Demo',
+    ]);
   });
 
   it('retains explicit legacy selections with an invalid timestamp and renders date unavailable', () => {
@@ -64,7 +66,7 @@ describe('deterministic PDF report text', () => {
     const analytics = buildPatientSelectionReportAnalytics(client, [legacy], generatedAt);
     const content = buildPatientReportText(client, analytics, brand, generatedAt);
     expect(analytics.totalSessions).toBe(1);
-    expect(content.metrics).toContain('Clinical sessions: 1');
-    expect(content.tableRows).toEqual(['Unavailable | 10 min | 0% | Muse 2']);
+    expect(content.metrics).toContain('Sessions: 1');
+    expect(content.tableRows).toEqual(['Unavailable | 10 min | 0% | Muse 2 | Standard']);
   });
 });

@@ -7,7 +7,6 @@ import {
   buildClinicalReportViewModel,
   buildClinicalReportAnalytics,
   formatMetric,
-  type ClinicalReportCohortFilter,
   type ClinicalReportExportState,
   type ClinicalReportLoadState,
   type ClinicalReportRange,
@@ -35,7 +34,6 @@ function MetricCard({ label, value, detail, icon }: { label: string; value: stri
 }
 
 export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ clients, brand, onSelectClient }) => {
-  const [filterCohort, setFilterCohort] = useState<ClinicalReportCohortFilter>('real');
   const [dateRange, setDateRange] = useState<ClinicalReportRange>('30d');
   const [allSessions, setAllSessions] = useState<SessionRecord[]>([]);
   const [loadState, setLoadState] = useState<ClinicalReportLoadState>('loading');
@@ -64,13 +62,13 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
   const viewModel = useMemo(() => buildClinicalReportViewModel({
     clients,
     sessions: allSessions,
-    cohortFilter: filterCohort,
+    cohortFilter: 'all',
     range: dateRange,
     loadState,
     exportState,
     nowMs: reportEndMs,
     timeZone,
-  }), [allSessions, clients, dateRange, exportState, filterCohort, loadState, reportEndMs, timeZone]);
+  }), [allSessions, clients, dateRange, exportState, loadState, reportEndMs, timeZone]);
   const { analytics, interval } = viewModel;
   const available = viewModel.loadState === 'ready';
 
@@ -107,16 +105,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
 
       <div className="card-clinician" style={{ padding: '12px 16px', background: '#FFFFFF' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={labelStyle}>Cohort:</span>
-            {([
-              ['all', `All (${clients.length})`],
-              ['real', `Enrolled (${clients.filter(client => !client.isDemo).length})`],
-              ['demo', `Sample (${clients.filter(client => client.isDemo).length})`],
-            ] as Array<[ClinicalReportCohortFilter, string]>).map(([id, label]) => (
-              <button key={id} onClick={() => setFilterCohort(id)} className={filterCohort === id ? 'btn btn-dense' : 'btn btn-ghost'}>{label}</button>
-            ))}
-          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Patients: {clients.length}</div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={labelStyle}>Window:</span>
             {([['30d', 'Last 30 Days'], ['90d', 'Last 90 Days'], ['ytd', 'YTD']] as Array<[ClinicalReportRange, string]>).map(([id, label]) => (
@@ -125,7 +114,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
           </div>
         </div>
         <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-          Interval: {intervalText} · Source: authenticated session repository fields · Training Demo/sample sessions are labeled and excluded from clinical metrics · Adherence: clinical interval sessions ÷ scheduled sessions (weekly prescription × {interval.dayCount}/7)
+          Interval: {intervalText} · Source: authenticated session repository fields · Patient training Demo sessions remain included; Demo is acquisition provenance only · Adherence: interval sessions ÷ scheduled sessions (weekly prescription × {interval.dayCount}/7)
         </div>
       </div>
 
@@ -139,9 +128,9 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
       {viewModel.exportError && <div role="alert" style={{ color: 'var(--status-error)', fontSize: '12px' }}>{viewModel.exportError}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '12px' }}>
-        <MetricCard label="Selected Cohort" value={available ? `${analytics.clients.length}` : 'Unavailable'} detail="Patient profiles in the selected cohort" icon={<Users size={16} />} />
-        <MetricCard label="Clinical Sessions" value={available ? `${analytics.totalSessions}` : 'Unavailable'} detail={`${metric(analytics.averageDurationMinutes.value, ' min')} average duration (${available ? `${analytics.averageDurationMinutes.recordedSessions}/${analytics.averageDurationMinutes.eligibleSessions}` : 'unavailable'} recorded)`} icon={<Activity size={16} />} />
-        <MetricCard label="Training Demo Completions" value={available ? `${analytics.demoSessionCount}` : 'Unavailable'} detail="Excluded from adherence, measurements, trends, and device coverage" icon={<Activity size={16} />} />
+        <MetricCard label="Patients" value={available ? `${analytics.clients.length}` : 'Unavailable'} detail="Patient profiles in this report" icon={<Users size={16} />} />
+        <MetricCard label="Sessions" value={available ? `${analytics.totalSessions}` : 'Unavailable'} detail={`${metric(analytics.averageDurationMinutes.value, ' min')} average duration (${available ? `${analytics.averageDurationMinutes.recordedSessions}/${analytics.averageDurationMinutes.eligibleSessions}` : 'unavailable'} recorded)`} icon={<Activity size={16} />} />
+        <MetricCard label="Training Demo Provenance" value={available ? `${analytics.demoSessionCount}` : 'Unavailable'} detail="Included in session history and all aggregates" icon={<Activity size={16} />} />
         <MetricCard label="Interval Adherence" value={metric(analytics.adherencePercent, '%')} detail={available && analytics.expectedSessions != null ? `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions` : 'Schedule unavailable'} icon={<CheckCircle2 size={16} />} />
         <MetricCard label="Average In-Zone Time" value={metric(analytics.averageInZonePercent.value, '%')} detail={available ? `${analytics.averageInZonePercent.recordedSessions}/${analytics.averageInZonePercent.eligibleSessions} sessions recorded` : 'Coverage unavailable'} icon={<Target size={16} />} />
         <MetricCard label="Device Snapshot Coverage" value={metric(analytics.deviceCoverage.value, '%')} detail={available ? `${analytics.deviceCoverage.recordedSessions}/${analytics.deviceCoverage.eligibleSessions} sessions identify a device` : 'Coverage unavailable'} icon={<HardDrive size={16} />} />
@@ -167,13 +156,13 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Clinical sessions', 'Demo completions', 'Duration', 'Adherence', 'In-zone average', 'Device coverage', 'Export'].map(label => <th key={label} style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{label}</th>)}</tr></thead>
+            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Sessions', 'Demo provenance', 'Duration', 'Adherence', 'In-zone average', 'Device coverage', 'Export'].map(label => <th key={label} style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{label}</th>)}</tr></thead>
             <tbody>
               {analytics.patientRows.map(row => (
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : row.client.assignedProtocol.replace(/-/g, ' ')}</div></td>
+                  <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.assignedProtocol.replace(/-/g, ' ')}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Excluded from clinical metrics' : ''}</div></td>
+                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Included in aggregates' : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} / ${row.expectedSessions} scheduled` : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>
@@ -181,7 +170,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
                   <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={viewModel.exportDisabled} onClick={() => void exportReport(row.client)}><FileText size={13} /> PDF</button></td>
                 </tr>
               ))}
-              {available && analytics.patientRows.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No patients are in this cohort.</td></tr>}
+              {available && analytics.patientRows.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No patients are available.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -149,6 +149,25 @@ describe('protocol runtime assignment', () => {
     expect(sample.inZone).toBe(false);
   });
 
+  it('keeps missing non-Demo EEG visibly unavailable and never switches to synthetic acquisition', () => {
+    const resolution = resolveProtocolRuntime(client('alpha-enhancement'));
+    if (!resolution.ok) throw new Error(resolution.error);
+    const engine = new EEGEngine();
+    engine.configureProtocol(resolution.config);
+    engine.isHardwareConnected = true;
+    engine.isDemoMode = false;
+    const sample = (engine as unknown as { generateSample: (dt: number) => {
+      bands: BandPowers; bandAvailability: Partial<Record<keyof BandPowers, boolean>>;
+      inZone: boolean; inZoneAvailable: boolean;
+    } }).generateSample(0.1);
+
+    expect(engine.isDemoMode).toBe(false);
+    expect(sample.bandAvailability).toEqual({});
+    expect(sample.bands).toEqual({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 });
+    expect(sample.inZoneAvailable).toBe(false);
+    expect(sample.inZone).toBe(false);
+  });
+
   it('applies canonical step, lower/higher directions, easing, and explicit bounds in absolute units', () => {
     const alphaResolution = resolveProtocolRuntime(client('alpha-enhancement'));
     if (!alphaResolution.ok) throw new Error(alphaResolution.error);

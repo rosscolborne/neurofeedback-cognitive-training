@@ -55,12 +55,12 @@ export function buildPracticeReportText(
       `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
       `Reporting interval: ${reportInterval(analytics)}`,
       `Reporting timezone: ${analytics.interval.timeZone}`,
-      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
+      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, device snapshot, and acquisition mode).',
     ],
     metrics: [
-      `Selected cohort: ${analytics.clients.length} patient profiles`,
-      `Clinical sessions: ${analytics.totalSessions}`,
-      `Training Demo/sample completions: ${analytics.demoSessionCount} (excluded from clinical measurements and adherence)`,
+      `Patients: ${analytics.clients.length} patient profiles`,
+      `Sessions: ${analytics.totalSessions}`,
+      `Training Demo acquisitions: ${analytics.demoSessionCount} (included in history and aggregates)`,
       `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
       `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
       `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'schedule unavailable' : `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions`})`,
@@ -70,15 +70,15 @@ export function buildPracticeReportText(
       trend,
     ],
     notes: [
-      `Adherence formula: non-Demo interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
-      'Training Demo and sample-record sessions use synthetic input and are excluded from durations, adherence, in-zone measurements, trends, device coverage, device models, and clinical session rows.',
+      `Adherence formula: interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Training Demo identifies synthetic acquisition provenance; those persisted sessions remain included in history and aggregates.',
       'In-zone values and their change are descriptive session measurements, not diagnoses, benchmark comparisons, treatment outcomes, or statistical significance claims.',
       'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
       'Unavailable values are not replaced with cohort defaults or zero.',
     ],
-    tableHeader: 'Patient | Clinical sessions | Demo completions | Duration | Adherence | In-zone | Device snapshots',
+    tableHeader: 'Patient | Sessions | Demo acquisitions | Duration | Adherence | In-zone | Device snapshots',
     tableRows: analytics.patientRows.map(row => [
-      `${row.client.name}${row.client.isDemo ? ' (Sample record)' : ''}`,
+      row.client.name,
       row.sessionCount,
       row.demoSessionCount,
       formatMetric(row.durationMinutes, ' min'),
@@ -101,29 +101,29 @@ export function buildPatientReportText(
     title: 'Patient Session Activity Report',
     metadata: [
       `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
-      `Patient: ${client.name || 'Unavailable'}${client.isDemo ? ' (Sample record)' : ''}`,
+      `Patient: ${client.name || 'Unavailable'}`,
       `Configured indication: ${client.condition || 'Unavailable'}`,
       `Configured protocol: ${client.assignedProtocol?.replace(/-/g, ' ') || 'Unavailable'}`,
       `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
       `Reporting interval: ${reportInterval(analytics)}`,
       `Reporting timezone: ${analytics.interval.timeZone}`,
-      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
+      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, device snapshot, and acquisition mode).',
     ],
     metrics: [
-      `Clinical sessions: ${row?.sessionCount ?? 0}`,
-      `Training Demo/sample completions: ${row?.demoSessionCount ?? 0} (excluded from clinical measurements and adherence)`,
+      `Sessions: ${row?.sessionCount ?? 0}`,
+      `Training Demo acquisitions: ${row?.demoSessionCount ?? 0} (included in history and aggregates)`,
       `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
       `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`,
       `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
       `Device snapshot coverage: ${row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'} (${coverage(row?.deviceRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
     ],
     notes: [
-      `Adherence formula: non-Demo interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
-      'Training Demo and sample-record sessions use synthetic input and are excluded from durations, adherence, in-zone measurements, trends, device coverage, device models, and clinical session rows.',
+      `Adherence formula: interval sessions divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Training Demo identifies synthetic acquisition provenance; those persisted sessions remain included in history and aggregates.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
       'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
     ],
-    tableHeader: 'Date/time | Duration | In-zone | Device',
+    tableHeader: 'Date/time | Duration | In-zone | Device | Acquisition',
     tableRows: sessions.map(session => {
       const when = typeof session.timestamp === 'number' && Number.isFinite(session.timestamp) && session.timestamp > 0
         ? new Intl.DateTimeFormat('en-US', {
@@ -137,7 +137,7 @@ export function buildPatientReportText(
       const inZone = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100
         ? `${session.timeInZonePercent}%`
         : 'Unavailable';
-      return `${when} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
+      return `${when} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'} | ${session.isDemo ? 'Training Demo' : 'Standard'}`;
     }),
   };
 }

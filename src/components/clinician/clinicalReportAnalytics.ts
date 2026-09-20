@@ -25,9 +25,9 @@ export interface CoveredMetric {
 
 export interface PatientReportRow {
   client: ClientProfile;
-  /** Non-synthetic sessions eligible for clinical measurements and adherence. */
+  /** All persisted sessions, including patient training Demo acquisitions. */
   sessions: SessionRecord[];
-  /** Training Demo/sample sessions, always excluded from clinical measurements. */
+  /** Informational acquisition provenance; these sessions remain in every aggregate. */
   demoSessions: SessionRecord[];
   sessionCount: number;
   demoSessionCount: number;
@@ -211,7 +211,7 @@ function buildPatientRow(
   const inZone = sessions
     .map(session => numeric(session.timeInZonePercent, 0, 100))
     .filter((value): value is number => value != null);
-  const expected = client.isDemo ? null : expectedSessions(client, interval);
+  const expected = expectedSessions(client, interval);
   return {
     client,
     sessions,
@@ -236,7 +236,6 @@ export function buildClinicalReportAnalytics(
   options: { mode?: 'interval' | 'explicit-selection' } = {},
 ): ClinicalReportAnalytics {
   const clientIds = new Set(clients.map(client => client.id));
-  const clientById = new Map(clients.map(client => [client.id, client]));
   const eligibleSessions = options.mode === 'explicit-selection'
     ? allSessions
         .filter(session => clientIds.has(session.patientId))
@@ -246,9 +245,10 @@ export function buildClinicalReportAnalytics(
           return aTime - bTime;
         })
     : filterSessionsForReport(allSessions, interval, clientIds);
-  const isSynthetic = (session: SessionRecord) => session.isDemo === true || clientById.get(session.patientId)?.isDemo === true;
-  const sessions = eligibleSessions.filter(session => !isSynthetic(session));
-  const demoSessions = eligibleSessions.filter(isSynthetic);
+  // isDemo describes acquisition provenance only. It must never remove a persisted
+  // patient training session from history, adherence, or outcome aggregates.
+  const sessions = eligibleSessions;
+  const demoSessions = eligibleSessions.filter(session => session.isDemo === true);
   const patientRows = clients.map(client => buildPatientRow(
     client,
     sessions.filter(session => session.patientId === client.id),
@@ -265,8 +265,7 @@ export function buildClinicalReportAnalytics(
   const expectedValues = patientRows
     .map(row => row.expectedSessions)
     .filter((value): value is number => value != null);
-  const clinicalClientCount = clients.filter(client => !client.isDemo).length;
-  const expectedTotal = expectedValues.length === clinicalClientCount
+  const expectedTotal = expectedValues.length === clients.length
     ? Math.round(expectedValues.reduce((a, b) => a + b, 0) * 10) / 10
     : null;
   const deviceSessions = sessions.filter(session => Boolean(session.device?.model?.trim()));
@@ -326,11 +325,9 @@ export function buildClinicalReportViewModel(input: {
   nowMs?: number;
   timeZone?: string;
 }): ClinicalReportViewModel {
-  const filteredClients = input.clients.filter(client => {
-    if (input.cohortFilter === 'real') return !client.isDemo;
-    if (input.cohortFilter === 'demo') return client.isDemo === true;
-    return true;
-  });
+  // Legacy cohort values are accepted for saved UI state/backward compatibility,
+  // but mutable persisted flags never classify or hide production patient records.
+  const filteredClients = input.clients;
   const interval = createReportInterval(input.range, input.nowMs, input.timeZone);
   // Never expose stale/partial evidence while loading or after a rejected read.
   const analytics = buildClinicalReportAnalytics(
@@ -339,7 +336,7 @@ export function buildClinicalReportViewModel(input: {
     interval,
   );
   const exportState = input.exportState ?? 'idle';
-  const hasActivity = analytics.totalSessions + analytics.demoSessionCount > 0;
+  const hasActivity = analytics.totalSessions > 0;
   const presentation: ClinicalReportPresentation = input.loadState === 'loading'
     ? 'loading'
     : input.loadState === 'error'

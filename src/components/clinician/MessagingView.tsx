@@ -183,20 +183,6 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
                         <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                           {thread.clientName}
                         </span>
-                        {thread.isDemo && (
-                          <span
-                            style={{
-                              fontSize: '9px',
-                              background: 'var(--surface-clinician-sidebar)',
-                              color: 'var(--text-tertiary)',
-                              padding: '1px 5px',
-                              borderRadius: '4px',
-                              fontWeight: 600,
-                            }}
-                          >
-                            Demo
-                          </span>
-                        )}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                         {thread.lastMessageTime}
@@ -270,24 +256,9 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
                     <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {activeThread.clientName}
                     </span>
-                    {activeThread.isDemo ? (
-                      <span
-                        style={{
-                          fontSize: '10px',
-                          background: 'var(--surface-clinician-sidebar)',
-                          color: 'var(--text-secondary)',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          fontWeight: 600,
-                        }}
-                      >
-                        Sample Patient
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: 'var(--status-active)' }}>
-                        ● Active Protocol Patient
-                      </span>
-                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--status-active)' }}>
+                      ● Active Protocol Patient
+                    </span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                     HIPAA Secure Channel • Muse S Athena Remote Monitoring

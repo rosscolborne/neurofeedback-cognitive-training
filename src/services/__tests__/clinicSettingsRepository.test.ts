@@ -17,6 +17,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import { ClinicSettingsRepository, mapClinicBrand } from '../clinicSettingsRepository';
+import { activateClinicianDemoWorkspace, deactivateClinicianDemoWorkspace } from '../clinicianDemoBoundary';
 
 const missing = (id: string) => ({ id, exists: () => false, data: () => undefined });
 const found = (id: string, data: Record<string, unknown>) => ({ id, exists: () => true, data: () => data });
@@ -49,6 +50,7 @@ const repositoryFor = (uid = 'clinician-1', storage: { getItem(key: string): str
 
 describe('ClinicSettingsRepository', () => {
   beforeEach(() => {
+    deactivateClinicianDemoWorkspace();
     vi.clearAllMocks();
     firestore.setDoc.mockResolvedValue(undefined);
     firestore.batchCommit.mockResolvedValue(undefined);
@@ -256,9 +258,18 @@ describe('ClinicSettingsRepository', () => {
     expect(firestore.getDoc).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects signed-out and demo identities', async () => {
+  it('rejects signed-out access', async () => {
     const signedOut = new ClinicSettingsRepository({ auth: { currentUser: null }, database: {} as never, storage: memoryStorage() });
     await expect(signedOut.load()).rejects.toThrow('Sign in with a clinician account');
-    await expect(repositoryFor('demo-clinician').saveBrand(brand)).rejects.toThrow('Sign in with a clinician account');
+  });
+
+  it('denies demo-workspace settings before any network access', async () => {
+    activateClinicianDemoWorkspace();
+    const repository = repositoryFor('real-session-still-present');
+    await expect(repository.load()).rejects.toThrow('unavailable in the sample clinician workspace');
+    await expect(repository.saveBrand(brand)).rejects.toThrow('unavailable in the sample clinician workspace');
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    deactivateClinicianDemoWorkspace();
   });
 });
