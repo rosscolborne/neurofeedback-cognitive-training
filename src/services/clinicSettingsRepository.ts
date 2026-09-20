@@ -255,8 +255,13 @@ export class ClinicSettingsRepository {
     const existingPrimary = existingCredentials.find((credential) => credential.id === 'primary-license');
     const otherCredentials = existingCredentials.filter((credential) => credential.id !== 'primary-license');
     const existingIdentifier = typeof existingPrimary?.identifier === 'string' ? clean(existingPrimary.identifier) : '';
+    const existingPrimaryIsValid = Boolean(
+      existingIdentifier
+      && existingPrimary
+      && ['unverified', 'pending', 'verified', 'expired', 'revoked'].includes(existingPrimary.status),
+    );
     let primaryCredential: PractitionerCredential | null = null;
-    if (existingPrimary && existingIdentifier === licenseIdentifier) {
+    if (existingPrimary && existingPrimaryIsValid && existingIdentifier === licenseIdentifier) {
       primaryCredential = existingPrimary;
     } else if (licenseIdentifier) {
       if (existingPrimary) {

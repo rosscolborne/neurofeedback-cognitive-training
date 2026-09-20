@@ -57,6 +57,17 @@ describe('clinic settings display contracts', () => {
       persistedStatusLabel: 'Verified', identifierChanged: true,
     }));
     expect(primaryLicensePresentation(practitioner, 'ON-999').guidance).toContain('Unverified');
+    expect(primaryLicensePresentation(practitioner, '').guidance).toContain('remove');
+    expect(primaryLicensePresentation(practitioner, '').guidance).not.toContain('Unverified');
     expect(primaryLicensePresentation(null, 'NEW-1').guidance).toContain('new identifier');
+
+    const legacyInvalid = primaryLicensePresentation({
+      ...practitioner,
+      credentials: [{ ...practitioner.credentials[0], identifier: undefined, status: 'mystery' as unknown as 'verified' }],
+    }, '');
+    expect(legacyInvalid).toEqual(expect.objectContaining({
+      persistedStatusLabel: 'Unavailable — incomplete legacy record', legacyInvalid: true,
+    }));
+    expect(legacyInvalid.guidance).not.toMatch(/Verified|Unverified/);
   });
 });

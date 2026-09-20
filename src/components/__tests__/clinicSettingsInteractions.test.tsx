@@ -183,6 +183,29 @@ describe('mounted clinic settings interactions', () => {
     (license.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: 'ON-999' } });
     await view.settle();
     expect(view.text()).toContain('replacement as Unverified');
+
+    (view.find('input', (node) => node.props.placeholder === 'Enter an identifier; verification is separate').props.onChange as (event: { target: { value: string } }) => void)({ target: { value: '' } });
+    await view.settle();
+    expect(view.text()).toContain('remove the saved primary credential');
+    expect(view.text()).not.toContain('replacement as Unverified');
+  });
+
+  it.each([
+    ['malformed identifier', { ...populatedSnapshot.practitioner.credentials[0], identifier: 42 as unknown as string }],
+    ['unknown status', { ...populatedSnapshot.practitioner.credentials[0], status: 'mystery' as unknown as 'verified' }],
+  ])('labels a %s primary credential as legacy-invalid', async (_caseName, credential) => {
+    repository.load.mockResolvedValue({
+      ...populatedSnapshot,
+      practitioner: {
+        ...populatedSnapshot.practitioner,
+        credentials: [credential],
+      },
+    });
+    const view = settings();
+    await view.settle();
+    expect(view.text()).toContain('Unavailable — incomplete legacy record');
+    expect(view.text()).toContain('verification status is unavailable');
+    expect(view.text()).not.toMatch(/\bVerified\b|\bUnverified\b/);
   });
 
   it('shows profile save success, resets Saved on edit, and reports save failure', async () => {
@@ -247,20 +270,38 @@ describe('mounted clinic branding interactions', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('treats a post-persistence callback/cache failure as best-effort and still closes', async () => {
+  it.each([
+    ['preview', 'throw'],
+    ['preview', 'reject'],
+    ['onSave', 'throw'],
+    ['onSave', 'reject'],
+    ['onClose', 'throw'],
+    ['onClose', 'reject'],
+  ] as const)('contains a post-persistence %s %s and leaves the modal unlocked', async (target, failureMode) => {
     repository.load.mockResolvedValue(populatedSnapshot);
     repository.saveBrand.mockResolvedValue(safeBrand);
-    const onSave = vi.fn(async () => { throw new Error('local cache unavailable'); });
+    const onSave = vi.fn();
     const onClose = vi.fn();
+    const failure = () => {
+      if (failureMode === 'throw') throw new Error(`${target} failed`);
+      return Promise.reject(new Error(`${target} failed`));
+    };
+    if (target === 'onSave') onSave.mockImplementation(failure);
+    if (target === 'onClose') onClose.mockImplementation(failure);
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { mounted } = customizer(onSave, onClose);
     await mounted.settle();
+    if (target === 'preview') brandEffects.applyBrandToDOM.mockImplementation(failure);
+
     (mounted.find('button', (node) => textOf(node).includes('Save and apply')).props.onClick as () => void)();
     await mounted.settle();
+
     expect(repository.saveBrand).toHaveBeenCalledOnce();
     expect(onSave).toHaveBeenCalledWith(safeBrand);
     expect(onClose).toHaveBeenCalledOnce();
     expect(mounted.text()).not.toContain('could not be saved');
+    expect(mounted.find('button', (node) => textOf(node).includes('Save and apply')).props.disabled).toBe(false);
+    expect(warning).toHaveBeenCalled();
     warning.mockRestore();
   });
 });

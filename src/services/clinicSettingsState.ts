@@ -28,15 +28,16 @@ export interface PrimaryLicensePresentation {
   persistedStatusLabel: string | null;
   guidance: string;
   identifierChanged: boolean;
+  legacyInvalid: boolean;
 }
 
-const credentialStatusLabel = (status: PractitionerProfile['credentials'][number]['status']): string => ({
+const CREDENTIAL_STATUS_LABELS: Record<PractitionerProfile['credentials'][number]['status'], string> = {
   verified: 'Verified',
   pending: 'Pending verification',
   unverified: 'Unverified',
   expired: 'Expired',
   revoked: 'Revoked',
-})[status] ?? 'Unverified';
+};
 
 /** Describes the persisted primary credential separately from the effect of the current draft. */
 export const primaryLicensePresentation = (
@@ -48,28 +49,46 @@ export const primaryLicensePresentation = (
     return {
       persistedStatusLabel: null,
       identifierChanged: draftIdentifier.trim().length > 0,
+      legacyInvalid: false,
       guidance: draftIdentifier.trim()
         ? 'This new identifier will be saved as Unverified. Verification is a separate process.'
         : 'New identifiers are saved as Unverified. Verification is a separate process.',
     };
   }
 
+  const rawStatus = (credential as { status?: unknown }).status;
   const persistedIdentifier = typeof credential.identifier === 'string' ? credential.identifier.trim() : '';
+  const validStatus = typeof rawStatus === 'string' && Object.hasOwn(CREDENTIAL_STATUS_LABELS, rawStatus);
+  if (!persistedIdentifier || !validStatus) {
+    return {
+      persistedStatusLabel: 'Unavailable — incomplete legacy record',
+      identifierChanged: Boolean(draftIdentifier.trim()),
+      legacyInvalid: true,
+      guidance: draftIdentifier.trim()
+        ? 'The saved primary credential is incomplete, so its verification status is unavailable. Saving a valid identifier replaces the legacy record and requires separate verification.'
+        : 'The saved primary credential is incomplete, so its verification status is unavailable. Saving with no identifier removes the legacy record.',
+    };
+  }
+
   const identifierChanged = draftIdentifier.trim() !== persistedIdentifier;
-  const persistedStatusLabel = credentialStatusLabel(credential.status);
+  const persistedStatusLabel = CREDENTIAL_STATUS_LABELS[rawStatus as PractitionerProfile['credentials'][number]['status']];
 
   if (identifierChanged) {
     return {
       persistedStatusLabel,
       identifierChanged,
-      guidance: 'Changing or clearing the identifier will save the replacement as Unverified. The existing verification metadata is preserved only when the identifier is unchanged.',
+      legacyInvalid: false,
+      guidance: draftIdentifier.trim()
+        ? 'Changing the identifier will save the replacement as Unverified. The existing verification metadata is preserved only when the identifier is unchanged.'
+        : 'Clearing the identifier will remove the saved primary credential.',
     };
   }
 
   return {
     persistedStatusLabel,
     identifierChanged,
-    guidance: credential.status === 'verified'
+    legacyInvalid: false,
+    guidance: rawStatus === 'verified'
       ? 'Saving this identifier unchanged preserves its Verified status and verification metadata.'
       : `Saving this identifier unchanged preserves its current ${persistedStatusLabel} status.`,
   };

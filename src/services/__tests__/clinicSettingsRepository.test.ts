@@ -154,7 +154,7 @@ describe('ClinicSettingsRepository', () => {
     expect(payload.credentials[0]).not.toHaveProperty('expiresAt');
   });
 
-  it('tolerates a malformed non-string primary identifier without copying it into a write', async () => {
+  it('removes a malformed primary credential when the identifier is cleared', async () => {
     const malformedPrimary = { id: 'primary-license', type: 'other', label: 'Legacy', identifier: 42, status: 'verified', verifiedAt: { seconds: 10 } };
     firestore.getDoc
       .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [malformedPrimary] }))
@@ -163,8 +163,20 @@ describe('ClinicSettingsRepository', () => {
       .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
     await repositoryFor().saveSettings({ clinicName: 'Clinic', timezone: 'UTC', practitionerName: 'Name', licenseIdentifier: '' });
     const payload = firestore.batchSet.mock.calls[1][1] as { credentials: Array<Record<string, unknown>> };
-    expect(payload.credentials[0]).not.toHaveProperty('identifier');
-    expect(payload.credentials[0]).toMatchObject({ id: 'primary-license', status: 'verified' });
+    expect(payload.credentials).toEqual([]);
+  });
+
+  it('replaces an unknown-status primary credential instead of preserving invalid verification claims', async () => {
+    const invalidPrimary = { id: 'primary-license', type: 'other', label: 'Legacy', identifier: 'LEGACY-1', status: 'mystery', verifiedAt: { seconds: 10 } };
+    firestore.getDoc
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [invalidPrimary] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }))
+      .mockResolvedValueOnce(found('clinician-1', { userId: 'clinician-1', clinicId: 'clinic-1', displayName: 'Name', credentials: [] }))
+      .mockResolvedValueOnce(found('clinic-1', { name: 'Clinic', timezone: 'UTC', practitionerIds: ['clinician-1'] }));
+    await repositoryFor().saveSettings({ clinicName: 'Clinic', timezone: 'UTC', practitionerName: 'Name', licenseIdentifier: 'LEGACY-1' });
+    const payload = firestore.batchSet.mock.calls[1][1] as { credentials: Array<Record<string, unknown>> };
+    expect(payload.credentials[0]).toMatchObject({ id: 'primary-license', identifier: 'LEGACY-1', status: 'unverified' });
+    expect(payload.credentials[0]).not.toHaveProperty('verifiedAt');
   });
 
   it('rejects invalid timezone and overlong text before writing', async () => {

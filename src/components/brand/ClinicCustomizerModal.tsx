@@ -9,7 +9,7 @@ import { X, Upload, ShieldCheck, AlertTriangle } from 'lucide-react';
 interface ClinicCustomizerModalProps {
   currentBrand: ClinicBrandConfig;
   onSave: (newBrand: ClinicBrandConfig) => void | Promise<void>;
-  onClose: () => void;
+  onClose: () => void | Promise<void>;
 }
 
 export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
@@ -106,10 +106,11 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
       return;
     }
 
-    // Persistence above is authoritative. Shell preview/cache callbacks are deliberately
-    // best-effort and must never turn a completed Firestore write into a reported save failure.
+    // Persistence above is authoritative. Unlock before shell preview/cache callbacks so a
+    // failed best-effort follow-up can never strand the persisted modal in a saving state.
+    setSaveState('idle');
     try {
-      applyBrandToDOM(savedBrand);
+      await applyBrandToDOM(savedBrand);
     } catch (error) {
       console.warn('Clinic branding was saved, but the local preview could not be applied.', error);
     }
@@ -119,7 +120,7 @@ export const ClinicCustomizerModal: React.FC<ClinicCustomizerModalProps> = ({
       console.warn('Clinic branding was saved, but the local callback/cache update failed.', error);
     }
     try {
-      onClose();
+      await onClose();
     } catch (error) {
       console.warn('Clinic branding was saved, but the customizer could not close cleanly.', error);
     }
