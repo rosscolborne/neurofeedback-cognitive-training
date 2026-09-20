@@ -172,7 +172,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
             <tbody>
               {analytics.patientRows.map(row => (
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : row.client.assignedProtocol.replace(/-/g, ' ')}</div></td>
+                  <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : row.client.assignedProtocol?.replace(/-/g, ' ') || 'Protocol unavailable'}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Included · synthetic provenance' : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.sampleSessionCount > 0 ? 'Fictional · excluded' : ''}</div></td>

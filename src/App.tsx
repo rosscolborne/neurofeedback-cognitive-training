@@ -49,6 +49,8 @@ export function App() {
   const [patientInvitations, setPatientInvitations] = useState<PatientInvitation[]>([]);
   const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
   const [patientProfileReload, setPatientProfileReload] = useState(0);
+  const [clinicianRosterError, setClinicianRosterError] = useState<string | null>(null);
+  const [clinicianRosterReload, setClinicianRosterReload] = useState(0);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
   const [dataIdentity, setDataIdentity] = useState('');
   const loadGeneration = useRef(0);
@@ -80,6 +82,7 @@ export function App() {
     setClients([]);
     setCurrentClient(null);
     setPatientProfileError(null);
+    setClinicianRosterError(null);
     setPatientInvitations([]);
     setShowRebrandModal(false);
 
@@ -96,12 +99,16 @@ export function App() {
     } else if (role === 'clinician') {
       void storageEngine.getClients()
         .then((nextClients) => { if (isCurrent()) setClients(nextClients); })
-        .catch((error) => { if (isCurrent()) console.warn('Error loading clinician roster:', error); });
+        .catch((error) => {
+          if (!isCurrent()) return;
+          console.warn('Error loading clinician roster:', error);
+          setClinicianRosterError(error instanceof Error ? error.message : 'The patient roster could not be loaded.');
+        });
       void storageEngine.getPatientInvitationsForClinician()
         .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
         .catch((error) => { if (isCurrent()) console.warn('Error loading patient invitations:', error); });
     }
-  }, [accountIdentity, isDemoWorkspace, loading, patientProfileReload, role, user]);
+  }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, role, user]);
 
   useEffect(() => {
     const generation = ++brandGeneration.current;
@@ -147,12 +154,11 @@ export function App() {
   }
 
   const handleUpdateClient = async (updated: ClientProfile) => {
-    if (visibleCurrentClient && visibleCurrentClient.id === updated.id) {
-      setCurrentClient(updated);
-    }
-    const next = visibleClients.map(c => (c.id === updated.id ? updated : c));
-    setClients(next);
+    const requestIdentity = accountIdentity;
     await storageEngine.saveClient(updated);
+    if (accountIdentityRef.current !== requestIdentity) return;
+    if (visibleCurrentClient && visibleCurrentClient.id === updated.id) setCurrentClient(updated);
+    setClients((current) => current.map(c => (c.id === updated.id ? updated : c)));
   };
 
   const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
@@ -245,6 +251,8 @@ export function App() {
       );
     }
     return (
+      <>
+      {clinicianRosterError && <div role="alert" style={{ padding: '10px 16px', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}><span>Patient roster unavailable: {clinicianRosterError}</span><button type="button" className="btn btn-ghost" onClick={() => setClinicianRosterReload((value) => value + 1)}>Retry</button></div>}
       <ClinicianShell
         brand={visibleBrand}
         clinicianLabel={user?.displayName || user?.email || undefined}
@@ -260,6 +268,7 @@ export function App() {
         onOpenRebrand={() => setShowRebrandModal(true)}
         onLogout={logout}
       />
+      </>
     );
   };
 

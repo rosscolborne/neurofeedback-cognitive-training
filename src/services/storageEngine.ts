@@ -197,10 +197,7 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     id: uid,
     name: cleanName,
     email: email,
-    avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
-    condition: 'Peak Performance',
     status: 'active',
-    assignedProtocol: 'theta-beta-ratio',
     allowedExperiences: [
       'immersive-3d',
       'generative-music',
@@ -216,21 +213,9 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
       'eeg-mandala',
       'neuro-gambit'
     ],
-    prescribedSessionsPerWeek: 4,
     completedSessionsCount: 0,
     currentStreak: 0,
-    streakFreezeRemaining: 1,
-    brainCapacityScore: 50,
-    lastSessionDate: 'No sessions yet',
-    nextSessionDate: 'Ready to train',
     brainMaps: [],
-    tidalGardenState: {
-      stage: 1,
-      plantsUnlocked: ['amber-coral'],
-      growthPoints: 0,
-      lastWatered: new Date().toISOString().split('T')[0],
-    },
-    skylineBiomesUnlocked: ['Alpine Meadows'],
     badges: [],
     isDemo: false,
   };
@@ -797,13 +782,9 @@ class StorageEngine {
   public async getClient(id: string): Promise<ClientProfile | null> {
     if (this.isDemoWorkspace()) return this.demoClients.find((client) => client.id === id) ?? null;
     if (!auth.currentUser) return null;
-    try {
-      const snap = await getDoc(doc(db, 'clients', id));
-      if (snap.exists()) {
-        return readClientProfile(snap.data(), snap.id);
-      }
-    } catch (err) {
-      console.warn('Failed to fetch client from Firestore:', err);
+    const snap = await getDoc(doc(db, 'clients', id));
+    if (snap.exists()) {
+      return readClientProfile(snap.data(), snap.id);
     }
     return null;
   }
@@ -816,17 +797,13 @@ class StorageEngine {
     }
 
     const owned = new Map<string, ClientProfile>();
-    try {
-      const canonical = await getDocs(
-        query(collection(db, 'clients'), where('clinicianId', '==', activeClinicianId))
-      );
-      canonical.docs.forEach((entry) => {
-        const profile = readClientProfile(entry.data(), entry.id);
-        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
-      });
-    } catch (err) {
-      console.warn('Failed to fetch canonical clients from Firestore:', err);
-    }
+    const canonical = await getDocs(
+      query(collection(db, 'clients'), where('clinicianId', '==', activeClinicianId))
+    );
+    canonical.docs.forEach((entry) => {
+      const profile = readClientProfile(entry.data(), entry.id);
+      if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+    });
 
     // Firestore rules are not post-query filters. The explicit null constraint
     // makes this legacy query provably exclude split-brain documents. Documents
@@ -843,8 +820,11 @@ class StorageEngine {
         const profile = readClientProfile(entry.data(), entry.id);
         if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
       });
-    } catch (err) {
-      console.warn('Failed to fetch legacy clients from Firestore:', err);
+    } catch (error) {
+      // The canonical query is complete for current records. Some deployments
+      // intentionally deny the temporary legacy compatibility query; preserve
+      // canonical results in that case, but surface operational failures.
+      if ((error as { code?: string })?.code !== 'permission-denied') throw error;
     }
     return [...owned.values()];
   }
@@ -1083,11 +1063,7 @@ class StorageEngine {
 
     if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
-    try {
-      await setDoc(doc(db, 'clients', client.id), client, { merge: true });
-    } catch (err) {
-      console.error('Failed to save client to Firestore:', err);
-    }
+    await setDoc(doc(db, 'clients', client.id), removeUndefined(client), { merge: true });
   }
 
   public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {
@@ -1192,11 +1168,7 @@ class StorageEngine {
     }
     if (!auth.currentUser) throw new Error('Sign in to remove a patient');
 
-    try {
-      await deleteDoc(doc(db, 'clients', id));
-    } catch (err) {
-      console.error('Failed to delete client from Firestore:', err);
-    }
+    await deleteDoc(doc(db, 'clients', id));
   }
 
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
@@ -1263,24 +1235,32 @@ class StorageEngine {
         }
         snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
       } else if (scope.role === 'clinician') {
-        snapshots.push(
-          await getDocs(query(collection(db, 'sessions'), where('clinicianId', '==', scope.clinicianId)))
-        );
-        const roster = await getDocs(
-          query(collection(db, 'clients'), where('clinicianId', '==', scope.clinicianId))
-        );
-        const legacySnapshots = await Promise.all(
-          roster.docs.map((client) =>
+        // Rules authorize session access through the patient's *current*
+        // relationship. Querying by the session's historical clinicianId can
+        // include a relinked patient's row and make Firestore reject the whole
+        // query because rules are not filters. Resolve the current canonical +
+        // explicit-null legacy roster first, then query each authorized patient.
+        const roster = await this.getClients(scope.clinicianId);
+        snapshots.push(...await Promise.all(
+          roster.map((client) =>
             getDocs(query(collection(db, 'sessions'), where('patientId', '==', client.id)))
           )
-        );
-        snapshots.push(...legacySnapshots);
+        ));
       } else if (scope.patientId) {
         const patient = await getDoc(doc(db, 'clients', scope.patientId));
         if (!patient.exists() || readClientProfile(patient.data(), patient.id).clinicId !== scope.clinicId) return [];
         snapshots.push(await getDocs(query(collection(db, 'sessions'), where('patientId', '==', scope.patientId))));
       } else {
-        snapshots.push(await getDocs(query(collection(db, 'sessions'), where('clinicId', '==', scope.clinicId))));
+        // As above, clinic authorization follows current patient tenancy rather
+        // than a historical session field.
+        const roster = await getDocs(
+          query(collection(db, 'clients'), where('clinicId', '==', scope.clinicId))
+        );
+        snapshots.push(...await Promise.all(
+          roster.docs.map((client) =>
+            getDocs(query(collection(db, 'sessions'), where('patientId', '==', client.id)))
+          )
+        ));
       }
 
       const unique = new Map<string, SessionRecord>();

@@ -12,11 +12,16 @@ import { MuseChannelQuality, BandPowers } from '../../types';
 
 type StudioStep = 'pair' | 'fit' | 'playground' | 'alpha-calibrate' | 'focus-calibrate' | 'reveal';
 
-export const HardwareSetup: React.FC = () => {
+interface HardwareSetupProps {
+  /** Test-only entry seam; production always begins at hardware pairing. */
+  initialStep?: StudioStep;
+}
+
+export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pair' }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [step, setStep] = useState<StudioStep>('pair');
+  const [step, setStep] = useState<StudioStep>(initialStep);
   const [connecting, setConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [deviceName, setDeviceName] = useState('Muse Headband');
@@ -54,6 +59,7 @@ export const HardwareSetup: React.FC = () => {
   const eyesClosedAlphaSamplesRef = useRef<number[]>([]);
   const focusBetaSamplesRef = useRef<number[]>([]);
   const [savingBaseline, setSavingBaseline] = useState(false);
+  const [baselineSaveError, setBaselineSaveError] = useState<string | null>(null);
 
   // Final Measured Metrics (no mock defaults)
   const [finalMetrics, setFinalMetrics] = useState<{
@@ -280,6 +286,7 @@ export const HardwareSetup: React.FC = () => {
   // Save Baseline to Profile & Continue
   const handleSaveNeuralImprint = async () => {
     setSavingBaseline(true);
+    setBaselineSaveError(null);
     try {
       const getStats = (arr: number[]) => {
         if (arr.length === 0) return { mean: 0, std: 0.1 };
@@ -318,7 +325,7 @@ export const HardwareSetup: React.FC = () => {
         }
       }
 
-      eegEngine.individualBaselineModel = {
+      const baselineModel = {
         alphaPeakHz: finalMetrics.alphaPeakHz,
         oneOverFSlope: Number(slope.toFixed(2)),
         lastCalibratedAt: new Date().toISOString(),
@@ -335,17 +342,20 @@ export const HardwareSetup: React.FC = () => {
         if (client) {
           const updated = {
             ...client,
-            individualBaselineModel: eegEngine.individualBaselineModel,
+            individualBaselineModel: baselineModel,
             status: 'active' as const,
           };
           await storageEngine.saveClient(updated);
-        }
+        } else throw new Error('Your patient profile is unavailable.');
+      } else {
+        throw new Error('Sign in before saving this calibration.');
       }
 
+      eegEngine.individualBaselineModel = baselineModel;
       navigate('/');
     } catch (err) {
       console.warn('Error saving baseline model:', err);
-      navigate('/');
+      setBaselineSaveError(err instanceof Error ? err.message : 'The calibration could not be saved. Try again.');
     } finally {
       setSavingBaseline(false);
     }
@@ -923,6 +933,8 @@ export const HardwareSetup: React.FC = () => {
           STEP 6: REVEAL NEURAL IMPRINT CARD (Real Measured Stats)
           ───────────────────────────────────────────────────────────── */}
       {step === 'reveal' && (
+        <div style={{ width: '100%', maxWidth: '640px' }}>
+        {baselineSaveError && <div role="alert" style={{ marginBottom: '12px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)' }}>Calibration not saved: {baselineSaveError}</div>}
         <NeuralImprintCard
           alphaPeakHz={finalMetrics.alphaPeakHz}
           alphaReactivityPercent={finalMetrics.alphaReactivityPercent}
@@ -933,6 +945,7 @@ export const HardwareSetup: React.FC = () => {
           onSave={handleSaveNeuralImprint}
           saving={savingBaseline}
         />
+        </div>
       )}
     </div>
   );

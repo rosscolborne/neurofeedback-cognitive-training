@@ -115,6 +115,9 @@ describe('mounted patient Demo session lifecycle', () => {
     expect(repository.getSessions).toHaveBeenCalledWith(client.id);
     expect(text(history)).toContain('Tracking 1 session over time.');
     expect(text(history)).toContain('Training Demo · Synthetic acquisition');
+    const sessionCard = history.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')[0];
+    await act(async () => { sessionCard.props.onClick(); });
+    expect(text(history)).toContain('Not measured — synthetic Training Demo feedback');
     await act(async () => { history.unmount(); });
 
     engine.isDemoMode = true; // Simulate any stale singleton value before the next ordinary run.
@@ -125,7 +128,7 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { nextRunner.unmount(); });
   });
 
-  it('uses the clinic and legacy clinician relationship independently for a hardware session', async () => {
+  it('refuses to save a hardware session without verified EEG coverage', async () => {
     engine.isHardwareConnected = true;
     const legacyLinkedClient = {
       ...client,
@@ -144,11 +147,50 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { button(renderer, 'Begin Training').props.onClick(); });
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
     await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
-    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
-      clinicId: 'clinic-legacy',
-      clinicianId: 'clinician-legacy',
-      isDemo: false,
-    }));
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(text(renderer)).toContain('No verified training time was recorded yet.');
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('pauses a started hardware session on disconnect without offering an in-place Demo substitution', async () => {
+    engine.isHardwareConnected = true;
+    const onComplete = vi.fn(async () => undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+    });
+    await act(async () => {
+      renderer.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady();
+    });
+    await act(async () => { button(renderer, 'Begin Training').props.onClick(); });
+    engine.isHardwareConnected = false;
+    await act(async () => {
+      renderer.update(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+    });
+    expect(text(renderer)).toContain('This real-EEG session is paused; Demo data cannot replace it.');
+    expect(text(renderer)).not.toContain('Try Demo Mode');
+    expect(onComplete).not.toHaveBeenCalled();
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('reuses one cryptographic completion ID when a Demo save response must be retried', async () => {
+    const attemptedIds: string[] = [];
+    const onComplete = vi.fn(async (session: SessionRecord) => {
+      attemptedIds.push(session.id);
+      if (attemptedIds.length === 1) throw new Error('ambiguous response');
+    });
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+    });
+    await act(async () => { button(renderer, 'Try Demo Mode').props.onClick(); });
+    await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
+    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    expect(text(renderer)).toContain("We couldn't save this session");
+    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    expect(onComplete).toHaveBeenCalledTimes(2);
+    expect(attemptedIds[0]).toMatch(/^sess-[0-9a-f-]{36}$/i);
+    expect(attemptedIds[1]).toBe(attemptedIds[0]);
     await act(async () => { renderer.unmount(); });
   });
 

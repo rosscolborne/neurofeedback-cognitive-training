@@ -3,7 +3,7 @@ import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { BrandLogo } from '../brand/BrandLogo';
-import { ArrowRight, Check, Wifi, ShieldCheck, Target, Waves, Moon, Activity } from 'lucide-react';
+import { ArrowRight, Check, Wifi, Target, Waves, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
   client: ClientProfile;
@@ -266,11 +266,6 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
                 Check Sensor Contact
               </button>
             )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-            <ShieldCheck size={14} />
-            <span>Clinical HIPAA & GDPR Compliant Telemetry</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>

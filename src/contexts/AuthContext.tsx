@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -91,48 +91,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
+  const authGenerationRef = useRef(0);
+  const mountedRef = useRef(true);
+  const demoTransitionRef = useRef<'entering' | 'restoring' | null>(null);
+  const identityRef = useRef<{ kind: 'production'; uid: string } | { kind: 'demo' } | null>(null);
+
+  const isCurrentProductionIdentity = (generation: number, uid: string) => (
+    mountedRef.current
+    && authGenerationRef.current === generation
+    && demoTransitionRef.current === null
+    && identityRef.current?.kind === 'production'
+    && identityRef.current.uid === uid
+  );
 
   useEffect(() => {
     let isMounted = true;
+    mountedRef.current = true;
 
     const unsubscribe = onAuthStateChanged(
       auth,
       async (currentUser) => {
-        if (!isMounted) return;
+        if (!isMounted || !mountedRef.current) return;
+
+        // Firebase emits a signed-out notification while the explicit demo
+        // transition is awaiting signOut(). That notification is expected and
+        // must not supersede the transition which requested it. Likewise, a
+        // late signed-out notification must not tear down an active in-memory
+        // demo workspace.
+        if (demoTransitionRef.current || (isClinicianDemoWorkspace() && !currentUser)) return;
+
+        const generation = ++authGenerationRef.current;
         if (isClinicianDemoRestoreRequested()) {
+          demoTransitionRef.current = 'restoring';
           try {
             if (currentUser) await signOut(auth);
-            if (!isMounted) return;
+            if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
             activateClinicianDemoWorkspace();
+            identityRef.current = { kind: 'demo' };
             setUser(DEMO_CLINICIAN_USER);
             setRole('clinician');
             setLoading(false);
+            demoTransitionRef.current = null;
             return;
           } catch (error) {
+            if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
             console.warn('Unable to restore the sample clinician workspace:', error);
             forgetClinicianDemoWorkspace();
             deactivateClinicianDemoWorkspace();
+            demoTransitionRef.current = null;
           }
         }
 
         deactivateClinicianDemoWorkspace();
+        identityRef.current = currentUser ? { kind: 'production', uid: currentUser.uid } : null;
         setUser(currentUser);
+        setRole(null);
 
         if (currentUser) {
+          setLoading(true);
           const userRole = await fetchUserRole(currentUser.uid);
-          if (isMounted) setRole(userRole);
-        } else {
-          if (isMounted) setRole(null);
+          if (!isCurrentProductionIdentity(generation, currentUser.uid)) return;
+          setRole(userRole);
         }
 
-        if (isMounted) {
+        if (isMounted && mountedRef.current && authGenerationRef.current === generation) {
           setLoading(false);
         }
       },
       (error) => {
         console.warn('Auth state change listener notice:', error);
+        if (demoTransitionRef.current || isClinicianDemoWorkspace()) return;
         if (isMounted) {
+          ++authGenerationRef.current;
+          demoTransitionRef.current = null;
+          identityRef.current = null;
           deactivateClinicianDemoWorkspace();
+          setUser(null);
+          setRole(null);
           setLoading(false);
         }
       }
@@ -140,6 +175,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       isMounted = false;
+      mountedRef.current = false;
+      ++authGenerationRef.current;
       unsubscribe();
     };
   }, []);
@@ -172,26 +209,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, pass: string) => {
+    const generation = ++authGenerationRef.current;
+    demoTransitionRef.current = null;
+    identityRef.current = null;
     forgetClinicianDemoWorkspace();
     deactivateClinicianDemoWorkspace();
-    const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
-    setUser(cred.user);
-    const userRole = await fetchUserRole(cred.user.uid);
-    setRole(userRole);
+    setUser(null);
+    setRole(null);
+    setLoading(true);
+    try {
+      // onAuthStateChanged is the single owner of identity/role hydration. A
+      // second fetch here could finish after a newer account transition.
+      await signInWithEmailAndPassword(auth, email.trim(), pass);
+    } catch (error) {
+      if (mountedRef.current && authGenerationRef.current === generation) setLoading(false);
+      throw error;
+    }
   };
 
   const loginAsDemoClinician = async () => {
     if (!CLINICIAN_DEMO_AVAILABLE) {
       throw new Error('The sample clinician workspace is not available in this deployment');
     }
+    const generation = ++authGenerationRef.current;
+    demoTransitionRef.current = 'entering';
+    identityRef.current = null;
     setLoading(true);
+    setUser(null);
+    setRole(null);
     forgetClinicianDemoWorkspace();
     deactivateClinicianDemoWorkspace();
     try {
       await signOut(auth);
+      if (!mountedRef.current || authGenerationRef.current !== generation || demoTransitionRef.current !== 'entering') return;
       try {
         activateClinicianDemoWorkspace();
         rememberClinicianDemoWorkspace();
+        identityRef.current = { kind: 'demo' };
         setUser(DEMO_CLINICIAN_USER);
         setRole('clinician');
       } catch (error) {
@@ -202,12 +256,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current && authGenerationRef.current === generation && demoTransitionRef.current === 'entering') {
+        demoTransitionRef.current = null;
+        setLoading(false);
+      }
     }
   };
 
   const selectRole = async (newRole: UserRole) => {
     if (!user) return;
+    const generation = authGenerationRef.current;
+    const uid = user.uid;
     setRole(newRole);
     if (!isClinicianDemoWorkspace()) {
       // Accounts created while Firestore was temporarily unavailable may not
@@ -220,18 +279,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }, { merge: true });
       } catch (err) {
         console.warn('Background role update notice:', err);
-        setRole(null);
+        if (isCurrentProductionIdentity(generation, uid)) setRole(null);
         throw err;
       }
     }
   };
 
   const logout = async () => {
+    ++authGenerationRef.current;
+    demoTransitionRef.current = null;
+    identityRef.current = null;
     forgetClinicianDemoWorkspace();
     deactivateClinicianDemoWorkspace();
-    await signOut(auth).catch(() => {});
     setUser(null);
     setRole(null);
+    setLoading(false);
+    await signOut(auth).catch(() => {});
   };
 
   const demoWorkspace = isClinicianDemoWorkspace();

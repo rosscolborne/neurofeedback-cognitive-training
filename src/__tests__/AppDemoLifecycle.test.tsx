@@ -9,6 +9,7 @@ const storage = vi.hoisted(() => ({
   getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
   getClients: vi.fn(), getPatientInvitationsForClinician: vi.fn(), getCurrentClient: vi.fn(),
   getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(), cancelPatientInvitation: vi.fn(),
+  saveClient: vi.fn(),
 }));
 const settings = vi.hoisted(() => ({ load: vi.fn() }));
 
@@ -56,6 +57,7 @@ describe('mounted App account/workspace lifecycle', () => {
     authState.value = { user: { uid: 'demo-clinician', displayName: 'Sample clinician' }, role: 'clinician', loading: false, isDemoWorkspace: true, logout: vi.fn() };
     storage.getClients.mockResolvedValue([{ id: 'sample-patient', name: 'Sample' }]);
     storage.getPatientInvitationsForClinician.mockResolvedValue([]);
+    storage.saveClient.mockResolvedValue(undefined);
     settings.load.mockResolvedValue({ clinicId: 'clinic-1', clinic: { id: 'clinic-1' }, practitioner: { id: 'clinician-1' }, brand: null });
   });
 
@@ -202,6 +204,19 @@ describe('mounted App account/workspace lifecycle', () => {
       await flush();
     });
     expect(patientShell(renderer).props.client).toMatchObject({ id: 'patient-one', name: 'Patient One' });
+    renderer.unmount();
+  });
+
+  it('does not publish a failed patient update into the clinician roster', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    const original = { id: 'patient-one', name: 'Original' };
+    storage.getClients.mockResolvedValueOnce([original]);
+    storage.saveClient.mockRejectedValueOnce(new Error('save offline'));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+
+    await expect(shell(renderer).props.onUpdateClient({ ...original, name: 'Unsaved' })).rejects.toThrow('save offline');
+    expect(shell(renderer).props.clients).toEqual([original]);
     renderer.unmount();
   });
 });

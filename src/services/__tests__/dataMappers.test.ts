@@ -35,7 +35,7 @@ const clientFixture = (): ClientProfile => ({
   badges: [],
 });
 
-const sessionFixture = (): SessionRecord => ({
+const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 'session-1',
   patientId: 'patient-1',
   patientName: 'Patient One',
@@ -53,6 +53,7 @@ const sessionFixture = (): SessionRecord => ({
   timeSeries: [],
   adaptiveAdjustmentsCount: 0,
   finalThreshold: 1.8,
+  ...overrides,
 });
 
 describe('production data migration readers', () => {
@@ -159,7 +160,24 @@ describe('session aggregate migration behavior', () => {
     expect(updated.completedSessionsCount).toBe(1);
     expect(updated.badges).toContain('first-light');
     expect(updated.badges).toContain('deep-focus');
+    expect(updated.brainCapacityScore).toBe(client.brainCapacityScore);
     expect(client.completedSessionsCount).toBe(0);
     expect(client.badges).toEqual([]);
+  });
+
+  it('does not invent score, streak, or garden state for a blank profile', () => {
+    const blank = {
+      ...clientFixture(),
+      brainCapacityScore: undefined,
+      currentStreak: 0,
+      tidalGardenState: undefined,
+      skylineBiomesUnlocked: undefined,
+    };
+    const updated = applySessionCompletionToClient(blank, sessionFixture({ experience: 'tidal-garden' }));
+
+    expect(updated.brainCapacityScore).toBeUndefined();
+    expect(updated.currentStreak).toBe(0);
+    expect(updated.tidalGardenState).toBeUndefined();
+    expect(updated.skylineBiomesUnlocked).toBeUndefined();
   });
 });

@@ -355,8 +355,8 @@ export interface SessionRecord {
   timeInZonePercent: number;
   /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
   averageCoherence: number | null;
-  peakFocusScore: number;
-  averageBands: BandPowers;
+  peakFocusScore?: number;
+  averageBands?: BandPowers;
   timeSeries: Array<{
     t: number;
     thetaBetaRatio: number;
@@ -434,32 +434,33 @@ export interface ClientProfile {
   id: string;
   name: string;
   email: string;
-  avatarUrl: string;
-  condition: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
+  avatarUrl?: string;
+  condition?: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
   status: 'active' | 'paused' | 'completed';
-  assignedProtocol: ProtocolType;
+  assignedProtocol?: ProtocolType;
   customProtocolConfig?: ProtocolTemplate;
   individualBaselineModel?: IndividualBaselineModel;
   brainMaps: QEEGBrainMap[];
   allowedExperiences: ExperienceType[];
-  prescribedSessionsPerWeek: number;
+  prescribedSessionsPerWeek?: number;
   completedSessionsCount: number;
   currentStreak: number;
-  streakFreezeRemaining: number;
-  brainCapacityScore: number; // 0 - 100
-  lastSessionDate: string;
-  nextSessionDate: string;
+  streakFreezeRemaining?: number;
+  /** Legacy-only until a clinically/product-validated score definition exists. */
+  brainCapacityScore?: number | null;
+  lastSessionDate?: string;
+  nextSessionDate?: string;
   customThresholdBounds?: {
     min: number;
     max: number;
   };
-  tidalGardenState: {
+  tidalGardenState?: {
     stage: number;
     plantsUnlocked: string[];
     growthPoints: number;
     lastWatered: string;
   };
-  skylineBiomesUnlocked: string[];
+  skylineBiomesUnlocked?: string[];
   badges: string[];
   linkedClinicianCode?: string;
   clinicianId?: string;

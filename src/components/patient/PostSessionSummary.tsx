@@ -20,7 +20,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
   session,
   onViewProgress,
 }) => {
-  const [selectedMood, setSelectedMood] = useState<1 | 2 | 3 | 4 | 5 | undefined>(session.moodRating || 4);
+  const [selectedMood, setSelectedMood] = useState<1 | 2 | 3 | 4 | 5 | undefined>(undefined);
   const [patientNotes, setPatientNotes] = useState(session.patientNotes || '');
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -105,6 +105,11 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
           Your session data has been saved.
         </p>
+        {session.isDemo && (
+          <p role="status" style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+            Training Demo · Synthetic acquisition. Feedback below is simulated, not measured EEG.
+          </p>
+        )}
       </div>
 
       {/* Primary Metrics Card */}
@@ -117,7 +122,9 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         </div>
         <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Time in target training zone</span>
+          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+            {session.isDemo ? 'Synthetic time in target zone' : 'Time in target training zone'}
+          </span>
           <span className="font-mono" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--brand-primary)' }}>
             {session.timeInZonePercent}%
           </span>
@@ -165,7 +172,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
       {/* Performance Time-Series Chart */}
       <div className="card-patient" style={{ padding: '16px' }}>
         <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-          Neural Stability Trajectory & In-Zone Windows
+          {session.isDemo ? 'Synthetic Feedback Trajectory' : 'Neural Stability Trajectory & In-Zone Windows'}
         </div>
         <svg viewBox="0 0 380 150" style={{ width: '100%', height: '130px', overflow: 'visible' }}>
           <defs>
@@ -198,8 +205,14 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         </div>
         <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
           • Trained for {Math.round(session.durationSeconds / 60)} minutes using {session.protocol.replace(/-/g, ' ')} protocol.<br />
-          • Spent {session.timeInZonePercent}% of active training time in the target neural zone.<br />
-          • Average band powers: θ={session.averageBands.theta.toFixed(1)} µV, α={session.averageBands.alpha.toFixed(1)} µV, SMR={session.averageBands.smr.toFixed(1)} µV, β={session.averageBands.beta.toFixed(1)} µV.<br />
+          • Spent {session.timeInZonePercent}% of active training time in the {session.isDemo ? 'simulated target zone' : 'target neural zone'}.<br />
+          {session.isDemo ? (
+            <>• Measured average band powers: unavailable in Training Demo.<br /></>
+          ) : session.averageBands ? (
+            <>• Average band powers: θ={session.averageBands.theta.toFixed(1)} µV, α={session.averageBands.alpha.toFixed(1)} µV, SMR={session.averageBands.smr.toFixed(1)} µV, β={session.averageBands.beta.toFixed(1)} µV.<br /></>
+          ) : (
+            <>• Average band powers: unavailable.<br /></>
+          )}
           {session.averageMindfulness != null && (
             <>• Average mindfulness score: {session.averageMindfulness}/100.<br /></>
           )}

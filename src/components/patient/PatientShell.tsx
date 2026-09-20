@@ -13,7 +13,7 @@ import { EducationHub } from './EducationHub';
 import { PatientMessagingView } from './PatientMessagingView';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import {
@@ -34,7 +34,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   brand,
   client,
   onUpdateClient,
-  onOpenRebrand,
   initialInvitationCode,
   onInvitationAccepted,
 }) => {
@@ -49,8 +48,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
-  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
-  const protocolAlias = client.customProtocolConfig
+  const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
+  const protocolAlias = client.customProtocolConfig && client.assignedProtocol
     ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
     : undefined;
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
@@ -289,15 +288,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           </div>
         </div>
 
-        {isClinicianLinked && (
-          <button
-            onClick={onOpenRebrand}
-            className="btn btn-ghost"
-            style={{ padding: '6px 10px', fontSize: '11px', gap: '4px' }}
-          >
-            <Sliders size={13} /> Clinic Theme
-          </button>
-        )}
       </header>
 
       {/* Main Tab Content */}
@@ -513,10 +503,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               </div>
 
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div><strong>Goal:</strong> {client.condition}</div>
+                <div><strong>Goal:</strong> {client.condition || 'Unavailable'}</div>
                 {protocolAlias && <div><strong>Name:</strong> {protocolAlias}</div>}
-                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
-                <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek} sessions / week</div>
+                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol?.replace(/-/g, ' ').toUpperCase() ?? 'Assignment required'}</div>
+                <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable'}</div>
                 <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
               </div>
             </div>

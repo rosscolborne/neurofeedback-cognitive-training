@@ -243,16 +243,26 @@ describe('role-aware session repository', () => {
     await expect(storageEngine.getBrainMaps('patient-1')).rejects.toThrow('offline');
   });
 
-  it('deduplicates direct clinician sessions and owned legacy patient sessions', async () => {
+  it('queries sessions only through the current canonical and explicit-null legacy roster', async () => {
     firestore.getDocs
-      .mockResolvedValueOnce({ docs: [sessionDocument('same-session', 'patient-1')] })
-      .mockResolvedValueOnce({ docs: [{ id: 'patient-1' }] })
-      .mockResolvedValueOnce({ docs: [sessionDocument('same-session', 'patient-1')] });
+      .mockResolvedValueOnce({ docs: [{ id: 'patient-1', data: () => ({ clinicianId: 'clinician-1' }) }] })
+      .mockResolvedValueOnce({ docs: [{ id: 'patient-2', data: () => ({ clinicianId: null, linkedClinicianCode: 'clinician-1' }) }] })
+      .mockResolvedValueOnce({ docs: [sessionDocument('session-1', 'patient-1')] })
+      .mockResolvedValueOnce({ docs: [sessionDocument('session-2', 'patient-2')] });
 
     const sessions = await storageEngine.getSessionsFor({ role: 'clinician', clinicianId: 'clinician-1' });
-    expect(sessions.map((session) => session.id)).toEqual(['same-session']);
-    const directQuery = firestore.getDocs.mock.calls[0][0] as { constraints: Array<{ field: string; value: string }> };
-    expect(directQuery.constraints).toContainEqual({ field: 'clinicianId', op: '==', value: 'clinician-1' });
+    expect(sessions.map((session) => session.id)).toEqual(['session-1', 'session-2']);
+    const queries = firestore.getDocs.mock.calls.map(([argument]) => argument as { source: { path: string }; constraints: Array<{ field: string; value: string | null }> });
+    expect(queries[0].constraints).toContainEqual({ field: 'clinicianId', op: '==', value: 'clinician-1' });
+    expect(queries[1].constraints).toEqual(expect.arrayContaining([
+      { field: 'linkedClinicianCode', op: '==', value: 'clinician-1' },
+      { field: 'clinicianId', op: '==', value: null },
+    ]));
+    expect(queries.slice(2).map((entry) => entry.constraints)).toEqual([
+      [{ field: 'patientId', op: '==', value: 'patient-1' }],
+      [{ field: 'patientId', op: '==', value: 'patient-2' }],
+    ]);
+    expect(queries.some((entry) => entry.source.path === 'sessions' && entry.constraints.some((constraint) => constraint.field === 'clinicianId'))).toBe(false);
   });
 
   it('does not let clinic patient scope escape the requested clinic', async () => {
@@ -274,13 +284,19 @@ describe('role-aware session repository', () => {
       id: 'clinic-1', exists: () => true,
       data: () => ({ id: 'clinic-1', name: 'Clinic', timezone: 'UTC', practitionerIds: ['practitioner-1'] }),
     });
-    firestore.getDocs.mockResolvedValueOnce({ docs: [sessionDocument('clinic-session', 'patient-1')] });
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ id: 'patient-1', data: () => ({ clinicId: 'clinic-1' }) }] })
+      .mockResolvedValueOnce({ docs: [sessionDocument('clinic-session', 'patient-1')] });
 
     const sessions = await storageEngine.getSessionsFor({ role: 'clinic', clinicId: 'clinic-1' });
 
     expect(sessions.map((session) => session.id)).toEqual(['clinic-session']);
-    const queryArg = firestore.getDocs.mock.calls[0][0] as { constraints: Array<{ field: string; value: string }> };
-    expect(queryArg.constraints).toContainEqual({ field: 'clinicId', op: '==', value: 'clinic-1' });
+    const rosterQuery = firestore.getDocs.mock.calls[0][0] as { source: { path: string }; constraints: Array<{ field: string; value: string }> };
+    expect(rosterQuery.source.path).toBe('clients');
+    expect(rosterQuery.constraints).toContainEqual({ field: 'clinicId', op: '==', value: 'clinic-1' });
+    const sessionQuery = firestore.getDocs.mock.calls[1][0] as { source: { path: string }; constraints: Array<{ field: string; value: string }> };
+    expect(sessionQuery.source.path).toBe('sessions');
+    expect(sessionQuery.constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
   });
 });
 
@@ -344,6 +360,25 @@ describe('production and sample workspace separation', () => {
       { type: 'doc', path: 'clients', id: user.uid },
       expect.objectContaining({ id: user.uid, patientId: user.uid }),
     );
+    const saved = firestore.setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(saved).not.toHaveProperty('avatarUrl');
+    expect(saved).not.toHaveProperty('condition');
+    expect(saved).not.toHaveProperty('assignedProtocol');
+    expect(saved).not.toHaveProperty('prescribedSessionsPerWeek');
+    expect(saved).not.toHaveProperty('brainCapacityScore');
+    expect(saved).not.toHaveProperty('tidalGardenState');
+    expect(saved).not.toHaveProperty('skylineBiomesUnlocked');
+  });
+
+  it('propagates roster and profile write failures', async () => {
+    firestore.getDocs.mockRejectedValueOnce(new Error('roster unavailable'));
+    await expect(storageEngine.getClients()).rejects.toThrow('roster unavailable');
+
+    firestore.setDoc.mockRejectedValueOnce(new Error('profile save unavailable'));
+    await expect(storageEngine.saveClient(INITIAL_DEMO_CLIENTS[0])).rejects.toThrow('profile save unavailable');
+
+    firestore.deleteDoc.mockRejectedValueOnce(new Error('delete unavailable'));
+    await expect(storageEngine.deleteClient('patient-1')).rejects.toThrow('delete unavailable');
   });
 
   it('propagates patient profile read and initialization failures without fabricating a profile', async () => {

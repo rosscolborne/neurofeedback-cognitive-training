@@ -21,7 +21,7 @@ interface ClientRosterViewProps {
   onSelectClient: (client: ClientProfile) => void;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelInvitation: (invitationId: string) => Promise<void>;
-  onUpdateClient?: (updated: ClientProfile) => void;
+  onUpdateClient?: (updated: ClientProfile) => Promise<void>;
   onDeleteClient?: (id: string) => void | Promise<void>;
   onScheduleClient?: (clientId: string) => void;
   onMessageClient?: (clientId: string) => void;
@@ -63,7 +63,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.condition.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.condition ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -89,8 +89,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setEditingClient(client);
     setFormName(client.name);
     setFormEmail(client.email);
-    setFormCondition(client.condition);
-    setFormProtocol(client.assignedProtocol);
+    setFormCondition(client.condition ?? 'Peak Performance');
+    setFormProtocol(client.assignedProtocol ?? 'theta-beta-ratio');
     setFormStatus(client.status);
     setFormSessionsPerWeek(client.prescribedSessionsPerWeek || 4);
     setFormNotes(client.notes || '');
@@ -132,7 +132,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setFormError(null);
     try {
       if (editingClient && onUpdateClient) {
-        await Promise.resolve(onUpdateClient({
+        await onUpdateClient({
           ...editingClient,
           name: formName,
           email: formEmail || editingClient.email,
@@ -141,7 +141,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           status: formStatus,
           prescribedSessionsPerWeek: Number(formSessionsPerWeek),
           notes: formNotes,
-        }));
+        });
         setShowAddModal(false);
       } else {
         const invitation = await onAddClient({
@@ -308,11 +308,11 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 >
                   <td style={{ padding: '14px 16px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <img
+                      {client.avatarUrl ? <img
                         src={client.avatarUrl}
                         alt={client.name}
                         style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
-                      />
+                      /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '34px', height: '34px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700 }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{client.name}</span>
@@ -329,21 +329,17 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 500 }}>{client.condition}</div>
+                    <div style={{ fontWeight: 500 }}>{client.condition || 'Condition unavailable'}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {client.assignedProtocol.replace(/-/g, ' ')}
+                      {client.assignedProtocol?.replace(/-/g, ' ') || 'Protocol unavailable'}
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                    {client.lastSessionDate}
+                    {client.lastSessionDate || 'No recorded session'}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span className="font-mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
-                      {client.brainCapacityScore}%
-                    </span>
-                  </td>
+                  <td style={{ padding: '14px 16px', color: 'var(--text-tertiary)' }}>Unavailable</td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
-                    {client.completedSessionsCount}
+                    {client.completedSessionsCount ?? 0}
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
@@ -394,11 +390,11 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <img
+                {client.avatarUrl ? <img
                   src={client.avatarUrl}
                   alt={client.name}
                   style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
-                />
+                /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '42px', height: '42px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700 }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
                 <div>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>{client.name}</span>
@@ -413,21 +409,18 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
               <span style={{ background: 'var(--surface-clinician-sidebar)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
-                {client.condition}
+                {client.condition || 'Condition unavailable'}
               </span>
               <span style={{ color: 'var(--text-secondary)' }}>
-                Protocol: <strong>{client.assignedProtocol.replace(/-/g, ' ')}</strong>
+                Protocol: <strong>{client.assignedProtocol?.replace(/-/g, ' ') || 'unavailable'}</strong>
               </span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
               <div>
-                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: </span>
-                <span className="font-mono" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
-                  {client.brainCapacityScore}%
-                </span>
+                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: unavailable</span>
                 <span style={{ color: 'var(--text-tertiary)', marginLeft: '12px' }}>Sessions: </span>
-                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount}</span>
+                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
               </div>
               <button
                 onClick={(e) => handleOpenEdit(client, e)}

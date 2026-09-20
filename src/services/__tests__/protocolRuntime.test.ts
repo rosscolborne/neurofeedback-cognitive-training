@@ -4,6 +4,8 @@ import {
   AdaptiveDifficultyEngine,
   accumulateVerifiedBands,
   advanceSessionClock,
+  assessSessionCompletionReadiness,
+  createSessionCompletionId,
   createVerifiedBandAccumulator,
   evaluateProtocolFeedback,
   getCompletedSessionDuration,
@@ -190,7 +192,7 @@ describe('protocol runtime assignment', () => {
     expect(summarizeVerifiedBands(valid)).toEqual({ bands, provenance: brainflowProvenance });
     const missing = createVerifiedBandAccumulator();
     accumulateVerifiedBands(missing, bands, { ...available, smr: false }, brainflowProvenance);
-    expect(summarizeVerifiedBands(missing).provenance).toBeUndefined();
+    expect(summarizeVerifiedBands(missing)).toEqual({});
     const unproven = createVerifiedBandAccumulator();
     accumulateVerifiedBands(unproven, bands, available, null);
     expect(summarizeVerifiedBands(unproven).provenance).toBeUndefined();
@@ -198,6 +200,23 @@ describe('protocol runtime assignment', () => {
     accumulateVerifiedBands(mixed, bands, available, brainflowProvenance);
     accumulateVerifiedBands(mixed, bands, available, { algorithm: 'browser-band-dft', version: '1', source: 'browser-dsp' });
     expect(summarizeVerifiedBands(mixed).provenance).toBeUndefined();
+  });
+
+  it('requires secure stable completion IDs and adequate verified hardware coverage', () => {
+    const id = createSessionCompletionId();
+    expect(id).toMatch(/^sess-[0-9a-f-]{36}$/i);
+    expect(assessSessionCompletionReadiness({
+      isDemo: false, elapsedSeconds: 10, verifiedSeconds: 7, verifiedBandSamples: 70, hardwareConnected: true,
+    })).toMatchObject({ ok: false });
+    expect(assessSessionCompletionReadiness({
+      isDemo: false, elapsedSeconds: 10, verifiedSeconds: 8, verifiedBandSamples: 1, hardwareConnected: true,
+    })).toEqual({ ok: true });
+    expect(assessSessionCompletionReadiness({
+      isDemo: false, elapsedSeconds: 10, verifiedSeconds: 10, verifiedBandSamples: 10, hardwareConnected: false,
+    })).toMatchObject({ ok: false, error: expect.stringContaining('disconnected') });
+    expect(assessSessionCompletionReadiness({
+      isDemo: true, elapsedSeconds: 0, verifiedSeconds: 0, verifiedBandSamples: 0, hardwareConnected: false,
+    })).toEqual({ ok: true });
   });
 
   it('completes a one-minute session on tick 60 with an exact 60-second saved duration', () => {

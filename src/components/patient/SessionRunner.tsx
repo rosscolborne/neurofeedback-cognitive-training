@@ -6,6 +6,8 @@ import {
   AdaptiveAdjustmentLog,
   accumulateVerifiedBands,
   advanceSessionClock,
+  assessSessionCompletionReadiness,
+  createSessionCompletionId,
   createVerifiedBandAccumulator,
   getCompletedSessionDuration,
   PROTOCOL_RUNTIME_LIMITATIONS,
@@ -149,12 +151,23 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     eegEngine.isDemoMode = false;
     return false;
   });
+  const [completionIdentity] = useState<{ id: string | null; error: string | null }>(() => {
+    try {
+      return { id: createSessionCompletionId(), error: null };
+    } catch (error) {
+      return {
+        id: null,
+        error: error instanceof Error ? error.message : 'Secure session completion IDs are unavailable.',
+      };
+    }
+  });
   const [phase, setPhase] = useState<SessionPhase>('calibration');
   const [eegData, setEegData] = useState<EEGDataPoint | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isSavingSession, setIsSavingSession] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [acquisitionError, setAcquisitionError] = useState<string | null>(null);
   const [isFitAccepted, setIsFitAccepted] = useState(false);
   const [isSessionStarted, setIsSessionStarted] = useState(false);
   const [showFitModal, setShowFitModal] = useState(false);
@@ -173,11 +186,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
   const [inZoneMeasuredSeconds, setInZoneMeasuredSeconds] = useState(0);
 
-  const adaptiveEngineRef = useRef<AdaptiveDifficultyEngine>(new AdaptiveDifficultyEngine(
-    runtimeConfig?.protocol ?? client.assignedProtocol,
-    runtimeConfig?.initialThreshold,
-    runtimeConfig ?? undefined,
-  ));
+  const [adaptiveEngine] = useState<AdaptiveDifficultyEngine | null>(() => runtimeConfig
+    ? new AdaptiveDifficultyEngine(runtimeConfig.protocol, runtimeConfig.initialThreshold, runtimeConfig)
+    : null);
   const timeSeriesRef = useRef<SessionRecord['timeSeries']>([]);
   const bandAccumulatorRef = useRef(createVerifiedBandAccumulator());
   const coherenceAccumulatorRef = useRef({ total: 0, count: 0 });
@@ -191,6 +202,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     training: 0,
     trainingCount: 0,
   });
+  const peakTrainingScoreRef = useRef<number | null>(null);
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const inZoneObservationsRef = useRef<InZoneObservation[]>([]);
   const [recentInZonePercent, setRecentInZonePercent] = useState<number | null>(null);
@@ -225,8 +237,32 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const finishSession = React.useCallback(async (completedDurationSeconds?: number) => {
     if (isSavingSession) return;
-    setIsSavingSession(true);
     setSaveError(null);
+    if (!runtimeConfig || !adaptiveEngine) {
+      setSaveError('A valid clinician-assigned protocol is required before this session can be saved.');
+      return;
+    }
+
+    const completedDuration = getCompletedSessionDuration(completedDurationSeconds, totalSecondsElapsedRef.current);
+    const readiness = assessSessionCompletionReadiness({
+      isDemo: isDemoSession,
+      elapsedSeconds: completedDuration,
+      verifiedSeconds: inZoneMeasuredSeconds,
+      verifiedBandSamples: bandAccumulatorRef.current.sampleCount,
+      hardwareConnected: eegEngine.isHardwareConnected,
+    });
+    if (!readiness.ok) {
+      setSaveError(readiness.error);
+      setAcquisitionError(readiness.error);
+      setIsPaused(true);
+      return;
+    }
+    if (!completionIdentity.id) {
+      setSaveError(completionIdentity.error ?? 'This session cannot be saved securely.');
+      return;
+    }
+
+    setIsSavingSession(true);
 
     const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
@@ -235,24 +271,26 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
     const bfAcc = brainflowAccRef.current;
     const summary: SessionRecord = {
-      id: 'sess-' + Date.now(),
+      id: completionIdentity.id,
       patientId: client.id,
       patientName: client.name,
       ...careProvenance,
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: Date.now(),
-      protocol: runtimeConfig?.protocol ?? client.assignedProtocol,
+      protocol: runtimeConfig.protocol,
       experience: selectedExperience,
-      durationSeconds: getCompletedSessionDuration(completedDurationSeconds, totalSecondsElapsedRef.current),
+      durationSeconds: completedDuration,
       timeInZonePercent,
       averageCoherence: coherenceAccumulatorRef.current.count > 0
         ? Math.round(coherenceAccumulatorRef.current.total / coherenceAccumulatorRef.current.count)
         : null,
-      peakFocusScore: Math.min(99, Math.round(timeInZonePercent * 1.05 + 10)),
+      peakFocusScore: peakTrainingScoreRef.current == null
+        ? undefined
+        : Math.round(peakTrainingScoreRef.current),
       averageBands: bandSummary.bands,
       timeSeries: timeSeriesRef.current, // Real recorded data only — no fabricated fallbacks
-      adaptiveAdjustmentsCount: adaptiveEngineRef.current.getAdjustmentsCount(),
-      finalThreshold: adaptiveEngineRef.current.getCurrentThreshold(),
+      adaptiveAdjustmentsCount: adaptiveEngine.getAdjustmentsCount(),
+      finalThreshold: adaptiveEngine.getCurrentThreshold(),
       isDemo: isDemoSession,
       averageTrainingScore: bfAcc.trainingCount > 0 ? Math.round(bfAcc.training / bfAcc.trainingCount) : null,
       averageMindfulness: bfAcc.mindfulnessCount > 0 ? Math.round(bfAcc.mindfulness / bfAcc.mindfulnessCount) : undefined,
@@ -273,7 +311,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       setSaveError("We couldn't save this session. Check your connection and try again.");
       setIsSavingSession(false);
     }
-  }, [client.assignedProtocol, client.clinicId, client.clinicianId, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
+  }, [adaptiveEngine, client, completionIdentity, inZoneMeasuredSeconds, inZoneSeconds, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {
@@ -311,6 +349,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         const bfAcc = brainflowAccRef.current;
         bfAcc.training += data.trainingMetric.score;
         bfAcc.trainingCount += 1;
+        peakTrainingScoreRef.current = Math.max(peakTrainingScoreRef.current ?? data.trainingMetric.score, data.trainingMetric.score);
       }
 
       if (!isPausedRef.current && isFitAccepted && phaseRef.current !== 'calibration') {
@@ -344,8 +383,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
         // Feed adaptive difficulty engine during Core Training
         if (phaseRef.current === 'training' && data.inZoneAvailable) {
-          const result = adaptiveEngineRef.current.addSample(data.inZone);
-          if (result.adjusted && result.log) {
+          const result = adaptiveEngine?.addSample(data.inZone);
+          if (result?.adjusted && result.log) {
             eegEngine.setThreshold(result.log.newThreshold);
             setAdjustmentNotice(result.log);
             setTimeout(() => setAdjustmentNotice(null), 5000);
@@ -359,13 +398,32 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       eegEngine.stop();
       audioEngine.stopAll();
     };
-  }, [isDemoSession, isFitAccepted, runtimeConfig]);
+  }, [adaptiveEngine, isDemoSession, isFitAccepted, runtimeConfig]);
 
   // Main session timer interval
   useEffect(() => {
     if (isPaused || !isSessionStarted || !runtimeConfig) return;
 
     const interval = window.setInterval(() => {
+      const currentData = eegDataRef.current;
+      const bandProvenance = eegEngine.getBandPowerProvenance();
+      const hasVerifiedHardwareFrame = Boolean(
+        currentData?.inZoneAvailable
+        && currentData.signalQuality !== 'disconnected'
+        && bandProvenance
+        && (Object.keys(bandAccumulatorRef.current.sums) as Array<keyof typeof bandAccumulatorRef.current.sums>)
+          .every((band) => currentData.bandAvailability[band] && Number.isFinite(currentData.bands[band])),
+      );
+      if (!isDemoSession && (!eegEngine.isHardwareConnected || !hasVerifiedHardwareFrame)) {
+        setAcquisitionError(
+          eegEngine.isHardwareConnected
+            ? 'Verified EEG is unavailable. Training is paused until a valid signal returns.'
+            : 'Your headset disconnected. Training is paused and cannot be saved until it reconnects.',
+        );
+        setIsPaused(true);
+        return;
+      }
+
       const tick = advanceSessionClock(totalSecondsElapsedRef.current, sessionTotalDuration, isDemoSession);
       totalSecondsElapsedRef.current = tick.elapsed;
       setTotalSecondsElapsed(tick.elapsed);
@@ -377,8 +435,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       }
 
       // Periodic time-series capture every 10 seconds
-      const currentData = eegDataRef.current;
-      if (tick.elapsed % 10 === 0 && currentData) {
+      if (tick.elapsed % 10 === 0 && currentData && (isDemoSession || hasVerifiedHardwareFrame)) {
         timeSeriesRef.current.push({
           t: tick.elapsed,
           thetaBetaRatio: currentData.thetaBetaRatio,
@@ -441,6 +498,31 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     forceUpdate({});
   };
 
+  const toggleSessionPause = () => {
+    if (!isPaused) {
+      setIsPaused(true);
+      return;
+    }
+    if (!isDemoSession) {
+      const currentData = eegDataRef.current;
+      const provenance = eegEngine.getBandPowerProvenance();
+      const hasVerifiedSignal = Boolean(
+        eegEngine.isHardwareConnected
+        && currentData?.inZoneAvailable
+        && currentData.signalQuality !== 'disconnected'
+        && provenance
+        && (Object.keys(bandAccumulatorRef.current.sums) as Array<keyof typeof bandAccumulatorRef.current.sums>)
+          .every((band) => currentData.bandAvailability[band] && Number.isFinite(currentData.bands[band])),
+      );
+      if (!hasVerifiedSignal) {
+        setAcquisitionError('Verified EEG is still unavailable. Check headset fit and connection before resuming.');
+        return;
+      }
+    }
+    setAcquisitionError(null);
+    setIsPaused(false);
+  };
+
   if (!runtimeResolution.ok) {
     return (
       <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
@@ -449,6 +531,16 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
           {PROTOCOL_RUNTIME_LIMITATIONS}
         </p>
+        <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
+      </div>
+    );
+  }
+
+  if (completionIdentity.error) {
+    return (
+      <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
+        <h1 style={{ fontSize: '22px' }}>Session unavailable</h1>
+        <p>{completionIdentity.error}</p>
         <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
       </div>
     );
@@ -510,13 +602,21 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             {isPairing ? 'Connecting...' : 'Connect Muse Headband'}
           </button>
 
-          <button
-            onClick={handleStartDemoMode}
-            className="btn btn-secondary"
-            style={{ padding: '12px', fontSize: '13px' }}
-          >
-            Try Demo Mode
-          </button>
+          {!isSessionStarted && (
+            <button
+              onClick={handleStartDemoMode}
+              className="btn btn-secondary"
+              style={{ padding: '12px', fontSize: '13px' }}
+            >
+              Try Demo Mode
+            </button>
+          )}
+
+          {isSessionStarted && (
+            <div role="alert" style={{ color: '#B91C1C', fontSize: '13px', lineHeight: 1.5 }}>
+              Headset connection was lost. This real-EEG session is paused; Demo data cannot replace it.
+            </div>
+          )}
 
           <button
             onClick={cancelSession}
@@ -718,6 +818,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         {PROTOCOL_RUNTIME_LIMITATIONS}
       </div>
 
+      {acquisitionError && (
+        <div role="alert" style={{ padding: '8px 14px', color: '#B91C1C', background: '#FEE2E2', fontSize: '12px', lineHeight: 1.4 }}>
+          {acquisitionError}
+        </div>
+      )}
+
       {/* Adaptive Threshold Notification Banner */}
       {adjustmentNotice && (
         <div
@@ -754,12 +860,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           {selectedExperience === 'skyline-drift' && (
             <SkylineDriftCanvas
               eegData={eegData}
-              assignedProtocol={client.assignedProtocol}
+              assignedProtocol={runtimeConfig!.protocol}
               recentInZonePercent={inZonePercent}
               isPaused={isPaused}
             />
           )}
-          {selectedExperience === 'tidal-garden' && (
+          {selectedExperience === 'tidal-garden' && client.tidalGardenState && (
             <TidalGardenCanvas 
               eegData={eegData} 
               stage={client.tidalGardenState.stage} 
@@ -767,6 +873,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               inZonePercent={inZonePercent ?? undefined}
               isPaused={isPaused} 
             />
+          )}
+          {selectedExperience === 'tidal-garden' && !client.tidalGardenState && (
+            <div role="status" style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', padding: '24px', textAlign: 'center' }}>
+              Garden progress is unavailable for this account. Return to the dashboard and ask your clinician to review the training assignment.
+            </div>
           )}
           {selectedExperience === 'breath-weave' && (
             <BreathWeaveCanvas eegData={eegData} isPaused={isPaused} />
@@ -977,7 +1088,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         }}
       >
         <button
-          onClick={() => setIsPaused(!isPaused)}
+          onClick={toggleSessionPause}
           className="btn btn-secondary"
           style={{ flex: 1, padding: '10px' }}
         >

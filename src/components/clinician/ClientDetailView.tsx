@@ -31,7 +31,7 @@ interface ClientDetailViewProps {
   client: ClientProfile;
   brand: ClinicBrandConfig;
   onBack: () => void;
-  onUpdateClient: (updated: ClientProfile) => void;
+  onUpdateClient: (updated: ClientProfile) => Promise<void>;
   /** Integration seam for the centrally owned authorized append transaction. */
   onAppendBrainMap?: ManualBrainMapSave;
   onSendMessage: () => void;
@@ -100,7 +100,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     generatePatientClinicalPDF(client, sessions, brand);
   };
 
-  const handleSaveProtocol = (newTemplate: ProtocolTemplate) => {
+  const handleSaveProtocol = async (newTemplate: ProtocolTemplate) => {
     const assigned = getProtocolTypeForTemplate(newTemplate, client.assignedProtocol);
 
     const updated: ClientProfile = {
@@ -109,7 +109,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       customProtocolConfig: newTemplate,
       allowedExperiences: newTemplate.recommendedExperiences,
     };
-    onUpdateClient(updated);
+    await onUpdateClient(updated);
   };
 
   const handleSaveBrainMap = async (map: QEEGBrainMap) => {
@@ -193,11 +193,11 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <img
+          {client.avatarUrl ? <img
             src={client.avatarUrl}
             alt={client.name}
             style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover' }}
-          />
+          /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '52px', height: '52px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '18px' }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
@@ -208,7 +208,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition} • Protocol: <strong>{assignedProtocol ? assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
+              {client.condition || 'Condition unavailable'} • Protocol: <strong>{assignedProtocol ? assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
             </div>
           </div>
         </div>

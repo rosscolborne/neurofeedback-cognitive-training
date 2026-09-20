@@ -81,8 +81,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }), [sessionStatus, sessions, nowMs]);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
-  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
-  const protocolAlias = client.customProtocolConfig
+  const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
+  const protocolAlias = client.customProtocolConfig && client.assignedProtocol
     ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
     : undefined;
 
@@ -117,7 +117,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
           {protocolAlias && <>Name: <strong style={{ color: 'var(--text-primary)' }}>{protocolAlias}</strong> · </>}
-          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
+          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? client.assignedProtocol?.replace(/-/g, ' ').toUpperCase() ?? 'Assignment required'}</strong>
         </p>
       </div>
 
@@ -223,11 +223,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <button
-          onClick={() => onStartSession(selectedExp)}
+          onClick={() => client.assignedProtocol && onStartSession(selectedExp)}
+          disabled={!client.assignedProtocol}
           className="btn btn-primary"
           style={{ width: '100%', padding: '16px', fontSize: '16px' }}
         >
-          <Play size={18} fill="currentColor" /> Begin 25-Min Session
+          <Play size={18} fill="currentColor" /> {client.assignedProtocol ? 'Begin 25-Min Session' : 'Protocol assignment required'}
         </button>
       </div>
 

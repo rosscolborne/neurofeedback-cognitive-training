@@ -15,7 +15,6 @@ import {
   BarChart3,
   Settings,
   Sliders,
-  ShieldCheck,
   LogOut,
 } from 'lucide-react';
 
@@ -25,7 +24,7 @@ interface ClinicianShellProps {
   isDemoWorkspace?: boolean;
   clients: ClientProfile[];
   patientInvitations: PatientInvitation[];
-  onUpdateClient: (updated: ClientProfile) => void;
+  onUpdateClient: (updated: ClientProfile) => Promise<void>;
   onAppendBrainMap: (patientId: string, map: QEEGBrainMap) => Promise<QEEGBrainMap>;
   onDeleteClient?: (clientId: string) => void | Promise<void>;
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
@@ -243,10 +242,6 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             <Sliders size={16} /> Clinic Theme Settings
           </button>
 
-          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ShieldCheck size={13} color="var(--status-active)" />
-            <span>HIPAA Compliant Security</span>
-          </div>
         </div>
       </aside>
 
@@ -275,8 +270,8 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             client={selectedClient}
             brand={brand}
             onBack={() => setSelectedClient(null)}
-            onUpdateClient={(c) => {
-              onUpdateClient(c);
+            onUpdateClient={async (c) => {
+              await onUpdateClient(c);
               setSelectedClient(c);
             }}
             onAppendBrainMap={(map) => onAppendBrainMap(selectedClient.id, map)}

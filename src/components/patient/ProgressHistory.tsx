@@ -398,7 +398,9 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                 {/* Expandable Session Detail */}
                 {isExpanded && (
                   <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {s.averageBands ? (
+                    {s.isDemo ? (
+                      <div><strong>Average Band Powers:</strong> Not measured — synthetic Training Demo feedback</div>
+                    ) : s.averageBands ? (
                       <div>
                         <strong>Average Band Powers:</strong> Theta {formatBandPower(s.averageBands.theta)}
                         {' | '}Alpha {formatBandPower(s.averageBands.alpha)}

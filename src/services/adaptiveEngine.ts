@@ -46,6 +46,9 @@ function sameRewardDefinition(
 /** Resolve the persisted assignment without allowing its display alias to affect training semantics. */
 export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeResolution {
   const custom = client.customProtocolConfig;
+  if (!client.assignedProtocol) {
+    return { ok: false, error: 'A clinician must assign a training protocol before this patient can begin training.' };
+  }
   const canonical = getClinicalProtocolTemplate(client.assignedProtocol);
   if (!canonical) return { ok: false, error: 'The assigned protocol is not supported by this training engine.' };
   const initialThreshold = getDefaultProtocolThreshold(client.assignedProtocol);
@@ -140,6 +143,57 @@ export function getCompletedSessionDuration(completedDurationSeconds: number | u
   return completedDurationSeconds ?? elapsedSeconds;
 }
 
+/**
+ * Completion identity is created once by the mounted runner and then reused for
+ * every retry. There is deliberately no timestamp/random fallback: a weak or
+ * changing identifier would make an ambiguous network result capable of
+ * applying patient aggregates twice.
+ */
+export function createSessionCompletionId(): string {
+  if (!globalThis.crypto?.randomUUID) {
+    throw new Error('Secure session completion IDs are unavailable in this browser.');
+  }
+  return `sess-${globalThis.crypto.randomUUID()}`;
+}
+
+export interface SessionMeasurementCoverage {
+  isDemo: boolean;
+  elapsedSeconds: number;
+  verifiedSeconds: number;
+  verifiedBandSamples: number;
+  hardwareConnected: boolean;
+}
+
+export type SessionCompletionReadiness =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * A real-hardware completion must be backed by verified EEG for at least 80%
+ * of the elapsed training clock and include verified complete-band samples.
+ * Demo sessions intentionally bypass this measurement rule because their
+ * synthetic provenance is carried and presented explicitly.
+ */
+export function assessSessionCompletionReadiness(
+  coverage: SessionMeasurementCoverage,
+): SessionCompletionReadiness {
+  if (coverage.isDemo) return { ok: true };
+  if (!coverage.hardwareConnected) {
+    return { ok: false, error: 'Your headset is disconnected. Reconnect it before saving this session.' };
+  }
+  if (coverage.elapsedSeconds < 1) {
+    return { ok: false, error: 'No verified training time was recorded yet.' };
+  }
+  const requiredSeconds = Math.max(1, Math.ceil(coverage.elapsedSeconds * 0.8));
+  if (coverage.verifiedSeconds < requiredSeconds || coverage.verifiedBandSamples < 1) {
+    return {
+      ok: false,
+      error: `Verified EEG covered ${coverage.verifiedSeconds} of ${coverage.elapsedSeconds} seconds. Resume with a valid signal before saving.`,
+    };
+  }
+  return { ok: true };
+}
+
 export interface VerifiedBandAccumulator {
   sums: BandPowers;
   sampleCount: number;
@@ -178,11 +232,11 @@ export function accumulateVerifiedBands(
 }
 
 export function summarizeVerifiedBands(accumulator: VerifiedBandAccumulator): {
-  bands: BandPowers;
+  bands?: BandPowers;
   provenance?: MetricProvenance;
 } {
   if (!accumulator.sampleCount || !accumulator.provenance || !accumulator.consistent) {
-    return { bands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 } };
+    return {};
   }
   const bands = Object.fromEntries(
     (Object.keys(accumulator.sums) as Array<keyof BandPowers>)
