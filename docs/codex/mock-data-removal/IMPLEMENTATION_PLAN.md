@@ -519,7 +519,7 @@ independent workstream immediately when a slot opens.
 
 ### T1 — Protocol Runtime Consumption
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-protocol-runtime`
 - **Worktree:** `../neurasticity-mockdata-protocol-runtime`
@@ -557,7 +557,9 @@ independent workstream immediately when a slot opens.
   arbitrary reward-band edits, consume canonical adaptive steps, show limitations
   on valid paths, honor explicit bounds, require complete consistent real-hardware
   provenance, and save exact elapsed duration. Focused tests passed 13/13 and full
-  tests passed 175/175; re-review is pending.
+  tests passed 175/175. Re-review cleared those findings but found remaining real-
+  hardware SMR synthesis and sub-cent adaptive-step precision divergence; focused
+  fixes are in progress.
 
 ### D1 — Production/Demo Data Separation
 
@@ -741,6 +743,9 @@ independent workstream immediately when a slot opens.
   remain central integration work.
 - **2026-09-19:** C2 completed review fixes at `38e0398`, with 15/15 focused and
   136/136 full tests passing, and entered independent re-review.
+- **2026-09-19:** T1 re-review cleared the major contract findings but returned the
+  stream to IN PROGRESS for removal of real-hardware SMR synthesis and exact
+  adaptive-step precision handling.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
