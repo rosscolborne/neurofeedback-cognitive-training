@@ -1202,31 +1202,25 @@ class StorageEngine {
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
     if (this.isDemoWorkspace()) return this.demoClients[0] ?? null;
     if (user?.uid) {
-      try {
-        const snap = await getDoc(doc(db, 'clients', user.uid));
-        if (snap && snap.exists()) {
-          const existing = readClientProfile(snap.data(), snap.id);
-          if (!existing.name && user.displayName) {
-            existing.name = user.displayName
-              .trim()
-              .replace(/[._]/g, ' ')
-              .replace(/\b\w/g, (c) => c.toUpperCase());
-            setDoc(doc(db, 'clients', user.uid), existing, { merge: true }).catch(() => {});
-          }
-          return existing;
+      const clientRef = doc(db, 'clients', user.uid);
+      const snap = await getDoc(clientRef);
+      if (snap.exists()) {
+        const existing = readClientProfile(snap.data(), snap.id);
+        if (!existing.name && user.displayName) {
+          existing.name = user.displayName
+            .trim()
+            .replace(/[._]/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          await setDoc(clientRef, existing, { merge: true });
         }
-      } catch (err) {
-        console.warn('Failed to fetch client record from Firestore:', err);
+        return existing;
       }
 
-      // Initialize new Firestore client profile
+      // A blank profile is safe only after Firestore authoritatively confirms
+      // that no profile exists. Read or write failures must remain visible.
       const fresh = createBlankProfile(user.uid, user.email || 'user@waveable.app', user.displayName);
       fresh.patientId = user.uid;
-      try {
-        await setDoc(doc(db, 'clients', user.uid), fresh);
-      } catch (err) {
-        console.warn('Failed to initialize client profile in Firestore:', err);
-      }
+      await setDoc(clientRef, fresh);
       return fresh;
     }
 

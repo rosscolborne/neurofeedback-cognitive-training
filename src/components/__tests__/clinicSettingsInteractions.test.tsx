@@ -142,9 +142,10 @@ const mount = (component: () => ReactElement) => {
   };
 };
 
-const settings = () => mount(() => ClinicSettingsView({
+const settings = (onSettingsSaved = vi.fn()) => mount(() => ClinicSettingsView({
   brand: safeBrand,
   onOpenRebrand: vi.fn(),
+  onSettingsSaved,
 }) as ReactElement);
 const customizer = (onSave = vi.fn(), onClose = vi.fn()) => ({
   mounted: mount(() => ClinicCustomizerModal({ currentBrand: safeBrand, onSave, onClose }) as ReactElement),
@@ -207,14 +208,16 @@ describe('mounted clinic settings interactions', () => {
   });
 
   it('shows profile save success, resets Saved on edit, and reports save failure', async () => {
+    const onSettingsSaved = vi.fn();
     repository.load.mockResolvedValue(populatedSnapshot);
     repository.saveSettings.mockResolvedValue(populatedSnapshot);
-    const view = settings();
+    const view = settings(onSettingsSaved);
     await view.settle();
     const form = view.find('form', () => true);
     await (form.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({ preventDefault: vi.fn() });
     await view.settle();
     expect(view.text()).toContain('Saved');
+    expect(onSettingsSaved).toHaveBeenCalledWith(populatedSnapshot);
 
     const name = view.find('input', (node) => node.props.placeholder === 'Enter your clinic name');
     (name.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: 'Clinic Renamed' } });
@@ -225,6 +228,27 @@ describe('mounted clinic settings interactions', () => {
     await (view.find('form', () => true).props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({ preventDefault: vi.fn() });
     await view.settle();
     expect(view.text()).toContain('Profile write denied');
+    expect(onSettingsSaved).toHaveBeenCalledOnce();
+  });
+
+  it.each(['throws', 'rejects'] as const)('keeps an authoritative settings save successful when the refresh callback %s', async (failureMode) => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const onSettingsSaved = vi.fn(() => {
+      if (failureMode === 'throws') throw new Error('refresh failed');
+      return Promise.reject(new Error('refresh failed'));
+    });
+    repository.load.mockResolvedValue(populatedSnapshot);
+    repository.saveSettings.mockResolvedValue(populatedSnapshot);
+    const view = settings(onSettingsSaved);
+    await view.settle();
+
+    await (view.find('form', () => true).props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({ preventDefault: vi.fn() });
+    await view.settle();
+
+    expect(view.text()).toContain('Saved');
+    expect(view.text()).not.toContain('could not be saved');
+    expect(warning).toHaveBeenCalledOnce();
+    warning.mockRestore();
   });
 });
 

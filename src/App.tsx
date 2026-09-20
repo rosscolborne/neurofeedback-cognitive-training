@@ -4,6 +4,7 @@ import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } fro
 import { storageEngine } from './services/storageEngine';
 import { applyBrandToDOM, BRAND_PRESETS } from './services/brandEngine';
 import { clinicSettingsRepository } from './services/clinicSettingsRepository';
+import type { ClinicSettingsSnapshot } from './services/clinicSettingsRepository';
 import { PatientShell } from './components/patient/PatientShell';
 import { ClinicianShell } from './components/clinician/ClinicianShell';
 import { ClinicCustomizerModal } from './components/brand/ClinicCustomizerModal';
@@ -46,11 +47,15 @@ export function App() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [currentClient, setCurrentClient] = useState<ClientProfile | null>(null);
   const [patientInvitations, setPatientInvitations] = useState<PatientInvitation[]>([]);
+  const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
+  const [patientProfileReload, setPatientProfileReload] = useState(0);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
   const [dataIdentity, setDataIdentity] = useState('');
   const loadGeneration = useRef(0);
   const brandGeneration = useRef(0);
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
+  const accountIdentityRef = useRef(accountIdentity);
+  accountIdentityRef.current = accountIdentity;
   const hasCurrentData = dataIdentity === accountIdentity;
   const visibleClients = hasCurrentData ? clients : [];
   const visibleCurrentClient = hasCurrentData ? currentClient : null;
@@ -74,6 +79,7 @@ export function App() {
     setDataIdentity(accountIdentity);
     setClients([]);
     setCurrentClient(null);
+    setPatientProfileError(null);
     setPatientInvitations([]);
     setShowRebrandModal(false);
 
@@ -82,7 +88,11 @@ export function App() {
     if (role === 'patient') {
       void storageEngine.getCurrentClient(user)
         .then((client) => { if (isCurrent()) setCurrentClient(client); })
-        .catch((error) => { if (isCurrent()) console.warn('Error loading patient profile:', error); });
+        .catch((error) => {
+          if (!isCurrent()) return;
+          console.warn('Error loading patient profile:', error);
+          setPatientProfileError(error instanceof Error ? error.message : 'Your patient profile is unavailable.');
+        });
     } else if (role === 'clinician') {
       void storageEngine.getClients()
         .then((nextClients) => { if (isCurrent()) setClients(nextClients); })
@@ -91,7 +101,7 @@ export function App() {
         .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
         .catch((error) => { if (isCurrent()) console.warn('Error loading patient invitations:', error); });
     }
-  }, [accountIdentity, isDemoWorkspace, loading, role, user]);
+  }, [accountIdentity, isDemoWorkspace, loading, patientProfileReload, role, user]);
 
   useEffect(() => {
     const generation = ++brandGeneration.current;
@@ -158,6 +168,7 @@ export function App() {
   };
 
   const handleAddClient = async (newClient: Partial<ClientProfile>): Promise<PatientInvitation> => {
+    const requestIdentity = accountIdentity;
     if (!newClient.email?.trim()) throw new Error('Patient email is required');
     if (!visibleClinicId) throw new Error('Complete clinic setup before inviting a patient');
     const invitation = await storageEngine.createPatientInvitation({
@@ -170,12 +181,16 @@ export function App() {
       prescribedSessionsPerWeek: newClient.prescribedSessionsPerWeek || 4,
       notes: newClient.notes,
     });
-    setPatientInvitations((current) => [invitation, ...current]);
+    if (accountIdentityRef.current === requestIdentity) {
+      setPatientInvitations((current) => [invitation, ...current]);
+    }
     return invitation;
   };
 
   const handleCancelPatientInvitation = async (invitationId: string) => {
+    const requestIdentity = accountIdentity;
     await storageEngine.cancelPatientInvitation(invitationId);
+    if (accountIdentityRef.current !== requestIdentity) return;
     setPatientInvitations((current) =>
       current.map((invitation) =>
         invitation.id === invitationId ? { ...invitation, status: 'cancelled' } : invitation
@@ -184,8 +199,15 @@ export function App() {
   };
 
   const handleSaveBrand = (newBrand: ClinicBrandConfig) => {
+    if (accountIdentityRef.current !== accountIdentity) return;
     setBrand(newBrand);
     applyBrandToDOM(newBrand);
+  };
+
+  const handleClinicSettingsSaved = (snapshot: ClinicSettingsSnapshot) => {
+    if (accountIdentityRef.current !== accountIdentity) return;
+    setClinicId(snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null);
+    setBrand(snapshot.brand ?? BRAND_PRESETS[0]);
   };
 
   const invitationCode = routeInvitationCode?.toUpperCase() || storedInvitationCode;
@@ -194,6 +216,16 @@ export function App() {
     if (!role) return <Navigate to="/role-selection" replace />;
     if (role === 'patient') {
       if (!visibleCurrentClient) {
+        if (patientProfileError) {
+          return (
+            <div role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', textAlign: 'center', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
+              <BrandLogo size={56} variant="terracotta" />
+              <strong style={{ color: 'var(--text-primary)' }}>Your patient profile could not be loaded.</strong>
+              <span>{patientProfileError}</span>
+              <button type="button" className="btn btn-primary" onClick={() => setPatientProfileReload((value) => value + 1)}>Retry</button>
+            </div>
+          );
+        }
         return (
           <div role="status" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
             <BrandLogo size={56} variant="terracotta" glow />
@@ -224,6 +256,7 @@ export function App() {
         onDeleteClient={handleDeleteClient}
         onAddClient={handleAddClient}
         onCancelPatientInvitation={handleCancelPatientInvitation}
+        onClinicSettingsSaved={handleClinicSettingsSaved}
         onOpenRebrand={() => setShowRebrandModal(true)}
         onLogout={logout}
       />

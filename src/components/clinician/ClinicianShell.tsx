@@ -6,6 +6,7 @@ import { MessagingView } from './MessagingView';
 import { ClinicalCalendarView } from './ClinicalCalendarView';
 import { ClinicalReportsView } from './ClinicalReportsView';
 import { ClinicSettingsView } from './ClinicSettingsView';
+import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { BrandLogo } from '../brand/BrandLogo';
 import {
   Users,
@@ -30,6 +31,7 @@ interface ClinicianShellProps {
   onAddClient: (newClient: Partial<ClientProfile>) => Promise<PatientInvitation>;
   onCancelPatientInvitation: (invitationId: string) => Promise<void>;
   onOpenRebrand: () => void;
+  onClinicSettingsSaved?: (snapshot: ClinicSettingsSnapshot) => void | Promise<void>;
   onLogout: () => Promise<void>;
 }
 
@@ -52,6 +54,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   onAddClient,
   onCancelPatientInvitation,
   onOpenRebrand,
+  onClinicSettingsSaved,
   onLogout,
 }) => {
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
@@ -309,6 +312,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           <ClinicSettingsView
             brand={brand}
             onOpenRebrand={onOpenRebrand}
+            onSettingsSaved={onClinicSettingsSaved}
           />
         )}
       </main>

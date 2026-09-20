@@ -204,7 +204,10 @@ service cloud.firestore {
         clinicianId == request.auth.uid &&
         emailKey == request.resource.data.patientEmail &&
         resource.data.clinicianId == request.auth.uid &&
-        resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null) &&
+        (
+          resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null) ||
+          resource.data.get('clinicId', null) == null
+        ) &&
         resource.data.expiresAt <= request.time &&
         request.resource.data.clinicianId == request.auth.uid &&
         request.resource.data.clinicId is string &&

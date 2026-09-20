@@ -96,8 +96,11 @@ describe('Firestore authorization rule contract', () => {
       rules.indexOf('match /clients/{clientId}'),
     );
     expect(claimsBlock).toContain("invitation.get('clinicId', null) == request.resource.data.get('clinicId', null)");
-    expect(claimsBlock).toContain("resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null)");
+    expect(claimsBlock).toContain("resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null) ||\n          resource.data.get('clinicId', null) == null");
     expect(claimsBlock).toContain('isAuthenticatedPractitionerForClinic(request.resource.data.clinicId)');
+    expect(claimsBlock).toContain('resource.data.expiresAt <= request.time');
+    expect(claimsBlock).toContain('request.resource.data.patientEmail == resource.data.patientEmail');
+    expect(claimsBlock).toContain('matchesPendingInvitation()');
   });
 
   it('copies exactly the invitation clinic on acceptance while preserving ordinary clinic immutability', () => {

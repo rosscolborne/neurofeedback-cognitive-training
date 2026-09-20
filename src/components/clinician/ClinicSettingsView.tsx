@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import type { ClinicBrandConfig } from '../../types';
 import { clinicSettingsRepository } from '../../services/clinicSettingsRepository';
+import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { errorMessage, primaryLicenseIdentifier, primaryLicensePresentation, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
 import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
   brand: ClinicBrandConfig;
   onOpenRebrand: () => void;
+  onSettingsSaved?: (snapshot: ClinicSettingsSnapshot) => void | Promise<void>;
 }
 
-export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, onOpenRebrand }) => {
+export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, onOpenRebrand, onSettingsSaved }) => {
   const [loadState, setLoadState] = useState<SettingsLoadState>({ status: 'loading' });
   const [clinicName, setClinicName] = useState('');
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
@@ -41,6 +43,13 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
       const snapshot = await clinicSettingsRepository.saveSettings({ clinicName, timezone, practitionerName, licenseIdentifier });
       setLoadState({ status: 'ready', snapshot });
       setSaveState((current) => transitionSettingsSaveState(current, 'success'));
+      try {
+        await onSettingsSaved?.(snapshot);
+      } catch (callbackError) {
+        // The repository write is authoritative; a consumer callback must not
+        // turn a persisted save into a false failure state.
+        console.warn('Clinic settings saved, but the workspace could not refresh immediately.', callbackError);
+      }
     } catch (error) {
       setSaveError(errorMessage(error, 'Clinic settings could not be saved. Try again.'));
       setSaveState((current) => transitionSettingsSaveState(current, 'failure'));

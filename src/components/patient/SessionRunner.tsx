@@ -127,6 +127,16 @@ interface SessionRunnerProps {
   onCancel: () => void;
 }
 
+export const resolveSessionCareProvenance = (client: ClientProfile): Pick<SessionRecord, 'clinicId' | 'clinicianId'> => {
+  const clinicianId = client.clinicianId || client.linkedClinicianCode || undefined;
+  return {
+    // Legacy linked profiles can lack clinicId. Keep that provenance explicitly
+    // unavailable instead of misclassifying a clinician-linked session as self-guided.
+    clinicId: client.clinicId || (clinicianId ? '' : 'self-guided'),
+    clinicianId,
+  };
+};
+
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
   selectedExperience,
@@ -221,13 +231,14 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
     const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
     const bandSummary = summarizeVerifiedBands(bandAccumulatorRef.current);
+    const careProvenance = resolveSessionCareProvenance(client);
 
     const bfAcc = brainflowAccRef.current;
     const summary: SessionRecord = {
       id: 'sess-' + Date.now(),
       patientId: client.id,
       patientName: client.name,
-      clinicId: client.linkedClinicianCode || 'self-guided',
+      ...careProvenance,
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: Date.now(),
       protocol: runtimeConfig?.protocol ?? client.assignedProtocol,
@@ -262,7 +273,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       setSaveError("We couldn't save this session. Check your connection and try again.");
       setIsSavingSession(false);
     }
-  }, [client.assignedProtocol, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
+  }, [client.assignedProtocol, client.clinicId, client.clinicianId, client.id, client.linkedClinicianCode, client.name, inZoneMeasuredSeconds, inZoneSeconds, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {

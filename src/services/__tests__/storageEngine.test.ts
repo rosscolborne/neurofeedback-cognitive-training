@@ -330,6 +330,41 @@ describe('production and sample workspace separation', () => {
     await expect(storageEngine.getAppointments()).resolves.toEqual([]);
   });
 
+  it('creates a blank patient profile only after a successful missing-document read', async () => {
+    const user = { uid: 'new-patient', email: 'new@example.com', displayName: 'New Patient' };
+    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => false });
+
+    await expect(storageEngine.getCurrentClient(user)).resolves.toMatchObject({
+      id: user.uid,
+      patientId: user.uid,
+      email: user.email,
+    });
+    expect(firestore.setDoc).toHaveBeenCalledOnce();
+    expect(firestore.setDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: user.uid },
+      expect.objectContaining({ id: user.uid, patientId: user.uid }),
+    );
+  });
+
+  it('propagates patient profile read and initialization failures without fabricating a profile', async () => {
+    const user = { uid: 'new-patient', email: 'new@example.com', displayName: 'New Patient' };
+    firestore.getDoc.mockRejectedValueOnce(new Error('profile read unavailable'));
+    await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile read unavailable');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+
+    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => false });
+    firestore.setDoc.mockRejectedValueOnce(new Error('profile write unavailable'));
+    await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile write unavailable');
+
+    firestore.getDoc.mockResolvedValueOnce({
+      id: user.uid,
+      exists: () => true,
+      data: () => ({ ...createBlankProfile(user.uid, user.email), name: '' }),
+    });
+    firestore.setDoc.mockRejectedValueOnce(new Error('profile enrichment unavailable'));
+    await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile enrichment unavailable');
+  });
+
   it('blocks sample resets from a production account', () => {
     expect(() => storageEngine.clearDemoData()).toThrow('isolated sample clinician workspace');
     expect(() => storageEngine.resetToDefaultSeed()).toThrow('isolated sample clinician workspace');

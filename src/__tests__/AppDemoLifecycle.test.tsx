@@ -8,7 +8,7 @@ const authState = vi.hoisted(() => ({
 const storage = vi.hoisted(() => ({
   getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
   getClients: vi.fn(), getPatientInvitationsForClinician: vi.fn(), getCurrentClient: vi.fn(),
-  getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(),
+  getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(), cancelPatientInvitation: vi.fn(),
 }));
 const settings = vi.hoisted(() => ({ load: vi.fn() }));
 
@@ -133,6 +133,75 @@ describe('mounted App account/workspace lifecycle', () => {
       await shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient' });
     });
     expect(storage.createPatientInvitation).toHaveBeenCalledWith(expect.objectContaining({ clinicId: 'clinic-one' }));
+    renderer.unmount();
+  });
+
+  it('can invite immediately after completing fresh clinic setup', async () => {
+    authState.value = { user: { uid: 'new-clinician' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    settings.load.mockResolvedValueOnce({ clinicId: 'new-clinician', clinic: null, practitioner: null, brand: null });
+    storage.createPatientInvitation.mockResolvedValueOnce({ id: 'INVITE' });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+
+    await expect(shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient' }))
+      .rejects.toThrow('Complete clinic setup');
+    act(() => {
+      shell(renderer).props.onClinicSettingsSaved({
+        clinicId: 'clinic-new', clinic: { id: 'clinic-new' }, practitioner: { id: 'new-clinician' }, brand: null,
+      });
+    });
+    await act(async () => {
+      await shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient' });
+    });
+    expect(storage.createPatientInvitation).toHaveBeenCalledWith(expect.objectContaining({ clinicId: 'clinic-new' }));
+    renderer.unmount();
+  });
+
+  it('does not expose a completed invitation or brand callback after the account changes', async () => {
+    let resolveInvitation!: (value: { id: string }) => void;
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    settings.load.mockResolvedValueOnce({ clinicId: 'clinic-one', clinic: { id: 'clinic-one' }, practitioner: { id: 'clinician-one' }, brand: null });
+    storage.createPatientInvitation.mockReturnValueOnce(new Promise((resolve) => { resolveInvitation = resolve; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    let invitationPromise!: Promise<unknown>;
+    act(() => {
+      invitationPromise = shell(renderer).props.onAddClient({ email: 'private@example.com', name: 'Private Patient' });
+      shell(renderer).props.onOpenRebrand();
+    });
+    const staleBrandCallback = renderer.root.find((node) => (node.type as unknown) === 'brand-modal').props.onSave;
+
+    authState.value = { user: { uid: 'clinician-two' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    settings.load.mockResolvedValueOnce({ clinicId: 'clinic-two', clinic: { id: 'clinic-two' }, practitioner: { id: 'clinician-two' }, brand: null });
+    storage.getClients.mockResolvedValueOnce([]);
+    storage.getPatientInvitationsForClinician.mockResolvedValueOnce([]);
+    await act(async () => { renderer.update(<App />); await flush(); });
+    await act(async () => {
+      resolveInvitation({ id: 'clinician-one-invitation' });
+      await invitationPromise;
+      staleBrandCallback({ ...storage.getBrandConfig(), clinicId: 'clinic-one', name: 'Clinic One' });
+      await flush();
+    });
+
+    expect(shell(renderer).props.patientInvitations).toEqual([]);
+    expect(shell(renderer).props.brand.name).toBe('Waveable');
+    renderer.unmount();
+  });
+
+  it('shows a retryable patient-profile error instead of fabricated patient data', async () => {
+    authState.value = { user: { uid: 'patient-one', email: 'patient@example.com' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getCurrentClient.mockRejectedValueOnce(new Error('profile offline'));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(JSON.stringify(renderer.toJSON())).toContain('profile offline');
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
+
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-one', name: 'Patient One' });
+    await act(async () => {
+      renderer.root.findByType('button').props.onClick();
+      await flush();
+    });
+    expect(patientShell(renderer).props.client).toMatchObject({ id: 'patient-one', name: 'Patient One' });
     renderer.unmount();
   });
 });
