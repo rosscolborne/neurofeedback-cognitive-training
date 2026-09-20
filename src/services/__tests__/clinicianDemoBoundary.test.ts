@@ -5,7 +5,10 @@ import {
   clinicianDemoEnabledForEnvironment,
   DEMO_AUTH_STORAGE_KEY,
   deactivateClinicianDemoWorkspace,
+  forgetClinicianDemoWorkspace,
+  isClinicianDemoRestoreRequested,
   isClinicianDemoWorkspace,
+  rememberClinicianDemoWorkspace,
   shouldOfferClinicianDemoWorkspace,
 } from '../clinicianDemoBoundary';
 
@@ -42,5 +45,14 @@ describe('clinician sample workspace deployment boundary', () => {
     activateClinicianDemoWorkspace();
     expect(isClinicianDemoWorkspace()).toBe(true);
     deactivateClinicianDemoWorkspace();
+  });
+
+  it('treats blocked browser storage as best-effort for marker reads and writes', () => {
+    const denied = () => { throw new DOMException('Blocked', 'SecurityError'); };
+    vi.stubGlobal('localStorage', { getItem: denied, setItem: denied, removeItem: denied });
+    expect(isClinicianDemoRestoreRequested()).toBe(false);
+    expect(() => rememberClinicianDemoWorkspace()).not.toThrow();
+    expect(() => forgetClinicianDemoWorkspace()).not.toThrow();
+    expect(() => clearUnavailableDemoMarker(false)).not.toThrow();
   });
 });

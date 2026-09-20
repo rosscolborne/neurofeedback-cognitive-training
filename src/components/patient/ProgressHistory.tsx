@@ -346,6 +346,11 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                       <span className="status-tag status-tag-active" style={{ fontSize: '11px', padding: '2px 8px' }}>
                         {s.protocol ? s.protocol.replace(/-/g, ' ') : 'Protocol unavailable'}
                       </span>
+                      {s.isDemo && (
+                        <span className="status-tag" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                          Training Demo · Synthetic acquisition
+                        </span>
+                      )}
                       {s.moodRating && (
                         <span className="font-mono" style={{ fontSize: '11px', background: 'var(--surface-patient-recessed)', padding: '2px 6px', borderRadius: '4px' }}>
                           State {s.moodRating}/5

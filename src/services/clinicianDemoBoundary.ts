@@ -20,10 +20,22 @@ export const shouldOfferClinicianDemoWorkspace = (available = CLINICIAN_DEMO_AVA
 
 let clinicianDemoWorkspaceActive = false;
 
-export const isClinicianDemoRestoreRequested = (available = CLINICIAN_DEMO_AVAILABLE): boolean =>
-  available &&
-  typeof localStorage !== 'undefined' &&
-  localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician';
+const demoMarkerStorage = (): Storage | null => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+};
+
+export const isClinicianDemoRestoreRequested = (available = CLINICIAN_DEMO_AVAILABLE): boolean => {
+  if (!available) return false;
+  try {
+    return demoMarkerStorage()?.getItem(DEMO_AUTH_STORAGE_KEY) === 'clinician';
+  } catch {
+    return false;
+  }
+};
 
 /** Repository authority is in-memory and can only be changed by AuthProvider. */
 export const isClinicianDemoWorkspace = (): boolean =>
@@ -39,15 +51,21 @@ export const deactivateClinicianDemoWorkspace = (): void => {
 };
 
 export const rememberClinicianDemoWorkspace = (): void => {
-  if (typeof localStorage !== 'undefined') localStorage.setItem(DEMO_AUTH_STORAGE_KEY, 'clinician');
+  try {
+    demoMarkerStorage()?.setItem(DEMO_AUTH_STORAGE_KEY, 'clinician');
+  } catch {
+    // Persistence is optional. Repository authority remains the in-memory guard.
+  }
 };
 
 export const forgetClinicianDemoWorkspace = (): void => {
-  if (typeof localStorage !== 'undefined') localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
+  try {
+    demoMarkerStorage()?.removeItem(DEMO_AUTH_STORAGE_KEY);
+  } catch {
+    // A blocked storage area must not interfere with auth teardown.
+  }
 };
 
 export const clearUnavailableDemoMarker = (available = CLINICIAN_DEMO_AVAILABLE): void => {
-  if (!available && typeof localStorage !== 'undefined') {
-    forgetClinicianDemoWorkspace();
-  }
+  if (!available) forgetClinicianDemoWorkspace();
 };

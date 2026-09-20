@@ -189,10 +189,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     deactivateClinicianDemoWorkspace();
     try {
       await signOut(auth);
-      activateClinicianDemoWorkspace();
-      rememberClinicianDemoWorkspace();
-      setUser(DEMO_CLINICIAN_USER);
-      setRole('clinician');
+      try {
+        activateClinicianDemoWorkspace();
+        rememberClinicianDemoWorkspace();
+        setUser(DEMO_CLINICIAN_USER);
+        setRole('clinician');
+      } catch (error) {
+        deactivateClinicianDemoWorkspace();
+        forgetClinicianDemoWorkspace();
+        setUser(null);
+        setRole(null);
+        throw error;
+      }
     } finally {
       setLoading(false);
     }
@@ -201,7 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const selectRole = async (newRole: UserRole) => {
     if (!user) return;
     setRole(newRole);
-    if (user.uid !== DEMO_CLINICIAN_ID) {
+    if (!isClinicianDemoWorkspace()) {
       // Accounts created while Firestore was temporarily unavailable may not
       // have their profile document yet. A merge write both recovers those
       // accounts and keeps existing profile fields intact.
@@ -226,7 +234,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRole(null);
   };
 
-  const demoWorkspace = isClinicianDemoWorkspace() && user?.uid === DEMO_CLINICIAN_ID;
+  const demoWorkspace = isClinicianDemoWorkspace();
 
   return (
     <AuthContext.Provider value={{ user, role, loading, login, signup, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
