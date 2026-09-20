@@ -296,6 +296,7 @@ service cloud.firestore {
           request.resource.data.recordingDate <= request.time &&
           request.resource.data.deviceSource is string &&
           request.resource.data.deviceSource.size() > 0 &&
+          request.resource.data.deviceSource.matches('.*\\S.*') &&
           request.resource.data.deviceSource.size() <= 200 &&
           request.resource.data.technicianNotes is string &&
           request.resource.data.technicianNotes.size() <= 5000 &&

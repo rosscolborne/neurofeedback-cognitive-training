@@ -36,6 +36,7 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain("request.resource.data.keys().hasOnly([");
     expect(rules).toContain('request.resource.data.zScores.keys().hasOnly([');
     expect(rules).toContain('request.resource.data.recordingDate is timestamp');
+    expect(rules).toContain("request.resource.data.deviceSource.matches('.*\\\\S.*')");
     expect(rules).toContain('request.resource.data.dominantAlphaPeakHz <= 30');
     const brainMapBlock = rules.slice(rules.indexOf('match /brainMaps/{brainMapId}'), rules.indexOf('// Neurofeedback Session Records'));
     expect(brainMapBlock).toContain('allow update, delete: if false;');

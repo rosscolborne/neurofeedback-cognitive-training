@@ -122,23 +122,17 @@ const readCanonicalBrainMap = (data: unknown, id: string): QEEGBrainMap => {
 };
 
 const qeegPayloadMatches = (saved: QEEGBrainMap, expected: ReturnType<typeof normalizeQeegInput>) =>
-  JSON.stringify({
-    id: saved.id,
-    fileName: saved.fileName,
-    recordingDate: saved.recordingDate,
-    deviceSource: saved.deviceSource,
-    technicianNotes: saved.technicianNotes,
-    zScores: saved.zScores,
-    dominantAlphaPeakHz: saved.dominantAlphaPeakHz,
-  }) === JSON.stringify({
-    id: expected.id,
-    fileName: expected.fileName,
-    recordingDate: expected.recordingDate,
-    deviceSource: expected.deviceSource,
-    technicianNotes: expected.technicianNotes,
-    zScores: expected.zScores,
-    dominantAlphaPeakHz: expected.dominantAlphaPeakHz,
-  });
+  saved.id === expected.id &&
+  saved.fileName === expected.fileName &&
+  saved.recordingDate === expected.recordingDate &&
+  saved.deviceSource === expected.deviceSource &&
+  saved.technicianNotes === expected.technicianNotes &&
+  saved.dominantAlphaPeakHz === expected.dominantAlphaPeakHz &&
+  saved.zScores?.frontalTheta === expected.zScores.frontalTheta &&
+  saved.zScores?.centralBeta === expected.zScores.centralBeta &&
+  saved.zScores?.occipitalAlpha === expected.zScores.occipitalAlpha &&
+  saved.zScores?.temporalDelta === expected.zScores.temporalDelta &&
+  saved.zScores?.sensorimotorSMR === expected.zScores.sensorimotorSMR;
 
 export const INITIAL_BADGES: MilestoneBadge[] = [
   {

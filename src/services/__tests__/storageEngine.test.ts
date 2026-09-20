@@ -189,7 +189,19 @@ describe('role-aware session repository', () => {
           .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }) })
           .mockResolvedValueOnce({
             id: map.id, exists: () => true,
-            data: () => ({ ...map, uploadDate: '2026-09-19T12:00:01.000Z', createdBy: 'clinician-1' }),
+            data: () => ({
+              ...map,
+              uploadDate: '2026-09-19T12:00:01.000Z',
+              createdBy: 'clinician-1',
+              // Firestore returns map keys in sorted order, not insertion order.
+              zScores: {
+                centralBeta: 1,
+                frontalTheta: 0,
+                occipitalAlpha: -1,
+                sensorimotorSMR: 0,
+                temporalDelta: 2,
+              },
+            }),
           }),
         set,
       })

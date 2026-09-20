@@ -442,12 +442,13 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
 - **Final commit:** `0fbc281a115effe529c54d9f0ff04e8b375cbae8`,
-  `19c2514ab84b8d8fea7ad05b99d04bfccd351672`
+  `19c2514ab84b8d8fea7ad05b99d04bfccd351672`,
+  `e702e443b570c0cece5b0a925420cd71004c3ba4`
 - **Owned files:** `src/components/clinician/ClinicSettingsView.tsx`,
   `src/components/brand/ClinicCustomizerModal.tsx`, `src/services/brandEngine.ts`,
   new dedicated clinic/practitioner repository/helper/tests. `App.tsx` wiring is
@@ -475,8 +476,10 @@ independent workstream immediately when a slot opens.
   creation metadata, complete onboarding detection, and stronger state tests.
   Owned fixes completed with 18/18 focused and 157/157 full tests passing. Re-review
   found residual credential-preservation, actual-surface contrast, cache-failure,
-  timestamp-shape, and test-depth issues; those fixes are assigned to the original
-  implementation agent. Shared rules/app/clinic-link changes remain central.
+  timestamp-shape, and test-depth issues. The original implementation agent fixed
+  them at `e702e443`; focused tests passed 26/26, the full suite passed 165/165,
+  focused lint was clean, and the production build passed. Independent final
+  re-review is pending. Shared rules/app/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
@@ -771,6 +774,20 @@ independent workstream immediately when a slot opens.
   test depth. S1 returned to IN PROGRESS and the findings were assigned to its
   original implementation agent; shared rules, app hydration, and clinic-link
   propagation remain centrally reserved.
+- **2026-09-19:** S1 completed its residual owned fixes at Git-verified
+  `e702e443`, preserving verified credential metadata, validating branding against
+  all actual app surfaces, tolerating unavailable browser cache access, preserving
+  Firestore timestamp shapes, and extending state/interaction coverage. Focused
+  tests passed 26/26, the full suite passed 165/165, focused lint was clean, and
+  the production build passed; S1 entered independent final re-review.
+- **2026-09-19:** Shared-contract re-review found QEEG retry comparison depended
+  on nested map insertion order, rules accepted whitespace-only acquisition
+  sources, and request identity had a non-cryptographic fallback. Central fixes
+  now compare canonical fields directly, exercise Firestore-sorted maps, enforce a
+  non-whitespace source, and fail explicitly without Web Crypto. Focused tests
+  passed 68/68, the full suite passed 202/202, and the production build passed;
+  final independent re-review is pending. Dynamic rules execution still requires
+  Java or another configured emulator environment.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit

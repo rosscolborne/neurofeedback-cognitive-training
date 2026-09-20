@@ -188,6 +188,15 @@ describe('manual QEEG entry validation and persistence shape', () => {
     ]);
   });
 
+  it('fails explicitly instead of creating a weak request identity without Web Crypto', () => {
+    vi.stubGlobal('crypto', undefined);
+    try {
+      expect(() => createManualBrainMapRequestId()).toThrow('Secure QEEG request identity is unavailable');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('orders mixed canonical and legacy records deterministically', () => {
     const records = [
       { id: 'legacy-b', uploadDate: '', recordingDate: 'Sep 19, 2026' },

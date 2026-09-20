@@ -60,7 +60,7 @@ export function createManualBrainMapRequestId(): string {
     const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
     return `qeeg-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`;
   }
-  return `qeeg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  throw new Error('Secure QEEG request identity is unavailable in this browser.');
 }
 
 export const isValidZScore = (value: unknown): value is number =>
