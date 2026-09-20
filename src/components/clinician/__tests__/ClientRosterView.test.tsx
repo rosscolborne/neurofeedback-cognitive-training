@@ -105,4 +105,36 @@ describe('ClientRosterView blank-profile editing', () => {
     }));
     renderer.unmount();
   });
+
+  it('drops a stale custom template when switching the assigned protocol', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const assigned: ClientProfile = {
+      ...blankClient,
+      condition: 'Peak Performance',
+      assignedProtocol: 'theta-beta-ratio',
+      prescribedSessionsPerWeek: 4,
+      customProtocolConfig: {
+        id: 'custom-tbr', protocolType: 'theta-beta-ratio', name: 'TBR', clinicalName: 'TBR',
+        leadInvestigator: '', indication: '', montageSite: '',
+        rewardBand: { name: 'TBR', freqMin: 4, freqMax: 30, targetCondition: 'below', targetThreshold: 1.8 },
+        adaptiveStep: 0.1, sensitivity: 'balanced', sessionDurationMinutes: 20,
+        recommendedExperiences: [], clinicalNotes: '',
+      },
+    };
+    const onUpdateClient = vi.fn().mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ClientRosterView clients={[assigned]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} onUpdateClient={onUpdateClient} />);
+    });
+    act(() => renderer.root.findByProps({ title: 'Edit Patient' }).props.onClick({ stopPropagation: vi.fn() }));
+    const protocolSelect = renderer.root.findAllByType('select')[1];
+    act(() => protocolSelect.props.onChange({ target: { value: 'alpha-enhancement' } }));
+    await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
+
+    expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
+      assignedProtocol: 'alpha-enhancement',
+      customProtocolConfig: undefined,
+    }));
+    renderer.unmount();
+  });
 });

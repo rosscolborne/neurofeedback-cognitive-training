@@ -436,6 +436,32 @@ describe('production and sample workspace separation', () => {
     expect(reloaded?.condition).toBeUndefined();
   });
 
+  it('deletes a stale custom template when switching protocol and reloads the selected assignment', async () => {
+    const switched = {
+      ...INITIAL_DEMO_CLIENTS[0],
+      assignedProtocol: 'alpha-enhancement' as const,
+      customProtocolConfig: undefined,
+    };
+    await storageEngine.saveClient(switched);
+    expect(firestore.setDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: switched.id },
+      expect.objectContaining({
+        assignedProtocol: 'alpha-enhancement',
+        customProtocolConfig: { __deleteField: true },
+      }),
+      { merge: true },
+    );
+
+    firestore.getDoc.mockResolvedValueOnce({
+      id: switched.id,
+      exists: () => true,
+      data: () => ({ ...switched, customProtocolConfig: undefined }),
+    });
+    await expect(storageEngine.getClient(switched.id)).resolves.toMatchObject({
+      assignedProtocol: 'alpha-enhancement',
+    });
+  });
+
   it('propagates patient profile read and initialization failures without fabricating a profile', async () => {
     const user = { uid: 'new-patient', email: 'new@example.com', displayName: 'New Patient' };
     firestore.getDoc.mockRejectedValueOnce(new Error('profile read unavailable'));
