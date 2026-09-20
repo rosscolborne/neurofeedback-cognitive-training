@@ -442,7 +442,7 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IMPLEMENTED
+- **Status:** MERGED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
@@ -490,8 +490,9 @@ independent workstream immediately when a slot opens.
   legacy credentials and a post-save close-failure path that could leave the brand
   modal locked. Those owned fixes completed at `af28154c`; focused tests passed
   38/38, the full suite passed 181/181, lint and build passed, and final re-review
-  is pending. The central atomic-onboarding rule is committed separately; shared
-  App/clinic-link changes remain central.
+  passed without findings. S1 merged into `fill-in-mocked-data` via `6195aaa`.
+  The central atomic-onboarding rule is committed separately; shared App/clinic-link
+  changes remain central.
 
 ### M1 — Production Messaging
 
@@ -860,6 +861,10 @@ independent workstream immediately when a slot opens.
   223/223 full tests passing, clean focused lint, and a passing production build.
   Its repository and clinician/patient surfaces entered independent review; shared
   rules and shell/App wiring remain centrally reserved.
+- **2026-09-19:** S1 final independent review passed without findings and merged
+  into `fill-in-mocked-data` via `6195aaa`. The first integrated rules check exposed
+  two S1 static assertions that predated the central role-gated `getAfter` contract;
+  the assertions were updated centrally to validate the hardened rule instead.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
