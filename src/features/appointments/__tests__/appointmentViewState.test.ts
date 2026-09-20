@@ -3,6 +3,7 @@ import type { ProductionAppointment } from '../appointmentTypes';
 import { applyConfirmedAppointment, resolveAppointmentSurfaceState } from '../appointmentViewState';
 
 const appointment = (overrides: Partial<ProductionAppointment> = {}): ProductionAppointment => ({
+  dataKind: 'canonical',
   id: 'appt-1', clinicianId: 'clinician-1', patientId: 'patient-1', patientDisplayName: 'Patient One',
   startsAtMillis: 100, timezone: 'UTC', durationMinutes: 45, type: 'consultation', status: 'scheduled',
   createdAtMillis: 1, updatedAtMillis: 1, createdBy: 'clinician-1', revision: 1, schemaVersion: 1, ...overrides,

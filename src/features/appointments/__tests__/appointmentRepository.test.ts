@@ -40,9 +40,10 @@ describe('production appointment repository', () => {
     expect(firestore.getDocs.mock.calls[0][0].constraints).toContainEqual({ field: 'clinicianId', op: '==', value: 'clinician-1' });
 
     state.auth.currentUser = { uid: 'patient-1' };
-    firestore.getDocs.mockResolvedValueOnce({ docs: [] });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [] }).mockResolvedValueOnce({ docs: [] });
     await repository.list('patient');
     expect(firestore.getDocs.mock.calls[1][0].constraints).toContainEqual({ field: 'patientId', op: '==', value: 'patient-1' });
+    expect(firestore.getDocs.mock.calls[2][0].constraints).toContainEqual({ field: 'clientId', op: '==', value: 'patient-1' });
   });
 
   it('propagates query failures instead of presenting an empty calendar', async () => {
@@ -92,8 +93,31 @@ describe('production appointment repository', () => {
       get: vi.fn().mockResolvedValueOnce(document('appt-1', canonical())).mockResolvedValueOnce(document('patient-1', { clinicianId: 'clinician-1' })), update,
     }));
     firestore.getDoc.mockResolvedValueOnce(document('appt-1', canonical({ status: 'cancelled', cancelledAt: 30, cancelledBy: 'clinician-1', revision: 2 })));
-    await expect(repository.cancel('appt-1')).resolves.toMatchObject({ status: 'cancelled', revision: 2 });
+    await expect(repository.cancel('appt-1', 1, 'cancel_12345678901234567890123456789012')).resolves.toMatchObject({ status: 'cancelled', revision: 2 });
     expect(update).toHaveBeenCalledWith({ type: 'doc', path: 'appointments', id: 'appt-1' }, expect.objectContaining({ status: 'cancelled', cancelledAt: { __serverTimestamp: true }, cancelledBy: 'clinician-1', revision: 2 }));
+  });
+
+  it('rejects stale edits and cancellation attempts with an actionable conflict', async () => {
+    firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
+      get: vi.fn().mockResolvedValue(document('appt-1', canonical({ revision: 4 }))), update: vi.fn(),
+    }));
+    await expect(repository.edit('appt-1', draft, 3)).rejects.toThrow(/changed elsewhere.*Reload/);
+    await expect(repository.cancel('appt-1', 3, 'cancel_12345678901234567890123456789012')).rejects.toThrow(/changed elsewhere.*Reload/);
+  });
+
+  it('accepts only an exact idempotent retry of the same completed cancellation', async () => {
+    const cancellationRequestId = 'cancel_12345678901234567890123456789012';
+    const cancelled = canonical({ status: 'cancelled', revision: 2, cancelledAt: 30, cancelledBy: 'clinician-1', cancellationRequestId });
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
+      get: vi.fn().mockResolvedValue(document('appt-1', cancelled)), update: vi.fn(),
+    }));
+    firestore.getDoc.mockResolvedValueOnce(document('appt-1', cancelled));
+    await expect(repository.cancel('appt-1', 1, cancellationRequestId)).resolves.toMatchObject({ status: 'cancelled', revision: 2 });
+
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
+      get: vi.fn().mockResolvedValue(document('appt-1', cancelled)), update: vi.fn(),
+    }));
+    await expect(repository.cancel('appt-1', 1, 'cancel_abcdefghijklmnopqrstuvwxyz123456')).rejects.toThrow(/changed elsewhere.*Reload/);
   });
 
   it('persists an edit with a new normalized instant, server update time, and revision', async () => {
@@ -103,7 +127,7 @@ describe('production appointment repository', () => {
     }));
     firestore.getDoc.mockResolvedValueOnce(document('appt-1', canonical({ startsAt: Date.parse('2026-09-19T15:30:00.000Z'), revision: 2 })));
 
-    await expect(repository.edit('appt-1', { ...draft, localTime: '11:30' })).resolves.toMatchObject({
+    await expect(repository.edit('appt-1', { ...draft, localTime: '11:30' }, 1)).resolves.toMatchObject({
       startsAtMillis: Date.parse('2026-09-19T15:30:00.000Z'), revision: 2,
     });
     expect(update).toHaveBeenCalledWith({ type: 'doc', path: 'appointments', id: 'appt-1' }, expect.objectContaining({
@@ -115,7 +139,7 @@ describe('production appointment repository', () => {
     firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
       get: vi.fn().mockResolvedValueOnce(document('appt-1', canonical({ status: 'cancelled', cancelledAt: 30, cancelledBy: 'clinician-1' }))), update: vi.fn(),
     }));
-    await expect(repository.edit('appt-1', draft)).rejects.toThrow(/scheduled appointments/);
-    await expect(repository.edit('appt-2', { ...draft, durationMinutes: 5 })).rejects.toThrow(/between 15 and 240/);
+    await expect(repository.edit('appt-1', draft, 1)).rejects.toThrow(/scheduled appointments/);
+    await expect(repository.edit('appt-2', { ...draft, durationMinutes: 5 }, 1)).rejects.toThrow(/between 15 and 240/);
   });
 });

@@ -1,14 +1,14 @@
-import type { ProductionAppointment } from './appointmentTypes';
+import type { AppointmentRecord, ProductionAppointment } from './appointmentTypes';
 
 export type AppointmentSurfaceState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'empty' }
-  | { kind: 'content'; appointments: ProductionAppointment[] };
+  | { kind: 'content'; appointments: AppointmentRecord[] };
 
 export function resolveAppointmentSurfaceState(
   loadState: 'loading' | 'ready' | 'error',
-  appointments: ProductionAppointment[],
+  appointments: AppointmentRecord[],
   error: string,
 ): AppointmentSurfaceState {
   if (loadState === 'loading') return { kind: 'loading' };
@@ -17,9 +17,13 @@ export function resolveAppointmentSurfaceState(
   return { kind: 'content', appointments };
 }
 export function applyConfirmedAppointment(
-  appointments: ProductionAppointment[],
+  appointments: AppointmentRecord[],
   confirmed: ProductionAppointment,
-): ProductionAppointment[] {
+): AppointmentRecord[] {
   return [...appointments.filter((item) => item.id !== confirmed.id), confirmed]
-    .sort((a, b) => a.startsAtMillis - b.startsAtMillis || a.id.localeCompare(b.id));
+    .sort((a, b) => {
+      const aKey = a.dataKind === 'canonical' ? new Date(a.startsAtMillis).toISOString() : `${a.legacyDate}T${a.legacyTime}`;
+      const bKey = b.dataKind === 'canonical' ? new Date(b.startsAtMillis).toISOString() : `${b.legacyDate}T${b.legacyTime}`;
+      return aKey.localeCompare(bKey) || a.id.localeCompare(b.id);
+    });
 }

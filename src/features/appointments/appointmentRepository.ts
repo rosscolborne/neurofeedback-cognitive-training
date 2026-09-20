@@ -10,11 +10,12 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
-import { readAppointmentDocument, sortAppointments } from './appointmentMappers';
+import { readAnyAppointmentDocument, readAppointmentDocument, sortAppointments } from './appointmentMappers';
 import { resolveAppointmentInstant } from './appointmentTime';
-import type { AppointmentDraft, AppointmentEdit, AppointmentListRole, ProductionAppointment } from './appointmentTypes';
+import type { AppointmentDraft, AppointmentEdit, AppointmentListRole, AppointmentRecord, ProductionAppointment } from './appointmentTypes';
 
 const APPOINTMENT_ID_PATTERN = /^[A-Za-z0-9_-]{20,100}$/;
+const CANCELLATION_ID_PATTERN = /^cancel_[A-Za-z0-9_-]{20,100}$/;
 const APPOINTMENT_TYPES = ['remote-training', 'in-clinic-evaluation', 'qeeg-mapping', 'protocol-review', 'consultation'];
 
 function signedInUserId(): string {
@@ -51,13 +52,20 @@ export function createAppointmentRequestId(): string {
   return `appt_${globalThis.crypto.randomUUID().replace(/-/g, '')}`;
 }
 
+export function createCancellationRequestId(): string {
+  if (!globalThis.crypto?.randomUUID) throw new Error('Secure cancellation IDs are unavailable in this browser');
+  return `cancel_${globalThis.crypto.randomUUID().replace(/-/g, '')}`;
+}
+
 export class AppointmentRepository {
-  async list(role: AppointmentListRole): Promise<ProductionAppointment[]> {
+  async list(role: AppointmentListRole): Promise<AppointmentRecord[]> {
     const uid = signedInUserId();
-    const field = role === 'clinician' ? 'clinicianId' : 'patientId';
-    const snapshot = await getDocs(query(collection(db, 'appointments'), where(field, '==', uid)));
-    const appointments = snapshot.docs.map((item) => {
-      const appointment = readAppointmentDocument(item.data(), item.id);
+    const fields = role === 'clinician' ? ['clinicianId'] : ['patientId', 'clientId'];
+    const snapshots = await Promise.all(fields.map((field) => getDocs(query(collection(db, 'appointments'), where(field, '==', uid)))));
+    const documents = new Map<string, { id: string; data: () => unknown }>();
+    for (const snapshot of snapshots) for (const item of snapshot.docs) documents.set(item.id, item);
+    const appointments = [...documents.values()].map((item) => {
+      const appointment = readAnyAppointmentDocument(item.data(), item.id);
       if (!appointment) throw new Error(`Appointment ${item.id} has invalid persisted data`);
       return appointment;
     });
@@ -117,7 +125,7 @@ export class AppointmentRepository {
     return this.getOwned(input.requestId, clinicianId);
   }
 
-  async edit(id: string, input: AppointmentEdit): Promise<ProductionAppointment> {
+  async edit(id: string, input: AppointmentEdit, expectedRevision: number): Promise<ProductionAppointment> {
     const clinicianId = signedInUserId();
     const normalized = validateDraft(input);
     const appointmentRef = doc(db, 'appointments', id);
@@ -125,6 +133,7 @@ export class AppointmentRepository {
       const snapshot = await transaction.get(appointmentRef);
       const current = snapshot.exists() ? readAppointmentDocument(snapshot.data(), snapshot.id) : null;
       if (!current || current.clinicianId !== clinicianId) throw new Error('Appointment not found');
+      if (current.revision !== expectedRevision) throw new Error('This appointment changed elsewhere. Reload the calendar before editing it');
       if (current.status !== 'scheduled') throw new Error('Only scheduled appointments can be edited');
       const patient = await transaction.get(doc(db, 'clients', current.patientId));
       if (!patient.exists() || !isLinkedToClinician(patient.data(), clinicianId)) {
@@ -143,14 +152,23 @@ export class AppointmentRepository {
     return this.getOwned(id, clinicianId);
   }
 
-  async cancel(id: string): Promise<ProductionAppointment> {
+  async cancel(id: string, expectedRevision: number, cancellationRequestId: string): Promise<ProductionAppointment> {
     const clinicianId = signedInUserId();
+    if (!CANCELLATION_ID_PATTERN.test(cancellationRequestId)) throw new Error('Cancellation request ID is invalid');
     const appointmentRef = doc(db, 'appointments', id);
     await runTransaction(db, async (transaction) => {
       const snapshot = await transaction.get(appointmentRef);
       const current = snapshot.exists() ? readAppointmentDocument(snapshot.data(), snapshot.id) : null;
       if (!current || current.clinicianId !== clinicianId) throw new Error('Appointment not found');
-      if (current.status === 'cancelled') return;
+      if (current.status === 'cancelled') {
+        if (
+          current.revision === expectedRevision + 1 &&
+          current.cancelledBy === clinicianId &&
+          current.cancellationRequestId === cancellationRequestId
+        ) return;
+        throw new Error('This appointment changed elsewhere. Reload the calendar before cancelling it');
+      }
+      if (current.revision !== expectedRevision) throw new Error('This appointment changed elsewhere. Reload the calendar before cancelling it');
       if (current.status !== 'scheduled') throw new Error('Only scheduled appointments can be cancelled');
       const patient = await transaction.get(doc(db, 'clients', current.patientId));
       if (!patient.exists() || !isLinkedToClinician(patient.data(), clinicianId)) {
@@ -160,6 +178,7 @@ export class AppointmentRepository {
         status: 'cancelled',
         cancelledAt: serverTimestamp(),
         cancelledBy: clinicianId,
+        cancellationRequestId,
         updatedAt: serverTimestamp(),
         revision: current.revision + 1,
       });
