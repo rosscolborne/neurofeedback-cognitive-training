@@ -442,14 +442,15 @@ independent workstream immediately when a slot opens.
 
 ### S1 — Clinic/Practitioner Settings and Branding
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** yes; first wave
 - **Branch:** `codex/mockdata-clinic-settings`
 - **Worktree:** `../neurasticity-mockdata-clinic-settings`
 - **Final commit:** `0fbc281a115effe529c54d9f0ff04e8b375cbae8`,
   `19c2514ab84b8d8fea7ad05b99d04bfccd351672`,
   `e702e443b570c0cece5b0a925420cd71004c3ba4`,
-  `018ebb80b8d2b0a3e73f09f4fc3625aa1e18875c`
+  `018ebb80b8d2b0a3e73f09f4fc3625aa1e18875c`,
+  `af28154c26ed997abbd4379975bcd20ff4927485`
 - **Owned files:** `src/components/clinician/ClinicSettingsView.tsx`,
   `src/components/brand/ClinicCustomizerModal.tsx`, `src/services/brandEngine.ts`,
   new dedicated clinic/practitioner repository/helper/tests. `App.tsx` wiring is
@@ -487,13 +488,14 @@ independent workstream immediately when a slot opens.
   interaction coverage. The full suite passed 173/173, lint and the production
   build passed. Final re-review found inaccurate presentation for cleared/malformed
   legacy credentials and a post-save close-failure path that could leave the brand
-  modal locked; those owned fixes are assigned to the original agent. The central
-  atomic-onboarding rule is committed separately; shared App/clinic-link changes
-  remain central.
+  modal locked. Those owned fixes completed at `af28154c`; focused tests passed
+  38/38, the full suite passed 181/181, lint and build passed, and final re-review
+  is pending. The central atomic-onboarding rule is committed separately; shared
+  App/clinic-link changes remain central.
 
 ### M1 — Production Messaging
 
-- **Status:** IMPLEMENTED
+- **Status:** IN PROGRESS
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-messaging`
@@ -520,15 +522,20 @@ independent workstream immediately when a slot opens.
   Focused tests passed 15/15, the full suite passed 216/216, targeted lint was
   clean, and the production build passed. Shared rules/index/shell/App integration
   is centrally reserved; independent review is pending.
+  Independent review required relationship-scoped thread identity for safe relink,
+  patient-keyed retry state, an explicit read-only legacy-history policy, exact R1
+  canonical precedence, separated/stale-safe loading and error lifecycles, and
+  mounted interaction/repository coverage. These owned changes are assigned to the
+  original agent under an orchestrator-selected relationship-scoped design.
 
 ### A1 — Production Appointments
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-appointments`
 - **Worktree:** `../neurasticity-mockdata-appointments`
-- **Final commit:** pending
+- **Final commit:** `93788ecb927c32524f7bffe59b1b13eff1a031aa`
 - **Owned files:** `src/components/clinician/ClinicalCalendarView.tsx`, a new
   patient appointment surface, new appointment repository/mappers/tests. No
   independent changes to shared rules/types/storage.
@@ -541,6 +548,13 @@ independent workstream immediately when a slot opens.
   access it; empty calendars contain no fabricated appointments.
 - **Tests:** timezone/DST/validation and repository tests; component state tests;
   rules integration after R1; manual dual-account scheduling.
+- **Implementation report:** authenticated canonical persistence, explicit IANA
+  timezone and DST ambiguity handling, cryptographic stable retry IDs, R1-linked
+  ownership checks, confirmed-write UI, and terminal audited cancellation are
+  implemented in owned files with an unwired patient surface. Focused tests passed
+  21/21, the full suite passed 223/223, focused lint was clean, and the production
+  build passed. Shared rules and shell/App wiring remain central; independent
+  review is pending.
 
 ### T1 — Protocol Runtime Consumption
 
@@ -834,6 +848,18 @@ independent workstream immediately when a slot opens.
   edge cases: truthful cleared/malformed credential presentation and recoverable
   modal state when preview/save/close callbacks fail after authoritative branding
   persistence. The findings were returned to the original implementation agent.
+- **2026-09-19:** S1 completed those edge-case fixes at Git-verified `af28154c`;
+  focused tests passed 38/38, the full suite passed 181/181, lint and build passed,
+  and S1 entered another final independent re-review.
+- **2026-09-19:** M1 independent review returned CHANGES_REQUIRED for safe relink
+  identity/history separation, cross-patient retry isolation, legacy-history
+  compatibility, exact R1 precedence, stale-safe load/error lifecycle, and deeper
+  interaction tests. The orchestrator selected relationship-scoped canonical
+  threads; findings were returned to the original agent.
+- **2026-09-19:** A1 completed at Git-verified `93788ecb`, with 21/21 focused and
+  223/223 full tests passing, clean focused lint, and a passing production build.
+  Its repository and clinician/patient surfaces entered independent review; shared
+  rules and shell/App wiring remain centrally reserved.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
