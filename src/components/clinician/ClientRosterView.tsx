@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
-import { inferProtocolTypeForTemplate } from '../../services/protocols';
 import {
   Search,
   Plus,
@@ -137,9 +136,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setFormError(null);
     try {
       if (editingClient && onUpdateClient) {
-        const customProtocolType = editingClient.customProtocolConfig
-          ? inferProtocolTypeForTemplate(editingClient.customProtocolConfig)
-          : undefined;
         await onUpdateClient({
           ...editingClient,
           name: formName,
@@ -148,8 +144,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           assignedProtocol: formProtocol,
           customProtocolConfig:
             formProtocol &&
-            formProtocol === editingClient.assignedProtocol &&
-            customProtocolType === formProtocol
+            formProtocol === editingClient.assignedProtocol
               ? editingClient.customProtocolConfig
               : undefined,
           status: formStatus,

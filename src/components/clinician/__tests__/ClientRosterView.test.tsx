@@ -137,4 +137,34 @@ describe('ClientRosterView blank-profile editing', () => {
     }));
     renderer.unmount();
   });
+
+  it('preserves an unrecognized legacy custom template on an unrelated edit', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const legacyTemplate = {
+      id: 'legacy-unknown', name: 'Legacy configuration', clinicalName: '',
+    } as ClientProfile['customProtocolConfig'];
+    const assigned: ClientProfile = {
+      ...blankClient,
+      condition: 'Peak Performance',
+      assignedProtocol: 'theta-beta-ratio',
+      prescribedSessionsPerWeek: 4,
+      customProtocolConfig: legacyTemplate,
+    };
+    const onUpdateClient = vi.fn().mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ClientRosterView clients={[assigned]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} onUpdateClient={onUpdateClient} />);
+    });
+    act(() => renderer.root.findByProps({ title: 'Edit Patient' }).props.onClick({ stopPropagation: vi.fn() }));
+    const nameInput = renderer.root.findAllByType('input').find((input) => input.props.placeholder === 'e.g. Alex Morgan')!;
+    act(() => nameInput.props.onChange({ target: { value: 'Renamed Patient' } }));
+    await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
+
+    expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Renamed Patient',
+      assignedProtocol: 'theta-beta-ratio',
+      customProtocolConfig: legacyTemplate,
+    }));
+    renderer.unmount();
+  });
 });
