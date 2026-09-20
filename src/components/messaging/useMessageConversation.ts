@@ -24,18 +24,20 @@ export function useMessageConversation(patientId: string | null, repository: Mes
   const [sendErrors, setSendErrors] = useState<Record<string, string | undefined>>({});
   const [sendingKey, setSendingKey] = useState<string | null>(null);
   const requestVersionRef = useRef(0);
+  const paginationRequestRef = useRef(0);
 
   useEffect(() => {
     let disposed = false;
     let listenerFailed = false;
     let unsubscribe = () => {};
     requestVersionRef.current += 1;
+    paginationRequestRef.current += 1;
     if (!patientId) {
       // oxlint-disable-next-line react/set-state-in-effect -- clear prior patient's protected content immediately
-      setRelationship(null); setMessages([]); setLoadPatientId(null); setLoadState('idle'); setLoadError(null); setCursor(null);
+      setRelationship(null); setMessages([]); setLoadPatientId(null); setLoadState('idle'); setLoadError(null); setCursor(null); setIsLoadingOlder(false);
       return;
     }
-    setRelationship(null); setMessages([]); setCursor(null); setLoadPatientId(patientId); setLoadState('loading'); setLoadError(null);
+    setRelationship(null); setMessages([]); setCursor(null); setIsLoadingOlder(false); setLoadPatientId(patientId); setLoadState('loading'); setLoadError(null);
     void repository.resolveActiveRelationship(patientId).then(async (resolved) => {
       if (disposed) return;
       setRelationship(resolved);
@@ -110,15 +112,22 @@ export function useMessageConversation(patientId: string | null, repository: Mes
     if (!activeRelationship || !cursor || cursor.relationshipKey !== activeRelationship.key) return;
     const requestedVersion = requestVersionRef.current;
     const requestedRelationshipKey = activeRelationship.key;
+    const paginationRequest = ++paginationRequestRef.current;
+    const isCurrentRequest = () => requestVersionRef.current === requestedVersion &&
+      paginationRequestRef.current === paginationRequest &&
+      patientId === activeRelationship.patientId;
     setIsLoadingOlder(true);
     try {
       const page = await repository.listMessages(activeRelationship, 50, cursor);
-      if (requestVersionRef.current !== requestedVersion || patientId !== activeRelationship.patientId || page.nextCursor && page.nextCursor.relationshipKey !== requestedRelationshipKey) return;
+      if (!isCurrentRequest() || page.nextCursor && page.nextCursor.relationshipKey !== requestedRelationshipKey) return;
       setMessages((current) => mergeMessages(current, page.messages));
       setCursor(page.nextCursor);
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setLoadState('error'); setLoadError(error instanceof Error ? error.message : 'Older messages are unavailable.');
-    } finally { setIsLoadingOlder(false); }
+    } finally {
+      if (isCurrentRequest()) setIsLoadingOlder(false);
+    }
   }, [activeRelationship, cursor, patientId, repository]);
 
   return useMemo(() => ({

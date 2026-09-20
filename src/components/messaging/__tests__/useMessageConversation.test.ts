@@ -116,4 +116,35 @@ describe('mounted message conversation interactions', () => {
     await olderRequest; result = view.render();
     expect(result.messages).toEqual([]); expect(result.cursor).toBeNull(); view.hooks.unmount();
   });
+
+  it('ignores a stale older-page rejection after switching patients', async () => {
+    let rejectOlder!: (error: Error) => void;
+    const older = new Promise<Awaited<ReturnType<MessageRepository['listMessages']>>>((_resolve, reject) => { rejectOlder = reject; });
+    const listMessages = vi.fn((value: MessageRelationship, _size?: number, cursor?: unknown) => cursor
+      ? older
+      : Promise.resolve({ messages: [], nextCursor: value.patientId === 'patient-1' ? { relationshipKey: value.key, createdAt: {}, id: 'cursor' } : null }));
+    const view = mount('patient-1', repository({ listMessages })); view.render(); await flush(); let result = view.render();
+    const olderRequest = result.loadOlder();
+    view.setPatient('patient-2'); view.render(); await flush(); result = view.render();
+    expect(result.loadState).toBe('ready'); expect(result.loadError).toBeNull();
+    rejectOlder(new Error('stale offline failure')); await olderRequest; result = view.render();
+    expect(result.relationship?.patientId).toBe('patient-2'); expect(result.loadState).toBe('ready'); expect(result.loadError).toBeNull();
+    view.hooks.unmount();
+  });
+
+  it('does not let an older overlapping completion clear the newer loading indicator', async () => {
+    const pending: Array<{ promise: Promise<Awaited<ReturnType<MessageRepository['listMessages']>>>; resolve: (value: Awaited<ReturnType<MessageRepository['listMessages']>>) => void }> = [];
+    const listMessages = vi.fn((value: MessageRelationship, _size?: number, cursor?: unknown) => {
+      if (!cursor) return Promise.resolve({ messages: [], nextCursor: { relationshipKey: value.key, createdAt: {}, id: 'cursor' } });
+      let resolve!: (value: Awaited<ReturnType<MessageRepository['listMessages']>>) => void;
+      const promise = new Promise<Awaited<ReturnType<MessageRepository['listMessages']>>>((done) => { resolve = done; });
+      pending.push({ promise, resolve }); return promise;
+    });
+    const view = mount('patient-1', repository({ listMessages })); view.render(); await flush(); let result = view.render();
+    const first = result.loadOlder(); const second = result.loadOlder(); result = view.render(); expect(result.isLoadingOlder).toBe(true);
+    pending[0].resolve({ messages: [], nextCursor: null }); await first; result = view.render();
+    expect(result.isLoadingOlder).toBe(true);
+    pending[1].resolve({ messages: [], nextCursor: null }); await second; result = view.render();
+    expect(result.isLoadingOlder).toBe(false); view.hooks.unmount();
+  });
 });
