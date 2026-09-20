@@ -64,6 +64,22 @@ describe('messaging Firestore rule contract', () => {
     expect(block).toContain('allow update, delete: if false;');
   });
 
+  it('requires every nested message create to update its exact parent summary atomically', () => {
+    const block = canonical();
+    expect(block).toContain('function validPostWriteSummary()');
+    expect(block).toContain('existsAfter(summaryPath)');
+    expect(block).toContain('let summary = getAfter(summaryPath).data');
+    expect(block).toContain('summary.patientId == patientId');
+    expect(block).toContain('summary.clinicianId == clinicianId');
+    expect(block).toContain('summary.participantIds == [patientId, clinicianId]');
+    expect(block).toContain('summary.lastMessageId == messageId');
+    expect(block).toContain('summary.lastMessageText == request.resource.data.text');
+    expect(block).toContain('summary.lastSenderId == request.auth.uid');
+    expect(block).toContain('summary.lastMessageAt == request.time');
+    expect(block).toContain('summary.updatedAt == request.time');
+    expect(block).toContain('request.resource.data.schemaVersion == 1 &&\n          validPostWriteSummary();');
+  });
+
   it('keeps legacy whole-array history read-only and denies a former clinician', () => {
     const block = legacy();
     expect(block).toContain('request.auth.uid == patientId');

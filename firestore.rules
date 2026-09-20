@@ -477,6 +477,21 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
+        function validPostWriteSummary() {
+          let summaryPath = /databases/$(database)/documents/messageThreads/$(patientId)/relationships/$(clinicianId);
+          let summary = getAfter(summaryPath).data;
+          return existsAfter(summaryPath) &&
+            summary.patientId == patientId &&
+            summary.clinicianId == clinicianId &&
+            summary.participantIds == [patientId, clinicianId] &&
+            summary.lastMessageId == messageId &&
+            summary.lastMessageText == request.resource.data.text &&
+            summary.lastSenderId == request.auth.uid &&
+            summary.lastMessageAt == request.time &&
+            summary.updatedAt == request.time &&
+            summary.schemaVersion == 1;
+        }
+
         allow read: if isAuthenticated() && (
           request.auth.uid == patientId ||
           (request.auth.uid == clinicianId && isPatientClinician(patientId))
@@ -502,7 +517,8 @@ service cloud.firestore {
           ) &&
           validMessageText(request.resource.data.text) &&
           request.resource.data.createdAt == request.time &&
-          request.resource.data.schemaVersion == 1;
+          request.resource.data.schemaVersion == 1 &&
+          validPostWriteSummary();
         allow update, delete: if false;
       }
     }
