@@ -496,13 +496,14 @@ independent workstream immediately when a slot opens.
 
 ### M1 — Production Messaging
 
-- **Status:** IN PROGRESS
+- **Status:** IMPLEMENTED
 - **Parallelizable:** implementation may start in first wave if isolated; shared
   authorization integration and E2E depend on R1
 - **Branch:** `codex/mockdata-messaging`
 - **Worktree:** `../neurasticity-mockdata-messaging`
 - **Final commit:** `9e85241c07237bad66c483935229dd2a9f94bbc7`,
-  `a471c4584e7f1af0861520c0959ad686c8a3bdda`
+  `a471c4584e7f1af0861520c0959ad686c8a3bdda`,
+  `2c84096e79417dbb46627d61fec23393942a0352`
 - **Owned files:** `src/components/clinician/MessagingView.tsx`, a new patient
   messaging surface, new message repository/mappers/tests. No independent changes
   to shared rules/types/storage.
@@ -527,7 +528,11 @@ independent workstream immediately when a slot opens.
   patient-keyed retry state, an explicit read-only legacy-history policy, exact R1
   canonical precedence, separated/stale-safe loading and error lifecycles, and
   mounted interaction/repository coverage. These owned changes are assigned to the
-  original agent under an orchestrator-selected relationship-scoped design.
+  original agent under an orchestrator-selected relationship-scoped design. Fixes
+  completed at `2c84096e`: relationship-scoped paths, exact R1 precedence, secured
+  read-only legacy compatibility, patient-keyed retry/load state, stale/disposal
+  guards, and mounted tests. Focused tests passed 20/20, the full suite passed
+  221/221, targeted lint was clean, and the build passed; re-review is pending.
 
 ### A1 — Production Appointments
 
@@ -877,6 +882,11 @@ independent workstream immediately when a slot opens.
   `fill-in-mocked-data@17a4f5d` after R1 and S1 review/merge. It must coordinate
   with the still-unmerged M1/A1 streams and preserve patient training Demo mode
   and developer simulators.
+- **2026-09-19:** M1 completed review fixes at Git-verified `2c84096e`, adopting
+  relationship-scoped thread paths, exact R1 precedence, secured read-only legacy
+  history, relationship-keyed retry/load state, stale/disposal guards, and mounted
+  interaction coverage. Focused tests passed 20/20, the full suite passed 221/221,
+  targeted lint and build passed, and M1 entered independent re-review.
 - **2026-09-19:** Original production-data foundation based on `905bb29` completed
   at `f97f7e1`; automated tests/build and user manual testing reported complete.
 - **2026-09-19:** Foundation merged by PR #16 (`68f415f`); subsequent sync commit
