@@ -28,9 +28,12 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const initialEvidenceTemplate = getClinicalProtocolTemplate(initialProtocolType) ?? CLINICAL_PROTOCOL_TEMPLATES[0];
   const initialSingle = DEFAULT_SINGLE_BAND_REWARDS[initialProtocolType];
   const initialRatio = DEFAULT_RATIO_REWARDS[initialProtocolType];
-  const initialCustomReward = Boolean(initialProtocol && (initialProtocol.customRewardEnabled
-    || initialProtocol.ratioReward
-    || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand, initialProtocolType)));
+  const initialCustomReward = initialProtocol
+    ? initialProtocol.customRewardEnabled ?? Boolean(
+      (initialRatio && initialProtocol.ratioReward)
+      || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand, initialProtocolType))
+    : false;
+  const initialActiveRatioReward = initialCustomReward && initialRatio ? initialProtocol?.ratioReward : undefined;
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
     initialEvidenceTemplate
   );
@@ -46,17 +49,17 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const [rewardMax, setRewardMax] = useState(initialCustomReward && !initialRatio && initialProtocol
     ? initialProtocol.rewardBand.freqMax : initialSingle?.freqMax ?? 0);
   const [rewardCondition, setRewardCondition] = useState<'above' | 'below'>(
-    initialProtocol?.ratioReward?.targetCondition
+    initialActiveRatioReward?.targetCondition
       ?? (initialCustomReward && !initialRatio ? initialProtocol?.rewardBand.targetCondition : undefined)
       ?? initialRatio?.targetCondition ?? initialSingle?.targetCondition ?? 'above');
   const [rewardThreshold, setRewardThreshold] = useState(
-    initialProtocol?.ratioReward?.targetThreshold
+    initialActiveRatioReward?.targetThreshold
       ?? (initialCustomReward && !initialRatio ? initialProtocol?.rewardBand.targetThreshold : undefined)
       ?? initialRatio?.targetThreshold ?? initialSingle?.targetThreshold ?? 0);
-  const [numeratorMin, setNumeratorMin] = useState(initialProtocol?.ratioReward?.numerator.freqMin ?? initialRatio?.numerator.freqMin ?? 0);
-  const [numeratorMax, setNumeratorMax] = useState(initialProtocol?.ratioReward?.numerator.freqMax ?? initialRatio?.numerator.freqMax ?? 0);
-  const [denominatorMin, setDenominatorMin] = useState(initialProtocol?.ratioReward?.denominator.freqMin ?? initialRatio?.denominator.freqMin ?? 0);
-  const [denominatorMax, setDenominatorMax] = useState(initialProtocol?.ratioReward?.denominator.freqMax ?? initialRatio?.denominator.freqMax ?? 0);
+  const [numeratorMin, setNumeratorMin] = useState(initialActiveRatioReward?.numerator.freqMin ?? initialRatio?.numerator.freqMin ?? 0);
+  const [numeratorMax, setNumeratorMax] = useState(initialActiveRatioReward?.numerator.freqMax ?? initialRatio?.numerator.freqMax ?? 0);
+  const [denominatorMin, setDenominatorMin] = useState(initialActiveRatioReward?.denominator.freqMin ?? initialRatio?.denominator.freqMin ?? 0);
+  const [denominatorMax, setDenominatorMax] = useState(initialActiveRatioReward?.denominator.freqMax ?? initialRatio?.denominator.freqMax ?? 0);
   const [ratioConversionConfirmed, setRatioConversionConfirmed] = useState(false);
   const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || initialEvidenceTemplate.sessionDurationMinutes);
   const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || initialEvidenceTemplate.clinicalNotes);

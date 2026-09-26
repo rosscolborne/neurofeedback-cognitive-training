@@ -79,21 +79,20 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
   }
   const rewardIsCustom = Boolean(custom && (
     custom.customRewardEnabled === true
-    || custom.ratioReward
-    || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand, assignedProtocol)
+    || (custom.customRewardEnabled === undefined && (
+      custom.ratioReward
+      || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand, assignedProtocol)
+    ))
   ));
   if (custom?.customRewardEnabled !== undefined && typeof custom.customRewardEnabled !== 'boolean') {
     return { ok: false, error: 'The saved reward mode is invalid.' };
   }
-  if (custom && custom.ratioReward !== undefined) {
+  if (custom && custom.ratioReward !== undefined && custom.customRewardEnabled !== false) {
     if (assignedProtocol !== 'theta-beta-ratio' && assignedProtocol !== 'alpha-theta-crossover') {
       return { ok: false, error: 'Ratio rewards are only supported by ratio protocols.' };
     }
     const ratioError = validateCustomRatioReward(custom.ratioReward);
     if (ratioError) return { ok: false, error: ratioError };
-    if (custom.customRewardEnabled === false) {
-      return { ok: false, error: 'The saved ratio reward is disabled but still configured.' };
-    }
   }
   if (rewardIsCustom) {
     const error = custom?.ratioReward

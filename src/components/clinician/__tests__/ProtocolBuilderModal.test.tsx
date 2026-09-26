@@ -82,6 +82,49 @@ describe('ProtocolBuilderModal persistence state', () => {
     renderer.unmount();
   });
 
+  it('reopens merged default assignments unchecked with the real runtime defaults', async () => {
+    for (const protocol of ['smr-enhancement', 'beta-downtraining'] as const) {
+      const template = getClinicalProtocolTemplate(protocol)!;
+      const persisted = { ...template, customRewardEnabled: false,
+        ratioReward: { ...DEFAULT_RATIO_REWARDS['theta-beta-ratio']!, targetThreshold: 2, targetCondition: 'below' as const } };
+      const { renderer, onSave } = await renderModal(persisted);
+      expect(renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.checked).toBe(false);
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+      });
+      const defaultRule = DEFAULT_SINGLE_BAND_REWARDS[protocol]!;
+      expect(renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.value).toBe(defaultRule.freqMin);
+      expect(renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.value).toBe(defaultRule.freqMax);
+      expect(renderer.root.findByProps({ 'aria-label': 'Reward condition' }).props.value).toBe(defaultRule.targetCondition);
+      expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.value).toBe(defaultRule.targetThreshold);
+      await submit(renderer);
+      expect(onSave.mock.calls[0][0]).not.toHaveProperty('ratioReward');
+      renderer.unmount();
+    }
+  });
+
+  it('uses a saved single-band rule rather than a stale ratio rule when reopened', async () => {
+    const beta = getClinicalProtocolTemplate('beta-downtraining')!;
+    const persisted = { ...beta, customRewardEnabled: true,
+      ratioReward: { ...DEFAULT_RATIO_REWARDS['theta-beta-ratio']!, targetCondition: 'above' as const, targetThreshold: 9 },
+      rewardBand: { ...beta.rewardBand, freqMin: 9, freqMax: 12, targetCondition: 'below' as const, targetThreshold: 2 } };
+    const { renderer, onSave } = await renderModal(persisted);
+    expect(renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.checked).toBe(true);
+    expect(renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.value).toBe(9);
+    expect(renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.value).toBe(12);
+    expect(renderer.root.findByProps({ 'aria-label': 'Reward condition' }).props.value).toBe('below');
+    expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.value).toBe(2);
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.onChange({ target: { value: '13' } });
+    });
+    await submit(renderer);
+    const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
+    expect(saved).not.toHaveProperty('ratioReward');
+    expect(resolveProtocolRuntime({ assignedProtocol: 'beta-downtraining', customProtocolConfig: saved } as ClientProfile))
+      .toMatchObject({ ok: true, config: { initialThreshold: 2, lowerIsBetter: true, rewardBand: { freqMin: 9, freqMax: 13 } } });
+    renderer.unmount();
+  });
+
   it('saves two ratio band choices that produce different feedback from the same EEG', async () => {
     const template = getClinicalProtocolTemplate('theta-beta-ratio')!;
     const save = async (numeratorMin: number, numeratorMax: number) => {

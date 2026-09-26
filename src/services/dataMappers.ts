@@ -54,11 +54,22 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
   const assignedProtocol = raw.customProtocolConfig
     ? inferProtocolTypeForTemplate(raw.customProtocolConfig) ?? raw.assignedProtocol
     : raw.assignedProtocol;
+  const savedConfig = raw.customProtocolConfig;
+  // Older merged saves could retain a ratio rule after switching to a
+  // single-band protocol or explicitly disabling custom rewards.
+  const knownMergedRatioResidue = Boolean(savedConfig?.ratioReward && (
+    savedConfig.customRewardEnabled === false
+    || (savedConfig.customRewardEnabled === true
+      && (assignedProtocol === 'smr-enhancement' || assignedProtocol === 'alpha-enhancement' || assignedProtocol === 'beta-downtraining'))
+  ));
+  const customProtocolConfig = knownMergedRatioResidue && savedConfig ? { ...savedConfig } : savedConfig;
+  if (knownMergedRatioResidue && customProtocolConfig) delete customProtocolConfig.ratioReward;
 
   return {
     ...raw,
     id: raw.id || documentId || '',
     assignedProtocol,
+    customProtocolConfig,
     allowedExperiences: [...new Set(allowed)],
     brainMaps: Array.isArray(raw.brainMaps) ? raw.brainMaps : [],
     badges: Array.isArray(raw.badges) ? raw.badges : [],

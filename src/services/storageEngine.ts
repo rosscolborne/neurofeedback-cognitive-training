@@ -1068,6 +1068,11 @@ class StorageEngine {
     for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
       if (client[field] === undefined) payload[field] = deleteField();
     }
+    // A merged map keeps omitted nested keys. Clear a previous ratio rule
+    // when this assignment no longer includes one.
+    if (client.customProtocolConfig && !client.customProtocolConfig.ratioReward) {
+      (payload.customProtocolConfig as Record<string, unknown>).ratioReward = deleteField();
+    }
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
   }
 

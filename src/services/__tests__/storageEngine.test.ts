@@ -35,6 +35,8 @@ import { activateClinicianDemoWorkspace, deactivateClinicianDemoWorkspace } from
 import { buildPatientProgressDisplayModel } from '../../components/patient/patientMetrics';
 import { BRAND_PRESETS } from '../brandEngine';
 import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
+import { DEFAULT_RATIO_REWARDS } from '../protocols';
+import { resolveProtocolRuntime } from '../adaptiveEngine';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
@@ -81,9 +83,54 @@ describe('role-aware session repository', () => {
     });
     expect(firestore.setDoc).toHaveBeenCalledWith(
       { type: 'doc', path: 'clients', id: 'patient-1' },
-      expect.objectContaining({ condition: 'Generalized Anxiety', assignedProtocol: 'alpha-enhancement', customProtocolConfig }),
+      expect.objectContaining({ condition: 'Generalized Anxiety', assignedProtocol: 'alpha-enhancement',
+        customProtocolConfig: expect.objectContaining({ alias: 'Evening Alpha', ratioReward: { __deleteField: true } }) }),
       { merge: true },
     );
+  });
+
+  it('clears a prior ratio reward through a Firestore merge so default and custom single-band assignments reload and train', async () => {
+    const ratio = getClinicalProtocolTemplate('theta-beta-ratio')!;
+    const stored: Record<string, unknown> = {
+      ...INITIAL_DEMO_CLIENTS[0], id: 'patient-1', clinicianId: 'clinician-1',
+      assignedProtocol: 'theta-beta-ratio',
+      customProtocolConfig: { ...ratio, customRewardEnabled: true, ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'] },
+    };
+    const merge = (target: Record<string, unknown>, update: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(update)) {
+        if (value && typeof value === 'object' && '__deleteField' in value) {
+          delete target[key];
+        } else if (value && typeof value === 'object' && !Array.isArray(value)
+          && target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])) {
+          merge(target[key] as Record<string, unknown>, value as Record<string, unknown>);
+        } else {
+          target[key] = value;
+        }
+      }
+    };
+    firestore.setDoc.mockImplementation(async (_ref: unknown, payload: Record<string, unknown>) => merge(stored, payload));
+    firestore.getDoc.mockImplementation(async () => ({ id: 'patient-1', exists: () => true, data: () => stored }));
+
+    const smr = { ...getClinicalProtocolTemplate('smr-enhancement')!, customRewardEnabled: false };
+    await storageEngine.saveClient({ ...INITIAL_DEMO_CLIENTS[0], id: 'patient-1', clinicianId: 'clinician-1',
+      assignedProtocol: 'smr-enhancement', customProtocolConfig: smr });
+    const defaultReloaded = await storageEngine.getClient('patient-1');
+    expect(stored.customProtocolConfig).not.toHaveProperty('ratioReward');
+    expect(defaultReloaded?.customProtocolConfig?.customRewardEnabled).toBe(false);
+    expect(resolveProtocolRuntime(defaultReloaded!)).toMatchObject({ ok: true,
+      config: { protocol: 'smr-enhancement', initialThreshold: 7.5, rewardBand: undefined } });
+
+    // Recreate the old merged state before editing a single-band reward.
+    (stored.customProtocolConfig as Record<string, unknown>).ratioReward = DEFAULT_RATIO_REWARDS['theta-beta-ratio'];
+    const beta = getClinicalProtocolTemplate('beta-downtraining')!;
+    const custom = { ...beta, customRewardEnabled: true,
+      rewardBand: { ...beta.rewardBand, freqMin: 9, freqMax: 12, targetCondition: 'below' as const, targetThreshold: 2 } };
+    await storageEngine.saveClient({ ...defaultReloaded!, assignedProtocol: 'beta-downtraining', customProtocolConfig: custom });
+    const customReloaded = await storageEngine.getClient('patient-1');
+    expect(stored.customProtocolConfig).not.toHaveProperty('ratioReward');
+    expect(resolveProtocolRuntime(customReloaded!)).toMatchObject({ ok: true,
+      config: { protocol: 'beta-downtraining', initialThreshold: 2, lowerIsBetter: true,
+        rewardBand: { freqMin: 9, freqMax: 12 } } });
   });
 
   it('rejects a clinician scope that does not match the authenticated clinician', async () => {

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientProfile } from '../../../types';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { resolveProtocolRuntime } from '../../../services/adaptiveEngine';
+import { readClientProfile } from '../../../services/dataMappers';
+import { DEFAULT_RATIO_REWARDS } from '../../../services/protocols';
 import { ProtocolDetailsModal } from '../ProtocolDetailsModal';
 
 const template = getClinicalProtocolTemplate('beta-downtraining')!;
@@ -27,6 +29,19 @@ async function details(client: ClientProfile) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('patient protocol details training rule', () => {
+  it('shows the default SMR rule after loading an assignment contaminated by a prior ratio reward', async () => {
+    const smr = getClinicalProtocolTemplate('smr-enhancement')!;
+    const client = readClientProfile({ ...assigned(false), assignedProtocol: 'smr-enhancement',
+      customProtocolConfig: { ...smr, customRewardEnabled: false,
+        ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'] } });
+    expect(resolveProtocolRuntime(client)).toMatchObject({ ok: true,
+      config: { protocol: 'smr-enhancement', initialThreshold: 7.5 } });
+    const text = await details(client);
+    expect(text).toContain('12 Hz');
+    expect(text).toContain('15 Hz');
+    expect(text).toContain('Above 7.5 µV');
+    expect(text).not.toContain('Training unavailable');
+  });
   it('shows the 8–13 Hz alpha default for an older uncustomized assignment', async () => {
     const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
     const legacy = { ...assigned(false), assignedProtocol: 'alpha-enhancement' as const,

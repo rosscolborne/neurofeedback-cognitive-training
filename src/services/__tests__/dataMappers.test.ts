@@ -11,7 +11,9 @@ import {
   timestampToIso,
   timestampToMillis,
 } from '../dataMappers';
-import { CLINICAL_PROTOCOL_TEMPLATES } from '../clinicalProtocolTemplates';
+import { CLINICAL_PROTOCOL_TEMPLATES, getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
+import { resolveProtocolRuntime } from '../adaptiveEngine';
+import { DEFAULT_RATIO_REWARDS } from '../protocols';
 
 const clientFixture = (): ClientProfile => ({
   id: 'patient-1',
@@ -57,6 +59,33 @@ const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord =
 });
 
 describe('production data migration readers', () => {
+  it('removes ratio residue from merged default and single-band assignments on read', () => {
+    const ratioReward = DEFAULT_RATIO_REWARDS['theta-beta-ratio']!;
+    for (const protocol of ['smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
+      const template = getClinicalProtocolTemplate(protocol)!;
+      const persisted = { ...clientFixture(), assignedProtocol: protocol,
+        customProtocolConfig: { ...template, customRewardEnabled: false, ratioReward } };
+      const loaded = readClientProfile(persisted);
+      expect(loaded.customProtocolConfig?.ratioReward).toBeUndefined();
+      expect(resolveProtocolRuntime(loaded)).toMatchObject({ ok: true, config: { protocol, rewardBand: undefined } });
+      expect(persisted.customProtocolConfig.ratioReward).toBe(ratioReward);
+    }
+    const beta = getClinicalProtocolTemplate('beta-downtraining')!;
+    const customized = readClientProfile({ ...clientFixture(), assignedProtocol: 'beta-downtraining',
+      customProtocolConfig: { ...beta, customRewardEnabled: true, ratioReward,
+        rewardBand: { ...beta.rewardBand, freqMin: 13, freqMax: 30, targetCondition: 'below', targetThreshold: 2 } } });
+    expect(customized.customProtocolConfig?.ratioReward).toBeUndefined();
+    expect(resolveProtocolRuntime(customized)).toMatchObject({ ok: true,
+      config: { protocol: 'beta-downtraining', initialThreshold: 2, rewardBand: { freqMin: 13, freqMax: 30 } } });
+  });
+
+  it('keeps unsupported unmarked ratio configurations visible to the runtime guard', () => {
+    const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const loaded = readClientProfile({ ...clientFixture(), assignedProtocol: 'alpha-enhancement',
+      customProtocolConfig: { ...alpha, ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'] } });
+    expect(loaded.customProtocolConfig?.ratioReward).toBeDefined();
+    expect(resolveProtocolRuntime(loaded)).toMatchObject({ ok: false });
+  });
   it('normalizes every supported persisted timestamp representation', () => {
     expect(timestampToMillis('2026-09-15T12:00:00.000Z')).toBe(1_789_473_600_000);
     expect(timestampToMillis(new Date('2026-09-15T12:00:00.000Z'))).toBe(1_789_473_600_000);

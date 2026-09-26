@@ -470,6 +470,12 @@ describe('protocol runtime assignment', () => {
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: identicalCustom('alpha-enhancement', {
       ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'],
     }) }))).toMatchObject({ ok: false });
+    expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: identicalCustom('alpha-enhancement', {
+      customRewardEnabled: true, ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'],
+    }) }))).toMatchObject({ ok: false });
+    expect(resolveProtocolRuntime(client('theta-beta-ratio', { customProtocolConfig: identicalCustom('theta-beta-ratio', {
+      customRewardEnabled: false, ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'],
+    }) }))).toMatchObject({ ok: true, config: { ratioReward: undefined, initialThreshold: 1.85 } });
   });
 
   it('resolves one default and lets an explicit custom assignment override it', () => {
