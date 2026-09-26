@@ -1749,8 +1749,12 @@ export class EEGEngine {
 
       }
 
-      const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
-      const calmNorm = Math.max(0, Math.min(100, this.userCalm)) / 100;
+      // Demo presets are centers, not frozen readings. Use the same smoothly
+      // varying drivers for synthetic bands and simulated mental-state scores.
+      const simulatedFocus = Math.max(0, Math.min(100, this.userFocus + 4 * Math.sin(this.demoTimeElapsed * 1.15)));
+      const simulatedCalm = Math.max(0, Math.min(100, this.userCalm + 4 * Math.sin(this.demoTimeElapsed * 0.9 + Math.PI / 3)));
+      const focusNorm = simulatedFocus / 100;
+      const calmNorm = simulatedCalm / 100;
       const slowDrift = Math.sin(this.phaseAngle * 0.3 + this.noiseSeed) * 1.5;
 
       const delta = 12.0 + Math.sin(this.phaseAngle * 1.5) * 2.0 + (1 - focusNorm) * 4.0;
@@ -1800,18 +1804,18 @@ export class EEGEngine {
       };
       trainingFeedback = { ...this.calculateBrowserFeedback(bands, thetaBeta, bandAvailability), source: 'demo' };
       brainFlowScores = {
-        mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
-        restfulnessScore: Math.round(this.userCalm),
-        valence: (this.userCalm - 50) / 50,
-        arousal: (this.userFocus - 50) / 50,
-        emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
+        mindfulnessScore: Math.round((simulatedFocus + simulatedCalm) / 2),
+        restfulnessScore: Math.round(simulatedCalm),
+        valence: (simulatedCalm - 50) / 50,
+        arousal: (simulatedFocus - 50) / 50,
+        emotionLabel: simulatedCalm > 60 ? 'calm flow' : 'seeking focus',
         method: 'demo',
       };
       // The simulator has no electrode spectra to correlate, but it still
       // needs to exercise the normal coherence field consumed by training
       // experiences. Keep this deterministic and physiologically bounded.
       sampleInterhemisphericCoherence = Math.max(0, Math.min(1, .25 + calmNorm * .5 + focusNorm * .2));
-      trainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
+      trainingMetric = { score: Math.round(Math.max(simulatedFocus, simulatedCalm)), baselineReady: true };
 
       rawSignal =
         slowDrift +
