@@ -11,7 +11,7 @@ export const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ pati
   const conversation = useMessageConversation(patientId, repository);
   const endRef = useRef<HTMLDivElement | null>(null);
   const sendView = getMessageSendViewState(conversation.draft, conversation.isSending, conversation.failedAttempt, conversation.sendError);
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [conversation.messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation.messages]);
   const submit = (event: React.FormEvent) => { event.preventDefault(); void conversation.send(); };
 
   return <section aria-label="Messages" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 150px)' }}>

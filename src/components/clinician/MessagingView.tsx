@@ -34,7 +34,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
     // oxlint-disable-next-line react/set-state-in-effect -- synchronize explicit navigation from patient detail
     if (selectedClientId && participantIds.has(selectedClientId)) setActivePatientId(selectedClientId);
   }, [participantIds, selectedClientId]);
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [conversation.messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation.messages]);
 
   const names = useMemo(() => new Map(participants.map((item) => [item.patientId, item.name])), [participants]);
   const filtered = participants.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase()));
