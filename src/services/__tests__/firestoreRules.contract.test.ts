@@ -74,7 +74,8 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain("request.resource.data.status == 'accepted'");
     expect(rules).toContain(".data.get('acceptedInvitationId', null) == invitationId");
     expect(rules).toContain('getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))');
-    expect(rules).toContain("resource.data.get('expiresAt', request.time + duration.value(1, 's')) > request.time");
+    expect(rules).toContain("resource.data.get('expiresAt', null) is timestamp");
+    expect(rules).toContain('resource.data.expiresAt > request.time');
     expect(rules).toContain("request.resource.data.expiresAt <= request.time + duration.value(30, 'd')");
   });
 
