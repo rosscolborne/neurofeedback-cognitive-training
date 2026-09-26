@@ -740,7 +740,7 @@ independent workstream immediately when a slot opens.
 
 ### E2 — Integrated Playwright Regression Coverage
 
-- **Status:** BLOCKED
+- **Status:** IN PROGRESS
 - **Branch:** `codex/mockdata-e2e-regression`
 - **Worktree:** `../neurasticity-mockdata-e2e`
 - **Base:** `fill-in-mocked-data@c49180f` after the validated Playwright harness
@@ -752,13 +752,17 @@ independent workstream immediately when a slot opens.
 - **Dependencies:** all application workstreams merged and repository-wide code
   audit passed; authenticated Playwright harness merged. Real authenticated E2E
   execution additionally requires isolated, deterministic E2E data lifecycle.
-- **Current state:** implementation and independent Sol/High review are complete;
-  final re-review passed. Nine scenarios are discovered. Public smoke,
-  patient/clinician authentication, and the read-only patient truthfulness flow
-  pass. Full stateful execution is blocked before mutation until the local E2E
-  environment supplies an explicitly confirmed dedicated Firebase project,
-  allow-listed patient/clinician UIDs, and Admin credentials. The E2 branch must
-  remain uncommitted and unmerged until that execution succeeds.
+- **Current state:** the previously reviewed E2 harness is being adapted for
+  the user's approved patient/clinician manual-test accounts in the app's
+  existing Firebase project. Browser project and account UIDs were read through
+  real UI authentication and locally allow-listed; patient/clinician login and
+  the read-only patient truthfulness flow pass again. Shared-project safety
+  review and fixes are in progress. Stateful execution remains blocked until
+  an Admin credential is installed locally and scope review passes. A read-only
+  clinician probe currently gets `permission-denied` for its own practitioner
+  document even though repository rules permit that read; deployed rules or
+  backend configuration require investigation before care flows can pass. Keep
+  E2 unmerged until stateful execution and re-review succeed.
 - **Coverage matrix:**
 
 | Workstream / requirement | Playwright scenario | Existing lower-level coverage | Remaining manual / hardware coverage |
@@ -825,6 +829,20 @@ independent workstream immediately when a slot opens.
   to track it when the first implementation wave started.
 
 ## Project log
+
+- **2026-09-25:** User authorized the existing Firebase project and the provided
+  patient/clinician accounts for E2 testing; those accounts are reserved for
+  manual testing. The real app still authenticates both accounts, and the
+  read-only patient Progress/History flow passes. E2 now accepts a separate
+  explicit shared-project confirmation, verifies the browser/project/UID/email
+  allow-list, and is narrowing cleanup to the two accounts and the intended
+  invitation/claim. Independent Sol/High review found that broad invitation,
+  clinic, and disposable-account cleanup needed tightening before an Admin key
+  is used; fixes and re-review are ongoing. The current browser project is
+  `brainwell-327dc`. The Admin key is still absent. An authenticated clinician
+  read of its own practitioner record returns `permission-denied` against the
+  live backend, despite being allowed by repository rules, so live rules or
+  configuration must be reconciled before care E2 tests can pass.
 
 - **2026-09-20:** E2 implementation completed in its dedicated worktree with
   nine discovered Playwright scenarios covering invitation/link/brand,
