@@ -36,8 +36,13 @@ export const PROTOCOL_RUNTIME_LIMITATIONS =
   + 'Inhibit bands, montage or device mapping, sensitivity, clinical notes or rationale, recommended experiences, and the custom alias are documentation/display-only.';
 
 export function validateCustomRewardBand(reward: ProtocolTemplate['rewardBand'] | undefined): string | null {
-  if (!reward || !finite(reward.freqMin) || !finite(reward.freqMax)
-    || reward.freqMin < 3 || reward.freqMax > 45 || reward.freqMax - reward.freqMin < 0.5) {
+  if (!reward || !finite(reward.freqMin) || !finite(reward.freqMax)) {
+    return 'Reward frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
+  }
+  if (reward.freqMin >= reward.freqMax) {
+    return 'Min Frequency must be below Max Frequency.';
+  }
+  if (reward.freqMin < 3 || reward.freqMax > 45 || reward.freqMax - reward.freqMin < 0.5) {
     return 'Reward frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
   }
   if (reward.targetCondition !== 'above' && reward.targetCondition !== 'below') {
@@ -53,8 +58,13 @@ export function validateCustomRewardBand(reward: ProtocolTemplate['rewardBand'] 
 export function validateCustomRatioReward(reward: ProtocolTemplate['ratioReward'] | undefined): string | null {
   if (!reward) return 'The saved ratio reward definition is missing.';
   for (const band of [reward.numerator, reward.denominator]) {
-    if (!band || !finite(band.freqMin) || !finite(band.freqMax)
-      || band.freqMin < 3 || band.freqMax > 45 || band.freqMax - band.freqMin < 0.5) {
+    if (!band || !finite(band.freqMin) || !finite(band.freqMax)) {
+      return 'Ratio frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
+    }
+    if (band.freqMin >= band.freqMax) {
+      return 'Each ratio band’s Min Frequency must be below its Max Frequency.';
+    }
+    if (band.freqMin < 3 || band.freqMax > 45 || band.freqMax - band.freqMin < 0.5) {
       return 'Ratio frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
     }
   }

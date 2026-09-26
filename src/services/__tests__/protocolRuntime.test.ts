@@ -452,6 +452,7 @@ describe('protocol runtime assignment', () => {
     for (const change of [
       { freqMin: 45, freqMax: 50 },
       { freqMin: 9, freqMax: 9 },
+      { freqMin: 10, freqMax: 9 },
       { targetCondition: 'equal' },
       { targetThreshold: Number.NaN },
       { targetThreshold: 6.123 },
@@ -467,6 +468,9 @@ describe('protocol runtime assignment', () => {
     const tbr = identicalCustom('theta-beta-ratio', { customRewardEnabled: true,
       ratioReward: { ...DEFAULT_RATIO_REWARDS['theta-beta-ratio']!, numerator: { freqMin: 9, freqMax: 9 } } });
     expect(resolveProtocolRuntime(client('theta-beta-ratio', { customProtocolConfig: tbr }))).toMatchObject({ ok: false });
+    const reversedDenominator = identicalCustom('theta-beta-ratio', { customRewardEnabled: true,
+      ratioReward: { ...DEFAULT_RATIO_REWARDS['theta-beta-ratio']!, denominator: { freqMin: 30, freqMax: 13 } } });
+    expect(resolveProtocolRuntime(client('theta-beta-ratio', { customProtocolConfig: reversedDenominator }))).toMatchObject({ ok: false });
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: identicalCustom('alpha-enhancement', {
       ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'],
     }) }))).toMatchObject({ ok: false });

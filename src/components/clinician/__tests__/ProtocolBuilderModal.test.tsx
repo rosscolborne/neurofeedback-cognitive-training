@@ -33,6 +33,56 @@ async function submit(renderer: ReactTestRenderer) {
 }
 
 describe('ProtocolBuilderModal persistence state', () => {
+  it('blocks equal and reversed single-band frequencies before saving', async () => {
+    const { renderer, onSave, onClose } = await renderModal(canonical);
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+    });
+    for (const [min, max] of [[12, 12], [13, 12]]) {
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.onChange({ target: { value: String(min) } });
+        renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.onChange({ target: { value: String(max) } });
+      });
+      await submit(renderer);
+      expect(onSave).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('Min Frequency must be below Max Frequency');
+    }
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.onChange({ target: { value: '12' } });
+      renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.onChange({ target: { value: '13' } });
+    });
+    await submit(renderer);
+    expect(onSave).toHaveBeenCalledOnce();
+    renderer.unmount();
+  });
+
+  it('blocks equal and reversed frequencies in either ratio band before saving', async () => {
+    const { renderer, onSave, onClose } = await renderModal(getClinicalProtocolTemplate('theta-beta-ratio')!);
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+    });
+    for (const [band, defaultMin, defaultMax] of [['Theta', 4, 8], ['Beta', 13, 30]] as const) {
+      for (const [min, max] of [[12, 12], [13, 12]]) {
+        await act(async () => {
+          renderer.root.findByProps({ 'aria-label': `${band} Min Frequency` }).props.onChange({ target: { value: String(min) } });
+          renderer.root.findByProps({ 'aria-label': `${band} Max Frequency` }).props.onChange({ target: { value: String(max) } });
+        });
+        await submit(renderer);
+        expect(onSave).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+        expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('Min Frequency must be below its Max Frequency');
+      }
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': `${band} Min Frequency` }).props.onChange({ target: { value: String(defaultMin) } });
+        renderer.root.findByProps({ 'aria-label': `${band} Max Frequency` }).props.onChange({ target: { value: String(defaultMax) } });
+      });
+    }
+    await submit(renderer);
+    expect(onSave).toHaveBeenCalledOnce();
+    renderer.unmount();
+  });
+
   it('prefills every editable reward from the active runtime rule with the right unit', async () => {
     for (const protocol of ['theta-beta-ratio', 'alpha-theta-crossover', 'smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
       const { renderer } = await renderModal(getClinicalProtocolTemplate(protocol)!);
