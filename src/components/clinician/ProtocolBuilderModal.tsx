@@ -235,10 +235,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           </div>
 
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Without a custom reward, {selectedTemplate.protocolType?.replace(/-/g, ' ')} training starts at its mode threshold
-            {' '}{getDefaultProtocolThreshold(selectedTemplate.protocolType!)}. The template values below are references until custom reward is enabled.
-            A custom reward uses peak spectral amplitude from the selected frequencies in each two-second raw EEG window;
-            its condition and threshold control positive versus negative feedback.
+            Without a custom reward, {selectedTemplate.protocolType?.replace(/-/g, ' ')} training rewards values
+            {' '}{selectedTemplate.protocolType === 'theta-beta-ratio' || selectedTemplate.protocolType === 'beta-downtraining' ? 'at or below' : 'at or above'}
+            {' '}{getDefaultProtocolThreshold(selectedTemplate.protocolType!)}. Select custom reward criteria to measure a chosen frequency range
+            and reward its amplitude at or above/below a threshold.
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600 }}>
             <input
@@ -259,18 +259,17 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             Use clinician-defined reward criteria for training
           </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+          {customRewardEnabled && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Min (Hz)
+                Min Frequency (Hz)
               </label>
               <input
                 type="number"
-                aria-label="Reward minimum"
+                aria-label="Min Frequency"
                 min="3"
                 max="44.5"
                 step="0.5"
-                readOnly={!customRewardEnabled}
                 value={rewardMin}
                 onChange={(e) => setRewardMin(parseFloat(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
@@ -278,15 +277,14 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Max (Hz)
+                Max Frequency (Hz)
               </label>
               <input
                 type="number"
-                aria-label="Reward maximum"
+                aria-label="Max Frequency"
                 min="3.5"
                 max="45"
                 step="0.5"
-                readOnly={!customRewardEnabled}
                 value={rewardMax}
                 onChange={(e) => setRewardMax(parseFloat(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
@@ -298,7 +296,6 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               </label>
               <select
                 aria-label="Reward condition"
-                disabled={!customRewardEnabled}
                 value={rewardCondition}
                 onChange={(e) => setRewardCondition(e.target.value as 'above' | 'below')}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
@@ -317,12 +314,13 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
                 min="0"
                 max="1000"
                 step="0.1"
-                readOnly={!customRewardEnabled}
                 value={rewardThreshold}
                 onChange={(e) => setRewardThreshold(parseFloat(e.target.value))}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
+          </div>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                 Duration (Min)

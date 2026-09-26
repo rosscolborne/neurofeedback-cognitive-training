@@ -53,6 +53,7 @@ describe('ProtocolBuilderModal persistence state', () => {
 
   it('saves a canonical assignment that resolves and starts training', async () => {
     const { renderer, onSave, onClose } = await renderModal(canonical);
+    expect(renderer.root.findAllByProps({ 'aria-label': 'Min Frequency' })).toHaveLength(0);
     await submit(renderer);
 
     expect(onSave).toHaveBeenCalledOnce();
@@ -77,8 +78,10 @@ describe('ProtocolBuilderModal persistence state', () => {
       const { renderer, onSave } = await renderModal(canonical);
       await act(async () => {
         renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
-        renderer.root.findByProps({ 'aria-label': 'Reward minimum' }).props.onChange({ target: { value: String(min) } });
-        renderer.root.findByProps({ 'aria-label': 'Reward maximum' }).props.onChange({ target: { value: String(max) } });
+      });
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.onChange({ target: { value: String(min) } });
+        renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.onChange({ target: { value: String(max) } });
         renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.onChange({ target: { value: '6' } });
       });
       await submit(renderer);
@@ -120,7 +123,7 @@ describe('ProtocolBuilderModal persistence state', () => {
     await submit(renderer);
     expect(onSave).not.toHaveBeenCalled();
     await act(async () => {
-      renderer.root.findByProps({ 'aria-label': 'Reward maximum' }).props.onChange({ target: { value: '11' } });
+      renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.onChange({ target: { value: '11' } });
     });
     await submit(renderer);
 

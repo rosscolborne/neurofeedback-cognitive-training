@@ -99,7 +99,7 @@ describe('mounted patient Demo session lifecycle', () => {
   });
 
   it('renders the resolved default and clinician reward from the emitted feedback metric', async () => {
-    const renderTelemetry = async (profile: ClientProfile, measured: number) => {
+    const renderTelemetry = async (profile: ClientProfile, measured: number, inZone = true) => {
       let runner!: ReactTestRenderer;
       await act(async () => {
         runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={vi.fn()} />);
@@ -114,7 +114,7 @@ describe('mounted patient Demo session lifecycle', () => {
           bandRatios: {}, coherence: null, coherenceAvailable: false,
           thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
           activeRewardMetric: { value: measured, source: profile.customProtocolConfig?.customRewardEnabled ? 'custom-raw' : 'demo' },
-          inZone: true, inZoneAvailable: true, zoneScore: 1,
+          inZone, inZoneAvailable: true, zoneScore: inZone ? 1 : 0,
           signalQuality: 'good',
           channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
           artifacts: { blink: false, clench: false },
@@ -129,6 +129,7 @@ describe('mounted patient Demo session lifecycle', () => {
     const defaultOutput = await renderTelemetry(client, 12.2);
     expect(defaultOutput).toContain('ALPHA (8–12 Hz)');
     expect(defaultOutput).toContain('12.2 µV');
+    expect(defaultOutput).toContain('In zone now');
     expect(defaultOutput).toContain('Restfulness');
     expect(defaultOutput).toContain('88');
     expect(defaultOutput).toContain('92');
@@ -150,6 +151,15 @@ describe('mounted patient Demo session lifecycle', () => {
     expect(b).toContain('REWARD (16–18 Hz)');
     expect(b).toContain('0.8 µV');
     expect(b).not.toContain('REWARD (9–11 Hz)');
+
+    const beta = await renderTelemetry({
+      ...client,
+      assignedProtocol: 'beta-downtraining',
+      customProtocolConfig: { ...getClinicalProtocolTemplate('beta-downtraining')!, alias: 'Test 123' },
+    }, 16.2, false);
+    expect(beta).toContain('BETA (15–30 Hz)');
+    expect(beta).toContain('16.2 µV');
+    expect(beta).toContain('Out of zone now');
   });
 
   it('saves and reloads one synthetic session, labels it in history, then restores the next headset gate', async () => {

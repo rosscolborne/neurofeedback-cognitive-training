@@ -5,10 +5,9 @@ import {
   CLINICAL_PROTOCOL_TEMPLATES,
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
-  hasCanonicalRewardDefinition,
 } from '../../services/clinicalProtocolTemplates';
 import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
-import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
+import { resolveProtocolRuntime, type ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -21,6 +20,20 @@ const formatIdentifier = (value?: string) =>
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ') : 'Unavailable';
+
+function describeTrainingRule(config: ProtocolRuntimeConfig): string {
+  const comparison = config.lowerIsBetter ? 'at or below' : 'at or above';
+  if (config.rewardBand) return `Measured amplitude ${comparison} ${config.initialThreshold} µV`;
+  const metric = {
+    'theta-beta-ratio': 'Theta/beta ratio',
+    'smr-enhancement': 'SMR band',
+    'alpha-enhancement': 'Alpha band',
+    'alpha-theta-crossover': 'Theta/alpha ratio',
+    'beta-downtraining': 'Beta band',
+    'individualized-upper-alpha': 'Alpha band',
+  }[config.protocol];
+  return `${metric} ${comparison} ${config.initialThreshold}`;
+}
 
 function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
   const resolvedProtocol = resolvePatientProtocol(client);
@@ -56,11 +69,6 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
     : undefined;
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
   const runtime = resolveProtocolRuntime(client);
-  const activeCustomReward = runtime.ok && Boolean(runtime.config.rewardBand);
-  const savedCustomReward = Boolean(client.customProtocolConfig && (
-    client.customProtocolConfig.customRewardEnabled
-    || (evidenceProtocol && !hasCanonicalRewardDefinition(client.customProtocolConfig.rewardBand, evidenceProtocol.rewardBand))
-  ));
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -135,14 +143,23 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
             <Detail label="Name" value={assignmentAlias ?? 'No custom name'} />
           </div>
 
-          {protocol && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-              <Detail label="Reward minimum" value={`${protocol.rewardBand.freqMin} Hz`} />
-              <Detail label="Reward maximum" value={`${protocol.rewardBand.freqMax} Hz`} />
-              <Detail label={activeCustomReward ? 'Active reward threshold' : savedCustomReward ? 'Saved reward threshold (training unavailable)' : 'Template reward reference'} value={`${protocol.rewardBand.targetThreshold} µV`} />
-              <Detail label="Duration" value={`${protocol.sessionDurationMinutes} minutes`} />
-            </div>
-          )}
+          {runtime.ok ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                {runtime.config.rewardBand && (
+                  <>
+                    <Detail label="Min Frequency" value={`${runtime.config.rewardBand.freqMin} Hz`} />
+                    <Detail label="Max Frequency" value={`${runtime.config.rewardBand.freqMax} Hz`} />
+                  </>
+                )}
+                <Detail label="Reward when" value={describeTrainingRule(runtime.config)} />
+                <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />
+              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>
+                The value must reach the threshold to be in zone. The threshold may adapt during training; the session display shows the measured value and current feedback state.
+              </p>
+            </>
+          ) : <div role="alert">Training unavailable: {runtime.error}</div>}
 
           <div style={{ padding: '15px 16px', borderRadius: '18px', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 700 }}>

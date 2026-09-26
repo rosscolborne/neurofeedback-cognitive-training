@@ -999,6 +999,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
               {activeReward?.value}
             </div>
+            {activeReward?.value !== 'Unavailable' && eegData?.inZoneAvailable && (
+              <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>
+                {eegData.inZone ? 'In zone now' : 'Out of zone now'}
+              </div>
+            )}
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
