@@ -747,23 +747,45 @@ independent workstream immediately when a slot opens.
   merged through PR #17.
 - **Ownership:** E2E specs, E2E-only fixtures/lifecycle helpers, Playwright config,
   E2E documentation, and related package scripts. Production behavior must not be
-  weakened or changed merely to make a browser test pass. This plan remains
-  orchestrator-owned on `fill-in-mocked-data` until final E2 integration.
+  weakened or changed merely to make a browser test pass. The E2E branch is
+  merged locally into `fill-in-mocked-data`; deployment and stateful runs remain
+  separate next steps.
 - **Dependencies:** all application workstreams merged and repository-wide code
   audit passed; authenticated Playwright harness merged. Real authenticated E2E
   execution additionally requires isolated, deterministic E2E data lifecycle.
-- **Current state:** the previously reviewed E2 harness is being adapted for
-  the user's approved patient/clinician manual-test accounts in the app's
-  existing Firebase project. Browser project and account UIDs were read through
-  real UI authentication and locally allow-listed; patient/clinician login and
-  the read-only patient truthfulness flow pass again. Shared-project safety
-  review and fixes are in progress. Stateful execution remains blocked until
-  an Admin credential is installed locally and scope review passes. A read-only
-  clinician probe currently gets `permission-denied` for its own practitioner
-  document even though repository rules permit that read; deployed rules or
-  backend configuration require investigation before care flows can pass. Keep
-  E2 unmerged until stateful execution and re-review succeed.
-- **Coverage matrix:**
+- **Current state (2026-09-26):** E2E/rules/security work is merged locally into
+  `fill-in-mocked-data`. Integration validation passed: 113 emulator rules tests,
+  443 Vitest tests, 26 Playwright harness tests, one public browser smoke test,
+  72 Python tests, E2E and rules typechecks, build, and targeted lint. The
+  dedicated branch completed and verified these non-destructive suites:
+  - Read-only Playwright (smoke, authenticated patient/clinician, deployed-rules
+    probe, Admin preflight) and stateful specs (patient Demo, care collaboration,
+    fresh-account isolation) with a plan/execute cleanup harness: run-marker and
+    server-time attribution, group-atomic restores, lease recovery by explicit
+    run ID and plan digest, Admin persistence assertions, harness unit tests.
+  - Firestore rules emulator suite (`npm run test:rules`, Java 21): 113 allow/deny
+    tests including replays of the app's real transactions and pinned policy
+    behavior. Reviews fixed invitation/appointment create blockers, invitation
+    replay after unlink, cross-clinic protocol reads, practitioner edits by
+    colleagues, clinic membership at creation, legacy-invitation expiry, the
+    `brands` collection, and made clinician unlink cancel future appointments and
+    pending invitations atomically.
+  - The live project still runs main-era rules (the read-only deployed-rules
+    probe fails as expected). The authenticated clinician probe gets
+    `permission-denied` for its own practitioner document despite repository
+    rules allowing it. No stateful suite has run against the live project.
+  - The existing Firebase project and patient/clinician manual-test accounts
+    were authorized for E2 testing. Browser project and account IDs were read
+    through real authentication and locally allow-listed. The Admin credential
+    is still absent, so privileged cleanup and stateful runs remain blocked.
+- **Not done / deferred:** identity (unverified email, self-assigned clinician
+  role), licence verification, care-plan field ownership, consent/unlinking/
+  account closure, development-data audit, E2E credential isolation, rules
+  deployment and stateful runs, expanded Playwright coverage, and the final
+  independent audit are tracked in `docs/codex/security-backlog/BACKLOG.md`
+  (Jira import: `jira-import.csv`). Nothing listed there is complete.
+- **Coverage matrix:** (superseded in detail by
+  `docs/codex/security-backlog/proposals/track-g-coverage/coverage-matrix.md`)
 
 | Workstream / requirement | Playwright scenario | Existing lower-level coverage | Remaining manual / hardware coverage |
 | --- | --- | --- | --- |
@@ -830,6 +852,13 @@ independent workstream immediately when a slot opens.
 
 ## Project log
 
+- **2026-09-26:** Merged `codex/mockdata-e2e-regression` into
+  `fill-in-mocked-data`, preserving the intervening protocol/reward/training
+  changes. Reconciled the Vitest exclusions for Playwright and emulator suites
+  and combined the E2 status histories. Local emulator and non-destructive
+  validation passed. Firestore rules were not deployed; authenticated/stateful
+  Playwright runs still await the live-rule and Admin fixture prerequisites.
+
 - **2026-09-25:** User authorized the existing Firebase project and the provided
   patient/clinician accounts for E2 testing; those accounts are reserved for
   manual testing. The real app still authenticates both accounts, and the
@@ -857,8 +886,20 @@ independent workstream immediately when a slot opens.
   build, public smoke, authentication, and the read-only patient flow pass.
   Stateful execution remains blocked before mutation because dedicated Firebase
   Admin credentials, project confirmation, and patient/clinician UID allow-list
-  values are not configured locally; the E2 branch remains uncommitted and
-  unmerged.
+  values were not configured locally; the E2 branch was still uncommitted and
+  unmerged at that point.
+
+- **2026-09-25:** E2 harness hardened for the shared `brainwell-327dc` project
+  using the owner-approved test accounts: plan/execute cleanup with positive
+  attribution only, Admin persistence verification, explicit-run recovery,
+  pinned least-privilege key handling. A Firestore rules emulator suite (113
+  tests) was added; two independent reviews found and fixed rules defects that
+  blocked the app's own invitation and appointment transactions and allowed an
+  unlinked patient to relink by replaying an old invitation. Seven investigation
+  tracks (identity, care-plan ownership, lifecycle, data audit, low-severity
+  rules, E2E credential threat model, coverage) produced designs and decisions
+  now captured in `docs/codex/security-backlog/`. Rules were not deployed, no
+  stateful suite had run, and the work was not yet committed.
 
 - **2026-09-20:** The validated Playwright harness merged into
   `fill-in-mocked-data` through PR #17 at `c49180f`. E2 started from that clean

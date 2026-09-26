@@ -139,9 +139,12 @@ service cloud.firestore {
         request.resource.data.expiresAt <= request.time + duration.value(30, 'd') &&
         getAfter(/databases/$(database)/documents/patientInvitationClaims/$(request.auth.uid)/emails/$(request.resource.data.uniquenessClaimId))
           .data.get('invitationId', null) == invitationId;
-      allow read: if isAuthenticated() && (
+      // The invited patient reads a single invitation by its code; only the
+      // inviting clinician may list, so an email alone cannot enumerate codes.
+      allow get: if isAuthenticated() && (
         resource.data.clinicianId == request.auth.uid || isInvitedPatient()
       );
+      allow list: if isAuthenticated() && resource.data.clinicianId == request.auth.uid;
       allow update: if isAuthenticated() && (
         (
           resource.data.clinicianId == request.auth.uid &&
@@ -154,7 +157,8 @@ service cloud.firestore {
           isInvitedPatient() &&
           resource.data.status == 'pending' &&
           resource.data.clinicianId != request.auth.uid &&
-          resource.data.get('expiresAt', request.time + duration.value(1, 's')) > request.time &&
+          resource.data.get('expiresAt', null) is timestamp &&
+          resource.data.expiresAt > request.time &&
           request.resource.data.status == 'accepted' &&
           request.resource.data.patientId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys()
@@ -184,9 +188,9 @@ service cloud.firestore {
           invitation.get('uniquenessClaimId', null) == emailKey;
       }
 
-      allow read: if isAuthenticated() &&
-        clinicianId == request.auth.uid &&
-        resource.data.clinicianId == request.auth.uid;
+      // Scoped by path (create pins resource clinicianId to it), so the
+      // invitation transaction can read a claim that does not exist yet.
+      allow read: if isAuthenticated() && clinicianId == request.auth.uid;
       allow create: if isClinician() &&
         clinicianId == request.auth.uid &&
         emailKey == request.resource.data.patientEmail &&
@@ -242,9 +246,12 @@ service cloud.firestore {
           request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null);
       }
 
+      // Linking consumes a still-pending invitation in the same write, so an
+      // invitation accepted earlier cannot be replayed after an unlink.
       function acceptsValidInvitation() {
         let invitationId = request.resource.data.get('acceptedInvitationId', null);
         return invitationId is string &&
+          get(/databases/$(database)/documents/patientInvitations/$(invitationId)).data.get('status', null) == 'pending' &&
           request.resource.data.get('clinicianId', null) != request.auth.uid &&
           resource.data.get('clinicianId', null) == null &&
           resource.data.get('clinicId', null) == null &&
@@ -263,6 +270,7 @@ service cloud.firestore {
       function createsWithValidInvitation() {
         let invitationId = request.resource.data.get('acceptedInvitationId', null);
         return invitationId is string &&
+          get(/databases/$(database)/documents/patientInvitations/$(invitationId)).data.get('status', null) == 'pending' &&
           request.resource.data.get('clinicianId', null) != request.auth.uid &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
           getAfter(/databases/$(database)/documents/patientInvitations/$(invitationId))
@@ -275,8 +283,11 @@ service cloud.firestore {
             .data.get('clinicId', null) == request.resource.data.get('clinicId', null);
       }
 
+      // Unlinking changes only the relationship fields; it cannot carry other edits.
       function unlinksOwningClinician() {
         return isCanonicalPatientClinician(resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['clinicId', 'clinicianId', 'linkedClinicianCode', 'acceptedInvitationId', 'updatedAt']) &&
           request.resource.data.get('clinicId', null) == null &&
           request.resource.data.get('clinicianId', null) == null &&
           request.resource.data.get('linkedClinicianCode', null) == null &&
@@ -670,6 +681,10 @@ service cloud.firestore {
           )
         )
       );
+      // The create transaction first reads its new random ID. A missing
+      // document holds no data, so a clinician may confirm the ID is free.
+      allow get: if resource == null && isClinician() &&
+        appointmentId.matches('^[A-Za-z0-9_-]{20,100}$');
       allow create: if isClinician() &&
         appointmentId.matches('^[A-Za-z0-9_-]{20,100}$') &&
         request.resource.data.clinicianId == request.auth.uid &&
@@ -736,10 +751,10 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Clinic Brand Configurations (brands/{brandId})
+    // Clinic Brand Configurations (brands/{brandId}), legacy. Branding now
+    // lives on clinics/{id}; the app neither reads nor writes here.
     match /brands/{brandId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow read, write: if false;
     }
 
     // Production tenant records. Practitioner IDs are Firebase user IDs until
@@ -751,7 +766,7 @@ service cloud.firestore {
       allow list: if (isClinician() && isClinicMember(clinicId)) || isClinicPatient(clinicId);
       allow create: if isClinician() &&
         clinicId == request.auth.uid &&
-        request.resource.data.practitionerIds.hasAny([request.auth.uid]);
+        request.resource.data.practitionerIds == [request.auth.uid];
       allow update: if isClinician() &&
         resource.data.practitionerIds.hasAny([request.auth.uid]) &&
         request.resource.data.practitionerIds == resource.data.practitionerIds;
@@ -767,16 +782,16 @@ service cloud.firestore {
         practitionerId == request.auth.uid &&
         request.resource.data.userId == request.auth.uid &&
         isClinicMemberAfter(request.resource.data.clinicId);
+      // Only the practitioner edits their own record; colleagues may read it.
       allow update: if isClinician() &&
+        resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId &&
-        request.resource.data.clinicId == resource.data.clinicId && (
-          resource.data.userId == request.auth.uid || isClinicMember(resource.data.clinicId)
-        );
+        request.resource.data.clinicId == resource.data.clinicId;
       allow delete: if false;
     }
 
     match /protocolCatalog/{protocolId} {
-      allow read: if isAuthenticated();
+      allow read: if isClinicMember(resource.data.clinicId) || isClinicPatient(resource.data.clinicId);
       allow create: if isAuthenticated() && isClinicMember(request.resource.data.clinicId);
       allow update: if isAuthenticated() &&
         request.resource.data.clinicId == resource.data.clinicId &&

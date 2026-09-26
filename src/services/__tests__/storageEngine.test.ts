@@ -5,7 +5,20 @@ const state = vi.hoisted(() => ({
   auth: { currentUser: null as null | { uid: string; email?: string } },
 }));
 
+const batchOperations = vi.hoisted(() => ({
+  update: vi.fn(),
+  delete: vi.fn(),
+  commit: vi.fn(),
+}));
+
+const MockTimestamp = vi.hoisted(() => class MockTimestamp {
+  constructor(private readonly millis: number) {}
+  toMillis() { return this.millis; }
+  static fromDate(date: Date) { return { __timestamp: date.toISOString() }; }
+});
+
 const firestore = vi.hoisted(() => ({
+  writeBatch: vi.fn(() => batchOperations),
   getDoc: vi.fn(),
   getDocs: vi.fn(),
   setDoc: vi.fn(),
@@ -26,7 +39,7 @@ vi.mock('firebase/firestore', () => ({
   }),
   where: (field: string, op: string, value: string) => ({ field, op, value }),
   query: (source: unknown, ...constraints: unknown[]) => ({ source, constraints }),
-  Timestamp: { fromDate: (date: Date) => ({ __timestamp: date.toISOString() }) },
+  Timestamp: MockTimestamp,
   ...firestore,
 }));
 
@@ -843,7 +856,7 @@ describe('patient invitation linking', () => {
         get: vi.fn()
           .mockResolvedValueOnce({
             id: 'ABCD-EFGH-JKLM', exists: () => true,
-            data: () => ({ clinicianId: 'clinician-1', clinicId: 'clinic-1', clinicianName: 'Dr. Example', patientEmail: 'patient@example.com', patientName: 'Patient One', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: 'claim-1', schemaVersion: 1 }),
+            data: () => ({ clinicianId: 'clinician-1', clinicId: 'clinic-1', clinicianName: 'Dr. Example', patientEmail: 'patient@example.com', patientName: 'Patient One', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3, status: 'pending', expiresAt: Date.now() + 86_400_000, uniquenessClaimId: 'claim-1', schemaVersion: 1 }),
           })
           .mockResolvedValueOnce({
             id: 'patient-1', exists: () => true,
@@ -872,7 +885,7 @@ describe('patient invitation linking', () => {
       callback({
         get: vi.fn().mockResolvedValueOnce({
           id: 'ABCD-EFGH-JKLM', exists: () => true,
-          data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', uniquenessClaimId: 'claim-1' }),
+          data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: Date.now() + 86_400_000, uniquenessClaimId: 'claim-1' }),
         }),
         set: vi.fn((ref, payload) => writes.push({ ref, payload })),
         delete: vi.fn((ref) => deletes.push(ref)),
@@ -893,7 +906,7 @@ describe('patient invitation linking', () => {
       callback({
         get: vi.fn().mockResolvedValueOnce({
           id: 'ABCD-EFGH-JKLM', exists: () => true,
-          data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending' }),
+          data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: Date.now() + 86_400_000 }),
         }),
         set: vi.fn(),
       })
@@ -945,6 +958,8 @@ describe('patient invitation linking', () => {
     const cases = [
       [{ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'cancelled' }, 'cancelled'],
       [{ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: Date.now() - 1 }, 'expired'],
+      // Legacy invitations without an expiry are refused by the rules; report them as expired.
+      [{ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending' }, 'expired'],
       [{ clinicianId: 'clinician-1', patientId: 'patient-2', patientEmail: 'patient@example.com', status: 'accepted' }, 'already been used'],
       [{ clinicianId: 'patient-1', patientEmail: 'patient@example.com', status: 'pending' }, 'cannot accept their own'],
     ] as const;
@@ -1020,7 +1035,7 @@ describe('patient invitation linking', () => {
         get: vi.fn()
           .mockResolvedValueOnce({
             id: 'ABCD-EFGH-JKLM', exists: () => true,
-            data: () => ({ clinicianId: 'clinician-2', patientEmail: 'patient@example.com', status: 'pending' }),
+            data: () => ({ clinicianId: 'clinician-2', patientEmail: 'patient@example.com', status: 'pending', expiresAt: Date.now() + 86_400_000 }),
           })
           .mockResolvedValueOnce({
             id: 'patient-1', exists: () => true,
@@ -1045,7 +1060,7 @@ describe('patient invitation linking', () => {
         get: vi.fn()
           .mockResolvedValueOnce({
             id: 'ABCD-EFGH-JKLM', exists: () => true,
-            data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending' }),
+            data: () => ({ clinicianId: 'clinician-1', patientEmail: 'patient@example.com', status: 'pending', expiresAt: Date.now() + 86_400_000 }),
           })
           .mockResolvedValueOnce({
             id: 'patient-1', exists: () => true,
@@ -1061,22 +1076,65 @@ describe('patient invitation linking', () => {
     expect(set).not.toHaveBeenCalled();
   });
 
-  it('removes a roster relationship without deleting the patient profile', async () => {
+  it('unlinks in one batch that cancels future appointments and pending invitations, without deleting the profile', async () => {
     state.auth.currentUser = { uid: 'clinician-1', email: 'clinician@example.com' };
-    firestore.getDoc.mockResolvedValueOnce({
-      id: 'patient-1', exists: () => true,
-      data: () => ({ ...createBlankProfile('patient-1', 'patient@example.com'), clinicianId: 'clinician-1' }),
+    firestore.getDoc
+      .mockResolvedValueOnce({
+        id: 'patient-1', exists: () => true,
+        data: () => ({ ...createBlankProfile('patient-1', 'patient@example.com'), clinicianId: 'clinician-1' }),
+      })
+      // Claims, read in order of first use: a@ belongs to LIVE, b@ is missing, c@ is held by a newer invitation.
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ invitationId: 'LIVE-INVI-TEXX' }) })
+      .mockResolvedValueOnce({ exists: () => false, data: () => undefined })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ invitationId: 'NEWE-RINV-ITEX' }) });
+    const canonical = (status: string, startsAt: number) => ({
+      clinicianId: 'clinician-1', patientId: 'patient-1', patientDisplayName: 'Patient', timezone: 'UTC',
+      durationMinutes: 45, type: 'consultation', status, startsAt: new MockTimestamp(startsAt),
+      createdAt: new MockTimestamp(1), updatedAt: new MockTimestamp(1), createdBy: 'clinician-1', revision: 3, schemaVersion: 1,
     });
-    firestore.setDoc.mockResolvedValueOnce(undefined);
+    const appointment = (id: string, data: Record<string, unknown>) => ({
+      id, ref: { type: 'doc', path: 'appointments', id }, data: () => data,
+    });
+    const future = Date.now() + 86_400_000;
+    const invitation = (id: string, patientEmail: string, claimId: string, expiresAt: number) => ({
+      id, ref: { type: 'doc', path: 'patientInvitations', id },
+      data: () => ({ id, clinicianId: 'clinician-1', patientEmail, status: 'pending', uniquenessClaimId: claimId, expiresAt }),
+    });
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [
+        appointment('future', canonical('scheduled', future)),
+        appointment('past', canonical('scheduled', Date.now() - 86_400_000)),
+        appointment('cancelled', canonical('cancelled', future)),
+        // Legacy shape the cancel rule would reject: left alone instead of blocking the unlink.
+        appointment('legacy', { ...canonical('scheduled', future), clientId: 'patient-1', schemaVersion: undefined }),
+      ] })
+      .mockResolvedValueOnce({ docs: [
+        invitation('LIVE-INVI-TEXX', 'patient@example.com', 'a@example.com', future),
+        invitation('NOCL-AIMX-XXXX', 'patient@example.com', 'b@example.com', future),
+        invitation('SUPE-RSED-EDXX', 'patient@example.com', 'c@example.com', future),
+        invitation('EXPI-REDX-XXXX', 'patient@example.com', 'd@example.com', Date.now() - 86_400_000),
+        invitation('OTHE-RPAT-IENT', 'other@example.com', 'e@example.com', future),
+      ] });
+    batchOperations.commit.mockResolvedValueOnce(undefined);
 
     await storageEngine.unlinkPatient('patient-1');
 
     expect(firestore.deleteDoc).not.toHaveBeenCalled();
-    expect(firestore.setDoc).toHaveBeenCalledWith(
-      { type: 'doc', path: 'clients', id: 'patient-1' },
-      expect.objectContaining({ clinicianId: null, clinicId: null, acceptedInvitationId: null }),
-      { merge: true }
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    const updatedIds = batchOperations.update.mock.calls.map(([reference]) => (reference as { id: string }).id);
+    expect(updatedIds).toEqual(['future', 'LIVE-INVI-TEXX', 'NOCL-AIMX-XXXX', 'patient-1']);
+    expect(batchOperations.update).toHaveBeenCalledWith(
+      { type: 'doc', path: 'appointments', id: 'future' },
+      expect.objectContaining({ status: 'cancelled', cancelledBy: 'clinician-1', revision: 4 }),
     );
+    expect(batchOperations.update).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: 'patient-1' },
+      expect.objectContaining({ clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null }),
+    );
+    expect(batchOperations.delete.mock.calls).toEqual([[{
+      type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'a@example.com',
+    }]]);
+    expect(batchOperations.commit).toHaveBeenCalledTimes(1);
   });
 
   it('does not let a split-brain legacy clinician unlink the canonical owner', async () => {
@@ -1088,6 +1146,7 @@ describe('patient invitation linking', () => {
 
     await expect(storageEngine.unlinkPatient('patient-1')).rejects.toThrow('not linked');
     expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(batchOperations.commit).not.toHaveBeenCalled();
   });
 });
 
