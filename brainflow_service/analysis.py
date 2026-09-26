@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .affective_state import FitQualityHint
-from .config import DEFAULT_PROCESSING, ProcessingConfig
+from .config import DEFAULT_BANDS, DEFAULT_PROCESSING, ProcessingConfig
 from .dsp import (
     calculate_peak_band_amplitude_uv,
     calculate_spectral_power_ratio,
@@ -41,14 +41,15 @@ from .models import SignalChannel, SignalFeatures, SignalQualityMetadata, Traini
 from .metrics import MetricCalculator, MetricInput
 from .training import TrainingScoreProvider
 
+STANDARD_BANDS = {band.id: (band.low_hz, band.high_hz) for band in DEFAULT_BANDS}
 DEFAULT_AMPLITUDE_BANDS = {
-    "smr-enhancement": (12.0, 15.0),
-    "alpha-enhancement": (8.0, 12.0),
-    "beta-downtraining": (13.0, 30.0),
+    "smr-enhancement": STANDARD_BANDS["smr"],
+    "alpha-enhancement": STANDARD_BANDS["alpha"],
+    "beta-downtraining": STANDARD_BANDS["beta"],
 }
 DEFAULT_RATIO_BANDS = {
-    "theta-beta-ratio": ((4.0, 8.0), (13.0, 30.0)),
-    "alpha-theta-crossover": ((4.0, 8.0), (8.0, 13.0)),
+    "theta-beta-ratio": (STANDARD_BANDS["theta"], STANDARD_BANDS["beta"]),
+    "alpha-theta-crossover": (STANDARD_BANDS["theta"], STANDARD_BANDS["alpha"]),
 }
 
 

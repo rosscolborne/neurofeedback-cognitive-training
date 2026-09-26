@@ -80,7 +80,7 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
   const rewardIsCustom = Boolean(custom && (
     custom.customRewardEnabled === true
     || custom.ratioReward
-    || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand)
+    || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand, assignedProtocol)
   ));
   if (custom?.customRewardEnabled !== undefined && typeof custom.customRewardEnabled !== 'boolean') {
     return { ok: false, error: 'The saved reward mode is invalid.' };

@@ -1,5 +1,5 @@
 import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample, IndividualBaselineModel } from '../types';
-import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS, getDefaultProtocolThreshold } from './protocols';
+import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS, getDefaultProtocolThreshold, STANDARD_EEG_BANDS_HZ } from './protocols';
 import { brainflowService, type BrainflowRewardRule } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
@@ -1351,12 +1351,12 @@ export class EEGEngine {
     }
 
     return {
-      delta: amplitude(1, 4),
-      theta: amplitude(4, 8),
-      alpha: amplitude(8, 12),
-      smr: amplitude(12, 15),
-      beta: amplitude(13, 30),
-      gamma: amplitude(30, 45),
+      delta: amplitude(STANDARD_EEG_BANDS_HZ.delta.min, STANDARD_EEG_BANDS_HZ.delta.max),
+      theta: amplitude(STANDARD_EEG_BANDS_HZ.theta.min, STANDARD_EEG_BANDS_HZ.theta.max),
+      alpha: amplitude(STANDARD_EEG_BANDS_HZ.alpha.min, STANDARD_EEG_BANDS_HZ.alpha.max),
+      smr: amplitude(STANDARD_EEG_BANDS_HZ.smr.min, STANDARD_EEG_BANDS_HZ.smr.max),
+      beta: amplitude(STANDARD_EEG_BANDS_HZ.beta.min, STANDARD_EEG_BANDS_HZ.beta.max),
+      gamma: amplitude(STANDARD_EEG_BANDS_HZ.gamma.min, STANDARD_EEG_BANDS_HZ.gamma.max),
     };
   }
 

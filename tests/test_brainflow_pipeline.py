@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import pytest
 
-from brainflow_service.config import DEFAULT_PROCESSING, DEVICE_CONFIGS
+from brainflow_service.config import DEFAULT_BANDS, DEFAULT_PROCESSING, DEVICE_CONFIGS
 from brainflow_service.dsp import (
     build_eeg_window,
     extract_band_power_features,
@@ -17,7 +17,7 @@ from brainflow_service.dsp import (
     preprocess_eeg_window,
 )
 from brainflow_service.app import app
-from brainflow_service.analysis import AnalysisProviders, analyze_window
+from brainflow_service.analysis import AnalysisProviders, DEFAULT_AMPLITUDE_BANDS, DEFAULT_RATIO_BANDS, analyze_window
 from brainflow_service.headset_fit import HeuristicHeadsetFitProvider
 from brainflow_service.models import SignalFeatures
 from brainflow_service.models import SignalChannel
@@ -28,6 +28,22 @@ def sine_window(freq_hz: float = 10.0, sample_rate: int = 256, seconds: float = 
     t = np.arange(int(sample_rate * seconds)) / sample_rate
     signal = np.sin(2 * math.pi * freq_hz * t) * 20.0
     return np.vstack([signal, signal * 0.9, signal * 1.1, signal])
+
+
+def test_default_reward_ranges_match_overview_bands() -> None:
+    bands = {band.id: (band.low_hz, band.high_hz) for band in DEFAULT_BANDS}
+    assert bands["delta"] == (1, 4)
+    assert bands["theta"] == (4, 8)
+    assert bands["alpha"] == (8, 13)
+    assert bands["beta"] == (13, 30)
+    assert DEFAULT_AMPLITUDE_BANDS == {
+        "smr-enhancement": bands["smr"], "alpha-enhancement": bands["alpha"],
+        "beta-downtraining": bands["beta"],
+    }
+    assert DEFAULT_RATIO_BANDS == {
+        "theta-beta-ratio": (bands["theta"], bands["beta"]),
+        "alpha-theta-crossover": (bands["theta"], bands["alpha"]),
+    }
 
 
 def test_window_construction_extracts_eeg_rows() -> None:
@@ -98,6 +114,28 @@ def test_beta_feedback_uses_spectral_amplitude_not_psd_band_power() -> None:
         assert result.features.primary_metric_name == "betaAmplitudeUv"
         assert result.features.primary_metric_value == pytest.approx(amplitude, abs=.2)
         assert result.features.in_zone is in_zone
+
+
+def test_default_alpha_reward_includes_12_5_hz_but_custom_8_to_12_does_not() -> None:
+    channels = [SignalChannel(id=name, label=name, unit="uV", index=index)
+                for index, name in enumerate(("TP9", "AF7", "AF8", "TP10"))]
+    window = sine_window(freq_hz=12.5) * .6
+    def feedback(reward: dict | None):
+        result = analyze_window(
+            providers=AnalysisProviders(headset_fit=HeuristicHeadsetFitProvider()),
+            channels=channels, eeg_samples=window.T.tolist(), raw_window=window,
+            sample_rate=256, protocol="alpha-enhancement", threshold=11, reward=reward,
+        )
+        assert result.features is not None
+        return result.features
+
+    default = feedback(None)
+    custom = feedback({"kind": "amplitude", "condition": "above",
+                       "band": {"freq_min": 8, "freq_max": 12}})
+    assert default.primary_metric_value == pytest.approx(12, abs=.2)
+    assert default.in_zone is True
+    assert custom.primary_metric_value < 1
+    assert custom.in_zone is False
 
 
 def test_interhemispheric_coherence_is_high_for_matched_left_right_signals() -> None:

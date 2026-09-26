@@ -57,6 +57,7 @@ describe('ProtocolBuilderModal persistence state', () => {
       } else if (single) {
         expect(renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.value).toBe(single.freqMin);
         expect(renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.value).toBe(single.freqMax);
+        if (protocol === 'alpha-enhancement') expect(single.freqMax).toBe(13);
         expect(JSON.stringify(renderer.toJSON())).toContain('Reward threshold (µV)');
       }
       expect(renderer.root.findByProps({ 'aria-label': 'Reward condition' }).props.value)
@@ -66,6 +67,19 @@ describe('ProtocolBuilderModal persistence state', () => {
       expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.step).toBe('0.01');
       renderer.unmount();
     }
+  });
+
+  it('prefills a legacy uncustomized alpha assignment with the current 8–13 Hz default', async () => {
+    const legacy = { ...canonical, rewardBand: { ...canonical.rewardBand, freqMax: 12 } };
+    const { renderer, onSave } = await renderModal(legacy);
+    expect(renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.checked).toBe(false);
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+    });
+    expect(renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.value).toBe(13);
+    await submit(renderer);
+    expect(onSave.mock.calls[0][0].rewardBand).toMatchObject({ freqMin: 8, freqMax: 13 });
+    renderer.unmount();
   });
 
   it('saves two ratio band choices that produce different feedback from the same EEG', async () => {

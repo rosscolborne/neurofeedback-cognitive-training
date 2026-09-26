@@ -30,7 +30,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const initialRatio = DEFAULT_RATIO_REWARDS[initialProtocolType];
   const initialCustomReward = Boolean(initialProtocol && (initialProtocol.customRewardEnabled
     || initialProtocol.ratioReward
-    || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand)));
+    || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand, initialProtocolType)));
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
     initialEvidenceTemplate
   );
@@ -67,7 +67,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const selectedSingle = DEFAULT_SINGLE_BAND_REWARDS[selectedTemplate.protocolType!];
   const legacySingleBandRatio = Boolean(initialRatio && initialProtocol && customRewardEnabled
     && !initialProtocol.ratioReward && (initialProtocol.customRewardEnabled
-      || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand))
+      || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand, initialProtocolType))
     && selectedTemplate.protocolType === initialProtocolType);
 
   const resetRewardFields = (type: ProtocolType) => {

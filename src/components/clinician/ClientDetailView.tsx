@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
-import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
+import { getProtocolTypeForTemplate, resolvePatientProtocol, STANDARD_EEG_BANDS_HZ } from '../../services/protocols';
 import { getClinicalProtocolTemplate, getProtocolAssignmentAlias } from '../../services/clinicalProtocolTemplates';
 import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
@@ -282,19 +282,19 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-delta)' }} />
-                  <span>Delta (1–4 Hz)</span>
+                  <span>Delta ({STANDARD_EEG_BANDS_HZ.delta.min}–{STANDARD_EEG_BANDS_HZ.delta.max} Hz)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-theta)' }} />
-                  <span>Theta (4–8 Hz)</span>
+                  <span>Theta ({STANDARD_EEG_BANDS_HZ.theta.min}–{STANDARD_EEG_BANDS_HZ.theta.max} Hz)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-alpha)' }} />
-                  <span>Alpha (8–13 Hz)</span>
+                  <span>Alpha ({STANDARD_EEG_BANDS_HZ.alpha.min}–{STANDARD_EEG_BANDS_HZ.alpha.max} Hz)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-beta)' }} />
-                  <span>Beta (13–30 Hz)</span>
+                  <span>Beta ({STANDARD_EEG_BANDS_HZ.beta.min}–{STANDARD_EEG_BANDS_HZ.beta.max} Hz)</span>
                 </div>
               </div>
             </div>

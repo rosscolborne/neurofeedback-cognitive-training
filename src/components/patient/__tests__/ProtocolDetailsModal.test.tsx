@@ -27,6 +27,15 @@ async function details(client: ClientProfile) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('patient protocol details training rule', () => {
+  it('shows the 8–13 Hz alpha default for an older uncustomized assignment', async () => {
+    const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const legacy = { ...assigned(false), assignedProtocol: 'alpha-enhancement' as const,
+      customProtocolConfig: { ...alpha, rewardBand: { ...alpha.rewardBand, freqMax: 12 } } };
+    const text = await details(legacy);
+    expect(text).toContain('8 Hz');
+    expect(text).toContain('13 Hz');
+    expect(text).toContain('Above 11 µV');
+  });
   it('shows both default ratio bands and a unitless reward threshold', async () => {
     const ratioTemplate = getClinicalProtocolTemplate('theta-beta-ratio')!;
     const client = { ...assigned(false), assignedProtocol: 'theta-beta-ratio' as const,

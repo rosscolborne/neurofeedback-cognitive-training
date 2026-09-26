@@ -127,7 +127,7 @@ describe('mounted patient Demo session lifecycle', () => {
     };
 
     const defaultOutput = await renderTelemetry(client, 12.2);
-    expect(defaultOutput).toContain('ALPHA (8–12 Hz)');
+    expect(defaultOutput).toContain('ALPHA (8–13 Hz)');
     expect(defaultOutput).toContain('12.2 µV');
     expect(defaultOutput).toContain('In zone now');
     expect(defaultOutput).toContain('Restfulness');

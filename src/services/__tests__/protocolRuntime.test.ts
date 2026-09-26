@@ -125,6 +125,33 @@ describe('protocol runtime assignment', () => {
     });
   });
 
+  it('uses 8–13 Hz for default alpha while preserving an explicitly customized 8–12 Hz reward', () => {
+    const canonical = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const oldBand = { ...canonical.rewardBand, freqMax: 12 };
+    const legacyDefault = resolveProtocolRuntime(client('alpha-enhancement', {
+      customProtocolConfig: identicalCustom('alpha-enhancement', { rewardBand: oldBand }),
+    }));
+    const explicitCustom = resolveProtocolRuntime(client('alpha-enhancement', {
+      customProtocolConfig: identicalCustom('alpha-enhancement', {
+        customRewardEnabled: true, rewardBand: oldBand,
+      }),
+    }));
+    expect(legacyDefault).toMatchObject({ ok: true, config: { initialThreshold: 11, rewardBand: undefined } });
+    expect(explicitCustom).toMatchObject({ ok: true, config: { initialThreshold: 11.5, rewardBand: { freqMax: 12 } } });
+    if (!legacyDefault.ok || !explicitCustom.ok) throw new Error('Alpha assignments did not resolve.');
+    const wave = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 12.5 * index / 256));
+    const measuredDefault = calculateRewardAmplitudeUv([wave], 256, DEFAULT_SINGLE_BAND_REWARDS['alpha-enhancement']!);
+    const measuredCustom = calculateRewardAmplitudeUv([wave], 256, oldBand);
+    expect(measuredDefault).toBeGreaterThan(11);
+    expect(measuredCustom).toBeLessThan(1);
+    const defaultEngine = new EEGEngine();
+    defaultEngine.configureProtocol(legacyDefault.config);
+    const customEngine = new EEGEngine();
+    customEngine.configureProtocol(explicitCustom.config);
+    expect(defaultEngine.evaluateFeedbackForBands(bands, available, measuredDefault)).toMatchObject({ available: true, inZone: true });
+    expect(customEngine.evaluateFeedbackForBands(bands, available, measuredCustom)).toMatchObject({ available: true, inZone: false });
+  });
+
   it('uses selected raw EEG frequencies, condition, and threshold for feedback and adaptation', () => {
     const canonical = getClinicalProtocolTemplate('alpha-enhancement')!;
     const raw = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 10 * index / 256));

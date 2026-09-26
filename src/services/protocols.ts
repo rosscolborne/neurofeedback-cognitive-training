@@ -2,11 +2,16 @@ import type { ClientProfile, ProtocolTemplate, ProtocolType } from '../types';
 
 export const DEFAULT_PROTOCOL: ProtocolType = 'theta-beta-ratio';
 
-/** Default beta spectral amplitude is resolved over this frequency range in both modes. */
-export const DEFAULT_BETA_BAND_HZ = {
-  min: 13,
-  max: 30,
+/** Fixed overview bands and the frequency defaults used by training protocols. */
+export const STANDARD_EEG_BANDS_HZ = {
+  delta: { min: 1, max: 4 },
+  theta: { min: 4, max: 8 },
+  alpha: { min: 8, max: 13 },
+  smr: { min: 12, max: 15 },
+  beta: { min: 13, max: 30 },
+  gamma: { min: 30, max: 45 },
 } as const;
+export const DEFAULT_BETA_BAND_HZ = STANDARD_EEG_BANDS_HZ.beta;
 
 /** The assignment shown to both roles is the mode training initializes. */
 export function resolvePatientProtocol(
@@ -47,18 +52,20 @@ export const DEFAULT_BETA_AMPLITUDE_REWARD_BAND: ProtocolTemplate['rewardBand'] 
 };
 
 export const DEFAULT_SINGLE_BAND_REWARDS: Partial<Record<ProtocolType, ProtocolTemplate['rewardBand']>> = {
-  'smr-enhancement': { name: 'SMR spectral amplitude', freqMin: 12, freqMax: 15, targetCondition: 'above', targetThreshold: 7.5 },
-  'alpha-enhancement': { name: 'Alpha spectral amplitude', freqMin: 8, freqMax: 12, targetCondition: 'above', targetThreshold: 11 },
+  'smr-enhancement': { name: 'SMR spectral amplitude', freqMin: STANDARD_EEG_BANDS_HZ.smr.min, freqMax: STANDARD_EEG_BANDS_HZ.smr.max, targetCondition: 'above', targetThreshold: 7.5 },
+  'alpha-enhancement': { name: 'Alpha spectral amplitude', freqMin: STANDARD_EEG_BANDS_HZ.alpha.min, freqMax: STANDARD_EEG_BANDS_HZ.alpha.max, targetCondition: 'above', targetThreshold: 11 },
   'beta-downtraining': DEFAULT_BETA_AMPLITUDE_REWARD_BAND,
 };
 
 export const DEFAULT_RATIO_REWARDS: Partial<Record<ProtocolType, NonNullable<ProtocolTemplate['ratioReward']>>> = {
   'theta-beta-ratio': {
-    numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 },
+    numerator: { freqMin: STANDARD_EEG_BANDS_HZ.theta.min, freqMax: STANDARD_EEG_BANDS_HZ.theta.max },
+    denominator: { freqMin: STANDARD_EEG_BANDS_HZ.beta.min, freqMax: STANDARD_EEG_BANDS_HZ.beta.max },
     targetCondition: 'below', targetThreshold: 1.85,
   },
   'alpha-theta-crossover': {
-    numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 8, freqMax: 13 },
+    numerator: { freqMin: STANDARD_EEG_BANDS_HZ.theta.min, freqMax: STANDARD_EEG_BANDS_HZ.theta.max },
+    denominator: { freqMin: STANDARD_EEG_BANDS_HZ.alpha.min, freqMax: STANDARD_EEG_BANDS_HZ.alpha.max },
     targetCondition: 'above', targetThreshold: 1,
   },
 };

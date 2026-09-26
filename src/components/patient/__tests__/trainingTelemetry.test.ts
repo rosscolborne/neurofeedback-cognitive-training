@@ -22,9 +22,9 @@ describe('training telemetry', () => {
     expect(describeActiveReward(config('smr-enhancement'), sample(12, 'brainflow')))
       .toEqual({ label: 'SMR (12–15 Hz)', value: '12.0 µV' });
     expect(describeActiveReward(config('alpha-enhancement'), sample(12.2, 'browser-dsp')))
-      .toEqual({ label: 'ALPHA (8–12 Hz)', value: '12.2 µV' });
+      .toEqual({ label: 'ALPHA (8–13 Hz)', value: '12.2 µV' });
     expect(describeActiveReward(config('alpha-enhancement'), sample(12.2, 'brainflow')))
-      .toEqual({ label: 'ALPHA (8–12 Hz)', value: '12.2 µV' });
+      .toEqual({ label: 'ALPHA (8–13 Hz)', value: '12.2 µV' });
     expect(describeActiveReward(config('beta-downtraining'), sample(13.5, 'demo')))
       .toEqual({ label: 'BETA (13–30 Hz)', value: '13.5 µV' });
     expect(describeActiveReward(config('beta-downtraining'), sample(13.5, 'browser-dsp')))
