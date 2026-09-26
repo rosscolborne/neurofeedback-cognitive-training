@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import { test } from '@playwright/test';
+import { test } from './fixtures';
 import {
     arriveAtClinicianDashboard,
     arriveAtPatientDashboard,

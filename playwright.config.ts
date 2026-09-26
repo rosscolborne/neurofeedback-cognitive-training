@@ -8,6 +8,7 @@ if (existsSync(e2eEnvFile)) {
 }
 
 const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173';
+const authenticatedTestIgnore = /(?:auth\.setup|permission-error-guard\.spec)\.ts/;
 
 export default defineConfig({
     testDir: './e2e',
@@ -51,7 +52,7 @@ export default defineConfig({
         },
         {
             name: 'patient',
-            testIgnore: /auth\.setup\.ts/,
+            testIgnore: authenticatedTestIgnore,
             dependencies: ['auth-patient'],
             use: {
                 storageState: 'e2e/.auth/patient.json',
@@ -59,7 +60,7 @@ export default defineConfig({
         },
         {
             name: 'clinician',
-            testIgnore: /auth\.setup\.ts/,
+            testIgnore: authenticatedTestIgnore,
             dependencies: ['auth-clinician'],
             use: {
                 storageState: 'e2e/.auth/clinician.json',
