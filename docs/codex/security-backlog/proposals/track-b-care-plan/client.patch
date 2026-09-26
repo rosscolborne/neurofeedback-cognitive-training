@@ -1,0 +1,233 @@
+--- a/src/services/storageEngine.ts
++++ b/src/services/storageEngine.ts
+@@ -188,6 +188,51 @@
+   },
+ ];
+ 
++/**
++ * Field ownership on clients/{uid}; mirrored by firestore.rules. Every
++ * production write sends only the fields its author owns, so the rules can
++ * check diff().affectedKeys() per role.
++ */
++export const PATIENT_PROFILE_FIELDS = ['name', 'avatarUrl', 'individualBaselineModel'] as const;
++/** Fields a patient chooses only while self-guided (no linked clinician). */
++export const SELF_GUIDED_FIELDS = ['assignedProtocol', 'customProtocolConfig', 'customThresholdBounds'] as const;
++export const CARE_PLAN_FIELDS = [
++  'condition', 'assignedProtocol', 'customProtocolConfig', 'customThresholdBounds',
++  'allowedExperiences', 'prescribedSessionsPerWeek', 'notes', 'status',
++] as const;
++export const SESSION_AGGREGATE_FIELDS = [
++  'completedSessionsCount', 'lastSessionDate', 'recentCompletedSessionIds', 'badges', 'tidalGardenState',
++] as const;
++
++type ClientField = keyof ClientProfile;
++const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
++
++/**
++ * Build a merge patch of the owned fields that changed between two in-memory
++ * profiles (undefined becomes a Firestore deletion). Any other changed field
++ * is a caller bug: reject it instead of silently dropping the edit.
++ */
++export function buildOwnedFieldPatch(
++  before: ClientProfile,
++  after: ClientProfile,
++  owned: readonly ClientField[],
++  ignored: readonly ClientField[] = [],
++): Record<string, unknown> {
++  const patch: Record<string, unknown> = {};
++  const rejected: string[] = [];
++  const keys = new Set([...Object.keys(before), ...Object.keys(after)] as ClientField[]);
++  for (const key of keys) {
++    if (sameValue(before[key], after[key]) || ignored.includes(key)) continue;
++    if (!owned.includes(key)) {
++      rejected.push(key);
++      continue;
++    }
++    patch[key] = after[key] === undefined ? deleteField() : removeUndefined(after[key]);
++  }
++  if (rejected.length) throw new Error(`These profile fields cannot be changed from this account: ${rejected.join(', ')}`);
++  return patch;
++}
++
+ export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
+   const name = displayName?.trim() || '';
+   const cleanName = name
+@@ -1020,14 +1065,53 @@
+           clinicianId: invitation.clinicianId,
+           clinicId: invitation.clinicId ?? current.clinicId,
+           acceptedInvitationId: invitation.id,
++          // The care plan is exactly the clinician's invitation; nothing from a
++          // self-guided plan or an earlier clinician carries into the link.
+           condition: invitation.condition,
+           assignedProtocol: invitation.assignedProtocol,
+           prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
+-          notes: invitation.notes ?? current.notes,
++          notes: invitation.notes,
++          customProtocolConfig: undefined,
++          customThresholdBounds: undefined,
+         };
+         const timestamp = serverTimestamp();
++        const carePlan = {
++          condition: invitation.condition ?? deleteField(),
++          assignedProtocol: invitation.assignedProtocol ?? deleteField(),
++          prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek ?? deleteField(),
++          notes: invitation.notes ?? deleteField(),
++          customProtocolConfig: deleteField(),
++          customThresholdBounds: deleteField(),
++        };
++        const relationship = {
++          clinicianId: invitation.clinicianId,
++          ...(linkedClient.clinicId ? { clinicId: linkedClient.clinicId } : {}),
++          acceptedInvitationId: invitation.id,
++        };
+ 
+-        transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
++        transaction.set(
++          clientRef,
++          clientSnapshot.exists()
++            // Existing profile: identity + relationship + plan only.
++            ? {
++                patientId: patient.uid,
++                email: patientEmail,
++                ...(current.name ? {} : { name: invitation.patientName }),
++                ...relationship,
++                ...carePlan,
++                updatedAt: timestamp,
++              }
++            // New profile: blank defaults + relationship + plan.
++            : {
++                ...removeUndefined(createBlankProfile(patient.uid, patientEmail, linkedClient.name)),
++                name: linkedClient.name,
++                patientId: patient.uid,
++                ...relationship,
++                ...carePlan,
++                updatedAt: timestamp,
++              },
++          { merge: true }
++        );
+         transaction.set(
+           invitationRef,
+           {
+@@ -1062,13 +1146,34 @@
+       return;
+     }
+ 
+-    if (!auth.currentUser) throw new Error('Sign in to save a patient record');
++    throw new Error('Use savePatientProfile or saveCarePlan to update a real patient record');
++  }
+ 
+-    const payload = removeUndefined(client) as unknown as Record<string, unknown>;
+-    for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
+-      if (client[field] === undefined) payload[field] = deleteField();
+-    }
+-    await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
++  /** The signed-in patient edits their own profile (and, while self-guided, their protocol). */
++  public async savePatientProfile(before: ClientProfile, after: ClientProfile): Promise<void> {
++    if (this.isDemoWorkspace()) return this.saveClient(after);
++    const uid = auth.currentUser?.uid;
++    if (!uid || uid !== before.id || before.id !== after.id) throw new Error('Sign in to update your profile');
++    const selfGuided = !getPatientClinicianId(before) && !before.clinicId && !before.acceptedInvitationId;
++    const owned: ClientField[] = [...PATIENT_PROFILE_FIELDS, ...(selfGuided ? SELF_GUIDED_FIELDS : [])];
++    const patch = buildOwnedFieldPatch(before, after, owned);
++    if (selfGuided && 'assignedProtocol' in patch) {
++      // A new self-guided choice replaces any template/bounds from an earlier plan.
++      patch.customProtocolConfig = after.customProtocolConfig === undefined ? deleteField() : patch.customProtocolConfig;
++      patch.customThresholdBounds = deleteField();
++    }
++    if (Object.keys(patch).length === 0) return;
++    await setDoc(doc(db, 'clients', uid), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
++  }
++
++  /** The canonical clinician or a clinic colleague edits the care plan only. */
++  public async saveCarePlan(before: ClientProfile, after: ClientProfile): Promise<void> {
++    if (this.isDemoWorkspace()) return this.saveClient(after);
++    if (!auth.currentUser) throw new Error('Sign in to save a patient record');
++    if (before.id !== after.id) throw new Error('Care plan edits must target one patient');
++    const patch = buildOwnedFieldPatch(before, after, CARE_PLAN_FIELDS);
++    if (Object.keys(patch).length === 0) return;
++    await setDoc(doc(db, 'clients', after.id), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
+   }
+ 
+   public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {
+@@ -1385,11 +1490,14 @@
+           readClientProfile(currentClient.data(), currentClient.id),
+           normalizedSession
+         );
+-        transaction.set(
+-          clientRef,
+-          removeUndefined({ ...nextClient, updatedAt: timestamp }),
+-          { merge: true }
++        // Only the aggregates move; the rules check the ledger gains exactly
++        // this new session and the count grows by one.
++        const aggregates = Object.fromEntries(
++          SESSION_AGGREGATE_FIELDS
++            .filter((field) => nextClient[field] !== undefined)
++            .map((field) => [field, removeUndefined(nextClient[field])])
+         );
++        transaction.set(clientRef, { ...aggregates, updatedAt: timestamp }, { merge: true });
+       }
+ 
+       return { created: true, session: normalizedSession };
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -161,7 +161,13 @@
+ 
+   const handleUpdateClient = async (updated: ClientProfile) => {
+     const requestIdentity = accountIdentity;
+-    await storageEngine.saveClient(updated);
++    // Each role writes only the fields it owns (see firestore.rules clients block).
++    const before = visibleCurrentClient?.id === updated.id
++      ? visibleCurrentClient
++      : visibleClients.find((client) => client.id === updated.id);
++    if (!before) throw new Error('This patient record is no longer loaded. Reload and try again.');
++    if (role === 'clinician') await storageEngine.saveCarePlan(before, updated);
++    else await storageEngine.savePatientProfile(before, updated);
+     if (accountIdentityRef.current !== requestIdentity) return;
+     if (visibleCurrentClient && visibleCurrentClient.id === updated.id) setCurrentClient(updated);
+     setClients((current) => current.map(c => (c.id === updated.id ? updated : c)));
+--- a/src/pages/onboarding/HardwareSetup.tsx
++++ b/src/pages/onboarding/HardwareSetup.tsx
+@@ -340,12 +340,8 @@
+       if (user) {
+         const client = await storageEngine.getCurrentClient(user);
+         if (client) {
+-          const updated = {
+-            ...client,
+-            individualBaselineModel: baselineModel,
+-            status: 'active' as const,
+-          };
+-          await storageEngine.saveClient(updated);
++          // Calibration is patient-owned; status belongs to the clinician's plan.
++          await storageEngine.savePatientProfile(client, { ...client, individualBaselineModel: baselineModel });
+         } else throw new Error('Your patient profile is unavailable.');
+       } else {
+         throw new Error('Sign in before saving this calibration.');
+--- a/src/components/clinician/ClientRosterView.tsx
++++ b/src/components/clinician/ClientRosterView.tsx
+@@ -137,9 +137,8 @@
+     try {
+       if (editingClient && onUpdateClient) {
+         await onUpdateClient({
++          // Name and email belong to the patient's account; the clinician edits the plan.
+           ...editingClient,
+-          name: formName,
+-          email: formEmail || editingClient.email,
+           condition: formCondition,
+           assignedProtocol: formProtocol,
+           customProtocolConfig:
+@@ -506,6 +505,7 @@
+                 <input
+                   type="text"
+                   required
++                  readOnly={Boolean(editingClient)}
+                   value={formName}
+                   onChange={(e) => setFormName(e.target.value)}
+                   placeholder="e.g. Alex Morgan"
+@@ -527,6 +527,7 @@
+                 <input
+                   type="email"
+                   required={!editingClient}
++                  readOnly={Boolean(editingClient)}
+                   value={formEmail}
+                   onChange={(e) => setFormEmail(e.target.value)}
+                   placeholder="patient@example.com"

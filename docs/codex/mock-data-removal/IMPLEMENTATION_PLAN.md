@@ -752,7 +752,30 @@ independent workstream immediately when a slot opens.
 - **Dependencies:** all application workstreams merged and repository-wide code
   audit passed; authenticated Playwright harness merged. Real authenticated E2E
   execution additionally requires isolated, deterministic E2E data lifecycle.
-- **Coverage matrix:**
+- **Current state (2026-09-25):** uncommitted in the worktree; not merged.
+  Completed and verified with non-destructive suites only:
+  - Read-only Playwright (smoke, authenticated patient/clinician, deployed-rules
+    probe, Admin preflight) and stateful specs (patient Demo, care collaboration,
+    fresh-account isolation) with a plan/execute cleanup harness: run-marker and
+    server-time attribution, group-atomic restores, lease recovery by explicit
+    run ID and plan digest, Admin persistence assertions, harness unit tests.
+  - Firestore rules emulator suite (`npm run test:rules`, Java 21): 113 allow/deny
+    tests including replays of the app's real transactions and pinned policy
+    behavior. Reviews fixed invitation/appointment create blockers, invitation
+    replay after unlink, cross-clinic protocol reads, practitioner edits by
+    colleagues, clinic membership at creation, legacy-invitation expiry, the
+    `brands` collection, and made clinician unlink cancel future appointments and
+    pending invitations atomically.
+  - The live project still runs main-era rules (the read-only deployed-rules
+    probe fails as expected). No stateful suite has run against it.
+- **Not done / deferred:** identity (unverified email, self-assigned clinician
+  role), licence verification, care-plan field ownership, consent/unlinking/
+  account closure, development-data audit, E2E credential isolation, rules
+  deployment and stateful runs, expanded Playwright coverage, and the final
+  independent audit are tracked in `docs/codex/security-backlog/BACKLOG.md`
+  (Jira import: `jira-import.csv`). Nothing listed there is complete.
+- **Coverage matrix:** (superseded in detail by
+  `docs/codex/security-backlog/proposals/track-g-coverage/coverage-matrix.md`)
 
 | Workstream / requirement | Playwright scenario | Existing lower-level coverage | Remaining manual / hardware coverage |
 | --- | --- | --- | --- |
@@ -818,6 +841,18 @@ independent workstream immediately when a slot opens.
   to track it when the first implementation wave started.
 
 ## Project log
+
+- **2026-09-25:** E2 harness hardened for the shared `brainwell-327dc` project
+  using the owner-approved test accounts: plan/execute cleanup with positive
+  attribution only, Admin persistence verification, explicit-run recovery,
+  pinned least-privilege key handling. A Firestore rules emulator suite (113
+  tests) was added; two independent reviews found and fixed rules defects that
+  blocked the app's own invitation and appointment transactions and allowed an
+  unlinked patient to relink by replaying an old invitation. Seven investigation
+  tracks (identity, care-plan ownership, lifecycle, data audit, low-severity
+  rules, E2E credential threat model, coverage) produced designs and decisions
+  now captured in `docs/codex/security-backlog/`. Rules are not deployed, no
+  stateful suite has run, and nothing is committed yet.
 
 - **2026-09-20:** The validated Playwright harness merged into
   `fill-in-mocked-data` through PR #17 at `c49180f`. E2 started from that clean

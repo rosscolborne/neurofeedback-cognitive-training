@@ -1,0 +1,145 @@
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -11,9 +11,24 @@
+       return isAuthenticated() && request.auth.uid == userId;
+     }
+ 
+-    function isClinician() {
++    // Email ownership is proven only by a verified Firebase Auth token.
++    function hasVerifiedEmail() {
+       return isAuthenticated() &&
+-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', null) == 'clinician';
++        request.auth.token.get('email', null) is string &&
++        request.auth.token.get('email_verified', false) == true;
++    }
++
++    // Clinician privilege is granted only by trusted code (Admin SDK) through
++    // the server-only clinicianAccess/{uid} document. users/{uid}.role is a
++    // self-selected onboarding preference and never grants privilege.
++    function clinicianAccess() {
++      return get(/databases/$(database)/documents/clinicianAccess/$(request.auth.uid)).data;
++    }
++
++    function isClinician() {
++      return hasVerifiedEmail() &&
++        exists(/databases/$(database)/documents/clinicianAccess/$(request.auth.uid)) &&
++        clinicianAccess().get('status', null) == 'active';
+     }
+ 
+     function clinicExists(clinicId) {
+@@ -21,8 +36,9 @@
+         exists(/databases/$(database)/documents/clinics/$(clinicId));
+     }
+ 
++    // Clinic membership confers access only while the clinician grant is active.
+     function isClinicMember(clinicId) {
+-      return isAuthenticated() && clinicExists(clinicId) &&
++      return isClinician() && clinicExists(clinicId) &&
+         get(/databases/$(database)/documents/clinics/$(clinicId))
+           .data.get('practitionerIds', []).hasAny([request.auth.uid]);
+     }
+@@ -60,6 +76,7 @@
+ 
+     function isCurrentPatientClinician(patientId, clinicianId) {
+       return isAuthenticated() && patientExists(patientId) &&
++        (request.auth.uid != clinicianId || isClinician()) &&
+         isCanonicalPatientClinicianId(
+           get(/databases/$(database)/documents/clients/$(patientId)).data,
+           clinicianId
+@@ -69,11 +86,13 @@
+     // Canonical ownership always wins. The legacy field is consulted only when
+     // clinicianId is absent, preventing mixed documents from authorizing twice.
+     function isCanonicalPatientClinician(patient) {
+-      return patient.get('clinicianId', null) == request.auth.uid ||
++      return isClinician() && (
++        patient.get('clinicianId', null) == request.auth.uid ||
+         (
+           patient.get('clinicianId', null) == null &&
+           patient.get('linkedClinicianCode', null) == request.auth.uid
+-        );
++        )
++      );
+     }
+ 
+     function isCanonicalPatientClinicianId(patient, clinicianId) {
+@@ -100,8 +119,31 @@
+ 
+     // User profiles (users/{userId})
+     match /users/{userId} {
++      function validProfile() {
++        return request.resource.data.keys().hasOnly([
++            'email', 'displayName', 'createdAt', 'updatedAt', 'role'
++          ]) &&
++          request.resource.data.get('role', null) in [null, 'patient', 'clinician'];
++      }
++
+       allow read: if isOwner(userId);
+-      allow write: if isOwner(userId);
++      allow create: if isOwner(userId) && validProfile();
++      // The preference is chosen once; changing it is an operator action.
++      allow update: if isOwner(userId) && validProfile() && (
++        resource.data.get('role', null) == null ||
++        request.resource.data.get('role', null) == resource.data.get('role', null)
++      );
++      allow delete: if isOwner(userId);
++    }
++
++    // Server-only clinician grant: { status: 'pending'|'active'|'suspended'|'revoked',
++    // displayName, credentialStatus, verifiedAt, ... }. Written by Admin SDK only.
++    match /clinicianAccess/{userId} {
++      allow get: if isOwner(userId) || (
++        isAuthenticated() &&
++        get(/databases/$(database)/documents/clients/$(request.auth.uid)).data.get('clinicianId', null) == userId
++      );
++      allow list, write: if false;
+     }
+ 
+     // A clinician creates an invitation, then the intended patient accepts it
+@@ -109,8 +151,7 @@
+     // link are committed atomically.
+     match /patientInvitations/{invitationId} {
+       function isInvitedPatient() {
+-        return isAuthenticated() &&
+-          request.auth.token.email != null &&
++        return hasVerifiedEmail() &&
+           resource.data.patientEmail == request.auth.token.email.lower();
+       }
+ 
+@@ -132,6 +173,7 @@
+         request.auth.token.email != null &&
+         request.resource.data.patientEmail != request.auth.token.email.lower() &&
+         request.resource.data.patientName is string &&
++        request.resource.data.get('clinicianName', null) == clinicianAccess().get('displayName', null) &&
+         request.resource.data.uniquenessClaimId is string &&
+         request.resource.data.uniquenessClaimId == request.resource.data.patientEmail &&
+         request.resource.data.expiresAt is timestamp &&
+@@ -227,7 +269,7 @@
+           getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+             .data.get('status', null) == 'cancelled'
+         ) || (
+-          request.auth.token.email != null &&
++          hasVerifiedEmail() &&
+           resource.data.patientEmail == request.auth.token.email.lower() &&
+           getAfter(/databases/$(database)/documents/patientInvitations/$(resource.data.invitationId))
+             .data.get('status', null) == 'accepted' &&
+@@ -775,15 +817,19 @@
+         practitionerId == request.auth.uid || isClinicMember(resource.data.clinicId)
+       );
+       allow list: if isClinician() && isClinicMember(resource.data.clinicId);
++      // Credential verification is server-owned (clinicianAccess). Clients may
++      // not create or change the legacy credentials list.
+       allow create: if isClinician() &&
+         practitionerId == request.auth.uid &&
+         request.resource.data.userId == request.auth.uid &&
++        request.resource.data.get('credentials', []) == [] &&
+         isClinicMemberAfter(request.resource.data.clinicId);
+       // Only the practitioner edits their own record; colleagues may read it.
+       allow update: if isClinician() &&
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId &&
+-        request.resource.data.clinicId == resource.data.clinicId;
++        request.resource.data.clinicId == resource.data.clinicId &&
++        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['credentials']);
+       allow delete: if false;
+     }
+ 

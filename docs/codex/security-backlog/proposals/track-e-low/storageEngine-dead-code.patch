@@ -1,0 +1,426 @@
+--- a/src/services/storageEngine.ts
++++ b/src/services/storageEngine.ts
+@@ -3,10 +3,8 @@
+   ClinicProfile,
+   ClinicBrandConfig,
+   DeviceAssignment,
+-  MessageThread,
+   MilestoneBadge,
+   SessionRecord,
+-  CalendarAppointment,
+   SessionCreateResult,
+   SessionNotesPatch,
+   SessionQueryScope,
+@@ -24,7 +22,6 @@
+   doc,
+   getDoc,
+   getDocs,
+-  onSnapshot,
+   query,
+   runTransaction,
+   serverTimestamp,
+@@ -354,95 +351,6 @@
+   },
+ ];
+ 
+-export const INITIAL_DEMO_MESSAGES: MessageThread[] = [
+-  {
+-    clientId: 'demo-sarah-mitchell',
+-    clientName: 'Sarah Mitchell',
+-    clientAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+-    lastMessageTime: 'Today 9:45 AM',
+-    unreadCount: 1,
+-    isDemo: true,
+-    messages: [
+-      {
+-        id: 'm1',
+-        sender: 'clinician',
+-        text: 'Hi Sarah, I reviewed your Skyline Drift sessions from this week. Your Theta/Beta ratio showed steady suppression during the 15-minute mark.',
+-        timestamp: 'Aug 21, 4:30 PM',
+-        isRead: true,
+-      },
+-      {
+-        id: 'm2',
+-        sender: 'patient',
+-        text: 'Thank you Dr. Vance. I noticed I felt much calmer while starting my work tasks right after the morning session.',
+-        timestamp: 'Aug 21, 5:12 PM',
+-        isRead: true,
+-      },
+-      {
+-        id: 'm3',
+-        sender: 'clinician',
+-        text: 'That is positive neuroplastic adaptation in action. I have adjusted your adaptive threshold slightly to challenge your sustained focus duration on your Muse S Athena.',
+-        timestamp: 'Aug 22, 9:10 AM',
+-        isRead: true,
+-      },
+-      {
+-        id: 'm4',
+-        sender: 'patient',
+-        text: 'Just completed my session today: 84% time in zone. The audio cues are very clear!',
+-        timestamp: 'Today 9:45 AM',
+-        isRead: false,
+-      },
+-    ],
+-  },
+-  {
+-    clientId: 'demo-david-miller',
+-    clientName: 'David Miller',
+-    clientAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+-    lastMessageTime: 'Aug 20, 2:15 PM',
+-    unreadCount: 0,
+-    isDemo: true,
+-    messages: [
+-      {
+-        id: 'm201',
+-        sender: 'clinician',
+-        text: 'Hi David, how is the Tidal Garden alpha training experience feeling for your evening wind-down?',
+-        timestamp: 'Aug 20, 1:00 PM',
+-        isRead: true,
+-      },
+-      {
+-        id: 'm202',
+-        sender: 'patient',
+-        text: 'It is very relaxing. Seeing the corals glow when my mind quiets down provides clear biofeedback.',
+-        timestamp: 'Aug 20, 2:15 PM',
+-        isRead: true,
+-      },
+-    ],
+-  },
+-  {
+-    clientId: 'demo-elena-rostova',
+-    clientName: 'Elena Rostova',
+-    clientAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+-    lastMessageTime: 'Aug 24, 8:00 AM',
+-    unreadCount: 0,
+-    isDemo: true,
+-    messages: [
+-      {
+-        id: 'm301',
+-        sender: 'clinician',
+-        text: 'Elena, outstanding SMR stability on your last three sessions. We are seeing sustained 12-15 Hz enhancement with low EMG interference.',
+-        timestamp: 'Aug 23, 5:00 PM',
+-        isRead: true,
+-      },
+-      {
+-        id: 'm302',
+-        sender: 'patient',
+-        text: 'The Signal Sort task has really helped me dial in stillness before high-stakes presentations.',
+-        timestamp: 'Aug 24, 8:00 AM',
+-        isRead: true,
+-      },
+-    ],
+-  },
+-];
+-
+ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
+   {
+     id: 'demo-sess-001',
+@@ -559,82 +467,9 @@
+   },
+ ];
+ 
+-export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
+-  {
+-    id: 'demo-appt-001',
+-    clientId: 'demo-sarah-mitchell',
+-    clientName: 'Sarah Mitchell',
+-    clientAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+-    clientCondition: 'ADHD (Inattentive)',
+-    date: new Date().toISOString().split('T')[0], // Today
+-    time: '14:00',
+-    durationMinutes: 45,
+-    type: 'remote-training',
+-    protocol: 'theta-beta-ratio',
+-    experience: 'skyline-drift',
+-    status: 'scheduled',
+-    notes: 'Supervised remote session. Target Fz virtual midline theta suppression with Muse S Athena.',
+-    isDemo: true,
+-    hardwareProfile: 'Muse S (Athena)',
+-  },
+-  {
+-    id: 'demo-appt-002',
+-    clientId: 'demo-david-miller',
+-    clientName: 'David Miller',
+-    clientAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+-    clientCondition: 'Generalized Anxiety',
+-    date: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Tomorrow
+-    time: '10:30',
+-    durationMinutes: 30,
+-    type: 'protocol-review',
+-    protocol: 'alpha-enhancement',
+-    experience: 'tidal-garden',
+-    status: 'scheduled',
+-    notes: 'Review posterior alpha synchrony and adjust adaptive step sensitivity.',
+-    isDemo: true,
+-    hardwareProfile: 'Muse S (Athena)',
+-  },
+-  {
+-    id: 'demo-appt-003',
+-    clientId: 'demo-elena-rostova',
+-    clientName: 'Elena Rostova',
+-    clientAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+-    clientCondition: 'Peak Performance',
+-    date: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0], // In 2 days
+-    time: '08:00',
+-    durationMinutes: 30,
+-    type: 'remote-training',
+-    protocol: 'smr-enhancement',
+-    experience: 'signal-sort',
+-    status: 'scheduled',
+-    notes: 'Morning executive flow training.',
+-    isDemo: true,
+-    hardwareProfile: 'Muse S (Athena)',
+-  },
+-  {
+-    id: 'demo-appt-004',
+-    clientId: 'demo-marcus-chen',
+-    clientName: 'Marcus Chen',
+-    clientAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+-    clientCondition: 'Stress / Insomnia',
+-    date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0], // 3 days ago
+-    time: '16:00',
+-    durationMinutes: 60,
+-    type: 'in-clinic-evaluation',
+-    protocol: 'beta-downtraining',
+-    experience: 'breath-weave',
+-    status: 'completed',
+-    notes: 'In-clinic 19-channel EEG baseline and impedance check conducted.',
+-    isDemo: true,
+-    hardwareProfile: '19-Ch QEEG Clinical',
+-  },
+-];
+-
+ class StorageEngine {
+   private demoClients: ClientProfile[] = [...INITIAL_DEMO_CLIENTS];
+   private demoSessions: SessionRecord[] = [...INITIAL_DEMO_SESSIONS];
+-  private demoMessages: MessageThread[] = [...INITIAL_DEMO_MESSAGES];
+-  private demoAppointments: CalendarAppointment[] = [...INITIAL_DEMO_APPOINTMENTS];
+   private demoBrand: ClinicBrandConfig = BRAND_PRESETS[0];
+ 
+   private isDemoWorkspace(): boolean {
+@@ -1472,187 +1307,10 @@
+     }
+   }
+ 
+-  public async getMessages(): Promise<MessageThread[]> {
+-    if (this.isDemoWorkspace()) {
+-      return [...this.demoMessages];
+-    }
+-    if (!auth.currentUser) {
+-      return [];
+-    }
+-    try {
+-      const q = query(
+-        collection(db, 'messages'),
+-        where('clinicianId', '==', auth.currentUser.uid)
+-      );
+-      const snap = await getDocs(q);
+-      const docs = snap.docs.map((d) => d.data() as MessageThread);
+-      if (docs.length > 0) return docs;
+-    } catch (err) {
+-      console.warn('Failed to fetch messages for clinician from Firestore:', err);
+-    }
+-
+-    try {
+-      const qPatient = query(
+-        collection(db, 'messages'),
+-        where('clientId', '==', auth.currentUser.uid)
+-      );
+-      const snapPatient = await getDocs(qPatient);
+-      const docsPatient = snapPatient.docs.map((d) => d.data() as MessageThread);
+-      if (docsPatient.length > 0) return docsPatient;
+-    } catch (err) {
+-      console.warn('Failed to fetch messages for patient from Firestore:', err);
+-    }
+-
+-    return [];
+-  }
+-
+-  public async saveMessageThread(thread: MessageThread): Promise<void> {
+-    if (this.isDemoWorkspace()) {
+-      const idx = this.demoMessages.findIndex((t) => t.clientId === thread.clientId);
+-      if (idx >= 0) {
+-        this.demoMessages[idx] = thread;
+-      } else {
+-        this.demoMessages.unshift(thread);
+-      }
+-      return;
+-    }
+-
+-    if (!auth.currentUser) throw new Error('Sign in to send a message');
+-
+-    try {
+-      await setDoc(doc(db, 'messages', thread.clientId), thread, { merge: true });
+-    } catch (err) {
+-      console.error('Failed to save message thread to Firestore:', err);
+-    }
+-  }
+-
+-  public async saveMessages(threads: MessageThread[]): Promise<void> {
+-    if (this.isDemoWorkspace()) {
+-      this.demoMessages = threads;
+-      return;
+-    }
+-    for (const t of threads) {
+-      await this.saveMessageThread(t);
+-    }
+-  }
+-
+-  public subscribeToMessages(callback: (threads: MessageThread[]) => void, role?: 'clinician' | 'patient' | null): () => void {
+-    if (this.isDemoWorkspace()) {
+-      callback([...this.demoMessages]);
+-      return () => {};
+-    }
+-    if (!auth.currentUser) {
+-      callback([]);
+-      return () => {};
+-    }
+-
+-    const uid = auth.currentUser.uid;
+-    const isPatient = role === 'patient';
+-    const primaryQuery = isPatient
+-      ? query(collection(db, 'messages'), where('clientId', '==', uid))
+-      : query(collection(db, 'messages'), where('clinicianId', '==', uid));
+-
+-    const unsubscribe = onSnapshot(
+-      primaryQuery,
+-      (snapshot) => {
+-        const docs = snapshot.docs.map((d) => d.data() as MessageThread);
+-        callback(docs);
+-      },
+-      () => {
+-        callback([]);
+-      }
+-    );
+-
+-    return unsubscribe;
+-  }
+-
+-  public async getAppointments(clinicianOrPatientId?: string): Promise<CalendarAppointment[]> {
+-    if (this.isDemoWorkspace()) {
+-      return [...this.demoAppointments];
+-    }
+-    if (!auth.currentUser) {
+-      return [];
+-    }
+-    const uid = clinicianOrPatientId || auth.currentUser.uid;
+-
+-    try {
+-      const q = query(
+-        collection(db, 'appointments'),
+-        where('clinicianId', '==', uid)
+-      );
+-      const snap = await getDocs(q);
+-      const docs = snap.docs.map((d) => d.data() as CalendarAppointment);
+-      if (docs.length > 0) return docs;
+-    } catch (err) {
+-      console.warn('Failed to fetch appointments for clinician from Firestore:', err);
+-    }
+-
+-    try {
+-      const qPatient = query(
+-        collection(db, 'appointments'),
+-        where('clientId', '==', uid)
+-      );
+-      const snapPatient = await getDocs(qPatient);
+-      const docsPatient = snapPatient.docs.map((d) => d.data() as CalendarAppointment);
+-      if (docsPatient.length > 0) return docsPatient;
+-    } catch (err) {
+-      console.warn('Failed to fetch appointments for patient from Firestore:', err);
+-    }
+-
+-    return [];
+-  }
+-
+-  public async saveAppointment(appt: CalendarAppointment): Promise<void> {
+-    if (this.isDemoWorkspace()) {
+-      const idx = this.demoAppointments.findIndex((a) => a.id === appt.id);
+-      if (idx >= 0) {
+-        this.demoAppointments[idx] = appt;
+-      } else {
+-        this.demoAppointments.unshift(appt);
+-      }
+-      return;
+-    }
+-
+-    if (!auth.currentUser) throw new Error('Sign in to save an appointment');
+-
+-    try {
+-      await setDoc(doc(db, 'appointments', appt.id), appt, { merge: true });
+-    } catch (err) {
+-      console.error('Failed to save appointment to Firestore:', err);
+-    }
+-  }
+-
+-  public async saveAppointments(appts: CalendarAppointment[]): Promise<void> {
+-    if (this.isDemoWorkspace()) {
+-      this.demoAppointments = appts;
+-      return;
+-    }
+-    for (const a of appts) {
+-      await this.saveAppointment(a);
+-    }
+-  }
+-
+-  public async deleteAppointment(id: string): Promise<void> {
+-    if (this.isDemoWorkspace()) {
+-      this.demoAppointments = this.demoAppointments.filter((a) => a.id !== id);
+-      return;
+-    }
+-
+-    if (!auth.currentUser) throw new Error('Sign in to delete an appointment');
+-
+-    try {
+-      await deleteDoc(doc(db, 'appointments', id));
+-    } catch (err) {
+-      console.error('Failed to delete appointment from Firestore:', err);
+-    }
+-  }
+-
+   public clearDemoData() {
+     this.requireDemoWorkspace('Clearing sample data');
+     this.demoClients = [];
+     this.demoSessions = [];
+-    this.demoMessages = [];
+-    this.demoAppointments = [];
+     this.demoBrand = BRAND_PRESETS[0];
+   }
+ 
+@@ -1660,8 +1318,6 @@
+     this.requireDemoWorkspace('Resetting sample data');
+     this.demoClients = [...INITIAL_DEMO_CLIENTS];
+     this.demoSessions = [...INITIAL_DEMO_SESSIONS];
+-    this.demoMessages = [...INITIAL_DEMO_MESSAGES];
+-    this.demoAppointments = [...INITIAL_DEMO_APPOINTMENTS];
+     this.demoBrand = BRAND_PRESETS[0];
+   }
+ }
+--- a/src/services/__tests__/storageEngine.test.ts
++++ b/src/services/__tests__/storageEngine.test.ts
+@@ -366,8 +366,6 @@
+     firestore.getDocs.mockResolvedValue({ docs: [] });
+ 
+     await expect(storageEngine.getClients()).resolves.toEqual([]);
+-    await expect(storageEngine.getMessages()).resolves.toEqual([]);
+-    await expect(storageEngine.getAppointments()).resolves.toEqual([]);
+   });
+ 
+   it('creates a blank patient profile only after a successful missing-document read', async () => {
+@@ -528,17 +526,6 @@
+     expect(firestore.getDocs).toHaveBeenCalledTimes(2);
+   });
+ 
+-  it('returns persisted messages and appointments even when legacy fields resemble sample data', async () => {
+-    const thread = { clientId: 'demo-looking-patient', clinicianId: 'clinician-1', clientName: 'Real patient', clientAvatar: '', lastMessageTime: '', unreadCount: 0, messages: [], isDemo: true };
+-    const appointment = { id: 'demo-looking-appointment', clientId: 'demo-looking-patient', clinicianId: 'clinician-1', clientName: 'Real patient', clientAvatar: '', clientCondition: '', date: '2026-09-19', time: '10:00', durationMinutes: 30, type: 'consultation' as const, protocol: 'theta-beta-ratio' as const, status: 'scheduled' as const, isDemo: true };
+-    firestore.getDocs
+-      .mockResolvedValueOnce({ docs: [{ data: () => thread }] })
+-      .mockResolvedValueOnce({ docs: [{ data: () => appointment }] });
+-
+-    await expect(storageEngine.getMessages()).resolves.toEqual([thread]);
+-    await expect(storageEngine.getAppointments()).resolves.toEqual([appointment]);
+-  });
+-
+   it('keeps sample records available only inside the explicit demo workspace', async () => {
+     activateClinicianDemoWorkspace();
+     state.auth.currentUser = null;
