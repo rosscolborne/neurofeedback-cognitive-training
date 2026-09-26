@@ -75,7 +75,7 @@ export async function startPatientTrainingInDemoMode(page: Page, experienceName?
         await expect(experience).toBeVisible();
         await experience.click();
     } else {
-        await page.getByRole('button', { name: 'Begin 25-Min Session', exact: true }).click();
+        await page.getByRole('button', { name: 'Begin Session', exact: true }).click();
     }
 
     const demoMode = page.getByRole('button', { name: 'Try Demo Mode', exact: true });

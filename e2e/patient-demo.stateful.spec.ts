@@ -66,7 +66,7 @@ test.describe('patient Demo persistence (stateful)', () => {
         await expect(page.getByText(/Not measured — synthetic Training Demo feedback/)).toBeVisible();
 
         await page.getByRole('button', { name: 'Home', exact: true }).click();
-        await page.getByRole('button', { name: 'Begin 25-Min Session', exact: true }).click();
+        await page.getByRole('button', { name: 'Begin Session', exact: true }).click();
 
         await expect(page.getByRole('heading', { name: 'Connect Muse Headband', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Connect Muse Headband', exact: true })).toBeVisible();

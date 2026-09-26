@@ -23,6 +23,7 @@
     "test:e2e:typecheck": "tsc -p tsconfig.e2e.json",
     "test:e2e:harness": "npx playwright test --project=harness-unit",
     "test:e2e:public": "npx playwright test --project=public",
+    "test:e2e:protocol": "firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e \"playwright test --config playwright.protocol.config.ts\"",
     "test:e2e:auth": "npx playwright test --project=auth-patient --project=auth-clinician",
     "test:e2e:patient": "npx playwright test --project=patient",
     "test:e2e:clinician": "npx playwright test --project=clinician",

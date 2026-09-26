@@ -9,7 +9,7 @@ test.describe('patient data authenticity (read-only)', () => {
         await arriveAtPatientDashboard(page);
 
         await expect(page.getByText('Training Portal', { exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Begin 25-Min Session', exact: true })).toBeEnabled();
+        await expect(page.getByRole('button', { name: 'Begin Session', exact: true })).toBeEnabled();
         await expect(page.getByText('Assignment required', { exact: true })).toHaveCount(0);
 
         await page.getByRole('button', { name: 'Profile', exact: true }).click();
@@ -23,7 +23,7 @@ test.describe('patient data authenticity (read-only)', () => {
         await protocolDialog.getByRole('button', { name: 'Close protocol details', exact: true }).click();
 
         await page.getByRole('button', { name: 'Home', exact: true }).click();
-        await page.getByRole('button', { name: 'Begin 25-Min Session', exact: true }).click();
+        await page.getByRole('button', { name: 'Begin Session', exact: true }).click();
         const headsetGate = page.getByRole('heading', { name: 'Connect Muse Headband', exact: true });
         const unavailableProtocol = page.getByRole('heading', { name: 'Protocol unavailable', exact: true });
         await expect(headsetGate.or(unavailableProtocol)).toBeVisible();
