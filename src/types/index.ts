@@ -226,6 +226,8 @@ export interface ProtocolTemplate {
   id: string;
   /** Broad training engine mode represented by this clinical template. */
   protocolType?: ProtocolType;
+  /** Opts a saved assignment into raw-EEG reward-band feedback, even when its values match the template. */
+  customRewardEnabled?: boolean;
   /** Optional patient-facing label; `name` remains the evidence-based protocol name. */
   alias?: string;
   name: string;

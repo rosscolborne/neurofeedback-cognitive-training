@@ -17,6 +17,7 @@ import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, BookOpen, Activity, User, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
+import { resolvePatientProtocol } from '../../services/protocols';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
@@ -55,9 +56,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
-  const protocolAlias = client.customProtocolConfig && client.assignedProtocol
-    ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
+  const resolvedProtocol = resolvePatientProtocol(client);
+  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
+  const protocolAlias = client.customProtocolConfig
+    ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
 
@@ -549,7 +551,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div><strong>Goal:</strong> {client.condition || 'Unavailable'}</div>
                 {protocolAlias && <div><strong>Name:</strong> {protocolAlias}</div>}
-                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol?.replace(/-/g, ' ').toUpperCase() ?? 'Assignment required'}</div>
+                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? resolvedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
                 <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable'}</div>
                 <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
               </div>

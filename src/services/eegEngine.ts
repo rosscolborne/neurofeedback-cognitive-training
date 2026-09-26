@@ -10,6 +10,7 @@ import {
   evaluateProtocolFeedback,
   type ProtocolRuntimeConfig,
 } from './adaptiveEngine';
+import { calculateDemoRewardAmplitudeUv, calculateRewardAmplitudeUv } from './rewardSpectrum';
 
 // Muse's EEG data service contains the 273e0001–273e0006 control and signal
 // characteristics. It is also the service advertised during device discovery.
@@ -29,6 +30,9 @@ export class EEGEngine {
   // Protocol configuration
   private currentProtocol: ProtocolType = 'theta-beta-ratio';
   private targetThreshold = 1.85;
+  private rewardBand: ProtocolRuntimeConfig['rewardBand'];
+  private rewardAmplitudeCache: { sequence: number; value: number | null } = { sequence: -1, value: null };
+  private rewardSampleRateHz = 256;
   private phaseAngle = 0;
   private noiseSeed = Math.random() * 100;
 
@@ -146,12 +150,16 @@ export class EEGEngine {
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
     this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
+    this.rewardBand = undefined;
+    this.rewardAmplitudeCache = { sequence: -1, value: null };
     this.syncProtocolToBrainflowSession();
   }
 
   public configureProtocol(config: ProtocolRuntimeConfig) {
     this.currentProtocol = config.protocol;
     this.targetThreshold = config.initialThreshold;
+    this.rewardBand = config.rewardBand;
+    this.rewardAmplitudeCache = { sequence: -1, value: null };
     this.syncProtocolToBrainflowSession();
   }
 
@@ -171,8 +179,25 @@ export class EEGEngine {
   public evaluateFeedbackForBands(
     bands: BandPowers,
     availability: Partial<Record<keyof BandPowers, boolean>>,
+    rewardAmplitudeUv?: number | null,
   ) {
-    return evaluateProtocolFeedback(this.currentProtocol, this.targetThreshold, bands, availability);
+    return evaluateProtocolFeedback(this.currentProtocol, this.targetThreshold, bands, availability, this.rewardBand, rewardAmplitudeUv);
+  }
+
+  private getHardwareRewardAmplitudeUv(): number | null {
+    if (!this.rewardBand || !this.sourceFrameSequence || Date.now() - this.lastSourceFrameAtMs > 2000
+      || (this.serverFitState && !this.serverFitState.ready)) return null;
+    if (this.rewardAmplitudeCache.sequence !== this.sourceFrameSequence) {
+      this.rewardAmplitudeCache = {
+        sequence: this.sourceFrameSequence,
+        value: calculateRewardAmplitudeUv(
+          [this.rawBuffers.tp9, this.rawBuffers.af7, this.rawBuffers.af8, this.rawBuffers.tp10],
+          this.rewardSampleRateHz,
+          this.rewardBand,
+        ),
+      };
+    }
+    return this.rewardAmplitudeCache.value;
   }
 
   public getBandPowerProvenance(): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null {
@@ -769,6 +794,9 @@ export class EEGEngine {
         session.sessionId,
         (frame) => {
           this.packetsReceivedCount++;
+          if (typeof frame.sampleRateHz === 'number' && Number.isFinite(frame.sampleRateHz)) {
+            this.rewardSampleRateHz = frame.sampleRateHz;
+          }
           if (frame.samples && frame.samples.length > 0) {
             this.markSourceFrameReceived();
             const channels: Array<keyof MuseChannelQuality> = ['tp9', 'af7', 'af8', 'tp10'];
@@ -897,6 +925,8 @@ export class EEGEngine {
     this.latestInterhemisphericCoherence = null;
     this.latestTrainingFeedback = null;
     this.lastSourceFrameAtMs = 0;
+    this.rewardAmplitudeCache = { sequence: -1, value: null };
+    this.rewardSampleRateHz = 256;
     this.localFitStableSince = null;
     this.serverFitState = null;
     this.resetState();
@@ -1741,14 +1771,21 @@ export class EEGEngine {
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
     const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
-    const localFeedback = this.evaluateFeedbackForBands(bands, bandAvailability);
-    if (!localFeedback.available) trainingFeedback = localFeedback;
+    const rewardAmplitudeUv = this.rewardBand
+      ? this.isDemoMode
+        ? calculateDemoRewardAmplitudeUv(bands, this.rewardBand)
+        : this.latestBandPowerProvenance && this.latestServerBands
+          ? this.getHardwareRewardAmplitudeUv()
+          : null
+      : undefined;
+    const localFeedback = this.evaluateFeedbackForBands(bands, bandAvailability, rewardAmplitudeUv);
+    if (this.rewardBand || !localFeedback.available) trainingFeedback = localFeedback;
     let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
     let inZone = trainingFeedback?.inZone ?? false;
     let zoneScore = trainingFeedback?.zoneScore ?? 0;
 
     // Fallback: If server has not yet returned inZone for this window, compute from live bands & protocol
-    if (!inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
+    if (!this.rewardBand && !inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
       const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
       inZone = fb.inZone;
       zoneScore = fb.zoneScore;

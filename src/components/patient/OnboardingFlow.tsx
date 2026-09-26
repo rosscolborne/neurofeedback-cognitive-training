@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
+import { DEFAULT_PROTOCOL, resolvePatientProtocol } from '../../services/protocols';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { BrandLogo } from '../brand/BrandLogo';
 import { ArrowRight, Check, Wifi, Target, Waves, Moon, Activity } from 'lucide-react';
@@ -36,10 +37,11 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
   };
 
   const handleComplete = async () => {
-    let assignedProtocol: ProtocolType = 'theta-beta-ratio';
+    let assignedProtocol: ProtocolType = DEFAULT_PROTOCOL;
     if (selectedGoal === 'calm') assignedProtocol = 'alpha-enhancement';
     if (selectedGoal === 'sleep') assignedProtocol = 'beta-downtraining';
     if (selectedGoal === 'performance') assignedProtocol = 'smr-enhancement';
+    if (client.clinicianId || client.linkedClinicianCode) assignedProtocol = resolvePatientProtocol(client);
 
     setIsSaving(true);
     setSaveError(null);
@@ -140,7 +142,9 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
               What is your primary training intention?
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              This helps us personalize your training protocol.
+              {client.clinicianId || client.linkedClinicianCode
+                ? 'Your clinician’s protocol assignment remains active during setup.'
+                : 'This helps us personalize your training protocol.'}
             </p>
           </div>
 

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
+import { resolvePatientProtocol } from '../../services/protocols';
+import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemplates';
 import {
   Search,
   Plus,
@@ -142,11 +144,9 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           email: formEmail || editingClient.email,
           condition: formCondition,
           assignedProtocol: formProtocol,
-          customProtocolConfig:
-            formProtocol &&
-            formProtocol === editingClient.assignedProtocol
-              ? editingClient.customProtocolConfig
-              : undefined,
+          customProtocolConfig: formProtocol === editingClient.assignedProtocol
+            ? editingClient.customProtocolConfig
+            : undefined,
           status: formStatus,
           prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
@@ -340,7 +340,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ fontWeight: 500 }}>{client.condition || 'Condition unavailable'}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {client.assignedProtocol?.replace(/-/g, ' ') || 'Protocol unavailable'}
+                      {getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? resolvePatientProtocol(client).replace(/-/g, ' ')}
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
@@ -421,7 +421,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 {client.condition || 'Condition unavailable'}
               </span>
               <span style={{ color: 'var(--text-secondary)' }}>
-                Protocol: <strong>{client.assignedProtocol?.replace(/-/g, ' ') || 'unavailable'}</strong>
+                Protocol: <strong>{getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? resolvePatientProtocol(client).replace(/-/g, ' ')}</strong>
               </span>
             </div>
 
@@ -584,7 +584,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       background: '#FFFFFF',
                     }}
                   >
-                    <option value="">Unassigned</option>
+                    <option value="">Use default (Theta/Beta)</option>
                     <option value="theta-beta-ratio">Theta/Beta (Lubar)</option>
                     <option value="smr-enhancement">SMR (Sterman)</option>
                     <option value="alpha-enhancement">Alpha (Hardt)</option>

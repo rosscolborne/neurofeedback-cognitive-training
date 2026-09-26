@@ -15,6 +15,8 @@ import {
 } from '../adaptiveEngine';
 import { EEGEngine } from '../eegEngine';
 import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
+import { calculateRewardAmplitudeUv } from '../rewardSpectrum';
+import { DEFAULT_PROTOCOL, resolvePatientProtocol } from '../protocols';
 
 const client = (assignedProtocol: ProtocolType = 'alpha-enhancement', override: Partial<ClientProfile> = {}): ClientProfile => ({
   id: 'patient-1', name: 'Patient', email: 'patient@example.com', avatarUrl: '',
@@ -70,32 +72,107 @@ describe('protocol runtime assignment', () => {
     });
   });
 
-  it.each([
-    ['sub-bin frequency edit', { freqMin: 9, freqMax: 11 }],
-    ['overlap frequency edit', { freqMin: 8, freqMax: 15 }],
-    ['unavailable 45-50 range', { freqMin: 45, freqMax: 50 }],
-  ])('blocks unsupported %s instead of approximating PSD', (_label, range) => {
+  it('uses selected raw EEG frequencies, condition, and threshold for feedback and adaptation', () => {
     const canonical = getClinicalProtocolTemplate('alpha-enhancement')!;
-    const custom = identicalCustom('alpha-enhancement', { rewardBand: { ...canonical.rewardBand, ...range } });
-    expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: custom }))).toMatchObject({
-      ok: false, error: expect.stringContaining('not supported'),
-    });
+    const raw = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 10 * index / 256));
+    const check = (reward: Partial<ProtocolTemplate['rewardBand']>) => {
+      const custom = identicalCustom('alpha-enhancement', {
+        customRewardEnabled: true,
+        rewardBand: { ...canonical.rewardBand, freqMin: 9, freqMax: 11, targetThreshold: 6, ...reward },
+      });
+      const resolved = resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: custom }));
+      if (!resolved.ok) throw new Error(resolved.error);
+      const measured = calculateRewardAmplitudeUv([raw, raw, raw, raw], 256, custom.rewardBand);
+      const eeg = new EEGEngine();
+      eeg.configureProtocol(resolved.config);
+      return { result: eeg.evaluateFeedbackForBands(bands, available, measured), config: resolved.config };
+    };
+    expect(check({ freqMin: 9, freqMax: 11 }).result).toMatchObject({ available: true, inZone: true });
+    expect(check({ freqMin: 16, freqMax: 18 }).result).toMatchObject({ available: true, inZone: false });
+    expect(check({ targetCondition: 'below' }).result).toMatchObject({ available: true, inZone: false });
+    expect(check({ targetThreshold: 13 }).result).toMatchObject({ available: true, inZone: false });
+    const below = check({ targetCondition: 'below' }).config;
+    expect(below).toMatchObject({ initialThreshold: 6, lowerIsBetter: true });
+    const adaptive = new AdaptiveDifficultyEngine(below.protocol, below.initialThreshold, below);
+    expect(samples(adaptive, true).log).toMatchObject({ direction: 'tightened', previousThreshold: 6, newThreshold: 5.4 });
   });
 
-  it('blocks reward threshold/condition edits and invalid explicit bounds', () => {
+  it('publishes custom reward feedback instead of the server broad-mode decision', () => {
+    const template = identicalCustom('alpha-enhancement', {
+      customRewardEnabled: true,
+      rewardBand: {
+        ...getClinicalProtocolTemplate('alpha-enhancement')!.rewardBand,
+        freqMin: 9, freqMax: 11, targetCondition: 'above', targetThreshold: 6,
+      },
+    });
+    const resolution = resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: template }));
+    if (!resolution.ok) throw new Error(resolution.error);
+    const engine = new EEGEngine();
+    engine.configureProtocol(resolution.config);
+    engine.isHardwareConnected = true;
+    const raw = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 10 * index / 256));
+    const internal = engine as unknown as {
+      rawBuffers: Record<'tp9' | 'af7' | 'af8' | 'tp10', number[]>;
+      sourceFrameSequence: number;
+      lastSourceFrameAtMs: number;
+      latestServerBands: BandPowers;
+      latestServerBandAvailability: typeof available;
+      latestBandPowerProvenance: MetricProvenance;
+      latestTrainingFeedback: { ratio: number; inZone: boolean; zoneScore: number };
+      generateSample: (dt: number) => { inZone: boolean; inZoneAvailable: boolean };
+    };
+    internal.rawBuffers = { tp9: raw, af7: raw, af8: raw, tp10: raw };
+    internal.sourceFrameSequence = 1;
+    internal.lastSourceFrameAtMs = Date.now();
+    internal.latestServerBands = bands;
+    internal.latestServerBandAvailability = available;
+    internal.latestBandPowerProvenance = brainflowProvenance;
+    internal.latestTrainingFeedback = { ratio: 0, inZone: false, zoneScore: 0 };
+    expect(internal.generateSample(0.1)).toMatchObject({ inZoneAvailable: true, inZone: true });
+    internal.sourceFrameSequence = 2;
+    internal.rawBuffers = Object.fromEntries(
+      Object.keys(internal.rawBuffers).map(key => [key, raw.map(value => value / 4)]),
+    ) as typeof internal.rawBuffers;
+    internal.latestTrainingFeedback = { ratio: 0, inZone: true, zoneScore: 1 };
+    expect(internal.generateSample(0.1)).toMatchObject({ inZoneAvailable: true, inZone: false });
+  });
+
+  it('converts raw ADC-offset windows to µV before custom reward comparison', () => {
+    const reward = { freqMin: 9, freqMax: 11 };
+    const microvolts = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 10 * index / 256));
+    const adc = microvolts.map(value => 400 + value / 0.48828);
+    expect(calculateRewardAmplitudeUv([adc], 256, reward)).toBeCloseTo(
+      calculateRewardAmplitudeUv([microvolts], 256, reward)!, 4,
+    );
+  });
+
+  it('rejects malformed persisted reward definitions and invalid explicit bounds', () => {
     const canonical = getClinicalProtocolTemplate('alpha-enhancement')!;
-    const changedThreshold = identicalCustom('alpha-enhancement', {
-      rewardBand: { ...canonical.rewardBand, targetThreshold: canonical.rewardBand.targetThreshold + 1 },
-    });
-    expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: changedThreshold }))).toMatchObject({ ok: false });
-    const changedCondition = identicalCustom('alpha-enhancement', {
-      rewardBand: { ...canonical.rewardBand, targetCondition: 'below' },
-    });
-    expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: changedCondition }))).toMatchObject({
-      ok: false, error: expect.stringContaining('canonical reward definition'),
-    });
+    for (const change of [
+      { freqMin: 45, freqMax: 50 },
+      { freqMin: 9, freqMax: 9 },
+      { targetCondition: 'equal' },
+      { targetThreshold: Number.NaN },
+      { targetThreshold: 6.123 },
+    ]) {
+      const custom = identicalCustom('alpha-enhancement', {
+        customRewardEnabled: true,
+        rewardBand: { ...canonical.rewardBand, ...change } as ProtocolTemplate['rewardBand'],
+      });
+      expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: custom }))).toMatchObject({ ok: false });
+    }
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customThresholdBounds: { min: 12, max: 10 } }))).toMatchObject({ ok: false });
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customThresholdBounds: { min: 12, max: 13 } }))).toMatchObject({ ok: false });
+  });
+
+  it('resolves one default and lets an explicit custom assignment override it', () => {
+    const blank = client('theta-beta-ratio', { assignedProtocol: undefined });
+    expect(resolvePatientProtocol(blank)).toBe(DEFAULT_PROTOCOL);
+    expect(resolveProtocolRuntime(blank)).toMatchObject({ ok: true, config: { protocol: DEFAULT_PROTOCOL } });
+    const custom = identicalCustom('alpha-enhancement');
+    const assigned = { ...blank, customProtocolConfig: custom };
+    expect(resolvePatientProtocol(assigned)).toBe('alpha-enhancement');
+    expect(resolveProtocolRuntime(assigned)).toMatchObject({ ok: true, config: { protocol: 'alpha-enhancement' } });
   });
 
   it('rejects sub-cent adaptive precision and accepts an exact 0.01 step without log divergence', () => {
@@ -115,8 +192,8 @@ describe('protocol runtime assignment', () => {
   });
 
   it('discloses every valid-session limitation explicitly', () => {
-    for (const term of ['Reward-band', 'inhibit bands', 'montage', 'device mapping', 'sensitivity', 'clinical notes', 'rationale', 'recommended experiences', 'custom alias', 'unsupported']) {
-      expect(PROTOCOL_RUNTIME_LIMITATIONS).toContain(term);
+    for (const term of ['reward frequency', 'inhibit bands', 'montage', 'device mapping', 'sensitivity', 'clinical notes', 'rationale', 'recommended experiences', 'custom alias']) {
+      expect(PROTOCOL_RUNTIME_LIMITATIONS.toLowerCase()).toContain(term);
     }
   });
 

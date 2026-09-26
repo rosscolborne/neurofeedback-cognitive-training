@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
+import { resolvePatientProtocol } from '../../services/protocols';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
@@ -81,9 +82,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }), [sessionStatus, sessions, nowMs]);
 
   const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
-  const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
-  const protocolAlias = client.customProtocolConfig && client.assignedProtocol
-    ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
+  const resolvedProtocol = resolvePatientProtocol(client);
+  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
+  const protocolAlias = client.customProtocolConfig
+    ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
 
   // Hide scroll hint once user scrolls the pills
@@ -117,7 +119,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
           {protocolAlias && <>Name: <strong style={{ color: 'var(--text-primary)' }}>{protocolAlias}</strong> · </>}
-          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? client.assignedProtocol?.replace(/-/g, ' ').toUpperCase() ?? 'Assignment required'}</strong>
+          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? resolvedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
         </p>
       </div>
 
@@ -223,12 +225,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <button
-          onClick={() => client.assignedProtocol && onStartSession(selectedExp)}
-          disabled={!client.assignedProtocol}
+          onClick={() => onStartSession(selectedExp)}
           className="btn btn-primary"
           style={{ width: '100%', padding: '16px', fontSize: '16px' }}
         >
-          <Play size={18} fill="currentColor" /> {client.assignedProtocol ? 'Begin 25-Min Session' : 'Protocol assignment required'}
+          <Play size={18} fill="currentColor" /> Begin Session
         </button>
       </div>
 

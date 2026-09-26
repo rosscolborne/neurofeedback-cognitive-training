@@ -18,6 +18,24 @@ const buttonWith = (renderer: ReactTestRenderer, text: string) =>
   renderer.root.findAllByType('button').find((button) => button.children.some((child) => typeof child === 'string' && child.includes(text)))!;
 
 describe('OnboardingFlow persistence', () => {
+  it('keeps a linked patient’s clinician assignment when setup is repeated', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const onFinish = vi.fn().mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<OnboardingFlow client={{ ...client, clinicianId: 'clinician-1', assignedProtocol: 'smr-enhancement' }} onFinish={onFinish} />);
+    });
+    act(() => buttonWith(renderer, 'Get Started').props.onClick());
+    expect(JSON.stringify(renderer.toJSON())).toContain('clinician’s protocol assignment remains active');
+    const calm = renderer.root.findAllByProps({ className: 'card-patient' }).find(node =>
+      node.findAll(child => child.children.some(value => typeof value === 'string' && value.includes('Anxiety Relief'))).length > 0)!;
+    act(() => calm.props.onClick());
+    act(() => buttonWith(renderer, 'Continue').props.onClick());
+    await act(async () => { await buttonWith(renderer, 'Continue without Headband').props.onClick(); });
+    expect(onFinish).toHaveBeenCalledWith({ assignedProtocol: 'smr-enhancement' });
+    renderer.unmount();
+  });
+
   it('stays open with a retryable error when the assessment write fails', async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const onFinish = vi.fn().mockRejectedValue(new Error('assessment save offline'));

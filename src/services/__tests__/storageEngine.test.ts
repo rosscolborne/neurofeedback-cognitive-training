@@ -34,6 +34,7 @@ import { INITIAL_DEMO_CLIENTS, createBlankProfile, storageEngine } from '../stor
 import { activateClinicianDemoWorkspace, deactivateClinicianDemoWorkspace } from '../clinicianDemoBoundary';
 import { buildPatientProgressDisplayModel } from '../../components/patient/patientMetrics';
 import { BRAND_PRESETS } from '../brandEngine';
+import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
@@ -56,6 +57,33 @@ describe('role-aware session repository', () => {
     storageEngine.resetToDefaultSeed();
     deactivateClinicianDemoWorkspace();
     state.auth.currentUser = { uid: 'clinician-1' };
+  });
+
+  it('persists a clinician condition change across a repository reload without changing protocol assignment', async () => {
+    const stored: Record<string, unknown> = {};
+    firestore.setDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
+      Object.assign(stored, payload);
+    });
+    firestore.getDoc.mockImplementationOnce(async () => ({
+      id: 'patient-1', exists: () => true, data: () => stored,
+    }));
+    const customProtocolConfig = { ...getClinicalProtocolTemplate('alpha-enhancement')!, alias: 'Evening Alpha' };
+    const updated = {
+      ...INITIAL_DEMO_CLIENTS[0], id: 'patient-1', clinicianId: 'clinician-1',
+      condition: 'Generalized Anxiety' as const, assignedProtocol: 'alpha-enhancement' as const,
+      customProtocolConfig,
+    };
+    await storageEngine.saveClient(updated);
+    const reloaded = await storageEngine.getClient('patient-1');
+    expect(reloaded).toMatchObject({
+      id: 'patient-1', condition: 'Generalized Anxiety', assignedProtocol: 'alpha-enhancement',
+      customProtocolConfig: { alias: 'Evening Alpha' },
+    });
+    expect(firestore.setDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: 'patient-1' },
+      expect.objectContaining({ condition: 'Generalized Anxiety', assignedProtocol: 'alpha-enhancement', customProtocolConfig }),
+      { merge: true },
+    );
   });
 
   it('rejects a clinician scope that does not match the authenticated clinician', async () => {

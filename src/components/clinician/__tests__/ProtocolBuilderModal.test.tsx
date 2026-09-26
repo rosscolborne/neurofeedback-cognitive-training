@@ -5,6 +5,7 @@ import type { ClientProfile, ProtocolTemplate } from '../../../types';
 import { resolveProtocolRuntime } from '../../../services/adaptiveEngine';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { EEGEngine } from '../../../services/eegEngine';
+import { calculateRewardAmplitudeUv } from '../../../services/rewardSpectrum';
 import { ProtocolBuilderModal } from '../ProtocolBuilderModal';
 
 const canonical = getClinicalProtocolTemplate('alpha-enhancement')!;
@@ -71,42 +72,56 @@ describe('ProtocolBuilderModal persistence state', () => {
     renderer.unmount();
   });
 
-  it.each([
-    ['minimum', { freqMin: canonical.rewardBand.freqMin + 1 }],
-    ['maximum', { freqMax: canonical.rewardBand.freqMax + 1 }],
-    ['condition', { targetCondition: 'below' as const }],
-    ['threshold', { targetThreshold: canonical.rewardBand.targetThreshold + 1 }],
-  ])('blocks an unsupported saved reward %s before another save', async (_field, change) => {
-    const legacy = { ...canonical, rewardBand: { ...canonical.rewardBand, ...change } };
-    const { renderer, onSave } = await renderModal(legacy);
-    for (const label of [
-      'Canonical reward minimum', 'Canonical reward maximum',
-      'Canonical reward condition', 'Canonical reward threshold reference',
-    ]) {
-      const field = renderer.root.findByProps({ 'aria-label': label });
-      expect(field.props.readOnly).toBe(true);
-      expect(field.props.onChange).toBeUndefined();
-    }
-    expect(renderer.root.findByProps({ type: 'submit' }).props.disabled).toBe(true);
-    await submit(renderer);
-    expect(onSave).not.toHaveBeenCalled();
-    renderer.unmount();
+  it('saves two clinician-selected rewards that produce different training feedback', async () => {
+    const saveSelected = async (min: number, max: number) => {
+      const { renderer, onSave } = await renderModal(canonical);
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+        renderer.root.findByProps({ 'aria-label': 'Reward minimum' }).props.onChange({ target: { value: String(min) } });
+        renderer.root.findByProps({ 'aria-label': 'Reward maximum' }).props.onChange({ target: { value: String(max) } });
+        renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.onChange({ target: { value: '6' } });
+      });
+      await submit(renderer);
+      expect(onSave).toHaveBeenCalledOnce();
+      const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
+      renderer.unmount();
+      return saved;
+    };
+    const raw = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 10 * index / 256));
+    const feedbackFor = (template: ProtocolTemplate) => {
+      const resolution = trainingConfig(template);
+      if (!resolution.ok) throw new Error(resolution.error);
+      const engine = new EEGEngine();
+      engine.configureProtocol(resolution.config);
+      return engine.evaluateFeedbackForBands(
+        { delta: 0, theta: 4, alpha: 12, smr: 8, beta: 6, gamma: 3 },
+        { alpha: true },
+        calculateRewardAmplitudeUv([raw, raw, raw, raw], 256, template.rewardBand),
+      );
+    };
+    const a = await saveSelected(9, 11);
+    const b = await saveSelected(16, 18);
+    expect(a.customRewardEnabled).toBe(true);
+    expect(b.customRewardEnabled).toBe(true);
+    expect(feedbackFor(a)).toMatchObject({ available: true, inZone: true });
+    expect(feedbackFor(b)).toMatchObject({ available: true, inZone: false });
   });
 
-  it('repairs a legacy noncanonical reward and then permits training', async () => {
+  it('blocks malformed reward input before save and repairs a legacy assignment by editing it', async () => {
     const legacy: ProtocolTemplate = {
       ...canonical,
       protocolType: undefined,
       name: 'Morning Alpha Plan',
       sessionDurationMinutes: 20,
-      rewardBand: { ...canonical.rewardBand, freqMin: 9, targetCondition: 'below' },
+      rewardBand: { ...canonical.rewardBand, freqMin: 9, freqMax: 50, targetCondition: 'below' },
     };
     const { renderer, onSave } = await renderModal(legacy);
-    expect(trainingConfig(legacy)).toMatchObject({ ok: false, error: expect.stringContaining('canonical reward') });
+    expect(trainingConfig(legacy)).toMatchObject({ ok: false });
+    await submit(renderer);
+    expect(onSave).not.toHaveBeenCalled();
     await act(async () => {
-      renderer.root.findAllByType('button').find(button => button.children.includes('Restore canonical reward definition'))!.props.onClick();
+      renderer.root.findByProps({ 'aria-label': 'Reward maximum' }).props.onChange({ target: { value: '11' } });
     });
-    expect(renderer.root.findByProps({ type: 'submit' }).props.disabled).toBe(false);
     await submit(renderer);
 
     const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
@@ -115,9 +130,10 @@ describe('ProtocolBuilderModal persistence state', () => {
       alias: 'Morning Alpha Plan',
       name: canonical.name,
       sessionDurationMinutes: 20,
-      rewardBand: canonical.rewardBand,
+      customRewardEnabled: true,
+      rewardBand: { ...canonical.rewardBand, freqMin: 9, freqMax: 11, targetCondition: 'below' },
     });
-    expect(trainingConfig(saved)).toMatchObject({ ok: true, config: { durationSeconds: 1200, initialThreshold: 11 } });
+    expect(trainingConfig(saved)).toMatchObject({ ok: true, config: { durationSeconds: 1200, initialThreshold: 11.5, lowerIsBetter: true } });
     renderer.unmount();
   });
 });

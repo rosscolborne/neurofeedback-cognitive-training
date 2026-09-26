@@ -1,6 +1,6 @@
-import { BandPowers, ClientProfile, MetricProvenance, ProtocolType, SessionPhase } from '../types';
+import { BandPowers, ClientProfile, MetricProvenance, ProtocolTemplate, ProtocolType, SessionPhase } from '../types';
 import { getClinicalProtocolTemplate, hasCanonicalRewardDefinition } from './clinicalProtocolTemplates';
-import { getDefaultProtocolThreshold, getProtocolTypeForTemplate } from './protocols';
+import { getDefaultProtocolThreshold, getProtocolTypeForTemplate, inferProtocolTypeForTemplate, resolvePatientProtocol } from './protocols';
 
 export interface ProtocolRuntimeConfig {
   protocol: ProtocolType;
@@ -8,6 +8,7 @@ export interface ProtocolRuntimeConfig {
   initialThreshold: number;
   adaptiveStep: number;
   lowerIsBetter: boolean;
+  rewardBand?: ProtocolTemplate['rewardBand'];
   thresholdBounds: { min: number; max: number };
   source: 'canonical-default' | 'patient-override';
 }
@@ -29,20 +30,46 @@ const LOWER_IS_BETTER: Record<ProtocolType, boolean> = {
 };
 
 export const PROTOCOL_RUNTIME_LIMITATIONS =
-  'Runtime controls: canonical protocol mode, session duration, adaptive step, and validated threshold bounds. '
-  + 'Canonical reward-band fields, inhibit bands, montage or device mapping, sensitivity, clinical notes or rationale, '
-  + 'recommended experiences, and the custom alias are documentation/display-only. The template reward threshold is not the runtime starting threshold. '
-  + 'Reward-band frequency, condition, or threshold edits are unsupported and block training.';
+  'Runtime controls: protocol mode, session duration, adaptive step, validated threshold bounds, and clinician-enabled reward frequency, condition, and threshold. '
+  + 'Custom reward feedback uses the selected frequency range in raw EEG, not an approximation from broad band totals. '
+  + 'Inhibit bands, montage or device mapping, sensitivity, clinical notes or rationale, recommended experiences, and the custom alias are documentation/display-only.';
+
+export function validateCustomRewardBand(reward: ProtocolTemplate['rewardBand'] | undefined): string | null {
+  if (!reward || !finite(reward.freqMin) || !finite(reward.freqMax)
+    || reward.freqMin < 3 || reward.freqMax > 45 || reward.freqMax - reward.freqMin < 0.5) {
+    return 'Reward frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
+  }
+  if (reward.targetCondition !== 'above' && reward.targetCondition !== 'below') {
+    return 'Reward condition must be above or below.';
+  }
+  if (!finite(reward.targetThreshold) || reward.targetThreshold < 0 || reward.targetThreshold > 1000
+    || !hasSupportedThresholdPrecision(reward.targetThreshold)) {
+    return 'Reward threshold must be a finite value from 0 to 1000 µV with at most two decimal places.';
+  }
+  return null;
+}
 
 /** Resolve the persisted assignment without allowing its display alias to affect training semantics. */
 export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeResolution {
   const custom = client.customProtocolConfig;
-  if (!client.assignedProtocol) {
-    return { ok: false, error: 'A clinician must assign a training protocol before this patient can begin training.' };
-  }
-  const canonical = getClinicalProtocolTemplate(client.assignedProtocol);
+  const assignedProtocol = resolvePatientProtocol(client);
+  const canonical = getClinicalProtocolTemplate(assignedProtocol);
   if (!canonical) return { ok: false, error: 'The assigned protocol is not supported by this training engine.' };
-  const initialThreshold = getDefaultProtocolThreshold(client.assignedProtocol);
+  if (custom && !client.assignedProtocol && !inferProtocolTypeForTemplate(custom)) {
+    return { ok: false, error: 'The saved protocol template has no supported training mode.' };
+  }
+  const rewardIsCustom = Boolean(custom && (
+    custom.customRewardEnabled === true
+    || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand)
+  ));
+  if (custom?.customRewardEnabled !== undefined && typeof custom.customRewardEnabled !== 'boolean') {
+    return { ok: false, error: 'The saved reward mode is invalid.' };
+  }
+  if (rewardIsCustom) {
+    const error = validateCustomRewardBand(custom?.rewardBand);
+    if (error) return { ok: false, error };
+  }
+  const initialThreshold = rewardIsCustom ? custom!.rewardBand.targetThreshold : getDefaultProtocolThreshold(assignedProtocol);
   const requestedBounds = client.customThresholdBounds;
   const thresholdBounds = requestedBounds ?? DEFAULT_THRESHOLD_BOUNDS;
   if (!finite(thresholdBounds.min) || !finite(thresholdBounds.max)
@@ -53,26 +80,21 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
   if (!custom) return {
     ok: true,
     config: {
-      protocol: client.assignedProtocol,
+      protocol: assignedProtocol,
       durationSeconds: Math.round(canonical.sessionDurationMinutes * 60),
       initialThreshold,
       adaptiveStep: canonical.adaptiveStep,
-      lowerIsBetter: LOWER_IS_BETTER[client.assignedProtocol],
+      lowerIsBetter: LOWER_IS_BETTER[assignedProtocol],
       thresholdBounds: { ...thresholdBounds },
       source: 'canonical-default',
     },
   };
 
-  const protocol = getProtocolTypeForTemplate(custom, client.assignedProtocol);
-  if (protocol !== client.assignedProtocol) {
+  const protocol = getProtocolTypeForTemplate(custom, assignedProtocol);
+  if (protocol !== assignedProtocol) {
     return { ok: false, error: 'The saved protocol template does not match the assigned training mode.' };
   }
-  if (!hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand)) {
-    return {
-      ok: false,
-      error: 'Custom reward frequencies, conditions, and thresholds are not supported by this engine. Restore the canonical reward definition before training.',
-    };
-  }
+  if (!custom.rewardBand) return { ok: false, error: 'The saved reward definition is missing.' };
   if (!finite(custom.sessionDurationMinutes) || custom.sessionDurationMinutes < 1 || custom.sessionDurationMinutes > 180) {
     return { ok: false, error: 'Session duration must be between 1 and 180 minutes.' };
   }
@@ -88,7 +110,8 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
       durationSeconds: Math.round(custom.sessionDurationMinutes * 60),
       initialThreshold,
       adaptiveStep: custom.adaptiveStep,
-      lowerIsBetter: LOWER_IS_BETTER[protocol],
+      lowerIsBetter: rewardIsCustom ? custom.rewardBand.targetCondition === 'below' : LOWER_IS_BETTER[protocol],
+      rewardBand: rewardIsCustom ? { ...custom.rewardBand } : undefined,
       thresholdBounds: { ...thresholdBounds },
       source: 'patient-override',
     },
@@ -100,9 +123,21 @@ export function evaluateProtocolFeedback(
   threshold: number,
   bands: BandPowers,
   availability: Partial<Record<keyof BandPowers, boolean>>,
+  rewardBand?: ProtocolTemplate['rewardBand'],
+  rewardAmplitudeUv?: number | null,
 ): { ratio: number | null; inZone: boolean; zoneScore: number; available: boolean } {
   const available = (...keys: Array<keyof BandPowers>) => keys.every(key => availability[key] && finite(bands[key]));
   const ratio = available('theta', 'beta') ? bands.theta / Math.max(1e-9, bands.beta) : null;
+  if (rewardBand) {
+    if (!finite(rewardAmplitudeUv)) return { ratio, inZone: false, zoneScore: 0, available: false };
+    const lowerIsBetter = rewardBand.targetCondition === 'below';
+    const inZone = lowerIsBetter ? rewardAmplitudeUv <= threshold : rewardAmplitudeUv >= threshold;
+    const width = 2;
+    const zoneScore = lowerIsBetter
+      ? 1 - (rewardAmplitudeUv - threshold) / width
+      : (rewardAmplitudeUv - threshold + width) / (2 * width);
+    return { ratio, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+  }
   let metric: number | null = null;
   let lowerIsBetter = false;
   let width = 1;

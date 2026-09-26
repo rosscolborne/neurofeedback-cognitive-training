@@ -5,8 +5,10 @@ import {
   CLINICAL_PROTOCOL_TEMPLATES,
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
+  hasCanonicalRewardDefinition,
 } from '../../services/clinicalProtocolTemplates';
-import { getProtocolTypeForTemplate } from '../../services/protocols';
+import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
+import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -21,12 +23,13 @@ const formatIdentifier = (value?: string) =>
     .join(' ') : 'Unavailable';
 
 function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
+  const resolvedProtocol = resolvePatientProtocol(client);
   const saved = client.customProtocolConfig;
-  if (saved && getProtocolTypeForTemplate(saved, client.assignedProtocol) === client.assignedProtocol) {
+  if (saved && getProtocolTypeForTemplate(saved, resolvedProtocol) === resolvedProtocol) {
     return saved;
   }
   return CLINICAL_PROTOCOL_TEMPLATES.find(
-    (template) => getProtocolTypeForTemplate(template) === client.assignedProtocol
+    (template) => getProtocolTypeForTemplate(template) === resolvedProtocol
   ) ?? null;
 }
 
@@ -46,11 +49,18 @@ const Detail: React.FC<{ label: string; value: React.ReactNode }> = ({ label, va
 
 export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ client, onClose }) => {
   const protocol = getDisplayedProtocol(client);
-  const evidenceProtocol = client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol) : undefined;
-  const assignmentAlias = protocol && client.assignedProtocol
-    ? getProtocolAssignmentAlias(protocol, client.assignedProtocol)
+  const resolvedProtocol = resolvePatientProtocol(client);
+  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
+  const assignmentAlias = protocol
+    ? getProtocolAssignmentAlias(protocol, resolvedProtocol)
     : undefined;
-  const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(client.assignedProtocol);
+  const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
+  const runtime = resolveProtocolRuntime(client);
+  const activeCustomReward = runtime.ok && Boolean(runtime.config.rewardBand);
+  const savedCustomReward = Boolean(client.customProtocolConfig && (
+    client.customProtocolConfig.customRewardEnabled
+    || (evidenceProtocol && !hasCanonicalRewardDefinition(client.customProtocolConfig.rewardBand, evidenceProtocol.rewardBand))
+  ));
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -129,7 +139,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
               <Detail label="Reward minimum" value={`${protocol.rewardBand.freqMin} Hz`} />
               <Detail label="Reward maximum" value={`${protocol.rewardBand.freqMax} Hz`} />
-              <Detail label="Template reward reference" value={`${protocol.rewardBand.targetThreshold} µV`} />
+              <Detail label={activeCustomReward ? 'Active reward threshold' : savedCustomReward ? 'Saved reward threshold (training unavailable)' : 'Template reward reference'} value={`${protocol.rewardBand.targetThreshold} µV`} />
               <Detail label="Duration" value={`${protocol.sessionDurationMinutes} minutes`} />
             </div>
           )}

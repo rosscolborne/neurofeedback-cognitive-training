@@ -1,7 +1,7 @@
 import type { ProtocolTemplate, ProtocolType } from '../types';
 
-// Reward thresholds here are reference metadata; runtime feedback starts from
-// the protocol-mode thresholds in protocols.ts (for example, alpha 11 vs 11.5).
+// These are reference definitions. Uncustomized assignments use the broad-mode
+// runtime defaults in protocols.ts; a clinician can opt into this reward band.
 export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
   {
     id: 'proto-lubar-tbr',

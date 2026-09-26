@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
-import { getProtocolTypeForTemplate } from '../../services/protocols';
-import { getClinicalProtocolTemplate, getProtocolAssignmentAlias, hasCanonicalRewardDefinition } from '../../services/clinicalProtocolTemplates';
+import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
+import { getClinicalProtocolTemplate, getProtocolAssignmentAlias } from '../../services/clinicalProtocolTemplates';
+import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
@@ -102,10 +103,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
   const handleSaveProtocol = async (newTemplate: ProtocolTemplate) => {
     const assigned = getProtocolTypeForTemplate(newTemplate, client.assignedProtocol);
-    const canonical = getClinicalProtocolTemplate(assigned);
-    if (!canonical || !hasCanonicalRewardDefinition(newTemplate.rewardBand, canonical.rewardBand)) {
-      throw new Error('Restore the canonical reward definition before saving this assignment.');
-    }
 
     const updated: ClientProfile = {
       ...client,
@@ -113,6 +110,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       customProtocolConfig: newTemplate,
       allowedExperiences: newTemplate.recommendedExperiences,
     };
+    const runtime = resolveProtocolRuntime(updated);
+    if (!runtime.ok) throw new Error(runtime.error);
     await onUpdateClient(updated);
   };
 
@@ -128,9 +127,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     });
   };
 
-  const assignedProtocol = typeof client.assignedProtocol === 'string' && client.assignedProtocol.trim()
-    ? client.assignedProtocol
-    : null;
+  const assignedProtocol = resolvePatientProtocol(client);
+  const evidenceProtocolName = getClinicalProtocolTemplate(assignedProtocol)?.name ?? assignedProtocol.replace(/-/g, ' ').toUpperCase();
   const persistedBrainMaps = persistedBrainMapsByPatient[client.id] ?? [];
   const brainMapLoadState = brainMapLoadResult?.clientId === client.id ? brainMapLoadResult.state : 'loading';
   const persistedIds = new Set(persistedBrainMaps.map((map) => map.id));
@@ -212,7 +210,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition || 'Condition unavailable'} • Protocol: <strong>{assignedProtocol ? assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
+              {client.condition || 'Condition unavailable'} • Protocol: <strong>{evidenceProtocolName}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
             </div>
           </div>
         </div>
@@ -424,7 +422,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                 Active Protocol: {client.customProtocolConfig
                   ? (assignedProtocol ? getProtocolAssignmentAlias(client.customProtocolConfig, assignedProtocol) : undefined) || client.customProtocolConfig.name || 'Unavailable'
-                  : assignedProtocol ? assignedProtocol.replace(/-/g, ' ').toUpperCase() : 'Unavailable'}
+                  : evidenceProtocolName}
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {client.customProtocolConfig && <>Evidence-Based Protocol: <strong>{client.customProtocolConfig.name}</strong> • </>}
@@ -641,7 +639,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       {/* Protocol Builder Modal */}
       {showProtocolBuilder && (
         <ProtocolBuilderModal
-          assignedProtocol={client.assignedProtocol}
+          assignedProtocol={assignedProtocol}
           initialProtocol={client.customProtocolConfig}
           onSave={handleSaveProtocol}
           onClose={() => setShowProtocolBuilder(false)}

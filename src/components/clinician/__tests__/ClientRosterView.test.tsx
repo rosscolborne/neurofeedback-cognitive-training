@@ -2,6 +2,7 @@ import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientProfile } from '../../../types';
+import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { ClientRosterView } from '../ClientRosterView';
 
 const blankClient: ClientProfile = {
@@ -17,6 +18,37 @@ const blankClient: ClientProfile = {
 };
 
 describe('ClientRosterView blank-profile editing', () => {
+  it('changes a condition without replacing the saved protocol and shows it after refresh', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const customProtocolConfig = {
+      ...getClinicalProtocolTemplate('alpha-enhancement')!,
+      alias: 'Evening Alpha',
+    };
+    const assigned: ClientProfile = {
+      ...blankClient,
+      condition: 'ADHD (Inattentive)',
+      customProtocolConfig,
+    };
+    const onUpdateClient = vi.fn().mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ClientRosterView clients={[assigned]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} onUpdateClient={onUpdateClient} />);
+    });
+    act(() => renderer.root.findByProps({ title: 'Edit Patient' }).props.onClick({ stopPropagation: vi.fn() }));
+    act(() => renderer.root.findAllByType('select')[0].props.onChange({ target: { value: 'Generalized Anxiety' } }));
+    await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
+    const saved = onUpdateClient.mock.calls[0][0] as ClientProfile;
+    expect(saved).toMatchObject({ condition: 'Generalized Anxiety' });
+    expect(saved.assignedProtocol).toBeUndefined();
+    expect(saved.customProtocolConfig).toBe(customProtocolConfig);
+    await act(async () => {
+      renderer.update(<ClientRosterView clients={[saved]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} onUpdateClient={onUpdateClient} />);
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('Generalized Anxiety');
+    expect(JSON.stringify(renderer.toJSON())).toContain(getClinicalProtocolTemplate('alpha-enhancement')!.name);
+    renderer.unmount();
+  });
+
   it('keeps unavailable clinical fields absent when saving unrelated edits', async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const onUpdateClient = vi.fn().mockResolvedValue(undefined);

@@ -1,4 +1,17 @@
-import type { ProtocolTemplate, ProtocolType } from '../types';
+import type { ClientProfile, ProtocolTemplate, ProtocolType } from '../types';
+
+export const DEFAULT_PROTOCOL: ProtocolType = 'theta-beta-ratio';
+
+/** The assignment shown to both roles is the mode training initializes. */
+export function resolvePatientProtocol(
+  client: Pick<ClientProfile, 'assignedProtocol' | 'customProtocolConfig'>,
+): ProtocolType {
+  if (client.assignedProtocol) return client.assignedProtocol;
+  if (client.customProtocolConfig) {
+    return inferProtocolTypeForTemplate(client.customProtocolConfig) ?? DEFAULT_PROTOCOL;
+  }
+  return DEFAULT_PROTOCOL;
+}
 
 export interface ProtocolDefinition {
   value: ProtocolType;
@@ -26,7 +39,7 @@ export function getDefaultProtocolThreshold(protocol: ProtocolType): number {
  */
 export function getProtocolTypeForTemplate(
   template: ProtocolTemplate,
-  fallback: ProtocolType = 'theta-beta-ratio'
+  fallback: ProtocolType = DEFAULT_PROTOCOL
 ): ProtocolType {
   return inferProtocolTypeForTemplate(template) ?? fallback;
 }
