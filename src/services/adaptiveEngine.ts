@@ -1,5 +1,5 @@
-import { BandPowers, ClientProfile, MetricProvenance, ProtocolTemplate, ProtocolType, SessionPhase } from '../types';
-import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
+import { BandPowers, ClientProfile, MetricProvenance, ProtocolType, SessionPhase } from '../types';
+import { getClinicalProtocolTemplate, hasCanonicalRewardDefinition } from './clinicalProtocolTemplates';
 import { getDefaultProtocolThreshold, getProtocolTypeForTemplate } from './protocols';
 
 export interface ProtocolRuntimeConfig {
@@ -31,17 +31,8 @@ const LOWER_IS_BETTER: Record<ProtocolType, boolean> = {
 export const PROTOCOL_RUNTIME_LIMITATIONS =
   'Runtime controls: canonical protocol mode, session duration, adaptive step, and validated threshold bounds. '
   + 'Canonical reward-band fields, inhibit bands, montage or device mapping, sensitivity, clinical notes or rationale, '
-  + 'recommended experiences, and the custom alias are documentation/display-only. Reward-band frequency, condition, or threshold edits are unsupported and block training.';
-
-function sameRewardDefinition(
-  value: ProtocolTemplate['rewardBand'],
-  canonical: ProtocolTemplate['rewardBand'],
-): boolean {
-  return value?.freqMin === canonical.freqMin
-    && value?.freqMax === canonical.freqMax
-    && value?.targetCondition === canonical.targetCondition
-    && value?.targetThreshold === canonical.targetThreshold;
-}
+  + 'recommended experiences, and the custom alias are documentation/display-only. The template reward threshold is not the runtime starting threshold. '
+  + 'Reward-band frequency, condition, or threshold edits are unsupported and block training.';
 
 /** Resolve the persisted assignment without allowing its display alias to affect training semantics. */
 export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeResolution {
@@ -76,7 +67,7 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
   if (protocol !== client.assignedProtocol) {
     return { ok: false, error: 'The saved protocol template does not match the assigned training mode.' };
   }
-  if (!custom.rewardBand || !sameRewardDefinition(custom.rewardBand, canonical.rewardBand)) {
+  if (!hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand)) {
     return {
       ok: false,
       error: 'Custom reward frequencies, conditions, and thresholds are not supported by this engine. Restore the canonical reward definition before training.',

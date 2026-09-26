@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { getProtocolTypeForTemplate } from '../../services/protocols';
-import { getProtocolAssignmentAlias } from '../../services/clinicalProtocolTemplates';
+import { getClinicalProtocolTemplate, getProtocolAssignmentAlias, hasCanonicalRewardDefinition } from '../../services/clinicalProtocolTemplates';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
@@ -102,6 +102,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
   const handleSaveProtocol = async (newTemplate: ProtocolTemplate) => {
     const assigned = getProtocolTypeForTemplate(newTemplate, client.assignedProtocol);
+    const canonical = getClinicalProtocolTemplate(assigned);
+    if (!canonical || !hasCanonicalRewardDefinition(newTemplate.rewardBand, canonical.rewardBand)) {
+      throw new Error('Restore the canonical reward definition before saving this assignment.');
+    }
 
     const updated: ClientProfile = {
       ...client,
@@ -637,6 +641,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       {/* Protocol Builder Modal */}
       {showProtocolBuilder && (
         <ProtocolBuilderModal
+          assignedProtocol={client.assignedProtocol}
           initialProtocol={client.customProtocolConfig}
           onSave={handleSaveProtocol}
           onClose={() => setShowProtocolBuilder(false)}

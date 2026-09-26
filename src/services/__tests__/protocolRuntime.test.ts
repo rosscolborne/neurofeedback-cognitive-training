@@ -88,6 +88,12 @@ describe('protocol runtime assignment', () => {
       rewardBand: { ...canonical.rewardBand, targetThreshold: canonical.rewardBand.targetThreshold + 1 },
     });
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: changedThreshold }))).toMatchObject({ ok: false });
+    const changedCondition = identicalCustom('alpha-enhancement', {
+      rewardBand: { ...canonical.rewardBand, targetCondition: 'below' },
+    });
+    expect(resolveProtocolRuntime(client('alpha-enhancement', { customProtocolConfig: changedCondition }))).toMatchObject({
+      ok: false, error: expect.stringContaining('canonical reward definition'),
+    });
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customThresholdBounds: { min: 12, max: 10 } }))).toMatchObject({ ok: false });
     expect(resolveProtocolRuntime(client('alpha-enhancement', { customThresholdBounds: { min: 12, max: 13 } }))).toMatchObject({ ok: false });
   });

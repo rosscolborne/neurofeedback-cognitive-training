@@ -129,7 +129,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
               <Detail label="Reward minimum" value={`${protocol.rewardBand.freqMin} Hz`} />
               <Detail label="Reward maximum" value={`${protocol.rewardBand.freqMax} Hz`} />
-              <Detail label="Threshold" value={`${protocol.rewardBand.targetThreshold} µV`} />
+              <Detail label="Template reward reference" value={`${protocol.rewardBand.targetThreshold} µV`} />
               <Detail label="Duration" value={`${protocol.sessionDurationMinutes} minutes`} />
             </div>
           )}

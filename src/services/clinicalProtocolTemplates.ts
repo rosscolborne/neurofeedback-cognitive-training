@@ -1,5 +1,7 @@
 import type { ProtocolTemplate, ProtocolType } from '../types';
 
+// Reward thresholds here are reference metadata; runtime feedback starts from
+// the protocol-mode thresholds in protocols.ts (for example, alpha 11 vs 11.5).
 export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
   {
     id: 'proto-lubar-tbr',
@@ -157,6 +159,16 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
 
 export function getClinicalProtocolTemplate(protocolType: ProtocolType): ProtocolTemplate | undefined {
   return CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.protocolType === protocolType);
+}
+
+export function hasCanonicalRewardDefinition(
+  rewardBand: ProtocolTemplate['rewardBand'] | undefined,
+  canonical: ProtocolTemplate['rewardBand'],
+): boolean {
+  return rewardBand?.freqMin === canonical.freqMin
+    && rewardBand?.freqMax === canonical.freqMax
+    && rewardBand?.targetCondition === canonical.targetCondition
+    && rewardBand?.targetThreshold === canonical.targetThreshold;
 }
 
 /** Read aliases saved before `alias` was introduced without changing Firestore data. */

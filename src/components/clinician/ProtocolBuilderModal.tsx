@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
-import { ProtocolTemplate } from '../../types';
+import { ProtocolTemplate, ProtocolType } from '../../types';
 import { CheckCircle2, X } from 'lucide-react';
 import {
   CLINICAL_PROTOCOL_TEMPLATES,
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
+  hasCanonicalRewardDefinition,
 } from '../../services/clinicalProtocolTemplates';
-import { getProtocolTypeForTemplate } from '../../services/protocols';
+import { getDefaultProtocolThreshold, getProtocolTypeForTemplate } from '../../services/protocols';
 
 interface ProtocolBuilderModalProps {
+  assignedProtocol?: ProtocolType;
   initialProtocol?: ProtocolTemplate;
   onSave: (template: ProtocolTemplate) => Promise<void>;
   onClose: () => void;
 }
 
 export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
+  assignedProtocol,
   initialProtocol,
   onSave,
   onClose,
 }) => {
-  const initialProtocolType = initialProtocol
-    ? getProtocolTypeForTemplate(initialProtocol)
-    : CLINICAL_PROTOCOL_TEMPLATES[0].protocolType!;
+  const initialProtocolType = assignedProtocol
+    ?? (initialProtocol ? getProtocolTypeForTemplate(initialProtocol) : CLINICAL_PROTOCOL_TEMPLATES[0].protocolType!);
   const initialEvidenceTemplate = getClinicalProtocolTemplate(initialProtocolType) ?? CLINICAL_PROTOCOL_TEMPLATES[0];
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
     initialEvidenceTemplate
@@ -29,15 +31,15 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
   const [alias, setAlias] = useState(
     initialProtocol ? getProtocolAssignmentAlias(initialProtocol, initialProtocolType) ?? '' : ''
   );
-  const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || CLINICAL_PROTOCOL_TEMPLATES[0].montageSite);
+  const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || initialEvidenceTemplate.montageSite);
   const [museMapping, setMuseMapping] = useState(
-    initialProtocol?.museChannelMapping || CLINICAL_PROTOCOL_TEMPLATES[0].museChannelMapping || 'AF7 / AF8 Frontal'
+    initialProtocol?.museChannelMapping || initialEvidenceTemplate.museChannelMapping || 'AF7 / AF8 Frontal'
   );
-  const [rewardMin, setRewardMin] = useState(initialProtocol?.rewardBand.freqMin || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMin);
-  const [rewardMax, setRewardMax] = useState(initialProtocol?.rewardBand.freqMax || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMax);
-  const [rewardThreshold, setRewardThreshold] = useState(initialProtocol?.rewardBand.targetThreshold || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.targetThreshold);
-  const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || CLINICAL_PROTOCOL_TEMPLATES[0].sessionDurationMinutes);
-  const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || CLINICAL_PROTOCOL_TEMPLATES[0].clinicalNotes);
+  const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || initialEvidenceTemplate.sessionDurationMinutes);
+  const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || initialEvidenceTemplate.clinicalNotes);
+  const [needsRewardRepair, setNeedsRewardRepair] = useState(Boolean(
+    initialProtocol && !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand)
+  ));
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -45,27 +47,25 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     setSelectedTemplate(tmpl);
     setMontageSite(tmpl.montageSite);
     setMuseMapping(tmpl.museChannelMapping || 'AF7 / AF8 Frontal');
-    setRewardMin(tmpl.rewardBand.freqMin);
-    setRewardMax(tmpl.rewardBand.freqMax);
-    setRewardThreshold(tmpl.rewardBand.targetThreshold);
+    setNeedsRewardRepair(false);
+    setSaveError(null);
     setDurationMins(tmpl.sessionDurationMinutes);
     setClinicalNotes(tmpl.clinicalNotes);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsRewardRepair) {
+      setSaveError('Restore the canonical reward definition before saving this assignment.');
+      return;
+    }
     const updated: ProtocolTemplate = {
       ...selectedTemplate,
       id: 'custom-' + Date.now(),
       alias: alias.trim() || undefined,
       montageSite,
       museChannelMapping: museMapping,
-      rewardBand: {
-        ...selectedTemplate.rewardBand,
-        freqMin: Number(rewardMin),
-        freqMax: Number(rewardMax),
-        targetThreshold: Number(rewardThreshold),
-      },
+      rewardBand: { ...selectedTemplate.rewardBand },
       sessionDurationMinutes: Number(durationMins),
       clinicalNotes,
     };
@@ -213,8 +213,28 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               />
             </div>
           </div>
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+            Site, channel mapping, and clinical notes document this assignment; they do not change training feedback.
+          </div>
 
-          {/* Reward & Inhibit Frequency Bounds */}
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            Canonical reward definition (read-only reference). Training starts at the {selectedTemplate.protocolType?.replace(/-/g, ' ')}
+            {' '}runtime threshold of {getDefaultProtocolThreshold(selectedTemplate.protocolType!)}; the template reward threshold below does not set it.
+          </div>
+          {needsRewardRepair && (
+            <div role="alert" style={{ padding: '10px 12px', border: '1px solid var(--status-alert)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}>
+              This saved assignment has unsupported reward settings, so training is blocked. Restore the canonical reward definition to keep its other assignment details and save it again.
+              <button
+                type="button"
+                onClick={() => { setNeedsRewardRepair(false); setSaveError(null); }}
+                className="btn btn-ghost"
+                style={{ display: 'block', marginTop: '8px' }}
+              >
+                Restore canonical reward definition
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
@@ -222,9 +242,9 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               </label>
               <input
                 type="number"
-                step="0.5"
-                value={rewardMin}
-                onChange={(e) => setRewardMin(parseFloat(e.target.value))}
+                aria-label="Canonical reward minimum"
+                readOnly
+                value={selectedTemplate.rewardBand.freqMin}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -234,21 +254,33 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               </label>
               <input
                 type="number"
-                step="0.5"
-                value={rewardMax}
-                onChange={(e) => setRewardMax(parseFloat(e.target.value))}
+                aria-label="Canonical reward maximum"
+                readOnly
+                value={selectedTemplate.rewardBand.freqMax}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
             <div>
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Threshold (µV)
+                Reward condition
+              </label>
+              <input
+                type="text"
+                aria-label="Canonical reward condition"
+                readOnly
+                value={selectedTemplate.rewardBand.targetCondition}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                Template reward reference (µV)
               </label>
               <input
                 type="number"
-                step="0.1"
-                value={rewardThreshold}
-                onChange={(e) => setRewardThreshold(parseFloat(e.target.value))}
+                aria-label="Canonical reward threshold reference"
+                readOnly
+                value={selectedTemplate.rewardBand.targetThreshold}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
             </div>
@@ -288,7 +320,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
-            <button type="submit" disabled={isSaving} className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
+            <button type="submit" disabled={isSaving || needsRewardRepair} className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
               {isSaving ? 'Saving…' : 'Assign Protocol Configuration'}
             </button>
             <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>
