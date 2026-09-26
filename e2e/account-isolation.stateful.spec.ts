@@ -133,7 +133,7 @@ function escapeRegExp(value: string): string {
 test.describe('fresh-account truthfulness and cross-account isolation (stateful)', () => {
     test.skip(!statefulRunRequested(), 'Stateful: run through npm run test:e2e:stateful:isolation.');
 
-    test('fresh patient and unrelated clinician see only their persisted, authorized data', async ({ browser, stateful }) => {
+    test('fresh patient and unrelated clinician see only their persisted, authorized data', async ({ browser, stateful, permissionErrorGuard }) => {
         const dedicatedPatient = await openDedicatedPatient(browser);
         const dedicatedClinician = await openDedicatedClinician(browser);
         expect(dedicatedClinician.identity.projectId).toBe(dedicatedPatient.identity.projectId);
@@ -226,6 +226,9 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             await expect(clinicianPage.getByText('No patients are in this cohort.', { exact: true })).toBeVisible();
             await expect(clinicianPage.getByText(dedicatedPatientName, { exact: true })).toHaveCount(0);
 
+            // Only this browser context's deliberate direct probes may return
+            // permission-denied; the other contexts remain under the guard.
+            permissionErrorGuard.expectDenialsIn(clinicianPage.context());
             await expectUnrelatedClinicianAuthorizationDenied(
                 clinicianPage,
                 dedicatedPatient.identity.uid,

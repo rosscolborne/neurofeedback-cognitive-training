@@ -53,6 +53,11 @@ export default defineConfig({
             testMatch: /smoke\.spec\.ts/,
         },
         {
+            name: 'permission-guard',
+            testMatch: /permission-error-guard\.spec\.ts/,
+            use: noCapture,
+        },
+        {
             name: 'auth-patient',
             testMatch: /auth\.setup\.ts/,
             grep: /patient authentication/,

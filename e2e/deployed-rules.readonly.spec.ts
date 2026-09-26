@@ -1,4 +1,5 @@
-import { expect, test, type Browser } from '@playwright/test';
+import type { Browser } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { authenticatedFirebaseIdentity, arriveAtClinicianDashboard, arriveAtPatientDashboard, identityFromStorageState, storageStatePath, type E2ERole } from './helpers/auth';
 
 /**

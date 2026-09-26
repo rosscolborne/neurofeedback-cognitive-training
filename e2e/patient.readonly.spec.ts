@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard } from './helpers/auth';
 import { aggregateSessionCount, openAllTimeProgress } from './helpers/patientProgress';
 

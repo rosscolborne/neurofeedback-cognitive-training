@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { identityFromStorageState } from './helpers/auth';
 import { inspectE2EHarness } from './helpers/dataLifecycle';
 

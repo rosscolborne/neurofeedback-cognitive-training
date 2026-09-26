@@ -21,10 +21,13 @@ npm run test:e2e:patient     # e2e/patient.readonly.spec.ts
 npm run test:e2e:clinician   # e2e/clinician.readonly.spec.ts
 npm run test:e2e:rules       # probes whether deployed Firestore rules match firestore.rules
 npm run test:e2e:harness     # offline unit tests for cleanup planning
+npm run test:e2e:guard       # browser checks for the permission-denied guard
 npm run test:e2e:preflight   # read-only Admin check of config, identities, leases, fixture
 ```
 
 Auth setup reads local `.env.e2e` and saves ignored storage states under `e2e/.auth/`. Never commit, print, attach, or inspect credentials or storage-state contents. Run `npm run test:e2e:auth` to refresh the states when they expire. Auth setup has trace and screenshot capture disabled to avoid credential exposure.
+
+Browser specs and auth setup import `test` from `e2e/fixtures.ts` so console, page, and Firestore network permission denials fail the test, including denials in additional browser contexts. Stateful specs inherit that guard through `e2e/helpers/statefulFixture.ts`. The cleanup-plan unit test imports directly from Playwright because it opens no browser. The fresh-account isolation spec calls `permissionErrorGuard.expectDenialsIn` only for the context running its deliberate cross-account denial probes; other contexts remain guarded and stateful cleanup still runs.
 
 Tests that need a different local server may set `E2E_BASE_URL` for the command, for example `E2E_BASE_URL=http://localhost:5174 npm run test:e2e:patient`.
 

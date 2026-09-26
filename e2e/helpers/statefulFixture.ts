@@ -1,4 +1,4 @@
-import { test as base } from '@playwright/test';
+import { expect, test as base } from '../fixtures';
 import {
     beginDisposableE2ERun,
     beginE2EPairRun,
@@ -55,4 +55,4 @@ export const test = base.extend<{ stateful: StatefulRuns }>({
     }, { timeout: 180_000 }],
 });
 
-export { expect } from '@playwright/test';
+export { expect };

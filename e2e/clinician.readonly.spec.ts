@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard } from './helpers/auth';
 
 // Read-only: confirms the saved clinician session reaches the real roster view.
