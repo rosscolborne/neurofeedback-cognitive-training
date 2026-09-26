@@ -6,9 +6,8 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
+import { DEFAULT_BETA_BAND_HZ, getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
 import { resolveProtocolRuntime, type ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
-import { DEFAULT_BETA_BAND_HZ } from './trainingTelemetry';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -24,7 +23,10 @@ const formatIdentifier = (value?: string) =>
 
 function describeTrainingRule(config: ProtocolRuntimeConfig): string {
   const comparison = config.lowerIsBetter ? 'at or below' : 'at or above';
-  if (config.rewardBand) return `Measured amplitude ${comparison} ${config.initialThreshold} µV`;
+  if (config.rewardBand) return `${comparison.charAt(0).toUpperCase()}${comparison.slice(1)} ${config.initialThreshold} µV`;
+  if (config.protocol === 'beta-downtraining') {
+    return `At or below ${config.initialThreshold} µV`;
+  }
   const metric = {
     'theta-beta-ratio': 'Theta/beta ratio',
     'smr-enhancement': 'SMR band',
@@ -154,7 +156,10 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
                   </>
                 )}
                 {!runtime.config.rewardBand && runtime.config.protocol === 'beta-downtraining' && (
-                  <Detail label="Feedback band" value={`${DEFAULT_BETA_BAND_HZ.demo} Hz (Demo); ${DEFAULT_BETA_BAND_HZ.brainflow} Hz (headset)`} />
+                  <>
+                    <Detail label="Min Frequency" value={`${DEFAULT_BETA_BAND_HZ.min} Hz`} />
+                    <Detail label="Max Frequency" value={`${DEFAULT_BETA_BAND_HZ.max} Hz`} />
+                  </>
                 )}
                 <Detail label="Reward when" value={describeTrainingRule(runtime.config)} />
                 <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />

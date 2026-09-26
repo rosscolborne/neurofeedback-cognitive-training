@@ -1,7 +1,6 @@
 import type { EEGDataPoint } from '../../types';
 import type { ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
-
-export const DEFAULT_BETA_BAND_HZ = { demo: '15–30', brainflow: '13–30' } as const;
+import { DEFAULT_BETA_BAND_HZ } from '../../services/protocols';
 
 /** Display only the measurement that the engine selected for this feedback frame. */
 export function describeActiveReward(config: ProtocolRuntimeConfig, sample: EEGDataPoint | null) {
@@ -12,7 +11,7 @@ export function describeActiveReward(config: ProtocolRuntimeConfig, sample: EEGD
     : config.protocol === 'theta-beta-ratio' ? 'THETA/BETA'
     : config.protocol === 'alpha-theta-crossover' ? 'THETA/ALPHA'
     : config.protocol === 'smr-enhancement' ? 'SMR (12–15 Hz)'
-    : config.protocol === 'beta-downtraining' ? `BETA (${DEFAULT_BETA_BAND_HZ[isBrainflow ? 'brainflow' : 'demo']} Hz)`
+    : config.protocol === 'beta-downtraining' ? `BETA (${DEFAULT_BETA_BAND_HZ.min}–${DEFAULT_BETA_BAND_HZ.max} Hz)`
     : `ALPHA (8–${isBrainflow ? '13' : '12'} Hz)`;
 
   const measured = sample?.activeRewardMetric?.value;
@@ -22,7 +21,7 @@ export function describeActiveReward(config: ProtocolRuntimeConfig, sample: EEGD
   const isRatio = !config.rewardBand && (
     config.protocol === 'theta-beta-ratio' || config.protocol === 'alpha-theta-crossover'
   );
-  const unit = isRatio ? '' : source === 'brainflow' ? ' µV²' : ' µV';
+  const unit = isRatio ? '' : config.rewardBand || config.protocol === 'beta-downtraining' || !isBrainflow ? ' µV' : ' µV²';
   return { label, value: `${measured.toFixed(isRatio ? 2 : 1)}${unit}` };
 }
 

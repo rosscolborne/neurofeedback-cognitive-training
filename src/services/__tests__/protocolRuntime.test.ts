@@ -16,7 +16,7 @@ import {
 import { EEGEngine } from '../eegEngine';
 import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
 import { calculateRewardAmplitudeUv } from '../rewardSpectrum';
-import { DEFAULT_PROTOCOL, resolvePatientProtocol } from '../protocols';
+import { DEFAULT_BETA_AMPLITUDE_REWARD_BAND, DEFAULT_PROTOCOL, resolvePatientProtocol } from '../protocols';
 
 const client = (assignedProtocol: ProtocolType = 'alpha-enhancement', override: Partial<ClientProfile> = {}): ClientProfile => ({
   id: 'patient-1', name: 'Patient', email: 'patient@example.com', avatarUrl: '',
@@ -43,6 +43,57 @@ const samples = (engine: AdaptiveDifficultyEngine, inZone: boolean) => {
 };
 
 describe('protocol runtime assignment', () => {
+  it('rewards default beta values at or below 14 and rejects values above 14', () => {
+    const resolved = resolveProtocolRuntime(client('beta-downtraining'));
+    if (!resolved.ok) throw new Error(resolved.error);
+    expect(resolved.config).toMatchObject({ initialThreshold: 14, lowerIsBetter: true });
+    expect(resolved.config.rewardBand).toBeUndefined();
+    for (const [beta, inZone] of [[13.9, true], [14, true], [14.1, false]] as const) {
+      expect(evaluateProtocolFeedback('beta-downtraining', resolved.config.initialThreshold, bands, available, DEFAULT_BETA_AMPLITUDE_REWARD_BAND, beta, 5))
+        .toMatchObject({ metric: beta, inZone, available: true });
+    }
+    expect(evaluateProtocolFeedback('beta-downtraining', 14, bands, available)).toMatchObject({ available: false });
+  });
+
+  it('uses raw 13–30 Hz amplitude for headset beta feedback even when backend band power disagrees', () => {
+    const resolution = resolveProtocolRuntime(client('beta-downtraining'));
+    if (!resolution.ok) throw new Error(resolution.error);
+    const engine = new EEGEngine();
+    engine.configureProtocol(resolution.config);
+    engine.isHardwareConnected = true;
+    const internal = engine as unknown as {
+      rawBuffers: Record<'tp9' | 'af7' | 'af8' | 'tp10', number[]>;
+      sourceFrameSequence: number;
+      lastSourceFrameAtMs: number;
+      latestServerBands: BandPowers;
+      latestServerBandAvailability: typeof available;
+      latestBandPowerProvenance: MetricProvenance;
+      latestTrainingFeedback: { ratio: number; metric: number; inZone: boolean; zoneScore: number; source: 'brainflow' };
+      generateSample: (dt: number) => EEGDataPoint;
+    };
+    const wave = (amplitude: number) => Array.from({ length: 512 }, (_, index) =>
+      amplitude * Math.sin(2 * Math.PI * 17 * index / 256));
+    internal.rawBuffers = { tp9: wave(12), af7: wave(12), af8: wave(12), tp10: wave(12) };
+    internal.sourceFrameSequence = 1;
+    internal.lastSourceFrameAtMs = Date.now();
+    internal.latestServerBands = { ...bands, beta: 100 };
+    internal.latestServerBandAvailability = available;
+    internal.latestBandPowerProvenance = brainflowProvenance;
+    internal.latestTrainingFeedback = { ratio: 0, metric: 100, inZone: false, zoneScore: 0, source: 'brainflow' };
+    expect(internal.generateSample(0.1)).toMatchObject({
+      inZoneAvailable: true, inZone: true,
+      activeRewardMetric: { value: expect.closeTo(12, 0), source: 'browser-dsp' },
+    });
+    internal.rawBuffers = { tp9: wave(16), af7: wave(16), af8: wave(16), tp10: wave(16) };
+    internal.sourceFrameSequence = 2;
+    internal.lastSourceFrameAtMs = Date.now();
+    internal.latestTrainingFeedback = { ratio: 0, metric: 0, inZone: true, zoneScore: 1, source: 'brainflow' };
+    expect(internal.generateSample(0.1)).toMatchObject({
+      inZoneAvailable: true, inZone: false,
+      activeRewardMetric: { value: expect.closeTo(16, 0), source: 'browser-dsp' },
+    });
+  });
+
   it.each<ProtocolType>(['theta-beta-ratio', 'alpha-theta-crossover', 'beta-downtraining'])(
     'keeps canonical and alias-only identical custom %s assignments semantically equivalent',
     protocol => {

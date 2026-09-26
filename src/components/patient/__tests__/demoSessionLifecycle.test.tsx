@@ -157,7 +157,7 @@ describe('mounted patient Demo session lifecycle', () => {
       assignedProtocol: 'beta-downtraining',
       customProtocolConfig: { ...getClinicalProtocolTemplate('beta-downtraining')!, alias: 'Test 123' },
     }, 16.2, false);
-    expect(beta).toContain('BETA (15–30 Hz)');
+    expect(beta).toContain('BETA (13–30 Hz)');
     expect(beta).toContain('16.2 µV');
     expect(beta).toContain('Out of zone now');
   });

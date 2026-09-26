@@ -20,7 +20,7 @@ async function renderModal(initialProtocol: ProtocolTemplate, onSave = vi.fn().m
   const onClose = vi.fn();
   let renderer!: ReactTestRenderer;
   await act(async () => {
-    renderer = create(<ProtocolBuilderModal assignedProtocol="alpha-enhancement" initialProtocol={initialProtocol} onSave={onSave} onClose={onClose} />);
+    renderer = create(<ProtocolBuilderModal assignedProtocol={initialProtocol.protocolType ?? 'alpha-enhancement'} initialProtocol={initialProtocol} onSave={onSave} onClose={onClose} />);
   });
   return { renderer, onSave, onClose };
 }
@@ -32,6 +32,38 @@ async function submit(renderer: ReactTestRenderer) {
 }
 
 describe('ProtocolBuilderModal persistence state', () => {
+  it('prefills beta customization with the active 13–30 Hz, below 14 µV rule', async () => {
+    const beta = getClinicalProtocolTemplate('beta-downtraining')!;
+    const { renderer, onSave } = await renderModal(beta);
+    await act(async () => {
+      renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+    });
+    expect(renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.value).toBe(13);
+    expect(renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.value).toBe(30);
+    expect(renderer.root.findByProps({ 'aria-label': 'Reward condition' }).props.value).toBe('below');
+    expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.value).toBe(14);
+    await submit(renderer);
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      customRewardEnabled: true,
+      rewardBand: { freqMin: 13, freqMax: 30, targetCondition: 'below', targetThreshold: 14 },
+    });
+    const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
+    const defaultRuntime = resolveProtocolRuntime({ assignedProtocol: 'beta-downtraining' } as ClientProfile);
+    const customRuntime = resolveProtocolRuntime({ assignedProtocol: 'beta-downtraining', customProtocolConfig: saved } as ClientProfile);
+    if (!defaultRuntime.ok || !customRuntime.ok) throw new Error('The beta assignment did not resolve.');
+    const defaultEngine = new EEGEngine();
+    defaultEngine.configureProtocol(defaultRuntime.config);
+    const customEngine = new EEGEngine();
+    customEngine.configureProtocol(customRuntime.config);
+    const betaBands = { delta: 0, theta: 4, alpha: 8, smr: 6, beta: 100, gamma: 3 };
+    const availability = { beta: true };
+    expect(defaultEngine.evaluateFeedbackForBands(betaBands, availability, 12).inZone)
+      .toBe(customEngine.evaluateFeedbackForBands(betaBands, availability, 12).inZone);
+    expect(defaultEngine.evaluateFeedbackForBands(betaBands, availability, 16).inZone)
+      .toBe(customEngine.evaluateFeedbackForBands(betaBands, availability, 16).inZone);
+    renderer.unmount();
+  });
+
   it('stays open and reports a failed protocol assignment', async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const onClose = vi.fn();

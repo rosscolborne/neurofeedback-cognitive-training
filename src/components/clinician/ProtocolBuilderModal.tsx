@@ -7,7 +7,7 @@ import {
   getProtocolAssignmentAlias,
   hasCanonicalRewardDefinition,
 } from '../../services/clinicalProtocolTemplates';
-import { getDefaultProtocolThreshold, getProtocolTypeForTemplate } from '../../services/protocols';
+import { DEFAULT_BETA_BAND_HZ, getDefaultProtocolThreshold, getProtocolTypeForTemplate } from '../../services/protocols';
 import { validateCustomRewardBand } from '../../services/adaptiveEngine';
 
 interface ProtocolBuilderModalProps {
@@ -235,10 +235,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           </div>
 
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Without a custom reward, {selectedTemplate.protocolType?.replace(/-/g, ' ')} training rewards values
-            {' '}{selectedTemplate.protocolType === 'theta-beta-ratio' || selectedTemplate.protocolType === 'beta-downtraining' ? 'at or below' : 'at or above'}
-            {' '}{getDefaultProtocolThreshold(selectedTemplate.protocolType!)}. Select custom reward criteria to measure a chosen frequency range
-            and reward its amplitude at or above/below a threshold.
+            {selectedTemplate.protocolType === 'beta-downtraining'
+              ? `Default beta training measures ${DEFAULT_BETA_BAND_HZ.min}–${DEFAULT_BETA_BAND_HZ.max} Hz peak amplitude and rewards at or below ${getDefaultProtocolThreshold('beta-downtraining')} µV.`
+              : `Without a custom reward, ${selectedTemplate.protocolType?.replace(/-/g, ' ')} training rewards values ${selectedTemplate.protocolType === 'theta-beta-ratio' ? 'at or below' : 'at or above'} ${getDefaultProtocolThreshold(selectedTemplate.protocolType!)}.`}
+            {' '}Select custom reward criteria to measure a chosen frequency range and reward its amplitude at or above/below a threshold.
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600 }}>
             <input
@@ -248,7 +248,12 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               onChange={(e) => {
                 setCustomRewardEnabled(e.target.checked);
                 setSaveError(null);
-                if (!e.target.checked) {
+                if (e.target.checked && selectedTemplate.protocolType === 'beta-downtraining') {
+                  setRewardMin(DEFAULT_BETA_BAND_HZ.min);
+                  setRewardMax(DEFAULT_BETA_BAND_HZ.max);
+                  setRewardCondition('below');
+                  setRewardThreshold(getDefaultProtocolThreshold('beta-downtraining'));
+                } else if (!e.target.checked) {
                   setRewardMin(selectedTemplate.rewardBand.freqMin);
                   setRewardMax(selectedTemplate.rewardBand.freqMax);
                   setRewardCondition(selectedTemplate.rewardBand.targetCondition);

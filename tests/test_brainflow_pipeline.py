@@ -17,7 +17,10 @@ from brainflow_service.dsp import (
     preprocess_eeg_window,
 )
 from brainflow_service.app import app
+from brainflow_service.analysis import AnalysisProviders, analyze_window
+from brainflow_service.headset_fit import HeuristicHeadsetFitProvider
 from brainflow_service.models import SignalFeatures
+from brainflow_service.models import SignalChannel
 from brainflow_service.runtime import BrainFlowSession
 
 
@@ -75,6 +78,26 @@ def test_band_power_extracts_smr_from_a_12_to_15_hz_signal() -> None:
 
     assert features is not None
     assert features.absolute["smr"] > features.absolute["theta"]
+
+
+def test_beta_feedback_uses_spectral_amplitude_not_psd_band_power() -> None:
+    channels = [SignalChannel(id=name, label=name, unit="uV", index=index)
+                for index, name in enumerate(("TP9", "AF7", "AF8", "TP10"))]
+    for amplitude, in_zone in [(12, True), (16, False)]:
+        window = sine_window(freq_hz=17) * (amplitude / 20)
+        result = analyze_window(
+            providers=AnalysisProviders(headset_fit=HeuristicHeadsetFitProvider()),
+            channels=channels,
+            eeg_samples=window.T.tolist(),
+            raw_window=window,
+            sample_rate=256,
+            protocol="beta-downtraining",
+            threshold=14,
+        )
+        assert result.features is not None
+        assert result.features.primary_metric_name == "betaAmplitudeUv"
+        assert result.features.primary_metric_value == pytest.approx(amplitude, abs=.2)
+        assert result.features.in_zone is in_zone
 
 
 def test_interhemispheric_coherence_is_high_for_matched_left_right_signals() -> None:

@@ -11,6 +11,32 @@ from .models import BandPowerFeatures
 logger = logging.getLogger(__name__)
 
 
+def calculate_peak_band_amplitude_uv(
+    window: np.ndarray, sampling_rate: int, low_hz: float, high_hz: float,
+) -> float | None:
+    """Mean channel peak spectral amplitude in µV over the latest two seconds."""
+    sample_count = round(sampling_rate * 2)
+    if sampling_rate < 90 or window.ndim != 2 or not len(window) or window.shape[1] < sample_count:
+        return None
+    if not 0 < low_hz < high_hz < sampling_rate / 2:
+        return None
+    first_bin = max(1, int(np.ceil(low_hz * sample_count / sampling_rate)))
+    last_bin = min(sample_count // 2 - 1, int(np.ceil(high_hz * sample_count / sampling_rate)) - 1)
+    if first_bin > last_bin:
+        return None
+
+    latest = window[:, -sample_count:].astype(float, copy=True)
+    if not np.isfinite(latest).all():
+        return None
+    means = latest.mean(axis=1, keepdims=True)
+    scales = np.where(np.abs(means) > 150, 0.48828, 1.0)
+    weights = np.hanning(sample_count)
+    weighted = (latest - means) * scales * weights
+    spectrum = np.fft.rfft(weighted, axis=1)
+    peaks = 2 * np.abs(spectrum[:, first_bin:last_bin + 1]).max(axis=1) / weights.sum()
+    return float(peaks.mean())
+
+
 def build_eeg_window(data: np.ndarray, eeg_channels: list[int], samples: int) -> np.ndarray | None:
     if data.size == 0 or samples <= 0:
         return None

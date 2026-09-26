@@ -1,5 +1,5 @@
 import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample, IndividualBaselineModel } from '../types';
-import { getDefaultProtocolThreshold } from './protocols';
+import { DEFAULT_BETA_AMPLITUDE_REWARD_BAND, getDefaultProtocolThreshold } from './protocols';
 import { brainflowService } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
@@ -31,6 +31,7 @@ export class EEGEngine {
   private currentProtocol: ProtocolType = 'theta-beta-ratio';
   private targetThreshold = 1.85;
   private rewardBand: ProtocolRuntimeConfig['rewardBand'];
+  private clinicianRewardBand = false;
   private rewardAmplitudeCache: { sequence: number; value: number | null } = { sequence: -1, value: null };
   private rewardSampleRateHz = 256;
   private phaseAngle = 0;
@@ -153,7 +154,8 @@ export class EEGEngine {
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
     this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
-    this.rewardBand = undefined;
+    this.rewardBand = protocol === 'beta-downtraining' ? DEFAULT_BETA_AMPLITUDE_REWARD_BAND : undefined;
+    this.clinicianRewardBand = false;
     this.rewardAmplitudeCache = { sequence: -1, value: null };
     this.syncProtocolToBrainflowSession();
   }
@@ -161,7 +163,8 @@ export class EEGEngine {
   public configureProtocol(config: ProtocolRuntimeConfig) {
     this.currentProtocol = config.protocol;
     this.targetThreshold = config.initialThreshold;
-    this.rewardBand = config.rewardBand;
+    this.rewardBand = config.rewardBand ?? (config.protocol === 'beta-downtraining' ? DEFAULT_BETA_AMPLITUDE_REWARD_BAND : undefined);
+    this.clinicianRewardBand = Boolean(config.rewardBand);
     this.rewardAmplitudeCache = { sequence: -1, value: null };
     this.syncProtocolToBrainflowSession();
   }
@@ -184,7 +187,10 @@ export class EEGEngine {
     availability: Partial<Record<keyof BandPowers, boolean>>,
     rewardAmplitudeUv?: number | null,
   ) {
-    return evaluateProtocolFeedback(this.currentProtocol, this.targetThreshold, bands, availability, this.rewardBand, rewardAmplitudeUv);
+    return evaluateProtocolFeedback(
+      this.currentProtocol, this.targetThreshold, bands, availability, this.rewardBand, rewardAmplitudeUv,
+      this.rewardBand && !this.clinicianRewardBand ? 5 : undefined,
+    );
   }
 
   private getHardwareRewardAmplitudeUv(): number | null {
@@ -1286,7 +1292,7 @@ export class EEGEngine {
       theta: amplitude(4, 8),
       alpha: amplitude(8, 12),
       smr: amplitude(12, 15),
-      beta: amplitude(15, 30),
+      beta: amplitude(13, 30),
       gamma: amplitude(30, 45),
     };
   }
@@ -1770,7 +1776,7 @@ export class EEGEngine {
     if (this.rewardBand || !localFeedback.available) {
       trainingFeedback = {
         ...localFeedback,
-        source: this.rewardBand ? 'custom-raw' : this.isDemoMode ? 'demo' : this.latestBandPowerProvenance?.source ?? 'browser-dsp',
+        source: this.clinicianRewardBand ? 'custom-raw' : this.isDemoMode ? 'demo' : this.rewardBand ? 'browser-dsp' : this.latestBandPowerProvenance?.source ?? 'browser-dsp',
       };
     }
     let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;

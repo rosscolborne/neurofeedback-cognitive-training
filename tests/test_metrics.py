@@ -1,5 +1,8 @@
 from brainflow_service.affective_state import compute_affective_state
+from brainflow_service.dsp import calculate_peak_band_amplitude_uv
 from brainflow_service.metrics import BrainFlowScoreSmoother, MetricCalculator, MetricInput, compute_band_ratios, compute_protocol_feedback, normalize_brainflow_score, smooth_ema
+import numpy as np
+import pytest
 
 
 def test_derived_metrics_use_independent_output_smoothing() -> None:
@@ -47,6 +50,23 @@ def test_protocol_feedback_names_the_actual_metric() -> None:
     bands = {"theta": 8, "alpha": 5, "smr": 7, "beta": 4}
     feedback = compute_protocol_feedback(bands, compute_band_ratios(bands), "smr-enhancement", 6)
     assert feedback.metric_name == "smr" and feedback.value == 7 and feedback.in_zone
+
+
+def test_default_beta_feedback_is_at_or_below_threshold() -> None:
+    for beta, in_zone in [(13.9, True), (14.0, True), (14.1, False)]:
+        bands = {"theta": 4, "alpha": 8, "smr": 6, "beta": beta}
+        feedback = compute_protocol_feedback(bands, compute_band_ratios(bands), "beta-downtraining", 14, beta)
+        assert feedback.metric_name == "betaAmplitudeUv" and feedback.value == beta and feedback.in_zone is in_zone
+    assert compute_protocol_feedback(bands, compute_band_ratios(bands), "beta-downtraining", 14).in_zone is None
+
+
+def test_beta_spectral_amplitude_comes_from_raw_microvolt_samples() -> None:
+    samples = np.arange(512) / 256
+    beta = 12 * np.sin(2 * np.pi * 17 * samples)
+    alpha = 30 * np.sin(2 * np.pi * 10 * samples)
+    window = np.tile(beta + alpha, (4, 1))
+    assert calculate_peak_band_amplitude_uv(window, 256, 13, 30) == pytest.approx(12, abs=.1)
+    assert calculate_peak_band_amplitude_uv(window, 256, 20, 30) < 1
 
 
 def test_normalize_and_ema_helpers() -> None:

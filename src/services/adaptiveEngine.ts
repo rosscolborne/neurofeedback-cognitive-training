@@ -125,6 +125,7 @@ export function evaluateProtocolFeedback(
   availability: Partial<Record<keyof BandPowers, boolean>>,
   rewardBand?: ProtocolTemplate['rewardBand'],
   rewardAmplitudeUv?: number | null,
+  rewardWidth?: number,
 ): { ratio: number | null; metric: number | null; inZone: boolean; zoneScore: number; available: boolean } {
   const available = (...keys: Array<keyof BandPowers>) => keys.every(key => availability[key] && finite(bands[key]));
   const ratio = available('theta', 'beta') ? bands.theta / Math.max(1e-9, bands.beta) : null;
@@ -132,7 +133,7 @@ export function evaluateProtocolFeedback(
     if (!finite(rewardAmplitudeUv)) return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
     const lowerIsBetter = rewardBand.targetCondition === 'below';
     const inZone = lowerIsBetter ? rewardAmplitudeUv <= threshold : rewardAmplitudeUv >= threshold;
-    const width = 2;
+    const width = rewardWidth ?? 2;
     const zoneScore = lowerIsBetter
       ? 1 - (rewardAmplitudeUv - threshold) / width
       : (rewardAmplitudeUv - threshold + width) / (2 * width);
@@ -150,7 +151,8 @@ export function evaluateProtocolFeedback(
       metric = available('theta', 'alpha') ? bands.theta / Math.max(1e-9, bands.alpha) : null;
       width = 0.5;
       break;
-    case 'beta-downtraining': metric = available('beta') ? bands.beta : null; lowerIsBetter = true; width = 5; break;
+    // Default beta feedback also needs a measured raw spectral amplitude.
+    case 'beta-downtraining': metric = null; lowerIsBetter = true; width = 5; break;
   }
   if (metric === null) return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
   const inZone = lowerIsBetter ? metric <= threshold : metric >= threshold;

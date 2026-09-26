@@ -2,6 +2,12 @@ import type { ClientProfile, ProtocolTemplate, ProtocolType } from '../types';
 
 export const DEFAULT_PROTOCOL: ProtocolType = 'theta-beta-ratio';
 
+/** Default beta spectral amplitude is resolved over this frequency range in both modes. */
+export const DEFAULT_BETA_BAND_HZ = {
+  min: 13,
+  max: 30,
+} as const;
+
 /** The assignment shown to both roles is the mode training initializes. */
 export function resolvePatientProtocol(
   client: Pick<ClientProfile, 'assignedProtocol' | 'customProtocolConfig'>,
@@ -31,6 +37,14 @@ export const protocolDefinitions: readonly ProtocolDefinition[] = [
 export function getDefaultProtocolThreshold(protocol: ProtocolType): number {
   return protocolDefinitions.find((definition) => definition.value === protocol)?.defaultThreshold ?? 1.85;
 }
+
+export const DEFAULT_BETA_AMPLITUDE_REWARD_BAND: ProtocolTemplate['rewardBand'] = {
+  name: 'Beta spectral amplitude',
+  freqMin: DEFAULT_BETA_BAND_HZ.min,
+  freqMax: DEFAULT_BETA_BAND_HZ.max,
+  targetCondition: 'below',
+  targetThreshold: getDefaultProtocolThreshold('beta-downtraining'),
+};
 
 /**
  * Resolve a clinical template to the broad mode used by the training engine.

@@ -20,8 +20,9 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .affective_state import FitQualityHint
-from .config import DEFAULT_PROCESSING, ProcessingConfig
+from .config import DEFAULT_BANDS, DEFAULT_PROCESSING, ProcessingConfig
 from .dsp import (
+    calculate_peak_band_amplitude_uv,
     extract_band_power_features,
     extract_brainflow_mindfulness,
     extract_brainflow_restfulness,
@@ -38,6 +39,8 @@ from .headset_fit import (
 from .models import SignalChannel, SignalFeatures, SignalQualityMetadata, TrainingMetricSampleModel
 from .metrics import MetricCalculator, MetricInput
 from .training import TrainingScoreProvider
+
+BETA_BAND = next(band for band in DEFAULT_BANDS if band.id == "beta")
 
 
 @dataclass
@@ -111,6 +114,7 @@ def analyze_window(
                 threshold=threshold,
                 reliable=reliable,
                 fit=FitQualityHint(ready=fit_snapshot.ready, state=fit_snapshot.state),
+                reward_amplitude_uv=calculate_peak_band_amplitude_uv(raw_window, sample_rate, BETA_BAND.low_hz, BETA_BAND.high_hz) if protocol == "beta-downtraining" else None,
             ))
             if band_powers:
                 band_powers = band_powers.model_copy(update={

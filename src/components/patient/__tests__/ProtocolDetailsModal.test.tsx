@@ -34,9 +34,11 @@ describe('patient protocol details training rule', () => {
     });
     const text = await details(client);
     expect(text).toContain('Test 123');
-    expect(text).toContain('Feedback band');
-    expect(text).toContain('15–30 Hz (Demo); 13–30 Hz (headset)');
-    expect(text).toContain('Beta band at or below 14');
+    expect(text).toContain('Min Frequency');
+    expect(text).toContain('Max Frequency');
+    expect(text).toContain('13 Hz');
+    expect(text).toContain('30 Hz');
+    expect(text).toContain('At or below 14 µV');
     expect(text).not.toContain('9–12 Hz');
     expect(text).not.toContain('10 µV');
     expect(text).not.toContain('Template reward');
@@ -56,8 +58,8 @@ describe('patient protocol details training rule', () => {
     expect(text).toContain('Max Frequency');
     expect(text).toContain('9 Hz');
     expect(text).toContain('12 Hz');
-    expect(text).toContain('Measured amplitude at or above 10 µV');
-    expect(text).not.toContain('15–30 Hz (Demo)');
-    expect(text).not.toContain('Beta band at or below 14');
+    expect(text).toContain('At or above 10 µV');
+    expect(text).not.toContain('13 Hz');
+    expect(text).not.toContain('at or below 14');
   });
 });
