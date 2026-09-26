@@ -2,7 +2,7 @@ export interface BrainStateEvent {
   timestamp: number;
   frontalTheta: number;        // 4–8 Hz (AF7, AF8) - calculation depth
   frontalHighBeta: number;     // 20–30 Hz (AF7, AF8) - panic/stress
-  tpAlpha: number;             // 8–12 Hz (TP9, TP10) - poise/calm
+  tpAlpha: number;             // 8–13 Hz (TP9, TP10) - poise/calm
   normalizedComposure: number; // Scaled 0.0 to 2.0 against user baseline
   isClenching: boolean;        // Artifact flag: jaw clench (EMG > 45 Hz)
   isBlinking: boolean;         // Artifact flag: frontal blink

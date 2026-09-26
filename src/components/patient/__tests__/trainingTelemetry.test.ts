@@ -20,11 +20,11 @@ describe('training telemetry', () => {
     expect(describeActiveReward(config('theta-beta-ratio'), sample(0.36, 'brainflow')))
       .toEqual({ label: 'THETA/BETA', value: '0.36' });
     expect(describeActiveReward(config('smr-enhancement'), sample(12, 'brainflow')))
-      .toEqual({ label: 'SMR (12–15 Hz)', value: '12.0 µV²' });
+      .toEqual({ label: 'SMR (12–15 Hz)', value: '12.0 µV' });
     expect(describeActiveReward(config('alpha-enhancement'), sample(12.2, 'browser-dsp')))
-      .toEqual({ label: 'ALPHA (8–12 Hz)', value: '12.2 µV' });
+      .toEqual({ label: 'ALPHA (8–13 Hz)', value: '12.2 µV' });
     expect(describeActiveReward(config('alpha-enhancement'), sample(12.2, 'brainflow')))
-      .toEqual({ label: 'ALPHA (8–13 Hz)', value: '12.2 µV²' });
+      .toEqual({ label: 'ALPHA (8–13 Hz)', value: '12.2 µV' });
     expect(describeActiveReward(config('beta-downtraining'), sample(13.5, 'demo')))
       .toEqual({ label: 'BETA (13–30 Hz)', value: '13.5 µV' });
     expect(describeActiveReward(config('beta-downtraining'), sample(13.5, 'browser-dsp')))
@@ -41,6 +41,14 @@ describe('training telemetry', () => {
       .toEqual({ label: 'REWARD (9–11 Hz)', value: '7.3 µV' });
     expect(describeActiveReward(config('alpha-enhancement', { ...rewardBand, freqMin: 16, freqMax: 18 }), sample(0.8, 'custom-raw')))
       .toEqual({ label: 'REWARD (16–18 Hz)', value: '0.8 µV' });
+  });
+
+  it('keeps customized ratio telemetry unitless and driven by the emitted feedback measurement', () => {
+    const ratioReward = { numerator: { freqMin: 9, freqMax: 11 }, denominator: { freqMin: 13, freqMax: 30 },
+      targetCondition: 'below' as const, targetThreshold: 1.85 };
+    expect(describeActiveReward({ ...config('theta-beta-ratio'), ratioReward }, sample(2.25, 'custom-raw', {
+      bands: { delta: 0, theta: 100, alpha: 0, smr: 0, beta: 1, gamma: 0 },
+    }))).toEqual({ label: 'THETA/BETA (9–11 / 13–30 Hz)', value: '2.25' });
   });
 
   it('shows explicit unavailability without fabricating reward or classifier scores', () => {

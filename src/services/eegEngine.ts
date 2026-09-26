@@ -1,6 +1,6 @@
 import { BandPowers, BrainFlowScores, EEGDataPoint, MuseChannelQuality, ProtocolType, ServerFitState, TrainingMetricSample, IndividualBaselineModel } from '../types';
-import { DEFAULT_BETA_AMPLITUDE_REWARD_BAND, getDefaultProtocolThreshold } from './protocols';
-import { brainflowService } from './brainflowService';
+import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS, getDefaultProtocolThreshold, STANDARD_EEG_BANDS_HZ } from './protocols';
+import { brainflowService, type BrainflowRewardRule } from './brainflowService';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
 import { AthenaWasmDecoder, BleTransport } from '@elata-biosciences/eeg-web-ble';
@@ -10,7 +10,7 @@ import {
   evaluateProtocolFeedback,
   type ProtocolRuntimeConfig,
 } from './adaptiveEngine';
-import { calculateDemoRewardAmplitudeUv, calculateRewardAmplitudeUv } from './rewardSpectrum';
+import { calculateDemoRewardAmplitudeUv, calculateDemoRewardPowerRatio, calculateRewardAmplitudeUv, calculateRewardPowerRatio } from './rewardSpectrum';
 
 // Muse's EEG data service contains the 273e0001–273e0006 control and signal
 // characteristics. It is also the service advertised during device discovery.
@@ -31,8 +31,11 @@ export class EEGEngine {
   private currentProtocol: ProtocolType = 'theta-beta-ratio';
   private targetThreshold = 1.85;
   private rewardBand: ProtocolRuntimeConfig['rewardBand'];
+  private ratioReward: ProtocolRuntimeConfig['ratioReward'];
   private clinicianRewardBand = false;
+  private clinicianRatioReward = false;
   private rewardAmplitudeCache: { sequence: number; value: number | null } = { sequence: -1, value: null };
+  private rewardRatioCache: { sequence: number; value: number | null } = { sequence: -1, value: null };
   private rewardSampleRateHz = 256;
   private phaseAngle = 0;
   private noiseSeed = Math.random() * 100;
@@ -42,6 +45,10 @@ export class EEGEngine {
   public isBrainflowActive = false;
   public brainflowSessionId: string | null = null;
   private brainflowUnsubscribe: (() => void) | null = null;
+  private brainflowProtocolRevision = 0;
+  private brainflowProtocolReady = true;
+  private brainflowServerProtocolRevision = 0;
+  private brainflowProtocolUpdate: Promise<void> = Promise.resolve();
 
   public deviceName: string | null = null;
   public batteryLevel: number | null = null;
@@ -154,18 +161,24 @@ export class EEGEngine {
   public setProtocol(protocol: ProtocolType, threshold?: number) {
     this.currentProtocol = protocol;
     this.targetThreshold = threshold ?? getDefaultProtocolThreshold(protocol);
-    this.rewardBand = protocol === 'beta-downtraining' ? DEFAULT_BETA_AMPLITUDE_REWARD_BAND : undefined;
+    this.rewardBand = DEFAULT_SINGLE_BAND_REWARDS[protocol];
+    this.ratioReward = DEFAULT_RATIO_REWARDS[protocol];
     this.clinicianRewardBand = false;
+    this.clinicianRatioReward = false;
     this.rewardAmplitudeCache = { sequence: -1, value: null };
+    this.rewardRatioCache = { sequence: -1, value: null };
     this.syncProtocolToBrainflowSession();
   }
 
   public configureProtocol(config: ProtocolRuntimeConfig) {
     this.currentProtocol = config.protocol;
     this.targetThreshold = config.initialThreshold;
-    this.rewardBand = config.rewardBand ?? (config.protocol === 'beta-downtraining' ? DEFAULT_BETA_AMPLITUDE_REWARD_BAND : undefined);
+    this.rewardBand = config.rewardBand ?? DEFAULT_SINGLE_BAND_REWARDS[config.protocol];
+    this.ratioReward = config.rewardBand ? undefined : config.ratioReward ?? DEFAULT_RATIO_REWARDS[config.protocol];
     this.clinicianRewardBand = Boolean(config.rewardBand);
+    this.clinicianRatioReward = Boolean(config.ratioReward);
     this.rewardAmplitudeCache = { sequence: -1, value: null };
+    this.rewardRatioCache = { sequence: -1, value: null };
     this.syncProtocolToBrainflowSession();
   }
 
@@ -186,11 +199,28 @@ export class EEGEngine {
     bands: BandPowers,
     availability: Partial<Record<keyof BandPowers, boolean>>,
     rewardAmplitudeUv?: number | null,
+    rewardPowerRatio?: number | null,
   ) {
     return evaluateProtocolFeedback(
       this.currentProtocol, this.targetThreshold, bands, availability, this.rewardBand, rewardAmplitudeUv,
       this.rewardBand && !this.clinicianRewardBand ? 5 : undefined,
+      this.ratioReward, rewardPowerRatio,
     );
+  }
+
+  private getHardwareRewardRatio(): number | null {
+    if (!this.ratioReward || !this.sourceFrameSequence || Date.now() - this.lastSourceFrameAtMs > 2000
+      || (this.serverFitState && !this.serverFitState.ready)) return null;
+    if (this.rewardRatioCache.sequence !== this.sourceFrameSequence) {
+      this.rewardRatioCache = {
+        sequence: this.sourceFrameSequence,
+        value: calculateRewardPowerRatio(
+          [this.rawBuffers.tp9, this.rawBuffers.af7, this.rawBuffers.af8, this.rawBuffers.tp10],
+          this.rewardSampleRateHz, this.ratioReward,
+        ),
+      };
+    }
+    return this.rewardRatioCache.value;
   }
 
   private getHardwareRewardAmplitudeUv(): number | null {
@@ -316,12 +346,38 @@ export class EEGEngine {
 
   private syncProtocolToBrainflowSession() {
     if (this.brainflowSessionId) {
-      void brainflowService.updateSessionProtocol(
-        this.brainflowSessionId,
-        this.currentProtocol,
-        this.targetThreshold,
-      );
+      const sessionId = this.brainflowSessionId;
+      const protocol = this.currentProtocol;
+      const threshold = this.targetThreshold;
+      const reward = this.getBackendRewardRule();
+      const revision = ++this.brainflowProtocolRevision;
+      this.brainflowProtocolReady = false;
+      this.latestTrainingFeedback = null;
+      this.brainflowProtocolUpdate = this.brainflowProtocolUpdate.catch(() => {}).then(async () => {
+        if (revision !== this.brainflowProtocolRevision || sessionId !== this.brainflowSessionId) return;
+        const serverRevision = await brainflowService.updateSessionProtocol(sessionId, protocol, threshold, reward);
+        if (revision === this.brainflowProtocolRevision && sessionId === this.brainflowSessionId) {
+          this.brainflowServerProtocolRevision = serverRevision;
+          this.brainflowProtocolReady = true;
+          this.latestTrainingFeedback = null;
+        }
+      }).catch(() => {
+        // Do not present feedback from the old rule if the update was rejected.
+        if (revision === this.brainflowProtocolRevision) this.brainflowProtocolReady = false;
+      });
     }
+  }
+
+  private getBackendRewardRule(): BrainflowRewardRule | undefined {
+    if (this.clinicianRewardBand && this.rewardBand) {
+      return { kind: 'amplitude', condition: this.rewardBand.targetCondition,
+        band: { freqMin: this.rewardBand.freqMin, freqMax: this.rewardBand.freqMax } };
+    }
+    if (this.clinicianRatioReward && this.ratioReward) {
+      return { kind: 'ratio', condition: this.ratioReward.targetCondition,
+        numerator: this.ratioReward.numerator, denominator: this.ratioReward.denominator };
+    }
+    return undefined;
   }
 
   public async startMetricCalibration(metrics?: string[]): Promise<void> {
@@ -792,8 +848,13 @@ export class EEGEngine {
    */
   public async connectBrainflowSession(deviceId = 'brainflow-synthetic'): Promise<{ success: boolean; error?: string }> {
     try {
-      const session = await brainflowService.startSession(deviceId, undefined, undefined, this.currentProtocol, this.targetThreshold);
+      const session = await brainflowService.startSession(deviceId, undefined, undefined,
+        this.currentProtocol, this.targetThreshold, this.getBackendRewardRule());
       this.brainflowSessionId = session.sessionId;
+      this.brainflowProtocolRevision++;
+      this.brainflowProtocolReady = true;
+      this.brainflowServerProtocolRevision = 0;
+      this.brainflowProtocolUpdate = Promise.resolve();
       this.isBrainflowActive = true;
       this.isHardwareConnected = true;
       this.isDemoMode = false;
@@ -862,7 +923,7 @@ export class EEGEngine {
             this.latestMetricCalibration = { status: frame.features.calibrationStatus ?? 'off', progress: frame.features.calibrationProgress ?? 0, required: frame.features.calibrationRequired ?? 24 };
             this.latestRawMetrics = frame.features.rawMetrics ?? {};
             this.latestBaselineRelativeMetrics = frame.features.baselineRelativeMetrics ?? {};
-            this.latestTrainingFeedback = {
+            if (this.brainflowProtocolReady && frame.protocolRevision === this.brainflowServerProtocolRevision) this.latestTrainingFeedback = {
               ratio: frame.features.bandPowers?.ratios?.thetaBeta ?? null,
               metric: frame.features.primaryMetricValue ?? null,
               inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null,
@@ -899,6 +960,8 @@ export class EEGEngine {
   public disconnectHardware() {
     // Invalidates an in-flight hosted-session request as well as active ones.
     this.bluetoothConnectionGeneration++;
+    this.brainflowProtocolRevision++;
+    this.brainflowProtocolReady = false;
     this.isStartingFitSession = false;
     this.hostedAnalysisFailures = 0;
     if (this.webBluetoothTransport) {
@@ -1288,12 +1351,12 @@ export class EEGEngine {
     }
 
     return {
-      delta: amplitude(1, 4),
-      theta: amplitude(4, 8),
-      alpha: amplitude(8, 12),
-      smr: amplitude(12, 15),
-      beta: amplitude(13, 30),
-      gamma: amplitude(30, 45),
+      delta: amplitude(STANDARD_EEG_BANDS_HZ.delta.min, STANDARD_EEG_BANDS_HZ.delta.max),
+      theta: amplitude(STANDARD_EEG_BANDS_HZ.theta.min, STANDARD_EEG_BANDS_HZ.theta.max),
+      alpha: amplitude(STANDARD_EEG_BANDS_HZ.alpha.min, STANDARD_EEG_BANDS_HZ.alpha.max),
+      smr: amplitude(STANDARD_EEG_BANDS_HZ.smr.min, STANDARD_EEG_BANDS_HZ.smr.max),
+      beta: amplitude(STANDARD_EEG_BANDS_HZ.beta.min, STANDARD_EEG_BANDS_HZ.beta.max),
+      gamma: amplitude(STANDARD_EEG_BANDS_HZ.gamma.min, STANDARD_EEG_BANDS_HZ.gamma.max),
     };
   }
 
@@ -1472,6 +1535,7 @@ export class EEGEngine {
         256,
         this.currentProtocol,
         this.targetThreshold,
+        this.getBackendRewardRule(),
       );
 
       if (response) {
@@ -1685,8 +1749,12 @@ export class EEGEngine {
 
       }
 
-      const focusNorm = Math.max(0, Math.min(100, this.userFocus)) / 100;
-      const calmNorm = Math.max(0, Math.min(100, this.userCalm)) / 100;
+      // Demo presets are centers, not frozen readings. Use the same smoothly
+      // varying drivers for synthetic bands and simulated mental-state scores.
+      const simulatedFocus = Math.max(0, Math.min(100, this.userFocus + 4 * Math.sin(this.demoTimeElapsed * 1.15)));
+      const simulatedCalm = Math.max(0, Math.min(100, this.userCalm + 4 * Math.sin(this.demoTimeElapsed * 0.9 + Math.PI / 3)));
+      const focusNorm = simulatedFocus / 100;
+      const calmNorm = simulatedCalm / 100;
       const slowDrift = Math.sin(this.phaseAngle * 0.3 + this.noiseSeed) * 1.5;
 
       const delta = 12.0 + Math.sin(this.phaseAngle * 1.5) * 2.0 + (1 - focusNorm) * 4.0;
@@ -1736,18 +1804,18 @@ export class EEGEngine {
       };
       trainingFeedback = { ...this.calculateBrowserFeedback(bands, thetaBeta, bandAvailability), source: 'demo' };
       brainFlowScores = {
-        mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
-        restfulnessScore: Math.round(this.userCalm),
-        valence: (this.userCalm - 50) / 50,
-        arousal: (this.userFocus - 50) / 50,
-        emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
+        mindfulnessScore: Math.round((simulatedFocus + simulatedCalm) / 2),
+        restfulnessScore: Math.round(simulatedCalm),
+        valence: (simulatedCalm - 50) / 50,
+        arousal: (simulatedFocus - 50) / 50,
+        emotionLabel: simulatedCalm > 60 ? 'calm flow' : 'seeking focus',
         method: 'demo',
       };
       // The simulator has no electrode spectra to correlate, but it still
       // needs to exercise the normal coherence field consumed by training
       // experiences. Keep this deterministic and physiologically bounded.
       sampleInterhemisphericCoherence = Math.max(0, Math.min(1, .25 + calmNorm * .5 + focusNorm * .2));
-      trainingMetric = { score: Math.round(Math.max(this.userFocus, this.userCalm)), baselineReady: true };
+      trainingMetric = { score: Math.round(Math.max(simulatedFocus, simulatedCalm)), baselineReady: true };
 
       rawSignal =
         slowDrift +
@@ -1765,32 +1833,33 @@ export class EEGEngine {
 
     const thetaBetaRatioAvailable = trainingFeedback?.ratio != null;
     const thetaBetaRatio = trainingFeedback?.ratio ?? (bands.beta > 0 ? bands.theta / bands.beta : 0);
-    const rewardAmplitudeUv = this.rewardBand
+    const backendFeedback = !this.isDemoMode && this.latestBandPowerProvenance?.source === 'brainflow';
+    if (backendFeedback && (!this.brainflowProtocolReady || trainingFeedback?.source !== 'brainflow')) trainingFeedback = null;
+    const rewardAmplitudeUv = !backendFeedback && this.rewardBand
       ? this.isDemoMode
         ? calculateDemoRewardAmplitudeUv(bands, this.rewardBand)
         : this.latestBandPowerProvenance && this.latestServerBands
           ? this.getHardwareRewardAmplitudeUv()
           : null
       : undefined;
-    const localFeedback = this.evaluateFeedbackForBands(bands, bandAvailability, rewardAmplitudeUv);
-    if (this.rewardBand || !localFeedback.available) {
+    const rewardPowerRatio = !backendFeedback && this.ratioReward
+      ? this.isDemoMode
+        ? calculateDemoRewardPowerRatio(bands, this.ratioReward)
+        : this.latestBandPowerProvenance && this.latestServerBands
+          ? this.getHardwareRewardRatio()
+          : null
+      : undefined;
+    const localFeedback = backendFeedback ? null
+      : this.evaluateFeedbackForBands(bands, bandAvailability, rewardAmplitudeUv, rewardPowerRatio);
+    if (localFeedback && (this.rewardBand || this.ratioReward || !localFeedback.available)) {
       trainingFeedback = {
         ...localFeedback,
-        source: this.clinicianRewardBand ? 'custom-raw' : this.isDemoMode ? 'demo' : this.rewardBand ? 'browser-dsp' : this.latestBandPowerProvenance?.source ?? 'browser-dsp',
+        source: this.clinicianRewardBand || this.clinicianRatioReward ? 'custom-raw' : this.isDemoMode ? 'demo' : this.rewardBand || this.ratioReward ? 'browser-dsp' : this.latestBandPowerProvenance?.source ?? 'browser-dsp',
       };
     }
-    let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
-    let inZone = trainingFeedback?.inZone ?? false;
-    let zoneScore = trainingFeedback?.zoneScore ?? 0;
-
-    // Fallback: If server has not yet returned inZone for this window, compute from live bands & protocol
-    if (!this.rewardBand && !inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
-      const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
-      trainingFeedback = { ...fb, source: this.isDemoMode ? 'demo' : this.latestBandPowerProvenance?.source ?? 'browser-dsp' };
-      inZone = fb.inZone;
-      zoneScore = fb.zoneScore;
-      inZoneAvailable = fb.available;
-    }
+    const inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
+    const inZone = trainingFeedback?.inZone ?? false;
+    const zoneScore = trainingFeedback?.zoneScore ?? 0;
 
     // Hardware values come from the server's cross-spectral AF7↔AF8 /
     // TP9↔TP10 calculation. Simulator values above exist only to exercise the

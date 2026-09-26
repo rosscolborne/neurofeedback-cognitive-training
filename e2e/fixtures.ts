@@ -1,6 +1,6 @@
-import { expect, test as base, type ConsoleMessage, type Request, type Response } from '@playwright/test';
+import { expect, test as base, type BrowserContext, type ConsoleMessage, type Request, type Response } from '@playwright/test';
 
-// Import test and expect from this module in every Playwright spec and setup.
+// Import test and expect from this module in browser specs and setup.
 
 function permissionError(text: string, firestoreRequest = false): string | undefined {
     const match = text.match(/\bpermission[-_]denied\b|missing or insufficient permissions|(?:firestore|firebase)[^\n]{0,120}\bpermission denied\b/i)
@@ -30,10 +30,22 @@ function responsePermissionError(body: string, status: number): string | undefin
     return undefined;
 }
 
-export const test = base.extend<{ permissionErrorGuard: void }>({
-    permissionErrorGuard: [async ({ context }, use) => {
+export type PermissionErrorGuard = {
+    expectDenialsIn: (context: BrowserContext) => void;
+};
+
+export const test = base.extend<{ permissionErrorGuard: PermissionErrorGuard }>({
+    permissionErrorGuard: [async ({ browser, context }, use) => {
         const errors: string[] = [];
         const pendingResponses = new Set<Promise<void>>();
+        const expectedDenialContexts = new Set<BrowserContext>();
+        const watchedContexts = new Map<BrowserContext, {
+            onConsole: (message: ConsoleMessage) => void;
+            onWebError: (webError: { error(): Error }) => void;
+            onResponse: (response: Response) => void;
+            onRequestFailed: (request: Request) => void;
+            onRequestFinished: (request: Request) => void;
+        }>();
 
         const onConsole = (message: ConsoleMessage) => {
             if (message.type() !== 'error' && message.type() !== 'warning') return;
@@ -77,19 +89,44 @@ export const test = base.extend<{ permissionErrorGuard: void }>({
             track(check);
         };
 
-        context.on('console', onConsole);
-        context.on('weberror', onWebError);
-        context.on('response', onResponse);
-        context.on('requestfailed', onRequestFailed);
-        context.on('requestfinished', onRequestFinished);
+        const watchContext = (context: BrowserContext) => {
+            if (watchedContexts.has(context)) return;
+            const guarded = () => !expectedDenialContexts.has(context);
+            const listeners = {
+                onConsole: (message: ConsoleMessage) => { if (guarded()) onConsole(message); },
+                onWebError: (webError: { error(): Error }) => { if (guarded()) onWebError(webError); },
+                onResponse: (response: Response) => { if (guarded()) onResponse(response); },
+                onRequestFailed: (request: Request) => { if (guarded()) onRequestFailed(request); },
+                onRequestFinished: (request: Request) => { if (guarded()) onRequestFinished(request); },
+            };
+            watchedContexts.set(context, listeners);
+            context.on('console', listeners.onConsole);
+            context.on('weberror', listeners.onWebError);
+            context.on('response', listeners.onResponse);
+            context.on('requestfailed', listeners.onRequestFailed);
+            context.on('requestfinished', listeners.onRequestFinished);
+        };
+        // Read-only probes and stateful scenarios open contexts through browser.newContext().
+        // The default page fixture is also covered when Playwright creates its context.
+        browser.on('context', watchContext);
+        browser.contexts().forEach(watchContext);
+        watchContext(context);
 
-        await use();
+        await use({
+            expectDenialsIn: (targetContext) => {
+                watchContext(targetContext);
+                expectedDenialContexts.add(targetContext);
+            },
+        });
 
-        context.off('console', onConsole);
-        context.off('weberror', onWebError);
-        context.off('response', onResponse);
-        context.off('requestfailed', onRequestFailed);
-        context.off('requestfinished', onRequestFinished);
+        browser.off('context', watchContext);
+        for (const [watchedContext, listeners] of watchedContexts) {
+            watchedContext.off('console', listeners.onConsole);
+            watchedContext.off('weberror', listeners.onWebError);
+            watchedContext.off('response', listeners.onResponse);
+            watchedContext.off('requestfailed', listeners.onRequestFailed);
+            watchedContext.off('requestfinished', listeners.onRequestFinished);
+        }
         await Promise.all(pendingResponses);
         expect(errors, 'Firestore permission-denied errors surfaced during this Playwright test').toEqual([]);
     }, { auto: true }],

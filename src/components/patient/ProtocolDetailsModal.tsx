@@ -6,8 +6,9 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { DEFAULT_BETA_BAND_HZ, getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
+import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
 import { resolveProtocolRuntime, type ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
+import { getRuntimeRewardDefinition } from '../../services/rewardDefinition';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -22,20 +23,8 @@ const formatIdentifier = (value?: string) =>
     .join(' ') : 'Unavailable';
 
 function describeTrainingRule(config: ProtocolRuntimeConfig): string {
-  const comparison = config.lowerIsBetter ? 'at or below' : 'at or above';
-  if (config.rewardBand) return `${comparison.charAt(0).toUpperCase()}${comparison.slice(1)} ${config.initialThreshold} µV`;
-  if (config.protocol === 'beta-downtraining') {
-    return `At or below ${config.initialThreshold} µV`;
-  }
-  const metric = {
-    'theta-beta-ratio': 'Theta/beta ratio',
-    'smr-enhancement': 'SMR band',
-    'alpha-enhancement': 'Alpha band',
-    'alpha-theta-crossover': 'Theta/alpha ratio',
-    'beta-downtraining': 'Beta band',
-    'individualized-upper-alpha': 'Alpha band',
-  }[config.protocol];
-  return `${metric} ${comparison} ${config.initialThreshold}`;
+  const definition = getRuntimeRewardDefinition(config);
+  return `${config.lowerIsBetter ? 'Below' : 'Above'} ${config.initialThreshold}${definition?.unit ?? ''}`;
 }
 
 function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
@@ -72,6 +61,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
     : undefined;
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
   const runtime = resolveProtocolRuntime(client);
+  const reward = runtime.ok ? getRuntimeRewardDefinition(runtime.config) : null;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -148,22 +138,32 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
 
           {runtime.ok ? (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-                {runtime.config.rewardBand && (
+              {reward?.kind === 'ratio' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                    <Detail label={`${reward.numeratorName} Min Frequency`} value={`${reward.numerator.freqMin} Hz`} />
+                    <Detail label={`${reward.numeratorName} Max Frequency`} value={`${reward.numerator.freqMax} Hz`} />
+                    <Detail label={`${reward.denominatorName} Min Frequency`} value={`${reward.denominator.freqMin} Hz`} />
+                    <Detail label={`${reward.denominatorName} Max Frequency`} value={`${reward.denominator.freqMax} Hz`} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                    <Detail label="Reward condition" value={reward.condition === 'below' ? 'Below' : 'Above'} />
+                    <Detail label="Reward threshold" value={runtime.config.initialThreshold} />
+                    <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                  {reward?.kind === 'amplitude' && (
                   <>
-                    <Detail label="Min Frequency" value={`${runtime.config.rewardBand.freqMin} Hz`} />
-                    <Detail label="Max Frequency" value={`${runtime.config.rewardBand.freqMax} Hz`} />
+                    <Detail label="Min Frequency" value={`${reward.band.freqMin} Hz`} />
+                    <Detail label="Max Frequency" value={`${reward.band.freqMax} Hz`} />
                   </>
-                )}
-                {!runtime.config.rewardBand && runtime.config.protocol === 'beta-downtraining' && (
-                  <>
-                    <Detail label="Min Frequency" value={`${DEFAULT_BETA_BAND_HZ.min} Hz`} />
-                    <Detail label="Max Frequency" value={`${DEFAULT_BETA_BAND_HZ.max} Hz`} />
-                  </>
-                )}
-                <Detail label="Reward when" value={describeTrainingRule(runtime.config)} />
-                <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />
-              </div>
+                  )}
+                  <Detail label="Reward when" value={describeTrainingRule(runtime.config)} />
+                  <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />
+                </div>
+              )}
               <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>
                 The value must reach the threshold to be in zone. The threshold may adapt during training; the session display shows the measured value and current feedback state.
               </p>

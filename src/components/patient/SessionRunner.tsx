@@ -42,7 +42,7 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
   },
   'tidal-garden': {
     title: 'Tidal Garden',
-    mechanism: 'Utilizes Alpha (8-12Hz) amplitude training to govern environmental growth.',
+    mechanism: 'Utilizes Alpha (8–13 Hz) amplitude training to govern environmental growth.',
     benefit: 'Teaches the brain to rapidly decouple from stress and lower cortisol levels, treating general anxiety.',
     instructions: 'Relax your jaw and shoulders. Allow your mind to wander gently. The garden flourishes when you achieve deep relaxation.',
   },
@@ -78,7 +78,7 @@ const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism:
   },
   'mandala': {
     title: 'Mandala Breathing',
-    mechanism: 'Alpha (8-12Hz) and Theta (4-8Hz) coherence visually construct geometric patterns.',
+    mechanism: 'Alpha (8–13 Hz) and Theta (4–8 Hz) coherence visually construct geometric patterns.',
     benefit: 'Facilitates transition into flow states and deep mindfulness practices.',
     instructions: 'Focus on the center of the mandala. Let your breath guide the geometry. The pattern completes as you achieve inner stillness.',
   },

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientProfile } from '../../../types';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { resolveProtocolRuntime } from '../../../services/adaptiveEngine';
+import { readClientProfile } from '../../../services/dataMappers';
+import { DEFAULT_RATIO_REWARDS } from '../../../services/protocols';
 import { ProtocolDetailsModal } from '../ProtocolDetailsModal';
 
 const template = getClinicalProtocolTemplate('beta-downtraining')!;
@@ -27,6 +29,48 @@ async function details(client: ClientProfile) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('patient protocol details training rule', () => {
+  it('shows the default SMR rule after loading an assignment contaminated by a prior ratio reward', async () => {
+    const smr = getClinicalProtocolTemplate('smr-enhancement')!;
+    const client = readClientProfile({ ...assigned(false), assignedProtocol: 'smr-enhancement',
+      customProtocolConfig: { ...smr, customRewardEnabled: false,
+        ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'] } });
+    expect(resolveProtocolRuntime(client)).toMatchObject({ ok: true,
+      config: { protocol: 'smr-enhancement', initialThreshold: 7.5 } });
+    const text = await details(client);
+    expect(text).toContain('12 Hz');
+    expect(text).toContain('15 Hz');
+    expect(text).toContain('Above 7.5 µV');
+    expect(text).not.toContain('Training unavailable');
+  });
+  it('shows the 8–13 Hz alpha default for an older uncustomized assignment', async () => {
+    const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const legacy = { ...assigned(false), assignedProtocol: 'alpha-enhancement' as const,
+      customProtocolConfig: { ...alpha, rewardBand: { ...alpha.rewardBand, freqMax: 12 } } };
+    const text = await details(legacy);
+    expect(text).toContain('8 Hz');
+    expect(text).toContain('13 Hz');
+    expect(text).toContain('Above 11 µV');
+  });
+  it('shows both default ratio bands and a unitless reward threshold', async () => {
+    const ratioTemplate = getClinicalProtocolTemplate('theta-beta-ratio')!;
+    const client = { ...assigned(false), assignedProtocol: 'theta-beta-ratio' as const,
+      customProtocolConfig: { ...ratioTemplate, customRewardEnabled: false } };
+    const text = await details(client);
+    expect(text).toContain('Theta Min Frequency');
+    expect(text).toContain('Theta Max Frequency');
+    expect(text).toContain('Beta Min Frequency');
+    expect(text).toContain('Beta Max Frequency');
+    expect(text).toContain('4 Hz');
+    expect(text).toContain('8 Hz');
+    expect(text).toContain('13 Hz');
+    expect(text).toContain('30 Hz');
+    expect(text).toContain('Reward condition');
+    expect(text).toContain('Below');
+    expect(text).toContain('Reward threshold');
+    expect(text).toContain('1.85');
+    expect(text.indexOf('Beta Max Frequency')).toBeLessThan(text.indexOf('Reward condition'));
+    expect(text).not.toContain('1.85 µV');
+  });
   it('shows the active default beta rule without inactive template values', async () => {
     const client = assigned(false);
     expect(resolveProtocolRuntime(client)).toMatchObject({
@@ -38,7 +82,7 @@ describe('patient protocol details training rule', () => {
     expect(text).toContain('Max Frequency');
     expect(text).toContain('13 Hz');
     expect(text).toContain('30 Hz');
-    expect(text).toContain('At or below 14 µV');
+    expect(text).toContain('Below 14 µV');
     expect(text).not.toContain('9–12 Hz');
     expect(text).not.toContain('10 µV');
     expect(text).not.toContain('Template reward');
@@ -58,7 +102,7 @@ describe('patient protocol details training rule', () => {
     expect(text).toContain('Max Frequency');
     expect(text).toContain('9 Hz');
     expect(text).toContain('12 Hz');
-    expect(text).toContain('At or above 10 µV');
+    expect(text).toContain('Above 10 µV');
     expect(text).not.toContain('13 Hz');
     expect(text).not.toContain('at or below 14');
   });

@@ -1,6 +1,17 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Browser, type Page } from '@playwright/test';
 
 export type E2ERole = 'patient' | 'clinician';
+
+export type AuthenticatedE2EIdentity = {
+    uid: string;
+    email: string;
+    projectId: string;
+};
+
+export const storageStatePath: Record<E2ERole, string> = {
+    patient: 'e2e/.auth/patient.json',
+    clinician: 'e2e/.auth/clinician.json',
+};
 
 type Credentials = {
     email: string;
@@ -64,7 +75,7 @@ export async function startPatientTrainingInDemoMode(page: Page, experienceName?
         await expect(experience).toBeVisible();
         await experience.click();
     } else {
-        await page.getByRole('button', { name: 'Begin 25-Min Session', exact: true }).click();
+        await page.getByRole('button', { name: 'Begin Session', exact: true }).click();
     }
 
     const demoMode = page.getByRole('button', { name: 'Try Demo Mode', exact: true });
@@ -75,4 +86,36 @@ export async function startPatientTrainingInDemoMode(page: Page, experienceName?
 
 export async function arriveAtClinicianDashboard(page: Page): Promise<void> {
     await expect(page.getByRole('button', { name: 'Patients', exact: true })).toBeVisible({ timeout: 15_000 });
+}
+
+/** Reads only the current Firebase UID from the authenticated app runtime. */
+export async function authenticatedUserId(page: Page): Promise<string> {
+    return (await authenticatedFirebaseIdentity(page)).uid;
+}
+
+/** Reads the minimum identity needed to bind privileged E2E cleanup safely. */
+export async function authenticatedFirebaseIdentity(page: Page): Promise<AuthenticatedE2EIdentity> {
+    const identity = await page.evaluate(async () => {
+        const { auth } = await import('/src/services/firebase.ts');
+        await auth.authStateReady();
+        return auth.currentUser && auth.currentUser.email && auth.app.options.projectId
+            ? { uid: auth.currentUser.uid, email: auth.currentUser.email, projectId: auth.app.options.projectId }
+            : null;
+    });
+    if (!identity) throw new Error('Expected an authenticated Firebase user and project.');
+    return identity;
+}
+
+/** Opens a saved role session only long enough to read its Firebase identity. */
+export async function identityFromStorageState(browser: Browser, role: E2ERole): Promise<AuthenticatedE2EIdentity> {
+    const context = await browser.newContext({ storageState: storageStatePath[role] });
+    try {
+        const page = await context.newPage();
+        await page.goto('/');
+        if (role === 'patient') await arriveAtPatientDashboard(page);
+        else await arriveAtClinicianDashboard(page);
+        return await authenticatedFirebaseIdentity(page);
+    } finally {
+        await context.close();
+    }
 }

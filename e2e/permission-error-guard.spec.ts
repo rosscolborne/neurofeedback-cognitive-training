@@ -6,6 +6,47 @@ test('fails on a Firestore permission error in the console', async ({ page }) =>
     test.fail();
 });
 
+test('fails on a permission error in a manually created browser context', async ({ browser }) => {
+    const context = await browser.newContext();
+    try {
+        const page = await context.newPage();
+        await page.goto('about:blank');
+        await page.evaluate(() => console.error('FirebaseError: [code=permission-denied]'));
+    } finally {
+        await context.close();
+    }
+    test.fail();
+});
+
+test('allows expected denials only in the selected context', async ({ browser, permissionErrorGuard }) => {
+    const expectedContext = await browser.newContext();
+    permissionErrorGuard.expectDenialsIn(expectedContext);
+    try {
+        const page = await expectedContext.newPage();
+        await page.goto('about:blank');
+        await page.evaluate(() => console.error('FirebaseError: [code=permission-denied]'));
+    } finally {
+        await expectedContext.close();
+    }
+});
+
+test('still catches another context after an expected-denial exception', async ({ browser, permissionErrorGuard }) => {
+    const expectedContext = await browser.newContext();
+    const guardedContext = await browser.newContext();
+    permissionErrorGuard.expectDenialsIn(expectedContext);
+    try {
+        const expectedPage = await expectedContext.newPage();
+        await expectedPage.goto('about:blank');
+        await expectedPage.evaluate(() => console.error('FirebaseError: [code=permission-denied]'));
+        const guardedPage = await guardedContext.newPage();
+        await guardedPage.goto('about:blank');
+        await guardedPage.evaluate(() => console.error('FirebaseError: [code=permission-denied]'));
+    } finally {
+        await Promise.all([expectedContext.close(), guardedContext.close()]);
+    }
+    test.fail();
+});
+
 test('fails on an uncaught Firestore permission error', async ({ page }) => {
     await page.goto('about:blank');
     const pageError = page.waitForEvent('pageerror');

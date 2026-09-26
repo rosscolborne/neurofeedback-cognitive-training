@@ -25,14 +25,14 @@ class BrainFlowSession:
         processing: ProcessingConfig = DEFAULT_PROCESSING,
         protocol: str = "theta-beta-ratio",
         threshold: float = 1.85,
+        reward: dict | None = None,
     ) -> None:
         self.id = str(uuid.uuid4())
         self.config = config
         self.mac_address = mac_address
         self.serial_number = serial_number
         self.processing = processing
-        self.protocol = protocol
-        self.threshold = threshold
+        self.protocol_config = (protocol, threshold, reward, 0)
         self.sequence_id = 0
         self.board = None
         self.board_id = 0
@@ -50,6 +50,11 @@ class BrainFlowSession:
 
     def reset_metric_calibration(self) -> None:
         self._analysis.metrics.reset_calibration()
+
+    def update_protocol(self, protocol: str, threshold: float, reward: dict | None) -> int:
+        revision = self.protocol_config[3] + 1
+        self.protocol_config = (protocol, threshold, reward, revision)
+        return revision
 
     def prepare(self) -> DeviceInfo:
         from brainflow.board_shim import BoardIds, BrainFlowInputParams, BrainFlowPresets, BoardShim
@@ -154,6 +159,7 @@ class BrainFlowSession:
 
         channels = self.device_info.capabilities[0].channels
         window = build_eeg_window(data, self.eeg_channels, window_samples)
+        protocol, threshold, reward, protocol_revision = self.protocol_config
         analysis = analyze_window(
             providers=self._analysis,
             channels=channels,
@@ -161,8 +167,9 @@ class BrainFlowSession:
             raw_window=window,
             sample_rate=sample_rate,
             processing=self.processing,
-            protocol=self.protocol,
-            threshold=self.threshold,
+            protocol=protocol,
+            threshold=threshold,
+            reward=reward,
         )
 
         return SignalFrame(
@@ -173,6 +180,7 @@ class BrainFlowSession:
             timestampsMs=timestamps_ms,
             receivedAtMs=time.time() * 1000.0,
             sequenceId=self.sequence_id,
+            protocolRevision=protocol_revision,
             quality=analysis.quality,
             features=analysis.features,
             training=analysis.training,

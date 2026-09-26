@@ -4,9 +4,28 @@ import {
   getProtocolAssignmentAlias,
 } from '../clinicalProtocolTemplates';
 import type { ProtocolTemplate, ProtocolType } from '../../types';
-import { getDefaultProtocolThreshold, getProtocolTypeForTemplate, protocolDefinitions } from '../protocols';
+import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS, getDefaultProtocolThreshold, getProtocolTypeForTemplate, protocolDefinitions, STANDARD_EEG_BANDS_HZ } from '../protocols';
 
 describe('protocol definitions', () => {
+  it('uses the overview bands for every default clinician training reward', () => {
+    expect(STANDARD_EEG_BANDS_HZ).toMatchObject({
+      delta: { min: 1, max: 4 }, theta: { min: 4, max: 8 },
+      alpha: { min: 8, max: 13 }, beta: { min: 13, max: 30 },
+    });
+    for (const [protocol, band] of [
+      ['smr-enhancement', 'smr'], ['alpha-enhancement', 'alpha'], ['beta-downtraining', 'beta'],
+    ] as const) {
+      expect(DEFAULT_SINGLE_BAND_REWARDS[protocol]).toMatchObject({
+        freqMin: STANDARD_EEG_BANDS_HZ[band].min, freqMax: STANDARD_EEG_BANDS_HZ[band].max,
+      });
+    }
+    expect(DEFAULT_RATIO_REWARDS['theta-beta-ratio']).toMatchObject({
+      numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 },
+    });
+    expect(DEFAULT_RATIO_REWARDS['alpha-theta-crossover']).toMatchObject({
+      numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 8, freqMax: 13 },
+    });
+  });
   it('supplies each supported protocol and its default threshold', () => {
     expect(protocolDefinitions).toHaveLength(6);
     expect(getDefaultProtocolThreshold('theta-beta-ratio')).toBe(1.85);

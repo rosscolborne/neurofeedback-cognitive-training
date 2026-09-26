@@ -1,0 +1,51 @@
+--- a/src/components/patient/PatientShell.tsx
++++ b/src/components/patient/PatientShell.tsx
+@@ -1,5 +1,5 @@
+ import React, { useState } from 'react';
+-import { signOut } from 'firebase/auth';
++import { EmailAuthProvider, reauthenticateWithCredential, signOut } from 'firebase/auth';
+ import { auth, db } from '../../services/firebase';
+ import { doc, deleteDoc } from 'firebase/firestore';
+ import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
+@@ -83,17 +83,31 @@
+     }
+   };
+ 
++  // Track C: re-authenticate BEFORE touching Firestore so an
++  // auth/requires-recent-login failure cannot leave a role-less, still-linked
++  // account behind. Copy must not promise erasure: sessions, QEEG, messages
++  // and appointments are retained (rules deny client deletes; no trusted
++  // server deletion exists). A linked patient must disconnect first (requires
++  // the policy-gated withdrawal rule) or ask their clinician to unlink.
+   const handleDeleteAccount = async () => {
+-    if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
+-      if (auth.currentUser) {
+-        try {
+-          await deleteDoc(doc(db, 'users', auth.currentUser.uid));
+-          await auth.currentUser.delete();
+-          window.location.href = '/welcome';
+-        } catch (err) {
+-          alert('Failed to delete account. Please log out and log back in to verify your identity, then try again.');
+-        }
+-      }
++    const currentUser = auth.currentUser;
++    if (!currentUser?.email) return;
++    if (isClinicianLinked) {
++      alert('Disconnect from your clinician before closing your account.');
++      return;
++    }
++    if (!window.confirm('Close your account? You will no longer be able to sign in. Training history, QEEG maps, messages and appointments already recorded are kept and are not deleted by this action.')) return;
++    const password = window.prompt('Enter your password to confirm');
++    if (!password) return;
++    try {
++      await reauthenticateWithCredential(currentUser, EmailAuthProvider.credential(currentUser.email, password));
++      await deleteDoc(doc(db, 'deviceAssignments', currentUser.uid));
++      await deleteDoc(doc(db, 'clients', currentUser.uid));
++      await deleteDoc(doc(db, 'users', currentUser.uid));
++      await currentUser.delete();
++      window.location.href = '/welcome';
++    } catch (err) {
++      alert('Your account could not be closed. Nothing was removed from sign-in; please try again.');
+     }
+   };
+ 

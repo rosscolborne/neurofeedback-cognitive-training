@@ -31,6 +31,7 @@ import {
   setDoc,
   Timestamp,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import {
   applySessionCompletionToClient,
@@ -72,6 +73,33 @@ const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 const INVITATION_CODE_PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 const getInvitationClaimRef = (clinicianId: string, normalizedEmail: string) =>
   doc(db, 'patientInvitationClaims', clinicianId, 'emails', normalizedEmail);
+
+const CANONICAL_APPOINTMENT_KEYS = new Set([
+  'clinicianId', 'patientId', 'patientDisplayName', 'clinicianDisplayName', 'startsAt', 'timezone',
+  'durationMinutes', 'type', 'status', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'revision', 'schemaVersion',
+]);
+
+const isBoundedText = (value: unknown, maxLength: number, allowEmpty: boolean) =>
+  typeof value === 'string' && value.length <= maxLength && (value === '' ? allowEmpty : value.trim() === value);
+
+/**
+ * Mirrors the Firestore cancellation rule, so an unlink only cancels future
+ * appointments the rules will accept. A legacy or malformed record is left as
+ * is rather than blocking the whole unlink.
+ */
+function isCancellableFutureAppointment(data: Record<string, unknown>, now: number): data is Record<string, unknown> & { revision: number } {
+  const startsAt = data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null;
+  return data.status === 'scheduled'
+    && startsAt !== null && startsAt > now
+    && Number.isInteger(data.revision)
+    && data.schemaVersion === 1
+    && data.createdAt instanceof Timestamp
+    && Object.keys(data).every((key) => CANONICAL_APPOINTMENT_KEYS.has(key))
+    && isBoundedText(data.patientDisplayName, 160, false)
+    && isBoundedText(data.timezone, 100, false)
+    && (!('clinicianDisplayName' in data) || isBoundedText(data.clinicianDisplayName, 160, false))
+    && (!('notes' in data) || isBoundedText(data.notes, 2000, true));
+}
 
 const QEEG_Z_SCORE_KEYS = ['centralBeta', 'frontalTheta', 'occipitalAlpha', 'sensorimotorSMR', 'temporalDelta'] as const;
 
@@ -948,11 +976,56 @@ class StorageEngine {
     if (getPatientClinicianId(patient) !== clinicianId) {
       throw new Error('You are not linked to this patient');
     }
-    await setDoc(
-      patientRef,
-      { clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp() },
-      { merge: true }
-    );
+
+    // End the relationship atomically with its live side effects.
+    // Rules evaluate get() against pre-batch state, so the still-linked checks
+    // on appointment cancellation pass inside the same batch as the unlink.
+    // Past appointments, sessions, QEEG maps and messages are left untouched.
+    const now = Date.now();
+    const [appointmentSnapshot, invitationSnapshot] = await Promise.all([
+      getDocs(query(
+        collection(db, 'appointments'),
+        where('clinicianId', '==', clinicianId),
+        where('patientId', '==', patientId),
+      )),
+      getDocs(query(collection(db, 'patientInvitations'), where('clinicianId', '==', clinicianId))),
+    ]);
+    const patientEmail = normalizeEmail(patient.email || '');
+    const pendingInvitations = invitationSnapshot.docs
+      .map((entry) => ({ entry, invitation: readPatientInvitation(entry.data(), entry.id) }))
+      .filter(({ invitation }) => invitation.status === 'pending' && Boolean(patientEmail)
+        && normalizeEmail(invitation.patientEmail) === patientEmail);
+    // A claim is released only when it still belongs to the invitation being
+    // cancelled; a claim now held by a newer invitation leaves that pair alone.
+    const claimIds = [...new Set(pendingInvitations.map(({ invitation }) => invitation.uniquenessClaimId).filter(Boolean))] as string[];
+    const claims = new Map(await Promise.all(claimIds.map(async (claimId) => {
+      const claim = await getDoc(getInvitationClaimRef(clinicianId, claimId));
+      return [claimId, claim.exists() ? (claim.data() as { invitationId?: unknown }).invitationId : undefined] as const;
+    })));
+    const batch = writeBatch(db);
+    for (const entry of appointmentSnapshot.docs) {
+      const data = entry.data() as Record<string, unknown>;
+      if (!isCancellableFutureAppointment(data, now)) continue;
+      batch.update(entry.ref, {
+        status: 'cancelled',
+        cancelledAt: serverTimestamp(),
+        cancelledBy: clinicianId,
+        cancellationRequestId: `cancel_${crypto.randomUUID().replace(/-/g, '')}`,
+        updatedAt: serverTimestamp(),
+        revision: data.revision + 1,
+      });
+    }
+    for (const { entry, invitation } of pendingInvitations) {
+      const claimId = invitation.uniquenessClaimId;
+      const claimHolder = claimId ? claims.get(claimId) : undefined;
+      if (claimHolder !== undefined && claimHolder !== invitation.id) continue;
+      batch.update(entry.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
+      if (claimId && claimHolder === invitation.id) batch.delete(getInvitationClaimRef(clinicianId, claimId));
+    }
+    batch.update(patientRef, {
+      clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
   }
 
   public async acceptPatientInvitation(invitationCode: string, fallbackClient: ClientProfile): Promise<ClientProfile> {
@@ -1001,7 +1074,9 @@ class StorageEngine {
           throw new Error('This invitation has already been used');
         }
         if (invitation.status === 'cancelled') throw new Error('This invitation was cancelled by the clinician');
-        if (invitation.status === 'expired' || isPatientInvitationExpired(invitation)) {
+        // Invitations must carry an expiry; legacy ones without it are refused by
+        // the rules, so report them as expired instead of a permission error.
+        if (invitation.status === 'expired' || isPatientInvitationExpired(invitation) || timestampToMillis(invitation.expiresAt) === null) {
           throw new Error('This invitation has expired. Ask your clinician for a new code');
         }
         if (invitation.status !== 'pending') throw new Error('This invitation is no longer available');
@@ -1067,6 +1142,11 @@ class StorageEngine {
     const payload = removeUndefined(client) as unknown as Record<string, unknown>;
     for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
       if (client[field] === undefined) payload[field] = deleteField();
+    }
+    // A merged map keeps omitted nested keys. Clear a previous ratio rule
+    // when this assignment no longer includes one.
+    if (client.customProtocolConfig && !client.customProtocolConfig.ratioReward) {
+      (payload.customProtocolConfig as Record<string, unknown>).ratioReward = deleteField();
     }
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
   }

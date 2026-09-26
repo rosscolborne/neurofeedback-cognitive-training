@@ -9,6 +9,7 @@ export interface ProtocolRuntimeConfig {
   adaptiveStep: number;
   lowerIsBetter: boolean;
   rewardBand?: ProtocolTemplate['rewardBand'];
+  ratioReward?: ProtocolTemplate['ratioReward'];
   thresholdBounds: { min: number; max: number };
   source: 'canonical-default' | 'patient-override';
 }
@@ -35,8 +36,13 @@ export const PROTOCOL_RUNTIME_LIMITATIONS =
   + 'Inhibit bands, montage or device mapping, sensitivity, clinical notes or rationale, recommended experiences, and the custom alias are documentation/display-only.';
 
 export function validateCustomRewardBand(reward: ProtocolTemplate['rewardBand'] | undefined): string | null {
-  if (!reward || !finite(reward.freqMin) || !finite(reward.freqMax)
-    || reward.freqMin < 3 || reward.freqMax > 45 || reward.freqMax - reward.freqMin < 0.5) {
+  if (!reward || !finite(reward.freqMin) || !finite(reward.freqMax)) {
+    return 'Reward frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
+  }
+  if (reward.freqMin >= reward.freqMax) {
+    return 'Min Frequency must be below Max Frequency.';
+  }
+  if (reward.freqMin < 3 || reward.freqMax > 45 || reward.freqMax - reward.freqMin < 0.5) {
     return 'Reward frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
   }
   if (reward.targetCondition !== 'above' && reward.targetCondition !== 'below') {
@@ -45,6 +51,29 @@ export function validateCustomRewardBand(reward: ProtocolTemplate['rewardBand'] 
   if (!finite(reward.targetThreshold) || reward.targetThreshold < 0 || reward.targetThreshold > 1000
     || !hasSupportedThresholdPrecision(reward.targetThreshold)) {
     return 'Reward threshold must be a finite value from 0 to 1000 µV with at most two decimal places.';
+  }
+  return null;
+}
+
+export function validateCustomRatioReward(reward: ProtocolTemplate['ratioReward'] | undefined): string | null {
+  if (!reward) return 'The saved ratio reward definition is missing.';
+  for (const band of [reward.numerator, reward.denominator]) {
+    if (!band || !finite(band.freqMin) || !finite(band.freqMax)) {
+      return 'Ratio frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
+    }
+    if (band.freqMin >= band.freqMax) {
+      return 'Each ratio band’s Min Frequency must be below its Max Frequency.';
+    }
+    if (band.freqMin < 3 || band.freqMax > 45 || band.freqMax - band.freqMin < 0.5) {
+      return 'Ratio frequencies must span at least 0.5 Hz within the measured 3–45 Hz range.';
+    }
+  }
+  if (reward.targetCondition !== 'above' && reward.targetCondition !== 'below') {
+    return 'Ratio reward condition must be above or below.';
+  }
+  if (!finite(reward.targetThreshold) || reward.targetThreshold < 0 || reward.targetThreshold > 1000
+    || !hasSupportedThresholdPrecision(reward.targetThreshold)) {
+    return 'Ratio threshold must be a finite unitless value from 0 to 1000 with at most two decimal places.';
   }
   return null;
 }
@@ -60,16 +89,30 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
   }
   const rewardIsCustom = Boolean(custom && (
     custom.customRewardEnabled === true
-    || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand)
+    || (custom.customRewardEnabled === undefined && (
+      custom.ratioReward
+      || !hasCanonicalRewardDefinition(custom.rewardBand, canonical.rewardBand, assignedProtocol)
+    ))
   ));
   if (custom?.customRewardEnabled !== undefined && typeof custom.customRewardEnabled !== 'boolean') {
     return { ok: false, error: 'The saved reward mode is invalid.' };
   }
+  if (custom && custom.ratioReward !== undefined && custom.customRewardEnabled !== false) {
+    if (assignedProtocol !== 'theta-beta-ratio' && assignedProtocol !== 'alpha-theta-crossover') {
+      return { ok: false, error: 'Ratio rewards are only supported by ratio protocols.' };
+    }
+    const ratioError = validateCustomRatioReward(custom.ratioReward);
+    if (ratioError) return { ok: false, error: ratioError };
+  }
   if (rewardIsCustom) {
-    const error = validateCustomRewardBand(custom?.rewardBand);
+    const error = custom?.ratioReward
+      ? validateCustomRatioReward(custom.ratioReward)
+      : validateCustomRewardBand(custom?.rewardBand);
     if (error) return { ok: false, error };
   }
-  const initialThreshold = rewardIsCustom ? custom!.rewardBand.targetThreshold : getDefaultProtocolThreshold(assignedProtocol);
+  const initialThreshold = rewardIsCustom
+    ? custom?.ratioReward?.targetThreshold ?? custom!.rewardBand.targetThreshold
+    : getDefaultProtocolThreshold(assignedProtocol);
   const requestedBounds = client.customThresholdBounds;
   const thresholdBounds = requestedBounds ?? DEFAULT_THRESHOLD_BOUNDS;
   if (!finite(thresholdBounds.min) || !finite(thresholdBounds.max)
@@ -110,8 +153,11 @@ export function resolveProtocolRuntime(client: ClientProfile): ProtocolRuntimeRe
       durationSeconds: Math.round(custom.sessionDurationMinutes * 60),
       initialThreshold,
       adaptiveStep: custom.adaptiveStep,
-      lowerIsBetter: rewardIsCustom ? custom.rewardBand.targetCondition === 'below' : LOWER_IS_BETTER[protocol],
-      rewardBand: rewardIsCustom ? { ...custom.rewardBand } : undefined,
+      lowerIsBetter: rewardIsCustom
+        ? (custom.ratioReward?.targetCondition ?? custom.rewardBand.targetCondition) === 'below'
+        : LOWER_IS_BETTER[protocol],
+      rewardBand: rewardIsCustom && !custom.ratioReward ? { ...custom.rewardBand } : undefined,
+      ratioReward: rewardIsCustom && custom.ratioReward ? { ...custom.ratioReward } : undefined,
       thresholdBounds: { ...thresholdBounds },
       source: 'patient-override',
     },
@@ -126,6 +172,8 @@ export function evaluateProtocolFeedback(
   rewardBand?: ProtocolTemplate['rewardBand'],
   rewardAmplitudeUv?: number | null,
   rewardWidth?: number,
+  ratioReward?: ProtocolTemplate['ratioReward'],
+  rewardPowerRatio?: number | null,
 ): { ratio: number | null; metric: number | null; inZone: boolean; zoneScore: number; available: boolean } {
   const available = (...keys: Array<keyof BandPowers>) => keys.every(key => availability[key] && finite(bands[key]));
   const ratio = available('theta', 'beta') ? bands.theta / Math.max(1e-9, bands.beta) : null;
@@ -139,27 +187,18 @@ export function evaluateProtocolFeedback(
       : (rewardAmplitudeUv - threshold + width) / (2 * width);
     return { ratio, metric: rewardAmplitudeUv, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
   }
-  let metric: number | null = null;
-  let lowerIsBetter = false;
-  let width = 1;
-  switch (protocol) {
-    case 'theta-beta-ratio': metric = ratio; lowerIsBetter = true; width = 1.5; break;
-    case 'smr-enhancement': metric = available('smr') ? bands.smr : null; width = 1.5; break;
-    case 'alpha-enhancement':
-    case 'individualized-upper-alpha': metric = available('alpha') ? bands.alpha : null; width = 2; break;
-    case 'alpha-theta-crossover':
-      metric = available('theta', 'alpha') ? bands.theta / Math.max(1e-9, bands.alpha) : null;
-      width = 0.5;
-      break;
-    // Default beta feedback also needs a measured raw spectral amplitude.
-    case 'beta-downtraining': metric = null; lowerIsBetter = true; width = 5; break;
+  if (ratioReward) {
+    if (!finite(rewardPowerRatio)) return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
+    const lowerIsBetter = ratioReward.targetCondition === 'below';
+    const inZone = lowerIsBetter ? rewardPowerRatio <= threshold : rewardPowerRatio >= threshold;
+    const width = protocol === 'theta-beta-ratio' ? 1.5 : 0.5;
+    const zoneScore = lowerIsBetter
+      ? 1 - (rewardPowerRatio - threshold) / width
+      : (rewardPowerRatio - threshold + width) / (2 * width);
+    return { ratio: protocol === 'theta-beta-ratio' ? rewardPowerRatio : ratio,
+      metric: rewardPowerRatio, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
   }
-  if (metric === null) return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
-  const inZone = lowerIsBetter ? metric <= threshold : metric >= threshold;
-  const zoneScore = lowerIsBetter
-    ? 1 - (metric - threshold) / width
-    : (metric - threshold + width) / (2 * width);
-  return { ratio, metric, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+  return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
 }
 
 export function advanceSessionClock(elapsedSeconds: number, durationSeconds: number, demoMode: boolean) {

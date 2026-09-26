@@ -23,6 +23,7 @@ from .affective_state import FitQualityHint
 from .config import DEFAULT_BANDS, DEFAULT_PROCESSING, ProcessingConfig
 from .dsp import (
     calculate_peak_band_amplitude_uv,
+    calculate_spectral_power_ratio,
     extract_band_power_features,
     extract_brainflow_mindfulness,
     extract_brainflow_restfulness,
@@ -40,7 +41,16 @@ from .models import SignalChannel, SignalFeatures, SignalQualityMetadata, Traini
 from .metrics import MetricCalculator, MetricInput
 from .training import TrainingScoreProvider
 
-BETA_BAND = next(band for band in DEFAULT_BANDS if band.id == "beta")
+STANDARD_BANDS = {band.id: (band.low_hz, band.high_hz) for band in DEFAULT_BANDS}
+DEFAULT_AMPLITUDE_BANDS = {
+    "smr-enhancement": STANDARD_BANDS["smr"],
+    "alpha-enhancement": STANDARD_BANDS["alpha"],
+    "beta-downtraining": STANDARD_BANDS["beta"],
+}
+DEFAULT_RATIO_BANDS = {
+    "theta-beta-ratio": (STANDARD_BANDS["theta"], STANDARD_BANDS["beta"]),
+    "alpha-theta-crossover": (STANDARD_BANDS["theta"], STANDARD_BANDS["alpha"]),
+}
 
 
 @dataclass
@@ -75,6 +85,7 @@ def analyze_window(
     at_ms: float | None = None,
     protocol: str = "theta-beta-ratio",
     threshold: float = 1.85,
+    reward: dict | None = None,
 ) -> WindowAnalysis:
     """Turns one raw EEG window into a headset-fit assessment plus (when
     `raw_window` has enough samples) the finished, smoothed scores.
@@ -95,6 +106,23 @@ def analyze_window(
     training: TrainingMetricSampleModel | None = None
 
     if raw_window is not None:
+        if reward is not None:
+            reward_kind = reward["kind"]
+            reward_condition = reward["condition"]
+            if reward_kind == "amplitude":
+                band = reward["band"]
+                amplitude_band = (band["freq_min"], band["freq_max"])
+                ratio_bands = None
+            else:
+                numerator, denominator = reward["numerator"], reward["denominator"]
+                ratio_bands = ((numerator["freq_min"], numerator["freq_max"]),
+                               (denominator["freq_min"], denominator["freq_max"]))
+                amplitude_band = None
+        else:
+            amplitude_band = DEFAULT_AMPLITUDE_BANDS.get(protocol)
+            ratio_bands = DEFAULT_RATIO_BANDS.get(protocol)
+            reward_kind = "amplitude" if amplitude_band else "ratio" if ratio_bands else None
+            reward_condition = "below" if protocol in {"theta-beta-ratio", "beta-downtraining"} else "above"
         processed = preprocess_eeg_window(raw_window, sample_rate, processing)
         band_powers = extract_band_power_features(processed, sample_rate)
         interhemispheric_coherence = extract_interhemispheric_coherence(
@@ -114,7 +142,15 @@ def analyze_window(
                 threshold=threshold,
                 reliable=reliable,
                 fit=FitQualityHint(ready=fit_snapshot.ready, state=fit_snapshot.state),
-                reward_amplitude_uv=calculate_peak_band_amplitude_uv(raw_window, sample_rate, BETA_BAND.low_hz, BETA_BAND.high_hz) if protocol == "beta-downtraining" else None,
+                reward_amplitude_uv=calculate_peak_band_amplitude_uv(
+                    raw_window, sample_rate, *amplitude_band,
+                ) if amplitude_band else None,
+                reward_power_ratio=calculate_spectral_power_ratio(
+                    raw_window, sample_rate, *ratio_bands,
+                ) if ratio_bands else None,
+                reward_kind=reward_kind,
+                reward_condition=reward_condition,
+                reward_width=(2.0 if reward is not None and reward_kind == "amplitude" else None),
             ))
             if band_powers:
                 band_powers = band_powers.model_copy(update={

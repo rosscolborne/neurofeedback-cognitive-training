@@ -121,3 +121,56 @@ def test_analyze_window_404_for_unknown_session() -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_clinician_ratio_condition_and_bands_reach_backend_feedback() -> None:
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app)
+    session_id = _create_session(client)
+    samples = [
+        [4 * math.sin(2 * math.pi * 6 * i / 256)
+         + 12 * math.sin(2 * math.pi * 10 * i / 256)
+         + 8 * math.sin(2 * math.pi * 17 * i / 256)] * 4
+        for i in range(512)
+    ]
+    def feedback(numerator: tuple[int, int], condition: str):
+        response = client.post(f"/headset-fit/sessions/{session_id}/analyze-window", json={
+            "sampleRateHz": 256, "samples": samples,
+            "channelIds": ["TP9", "AF7", "AF8", "TP10"],
+            "protocol": "theta-beta-ratio", "threshold": 1.85,
+            "reward": {"kind": "ratio", "condition": condition,
+                       "numerator": {"freqMin": numerator[0], "freqMax": numerator[1]},
+                       "denominator": {"freqMin": 13, "freqMax": 30}},
+        })
+        assert response.status_code == 200
+        return response.json()["features"]
+
+    default = feedback((4, 8), "below")
+    changed_band = feedback((9, 11), "below")
+    changed_condition = feedback((9, 11), "above")
+    assert default["primaryMetricValue"] == pytest.approx(.25, abs=.03)
+    assert default["inZone"] is True
+    assert changed_band["primaryMetricValue"] == pytest.approx(2.25, abs=.1)
+    assert changed_band["inZone"] is False
+    assert changed_condition["primaryMetricValue"] == pytest.approx(changed_band["primaryMetricValue"])
+    assert changed_condition["inZone"] is True
+
+    invalid = client.post(f"/headset-fit/sessions/{session_id}/analyze-window", json={
+        "sampleRateHz": 256, "samples": samples,
+        "channelIds": ["TP9", "AF7", "AF8", "TP10"],
+        "reward": {"kind": "ratio", "condition": "above", "numerator": {"freqMin": 9, "freqMax": 9},
+                   "denominator": {"freqMin": 13, "freqMax": 30}},
+    })
+    assert invalid.status_code == 422
+
+    unsupported = client.post(f"/headset-fit/sessions/{session_id}/analyze-window", json={
+        "sampleRateHz": 256, "samples": samples,
+        "channelIds": ["TP9", "AF7", "AF8", "TP10"],
+        "protocol": "smr-enhancement", "threshold": 1.85,
+        "reward": {"kind": "ratio", "condition": "above",
+                   "numerator": {"freqMin": 4, "freqMax": 8},
+                   "denominator": {"freqMin": 13, "freqMax": 30}},
+    })
+    assert unsupported.status_code == 422

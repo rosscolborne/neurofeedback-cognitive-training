@@ -75,7 +75,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     id: 'proto-hardt-alpha',
     protocolType: 'alpha-enhancement',
     name: 'Hardt Alpha Synchrony Protocol',
-    clinicalName: 'Parieto-Occipital Alpha (8-12 Hz) Enhancement',
+    clinicalName: 'Parieto-Occipital Alpha (8-13 Hz) Enhancement',
     leadInvestigator: 'James V. Hardt, Ph.D. (Biocybernaut Institute)',
     indication: 'Generalized Anxiety, Somatic Worry, Executive Burnout',
     montageSite: 'Pz / Oz (Parietal-Occipital)',
@@ -83,7 +83,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     rewardBand: {
       name: 'Alpha Synchrony',
       freqMin: 8.0,
-      freqMax: 12.0,
+      freqMax: 13.0,
       targetCondition: 'above',
       targetThreshold: 11.5,
     },
@@ -164,9 +164,18 @@ export function getClinicalProtocolTemplate(protocolType: ProtocolType): Protoco
 export function hasCanonicalRewardDefinition(
   rewardBand: ProtocolTemplate['rewardBand'] | undefined,
   canonical: ProtocolTemplate['rewardBand'],
+  protocolType: ProtocolType,
 ): boolean {
-  return rewardBand?.freqMin === canonical.freqMin
+  const sameReference = rewardBand?.freqMin === canonical.freqMin
     && rewardBand?.freqMax === canonical.freqMax
+    && rewardBand?.targetCondition === canonical.targetCondition
+    && rewardBand?.targetThreshold === canonical.targetThreshold;
+  if (sameReference) return true;
+  // Assignments saved before the alpha default changed to 8–13 Hz carried
+  // 8–12 Hz template metadata even when the clinician had not customized it.
+  return protocolType === 'alpha-enhancement'
+    && canonical.freqMin === 8 && canonical.freqMax === 13
+    && rewardBand?.freqMin === 8 && rewardBand?.freqMax === 12
     && rewardBand?.targetCondition === canonical.targetCondition
     && rewardBand?.targetThreshold === canonical.targetThreshold;
 }
