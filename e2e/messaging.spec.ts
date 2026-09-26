@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('clinician and patient Messages remain visible when smooth scrolling returns a Promise', async ({ page }) => {
   const pageErrors: string[] = [];

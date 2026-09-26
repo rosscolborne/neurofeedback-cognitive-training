@@ -53,6 +53,10 @@ export default defineConfig({
             testMatch: /smoke\.spec\.ts/,
         },
         {
+            name: 'messaging',
+            testMatch: /messaging\.spec\.ts/,
+        },
+        {
             name: 'permission-guard',
             testMatch: /permission-error-guard\.spec\.ts/,
             use: noCapture,

@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 // Entirely separate from the shared-account E2E projects and .env.e2e.
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /protocol\.local\.spec\.ts/,
+  testMatch: /(?:protocol|messaging)\.local\.spec\.ts/,
   workers: 1,
   timeout: 90_000,
   use: {

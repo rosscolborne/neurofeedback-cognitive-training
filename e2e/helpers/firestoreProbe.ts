@@ -12,6 +12,12 @@ async function outcome(probe: () => Promise<unknown>): Promise<string> {
     }
 }
 
+/** Direct, read-only probe used by the isolated messaging browser scenario. */
+export async function probeMessageThreadRead(patientId: string, clinicianId: string): Promise<string> {
+    await auth.authStateReady();
+    return outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId)));
+}
+
 export async function probeUnrelatedClinicianReads(patientId: string, ownerClinicianId: string): Promise<string[]> {
     await auth.authStateReady();
     return Promise.all([
