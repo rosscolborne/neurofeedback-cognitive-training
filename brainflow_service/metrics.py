@@ -20,6 +20,10 @@ class MetricInput:
     reliable: bool
     fit: FitQualityHint | None = None
     reward_amplitude_uv: float | None = None
+    reward_power_ratio: float | None = None
+    reward_kind: str | None = None
+    reward_condition: str | None = None
+    reward_width: float | None = None
 
 
 @dataclass(frozen=True)
@@ -216,7 +220,11 @@ class MetricCalculator:
         brainflow_scores = self._brainflow.push(metric_input.raw_mindfulness, metric_input.raw_restfulness) if metric_input.reliable else BrainFlowScores(None, None)
         raw_affective = compute_affective_state(raw_absolute, metric_input.fit) if metric_input.reliable else None
         affective = self._push_affective(raw_affective)
-        feedback = compute_protocol_feedback(absolute, ratios, metric_input.protocol, metric_input.threshold, metric_input.reward_amplitude_uv) if metric_input.reliable else ProtocolFeedback(None, None, None, None)
+        feedback = compute_protocol_feedback(
+            absolute, ratios, metric_input.protocol, metric_input.threshold,
+            metric_input.reward_amplitude_uv, metric_input.reward_power_ratio,
+            metric_input.reward_kind, metric_input.reward_condition, metric_input.reward_width,
+        ) if metric_input.reliable else ProtocolFeedback(None, None, None, None)
         raw_display = _display_values(brainflow_scores, affective, coherence, ratios) if metric_input.reliable else {}
         display = self._calibration.apply(raw_display) if metric_input.reliable else {}
         baseline_relative = {key: display[key] for key in self._calibration.active_keys if key in display}
@@ -275,13 +283,30 @@ def compute_band_ratios(bands: dict[str, float]) -> dict[str, float]:
     }
 
 
-def compute_protocol_feedback(bands: dict[str, float], ratios: dict[str, float], protocol: str, threshold: float, reward_amplitude_uv: float | None = None) -> ProtocolFeedback:
-    if protocol == "theta-beta-ratio": return _lower_is_better("thetaBeta", ratios.get("thetaBeta"), threshold, 1.5)
-    if protocol == "smr-enhancement": return _higher_is_better("smr", bands.get("smr"), threshold, 1.5)
-    if protocol in {"alpha-enhancement", "individualized-upper-alpha"}: return _higher_is_better("alpha", bands.get("alpha"), threshold, 2.0)
-    if protocol == "alpha-theta-crossover": return _higher_is_better("thetaAlpha", ratios.get("thetaAlpha"), threshold, .5)
-    if protocol == "beta-downtraining": return _lower_is_better("betaAmplitudeUv", reward_amplitude_uv, threshold, 5.0)
-    return ProtocolFeedback(None, None, None, None)
+def compute_protocol_feedback(
+    bands: dict[str, float], ratios: dict[str, float], protocol: str, threshold: float,
+    reward_amplitude_uv: float | None = None, reward_power_ratio: float | None = None,
+    reward_kind: str | None = None, reward_condition: str | None = None,
+    reward_width: float | None = None,
+) -> ProtocolFeedback:
+    del bands, ratios  # Only the reward measured from raw EEG can decide feedback.
+    kind = reward_kind or ("ratio" if protocol in {"theta-beta-ratio", "alpha-theta-crossover"} else "amplitude")
+    condition = reward_condition or ("below" if protocol in {"theta-beta-ratio", "beta-downtraining"} else "above")
+    if kind == "ratio":
+        name = {"theta-beta-ratio": "thetaBeta", "alpha-theta-crossover": "thetaAlpha"}.get(protocol)
+        value = reward_power_ratio
+        width = reward_width or (1.5 if protocol == "theta-beta-ratio" else .5)
+    elif kind == "amplitude":
+        name = {"smr-enhancement": "smrAmplitudeUv", "alpha-enhancement": "alphaAmplitudeUv",
+                "beta-downtraining": "betaAmplitudeUv"}.get(protocol, "rewardAmplitudeUv")
+        value = reward_amplitude_uv
+        width = reward_width or {"smr-enhancement": 1.5, "alpha-enhancement": 2.0,
+                                 "beta-downtraining": 5.0}.get(protocol, 2.0)
+    else:
+        return ProtocolFeedback(None, None, None, None)
+    if condition == "below": return _lower_is_better(name, value, threshold, width)
+    if condition == "above": return _higher_is_better(name, value, threshold, width)
+    return ProtocolFeedback(name, None, None, None)
 
 
 def normalize_brainflow_score(value: float | None) -> float | None:

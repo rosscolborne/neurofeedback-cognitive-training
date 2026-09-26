@@ -37,6 +37,39 @@ def calculate_peak_band_amplitude_uv(
     return float(peaks.mean())
 
 
+def calculate_spectral_band_power_uv2(
+    window: np.ndarray, sampling_rate: int, low_hz: float, high_hz: float,
+) -> float | None:
+    """Mean channel power in one raw-EEG band, matching the live/Demo ratio path."""
+    sample_count = round(sampling_rate * 2)
+    if sampling_rate < 90 or window.ndim != 2 or not len(window) or window.shape[1] < sample_count:
+        return None
+    if not 0 < low_hz < high_hz < sampling_rate / 2:
+        return None
+    first_bin = max(1, int(np.ceil(low_hz * sample_count / sampling_rate)))
+    last_bin = min(sample_count // 2 - 1, int(np.ceil(high_hz * sample_count / sampling_rate)) - 1)
+    if first_bin > last_bin:
+        return None
+    latest = window[:, -sample_count:].astype(float, copy=True)
+    if not np.isfinite(latest).all():
+        return None
+    means = latest.mean(axis=1, keepdims=True)
+    scales = np.where(np.abs(means) > 150, 0.48828, 1.0)
+    weights = np.hanning(sample_count)
+    spectrum = np.fft.rfft((latest - means) * scales * weights, axis=1)
+    amplitudes = 2 * np.abs(spectrum[:, first_bin:last_bin + 1]) / weights.sum()
+    return float((amplitudes ** 2 / 2).sum(axis=1).mean())
+
+
+def calculate_spectral_power_ratio(
+    window: np.ndarray, sampling_rate: int,
+    numerator: tuple[float, float], denominator: tuple[float, float],
+) -> float | None:
+    top = calculate_spectral_band_power_uv2(window, sampling_rate, *numerator)
+    bottom = calculate_spectral_band_power_uv2(window, sampling_rate, *denominator)
+    return None if top is None or bottom is None or bottom <= 1e-9 else top / bottom
+
+
 def build_eeg_window(data: np.ndarray, eeg_channels: list[int], samples: int) -> np.ndarray | None:
     if data.size == 0 or samples <= 0:
         return None

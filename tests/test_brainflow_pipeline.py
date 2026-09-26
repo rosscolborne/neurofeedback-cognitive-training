@@ -223,6 +223,16 @@ def test_synthetic_session_initializes_when_brainflow_is_available() -> None:
         session.stop()
 
 
+def test_session_protocol_revision_tracks_the_entire_reward_rule() -> None:
+    session = BrainFlowSession(DEVICE_CONFIGS["brainflow-synthetic"])
+    rule = {"kind": "ratio", "condition": "above",
+            "numerator": {"freq_min": 4, "freq_max": 8},
+            "denominator": {"freq_min": 13, "freq_max": 30}}
+    assert session.update_protocol("theta-beta-ratio", 2.5, rule) == 1
+    assert session.protocol_config == ("theta-beta-ratio", 2.5, rule, 1)
+    assert session.update_protocol("theta-beta-ratio", 2.6, rule) == 2
+
+
 def test_synthetic_board_to_features_end_to_end() -> None:
     pytest.importorskip("brainflow")
 
@@ -234,11 +244,13 @@ from brainflow_service.runtime import BrainFlowSession
 async def collect_one_frame():
     session = BrainFlowSession(DEVICE_CONFIGS["brainflow-synthetic"])
     try:
+        revision = session.update_protocol("theta-beta-ratio", 1.85, None)
         session.prepare()
         session.start()
         async for frame in session.frames():
             if frame.features and frame.features.band_powers:
                 assert frame.sensor == "eeg"
+                assert frame.protocol_revision == revision
                 assert frame.features.band_powers.absolute["theta"] >= 0
                 assert frame.features.band_powers.absolute["alpha"] >= 0
                 assert frame.features.band_powers.absolute["beta"] >= 0

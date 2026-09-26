@@ -5,7 +5,8 @@ import type { ClientProfile, ProtocolTemplate } from '../../../types';
 import { resolveProtocolRuntime } from '../../../services/adaptiveEngine';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { EEGEngine } from '../../../services/eegEngine';
-import { calculateRewardAmplitudeUv } from '../../../services/rewardSpectrum';
+import { calculateRewardAmplitudeUv, calculateRewardPowerRatio } from '../../../services/rewardSpectrum';
+import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS } from '../../../services/protocols';
 import { ProtocolBuilderModal } from '../ProtocolBuilderModal';
 
 const canonical = getClinicalProtocolTemplate('alpha-enhancement')!;
@@ -32,6 +33,74 @@ async function submit(renderer: ReactTestRenderer) {
 }
 
 describe('ProtocolBuilderModal persistence state', () => {
+  it('prefills every editable reward from the active runtime rule with the right unit', async () => {
+    for (const protocol of ['theta-beta-ratio', 'alpha-theta-crossover', 'smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
+      const { renderer } = await renderModal(getClinicalProtocolTemplate(protocol)!);
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+      });
+      const ratio = DEFAULT_RATIO_REWARDS[protocol];
+      const single = DEFAULT_SINGLE_BAND_REWARDS[protocol];
+      if (ratio) {
+        const denominator = protocol === 'theta-beta-ratio' ? 'Beta' : 'Alpha';
+        expect(renderer.root.findByProps({ 'aria-label': 'Theta Min Frequency' }).props.value).toBe(ratio.numerator.freqMin);
+        expect(renderer.root.findByProps({ 'aria-label': 'Theta Max Frequency' }).props.value).toBe(ratio.numerator.freqMax);
+        expect(renderer.root.findByProps({ 'aria-label': `${denominator} Min Frequency` }).props.value).toBe(ratio.denominator.freqMin);
+        expect(renderer.root.findByProps({ 'aria-label': `${denominator} Max Frequency` }).props.value).toBe(ratio.denominator.freqMax);
+        expect(JSON.stringify(renderer.toJSON())).toContain('Reward threshold (ratio)');
+        const frequencyRow = renderer.root.findByProps({ 'aria-label': 'Theta Min Frequency' }).parent!.parent!;
+        const ruleRow = renderer.root.findByProps({ 'aria-label': 'Reward condition' }).parent!.parent!;
+        expect(frequencyRow.findAllByType('input')).toHaveLength(4);
+        expect(ruleRow.findAllByType('input')).toHaveLength(2);
+        expect(ruleRow.findAllByType('select')).toHaveLength(1);
+        expect(ruleRow.findByProps({ 'aria-label': 'Duration' }).props.value).toBe(getClinicalProtocolTemplate(protocol)!.sessionDurationMinutes);
+      } else if (single) {
+        expect(renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.value).toBe(single.freqMin);
+        expect(renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.value).toBe(single.freqMax);
+        expect(JSON.stringify(renderer.toJSON())).toContain('Reward threshold (µV)');
+      }
+      expect(renderer.root.findByProps({ 'aria-label': 'Reward condition' }).props.value)
+        .toBe((ratio ?? single)!.targetCondition);
+      expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.value)
+        .toBe((ratio ?? single)!.targetThreshold);
+      renderer.unmount();
+    }
+  });
+
+  it('saves two ratio band choices that produce different feedback from the same EEG', async () => {
+    const template = getClinicalProtocolTemplate('theta-beta-ratio')!;
+    const save = async (numeratorMin: number, numeratorMax: number) => {
+      const { renderer, onSave } = await renderModal(template);
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
+      });
+      await act(async () => {
+        renderer.root.findByProps({ 'aria-label': 'Theta Min Frequency' }).props.onChange({ target: { value: String(numeratorMin) } });
+        renderer.root.findByProps({ 'aria-label': 'Theta Max Frequency' }).props.onChange({ target: { value: String(numeratorMax) } });
+      });
+      await submit(renderer);
+      const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
+      renderer.unmount();
+      return saved;
+    };
+    const a = await save(4, 8);
+    const b = await save(9, 11);
+    const raw = Array.from({ length: 512 }, (_, index) => (
+      4 * Math.sin(2 * Math.PI * 6 * index / 256)
+      + 12 * Math.sin(2 * Math.PI * 10 * index / 256)
+      + 8 * Math.sin(2 * Math.PI * 17 * index / 256)
+    ));
+    const feedback = (saved: ProtocolTemplate) => {
+      const resolution = resolveProtocolRuntime({ assignedProtocol: 'theta-beta-ratio', customProtocolConfig: saved } as ClientProfile);
+      if (!resolution.ok) throw new Error(resolution.error);
+      const engine = new EEGEngine();
+      engine.configureProtocol(resolution.config);
+      return engine.evaluateFeedbackForBands({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 }, {}, undefined,
+        calculateRewardPowerRatio([raw], 256, saved.ratioReward!));
+    };
+    expect(feedback(a)).toMatchObject({ available: true, inZone: true });
+    expect(feedback(b)).toMatchObject({ available: true, inZone: false });
+  });
   it('prefills beta customization with the active 13–30 Hz, below 14 µV rule', async () => {
     const beta = getClinicalProtocolTemplate('beta-downtraining')!;
     const { renderer, onSave } = await renderModal(beta);
@@ -101,6 +170,7 @@ describe('ProtocolBuilderModal persistence state', () => {
     expect(engine.evaluateFeedbackForBands(
       { delta: 0, theta: 4, alpha: 12, smr: 8, beta: 6, gamma: 3 },
       { alpha: true },
+      12,
     )).toMatchObject({ available: true, inZone: true });
     renderer.unmount();
   });

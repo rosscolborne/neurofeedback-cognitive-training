@@ -46,6 +46,23 @@ export const DEFAULT_BETA_AMPLITUDE_REWARD_BAND: ProtocolTemplate['rewardBand'] 
   targetThreshold: getDefaultProtocolThreshold('beta-downtraining'),
 };
 
+export const DEFAULT_SINGLE_BAND_REWARDS: Partial<Record<ProtocolType, ProtocolTemplate['rewardBand']>> = {
+  'smr-enhancement': { name: 'SMR spectral amplitude', freqMin: 12, freqMax: 15, targetCondition: 'above', targetThreshold: 7.5 },
+  'alpha-enhancement': { name: 'Alpha spectral amplitude', freqMin: 8, freqMax: 12, targetCondition: 'above', targetThreshold: 11 },
+  'beta-downtraining': DEFAULT_BETA_AMPLITUDE_REWARD_BAND,
+};
+
+export const DEFAULT_RATIO_REWARDS: Partial<Record<ProtocolType, NonNullable<ProtocolTemplate['ratioReward']>>> = {
+  'theta-beta-ratio': {
+    numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 },
+    targetCondition: 'below', targetThreshold: 1.85,
+  },
+  'alpha-theta-crossover': {
+    numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 8, freqMax: 13 },
+    targetCondition: 'above', targetThreshold: 1,
+  },
+};
+
 /**
  * Resolve a clinical template to the broad mode used by the training engine.
  * New templates persist protocolType explicitly. The text checks keep older

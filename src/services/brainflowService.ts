@@ -16,6 +16,15 @@
 
 import { ServerFitState, TrainingMetricSample } from '../types';
 
+export type BrainflowRewardRule = {
+  kind: 'amplitude'; condition: 'above' | 'below';
+  band: { freqMin: number; freqMax: number };
+} | {
+  kind: 'ratio'; condition: 'above' | 'below';
+  numerator: { freqMin: number; freqMax: number };
+  denominator: { freqMin: number; freqMax: number };
+};
+
 // ─── Response Interfaces ────────────────────────────────────────────────────
 
 export interface BrainFlowBandPowers {
@@ -216,6 +225,7 @@ class BrainFlowService {
     sampleRateHz = 256,
     protocol = 'theta-beta-ratio',
     threshold = 1.85,
+    reward?: BrainflowRewardRule,
   ): Promise<FitWindowResponse | null> {
     if (!samples || samples.length === 0) return null;
 
@@ -236,6 +246,7 @@ class BrainFlowService {
               channelIds: SCALP_CHANNEL_IDS,
               protocol,
               threshold,
+              reward,
             }),
             signal: controller.signal,
           },
@@ -318,7 +329,7 @@ class BrainFlowService {
   /**
    * Start a native BrainFlow board session (e.g. Muse Athena or Synthetic Board)
    */
-  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string, protocol = 'theta-beta-ratio', threshold = 1.85): Promise<{ sessionId: string; deviceInfo: any }> {
+  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string, protocol = 'theta-beta-ratio', threshold = 1.85, reward?: BrainflowRewardRule): Promise<{ sessionId: string; deviceInfo: any }> {
     const res = await fetch(`${this.baseUrl}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -326,7 +337,7 @@ class BrainFlowService {
         deviceId,
         macAddress: macAddress || null,
         serialNumber: serialNumber || null,
-        protocol, threshold,
+        protocol, threshold, reward,
       }),
     });
 
@@ -338,17 +349,16 @@ class BrainFlowService {
     return await res.json();
   }
 
-  public async updateSessionProtocol(sessionId: string, protocol: string, threshold: number): Promise<void> {
-    try {
-      await fetch(`${this.baseUrl}/sessions/${sessionId}/protocol`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ protocol, threshold }),
-      });
-    } catch {
-      // The local service may be offline; the browser feedback path still
-      // applies the new settings immediately.
-    }
+  public async updateSessionProtocol(sessionId: string, protocol: string, threshold: number, reward?: BrainflowRewardRule): Promise<number> {
+    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/protocol`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ protocol, threshold, reward }),
+    });
+    if (!res.ok) throw new Error(`BrainFlow protocol update failed: ${await res.text()}`);
+    const updated = await res.json();
+    if (!Number.isInteger(updated.protocolRevision)) throw new Error('BrainFlow protocol update response has no revision.');
+    return updated.protocolRevision;
   }
 
   /**

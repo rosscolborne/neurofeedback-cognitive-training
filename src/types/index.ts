@@ -233,6 +233,13 @@ export interface ProtocolTemplate {
   protocolType?: ProtocolType;
   /** Opts a saved assignment into raw-EEG reward-band feedback, even when its values match the template. */
   customRewardEnabled?: boolean;
+  /** A clinician-defined ratio of spectral powers. Used only by ratio protocols. */
+  ratioReward?: {
+    numerator: { freqMin: number; freqMax: number };
+    denominator: { freqMin: number; freqMax: number };
+    targetCondition: 'above' | 'below';
+    targetThreshold: number;
+  };
   /** Optional patient-facing label; `name` remains the evidence-based protocol name. */
   alias?: string;
   name: string;
