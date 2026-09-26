@@ -271,10 +271,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  Spectral Power Distribution (µV) Across Sessions
+                  Spectral Power Distribution (µV²) Across Sessions
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Persisted session band-power values with verified metricProvenance.averageBands algorithm, version, and non-legacy source. No missing-value substitution is applied.
+                  Comparable BrainFlow Welch band powers. These overview bands are fixed; the active reward frequencies are shown in Protocol Settings.
                 </p>
               </div>
 
@@ -282,19 +282,19 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-delta)' }} />
-                  <span>Delta (1-4Hz)</span>
+                  <span>Delta (1–4 Hz)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-theta)' }} />
-                  <span>Theta (4-8Hz)</span>
+                  <span>Theta (4–8 Hz)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-alpha)' }} />
-                  <span>Alpha (8-12Hz)</span>
+                  <span>Alpha (8–13 Hz)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-beta)' }} />
-                  <span>Beta (15-30Hz)</span>
+                  <span>Beta (13–30 Hz)</span>
                 </div>
               </div>
             </div>
@@ -341,14 +341,14 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
                 {psdGroups.map((row) => (
                   <div key={`values-${row.id}`}>
-                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV
+                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV²
                   </div>
                 ))}
               </div>
             )}
             {invalidPsdRows.length > 0 && sessionsState === 'ready' && (
               <div role="status" style={{ marginTop: '8px', color: 'var(--status-alert)', fontSize: '11px' }}>
-                {invalidPsdRows.length} session{invalidPsdRows.length === 1 ? '' : 's'} omitted because persisted band data is partial or malformed.
+                {invalidPsdRows.length} session{invalidPsdRows.length === 1 ? '' : 's'} omitted because comparable BrainFlow Welch band power is unavailable or incomplete.
               </div>
             )}
             

@@ -42,9 +42,8 @@ export function deriveSessionBandRows(sessions: SessionRecord[]): SessionBandRow
     const source = session.averageBands as unknown as Record<string, unknown> | null | undefined;
     const provenance = session.metricProvenance?.averageBands;
     const hasMeasuredProvenance = provenance != null
-      && provenance.source !== 'legacy'
-      && typeof provenance.algorithm === 'string'
-      && provenance.algorithm.trim().length > 0
+      && provenance.source === 'brainflow'
+      && provenance.algorithm === 'welch-psd'
       && typeof provenance.version === 'string'
       && provenance.version.trim().length > 0;
     if (!hasMeasuredProvenance) {
@@ -52,7 +51,7 @@ export function deriveSessionBandRows(sessions: SessionRecord[]): SessionBandRow
         id: session.id || `session-${index}`,
         label: normalizeSessionLabel(session),
         bands: null,
-        issue: 'Band power unavailable: measured-value provenance is missing or unverified.',
+        issue: 'Comparable BrainFlow Welch band power is unavailable for this session.',
       };
     }
     const values = DISPLAY_BANDS.map((band) => source?.[band]);

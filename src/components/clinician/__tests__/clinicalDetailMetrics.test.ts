@@ -32,7 +32,12 @@ describe('clinical detail metric boundaries', () => {
   it('withholds band values without measured provenance, including zero sentinels', () => {
     const row = deriveSessionBandRows([session({ metricProvenance: undefined })])[0];
     expect(row.bands).toBeNull();
-    expect(row.issue).toContain('provenance');
+    expect(row.issue).toContain('BrainFlow Welch');
+    const browserAmplitude = deriveSessionBandRows([session({
+      metricProvenance: { averageBands: { algorithm: 'browser-band-dft', version: '1', source: 'browser-dsp' } },
+    })])[0];
+    expect(browserAmplitude.bands).toBeNull();
+    expect(browserAmplitude.issue).toContain('BrainFlow Welch');
   });
 
   it('sorts learning points oldest-to-newest and rejects invalid dates', () => {
