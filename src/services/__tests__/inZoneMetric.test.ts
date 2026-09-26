@@ -30,4 +30,17 @@ describe('calculateRecentInZonePercent', () => {
 
     expect(metric).toEqual({ percent: 80, measuredMilliseconds: 5_000 });
   });
+
+  it('stays flat while new in-zone time replaces old in-zone time', () => {
+    const observations = [
+      { timestamp: 0, inZone: true, available: true },
+      { timestamp: 4_000, inZone: false, available: true },
+      { timestamp: 10_000, inZone: true, available: true },
+    ];
+
+    expect(calculateRecentInZonePercent(observations, 10_000, 10).percent).toBe(40);
+    expect(calculateRecentInZonePercent(observations, 12_000, 10).percent).toBe(40);
+    expect(calculateRecentInZonePercent(observations, 14_000, 10).percent).toBe(40);
+    expect(calculateRecentInZonePercent(observations, 16_000, 10).percent).toBe(60);
+  });
 });
