@@ -63,6 +63,7 @@ describe('ProtocolBuilderModal persistence state', () => {
         .toBe((ratio ?? single)!.targetCondition);
       expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.value)
         .toBe((ratio ?? single)!.targetThreshold);
+      expect(renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.step).toBe('0.01');
       renderer.unmount();
     }
   });
@@ -80,6 +81,7 @@ describe('ProtocolBuilderModal persistence state', () => {
       });
       await submit(renderer);
       const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
+      expect(saved.ratioReward?.targetThreshold).toBe(1.85);
       renderer.unmount();
       return saved;
     };

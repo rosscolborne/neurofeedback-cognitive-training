@@ -153,7 +153,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
     <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
       {selectedRatio ? 'Reward threshold (ratio)' : 'Reward threshold (µV)'}
     </label>
-    <input type="number" aria-label="Reward threshold" min="0" max="1000" step="0.1" value={rewardThreshold}
+    <input type="number" aria-label="Reward threshold" min="0" max="1000" step="0.01" value={rewardThreshold}
       onChange={(e) => setRewardThreshold(parseFloat(e.target.value))}
       style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }} />
   </div>;
