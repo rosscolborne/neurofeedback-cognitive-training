@@ -86,7 +86,7 @@ export interface BrainFlowScores {
   valence?: number | null;       // -1 (negative) to +1 (positive)
   arousal?: number | null;       // 0 (calm) to 1 (activated)
   emotionLabel?: string | null;  // e.g. "calm", "excited", "stressed"
-  method?: 'brainflow_welch_psd' | 'browser_dsp';
+  method?: 'brainflow_welch_psd' | 'browser_dsp' | 'demo';
 }
 
 export type ServerFitChannelState = 'good' | 'adjusting' | 'poor';
@@ -131,6 +131,11 @@ export interface EEGDataPoint {
   baselineRelativeMetrics?: Record<string, number>;
   thetaBetaRatio: number;
   thetaBetaRatioAvailable: boolean;
+  /** The exact measurement selected for this frame's protocol feedback decision. */
+  activeRewardMetric?: {
+    value: number | null;
+    source: 'brainflow' | 'browser-dsp' | 'demo' | 'custom-raw';
+  };
   /** 0–100 measured coherence percentage; null when the service could not compute it. */
   coherence: number | null;
   coherenceAvailable: boolean;

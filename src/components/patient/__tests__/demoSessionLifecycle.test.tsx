@@ -48,6 +48,7 @@ vi.mock('../HeadsetFitModal', () => ({ HeadsetFitModal: 'headset-fit' }));
 
 import { resolveSessionCareProvenance, SessionRunner } from '../SessionRunner';
 import { ProgressHistory } from '../ProgressHistory';
+import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 
 const client = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', avatarUrl: '',
@@ -95,6 +96,60 @@ describe('mounted patient Demo session lifecycle', () => {
     engine.isDemoMode = false;
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('renders the resolved default and clinician reward from the emitted feedback metric', async () => {
+    const renderTelemetry = async (profile: ClientProfile, measured: number) => {
+      let runner!: ReactTestRenderer;
+      await act(async () => {
+        runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={vi.fn()} />);
+      });
+      await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
+      await act(async () => {
+        stream.callback?.({
+          timestamp: Date.now(),
+          rawSignal: 0,
+          bands: { delta: 1, theta: 2, alpha: 99, smr: 8, beta: 4, gamma: 1 },
+          bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
+          bandRatios: {}, coherence: null, coherenceAvailable: false,
+          thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
+          activeRewardMetric: { value: measured, source: profile.customProtocolConfig?.customRewardEnabled ? 'custom-raw' : 'demo' },
+          inZone: true, inZoneAvailable: true, zoneScore: 1,
+          signalQuality: 'good',
+          channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+          artifacts: { blink: false, clench: false },
+          brainflowScores: { mindfulnessScore: 88, restfulnessScore: 92, method: 'demo' },
+        });
+      });
+      const output = text(runner);
+      await act(async () => { runner.unmount(); });
+      return output;
+    };
+
+    const defaultOutput = await renderTelemetry(client, 12.2);
+    expect(defaultOutput).toContain('ALPHA (8–12 Hz)');
+    expect(defaultOutput).toContain('12.2 µV');
+    expect(defaultOutput).toContain('Restfulness');
+    expect(defaultOutput).toContain('88');
+    expect(defaultOutput).toContain('92');
+    expect(defaultOutput).toContain('Simulated');
+    expect(defaultOutput).not.toContain('99.0 µV');
+
+    const template = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const custom = (freqMin: number, freqMax: number): ClientProfile => ({
+      ...client,
+      customProtocolConfig: {
+        ...template, id: 'custom-alpha', customRewardEnabled: true,
+        rewardBand: { ...template.rewardBand, freqMin, freqMax, targetThreshold: 6 },
+      },
+    });
+    const a = await renderTelemetry(custom(9, 11), 7.2);
+    expect(a).toContain('REWARD (9–11 Hz)');
+    expect(a).toContain('7.2 µV');
+    const b = await renderTelemetry(custom(16, 18), 0.8);
+    expect(b).toContain('REWARD (16–18 Hz)');
+    expect(b).toContain('0.8 µV');
+    expect(b).not.toContain('REWARD (9–11 Hz)');
   });
 
   it('saves and reloads one synthetic session, labels it in history, then restores the next headset gate', async () => {

@@ -125,18 +125,18 @@ export function evaluateProtocolFeedback(
   availability: Partial<Record<keyof BandPowers, boolean>>,
   rewardBand?: ProtocolTemplate['rewardBand'],
   rewardAmplitudeUv?: number | null,
-): { ratio: number | null; inZone: boolean; zoneScore: number; available: boolean } {
+): { ratio: number | null; metric: number | null; inZone: boolean; zoneScore: number; available: boolean } {
   const available = (...keys: Array<keyof BandPowers>) => keys.every(key => availability[key] && finite(bands[key]));
   const ratio = available('theta', 'beta') ? bands.theta / Math.max(1e-9, bands.beta) : null;
   if (rewardBand) {
-    if (!finite(rewardAmplitudeUv)) return { ratio, inZone: false, zoneScore: 0, available: false };
+    if (!finite(rewardAmplitudeUv)) return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
     const lowerIsBetter = rewardBand.targetCondition === 'below';
     const inZone = lowerIsBetter ? rewardAmplitudeUv <= threshold : rewardAmplitudeUv >= threshold;
     const width = 2;
     const zoneScore = lowerIsBetter
       ? 1 - (rewardAmplitudeUv - threshold) / width
       : (rewardAmplitudeUv - threshold + width) / (2 * width);
-    return { ratio, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+    return { ratio, metric: rewardAmplitudeUv, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
   }
   let metric: number | null = null;
   let lowerIsBetter = false;
@@ -152,12 +152,12 @@ export function evaluateProtocolFeedback(
       break;
     case 'beta-downtraining': metric = available('beta') ? bands.beta : null; lowerIsBetter = true; width = 5; break;
   }
-  if (metric === null) return { ratio, inZone: false, zoneScore: 0, available: false };
+  if (metric === null) return { ratio, metric: null, inZone: false, zoneScore: 0, available: false };
   const inZone = lowerIsBetter ? metric <= threshold : metric >= threshold;
   const zoneScore = lowerIsBetter
     ? 1 - (metric - threshold) / width
     : (metric - threshold + width) / (2 * width);
-  return { ratio, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
+  return { ratio, metric, inZone, zoneScore: Math.max(0, Math.min(1, zoneScore)), available: true };
 }
 
 export function advanceSessionClock(elapsedSeconds: number, durationSeconds: number, demoMode: boolean) {

@@ -16,6 +16,7 @@ import {
 } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
+import { describeActiveReward, describeBrainFlowScore } from './trainingTelemetry';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
 import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
 import { BreathWeaveCanvas } from '../experiences/BreathWeaveCanvas';
@@ -179,6 +180,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   );
   const runtimeResolution = React.useMemo(() => resolveProtocolRuntime(client), [client]);
   const runtimeConfig = runtimeResolution.ok ? runtimeResolution.config : null;
+  const activeReward = runtimeConfig ? describeActiveReward(runtimeConfig, eegData) : null;
 
   // Timers (in seconds)
   const sessionTotalDuration = runtimeConfig?.durationSeconds ?? 0;
@@ -993,24 +995,26 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           }}
         >
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Theta/Beta</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{activeReward?.label}</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {eegData?.thetaBetaRatioAvailable ? eegData.thetaBetaRatio.toFixed(2) : '--'}
+              {activeReward?.value}
             </div>
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Mindfulness</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#7B68AE' }}>
-              {eegData?.brainflowScores?.mindfulnessScore != null ? Math.round(eegData.brainflowScores.mindfulnessScore) : '--'}
+              {describeBrainFlowScore(eegData, 'mindfulnessScore', isDemoSession)}
             </div>
+            {isDemoSession && <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>Simulated</div>}
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>SMR (12-15Hz)</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Restfulness</div>
             <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-smr)' }}>
-              {eegData?.bands?.smr && eegData.bands.smr > 0 ? eegData.bands.smr.toFixed(1) + ' µV' : (eegData?.bandAvailability?.smr ? eegData.bands.smr.toFixed(1) + ' µV' : '--')}
+              {describeBrainFlowScore(eegData, 'restfulnessScore', isDemoSession)}
             </div>
+            {isDemoSession && <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>Simulated</div>}
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
           <div style={{ textAlign: 'center' }}>

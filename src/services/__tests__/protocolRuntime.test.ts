@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { BandPowers, ClientProfile, MetricProvenance, ProtocolTemplate, ProtocolType } from '../../types';
+import type { BandPowers, ClientProfile, EEGDataPoint, MetricProvenance, ProtocolTemplate, ProtocolType } from '../../types';
 import {
   AdaptiveDifficultyEngine,
   accumulateVerifiedBands,
@@ -119,7 +119,7 @@ describe('protocol runtime assignment', () => {
       latestServerBandAvailability: typeof available;
       latestBandPowerProvenance: MetricProvenance;
       latestTrainingFeedback: { ratio: number; inZone: boolean; zoneScore: number };
-      generateSample: (dt: number) => { inZone: boolean; inZoneAvailable: boolean };
+      generateSample: (dt: number) => EEGDataPoint;
     };
     internal.rawBuffers = { tp9: raw, af7: raw, af8: raw, tp10: raw };
     internal.sourceFrameSequence = 1;
@@ -128,13 +128,76 @@ describe('protocol runtime assignment', () => {
     internal.latestServerBandAvailability = available;
     internal.latestBandPowerProvenance = brainflowProvenance;
     internal.latestTrainingFeedback = { ratio: 0, inZone: false, zoneScore: 0 };
-    expect(internal.generateSample(0.1)).toMatchObject({ inZoneAvailable: true, inZone: true });
+    expect(internal.generateSample(0.1)).toMatchObject({
+      inZoneAvailable: true, inZone: true,
+      activeRewardMetric: { value: expect.closeTo(12, 0), source: 'custom-raw' },
+    });
     internal.sourceFrameSequence = 2;
     internal.rawBuffers = Object.fromEntries(
       Object.keys(internal.rawBuffers).map(key => [key, raw.map(value => value / 4)]),
     ) as typeof internal.rawBuffers;
     internal.latestTrainingFeedback = { ratio: 0, inZone: true, zoneScore: 1 };
-    expect(internal.generateSample(0.1)).toMatchObject({ inZoneAvailable: true, inZone: false });
+    expect(internal.generateSample(0.1)).toMatchObject({
+      inZoneAvailable: true, inZone: false,
+      activeRewardMetric: { value: expect.closeTo(3, 0), source: 'custom-raw' },
+    });
+  });
+
+  it('publishes the server primary metric from the same feedback result, not a band approximation', () => {
+    const resolved = resolveProtocolRuntime(client('alpha-enhancement'));
+    if (!resolved.ok) throw new Error(resolved.error);
+    const eeg = new EEGEngine();
+    eeg.configureProtocol(resolved.config);
+    eeg.isHardwareConnected = true;
+    const internal = eeg as unknown as {
+      latestServerBands: BandPowers;
+      latestServerBandAvailability: typeof available;
+      latestBandPowerProvenance: MetricProvenance;
+      latestTrainingFeedback: {
+        ratio: number; metric: number; inZone: boolean; zoneScore: number; source: 'brainflow';
+      };
+      generateSample: (dt: number) => EEGDataPoint;
+    };
+    internal.latestServerBands = { ...bands, alpha: 25 };
+    internal.latestServerBandAvailability = available;
+    internal.latestBandPowerProvenance = brainflowProvenance;
+    internal.latestTrainingFeedback = { ratio: 0.6, metric: 12.34, inZone: true, zoneScore: 0.7, source: 'brainflow' };
+    const sample = internal.generateSample(0.1);
+    expect(sample).toMatchObject({
+      inZone: true, inZoneAvailable: true, activeRewardMetric: { value: 12.34, source: 'brainflow' },
+    });
+    expect(sample.activeRewardMetric?.value).not.toBe(sample.bands.alpha);
+  });
+
+  it('does not fabricate classifier scores for browser DSP or replace a high BrainFlow score', () => {
+    const eeg = new EEGEngine();
+    const internal = eeg as unknown as {
+      latestServerRatios: Record<string, number>;
+      latestBrainFlowScores: EEGDataPoint['brainflowScores'];
+      latestRawMetrics: Record<string, number>;
+      latestServerBands: BandPowers;
+      latestServerBandAvailability: typeof available;
+      updateBrowserDerivedMetrics: () => void;
+      generateSample: (dt: number) => EEGDataPoint;
+    };
+    internal.latestServerRatios = { valence: 1.2, arousal: 0.8 };
+    internal.updateBrowserDerivedMetrics();
+    expect(internal.latestBrainFlowScores).toMatchObject({
+      method: 'browser_dsp', mindfulnessScore: null, restfulnessScore: null,
+    });
+    expect(internal.latestRawMetrics).not.toHaveProperty('mindfulness');
+    expect(internal.latestRawMetrics).not.toHaveProperty('restfulness');
+
+    eeg.isHardwareConnected = true;
+    internal.latestServerBands = bands;
+    internal.latestServerBandAvailability = available;
+    internal.latestBrainFlowScores = {
+      method: 'brainflow_welch_psd', mindfulnessScore: 99, restfulnessScore: null,
+      valence: 0.5, arousal: 0.5,
+    };
+    expect(internal.generateSample(0.1).brainflowScores).toMatchObject({
+      mindfulnessScore: 99, restfulnessScore: null,
+    });
   });
 
   it('converts raw ADC-offset windows to µV before custom reward comparison', () => {
@@ -209,7 +272,11 @@ describe('protocol runtime assignment', () => {
     expect(demo.evaluateFeedbackForBands(bands, available)).toEqual(headset.evaluateFeedbackForBands(bands, available));
     expect(demo.evaluateFeedbackForBands(bands, available)).toEqual(evaluateProtocolFeedback('theta-beta-ratio', 1.85, bands, available));
     expect(evaluateProtocolFeedback('alpha-enhancement', 0, bands, available)).toMatchObject({ available: true, inZone: true });
-    expect(evaluateProtocolFeedback('alpha-enhancement', 0, bands, { ...available, alpha: false })).toMatchObject({ available: false });
+    expect(evaluateProtocolFeedback('alpha-enhancement', 0, bands, { ...available, alpha: false })).toMatchObject({ available: false, metric: null });
+    const demoSample = (demo as unknown as { generateSample: (dt: number) => EEGDataPoint }).generateSample(0.1);
+    const evaluated = demo.evaluateFeedbackForBands(demoSample.bands, demoSample.bandAvailability);
+    expect(demoSample.activeRewardMetric).toEqual({ value: evaluated.metric, source: 'demo' });
+    expect(demoSample.inZone).toBe(evaluated.inZone);
   });
 
   it('keeps missing production SMR unavailable without alpha/beta proxy reward or display', () => {

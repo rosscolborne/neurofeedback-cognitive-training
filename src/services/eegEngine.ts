@@ -90,7 +90,10 @@ export class EEGEngine {
   private latestRawMetrics: Record<string, number> = {};
   private latestBaselineRelativeMetrics: Record<string, number> = {};
   private latestInterhemisphericCoherence: number | null = null;
-  private latestTrainingFeedback: { ratio: number | null; inZone: boolean | null; zoneScore: number | null; available?: boolean } | null = null;
+  private latestTrainingFeedback: {
+    ratio: number | null; metric: number | null; inZone: boolean | null; zoneScore: number | null;
+    available?: boolean; source: 'brainflow' | 'browser-dsp' | 'demo' | 'custom-raw';
+  } | null = null;
   private localFitStableSince: number | null = null;
 
   private gattServer: any = null;
@@ -853,7 +856,12 @@ export class EEGEngine {
             this.latestMetricCalibration = { status: frame.features.calibrationStatus ?? 'off', progress: frame.features.calibrationProgress ?? 0, required: frame.features.calibrationRequired ?? 24 };
             this.latestRawMetrics = frame.features.rawMetrics ?? {};
             this.latestBaselineRelativeMetrics = frame.features.baselineRelativeMetrics ?? {};
-            this.latestTrainingFeedback = { ratio: frame.features.bandPowers?.ratios?.thetaBeta ?? null, inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null };
+            this.latestTrainingFeedback = {
+              ratio: frame.features.bandPowers?.ratios?.thetaBeta ?? null,
+              metric: frame.features.primaryMetricValue ?? null,
+              inZone: frame.features.inZone ?? null, zoneScore: frame.features.zoneScore ?? null,
+              source: 'brainflow',
+            };
           }
 
           if (frame.training) {
@@ -1106,7 +1114,7 @@ export class EEGEngine {
       };
       this.latestInterhemisphericCoherence = this.calculateBrowserCoherence(windows);
       this.updateBrowserDerivedMetrics();
-      this.latestTrainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta);
+      this.latestTrainingFeedback = { ...this.calculateBrowserFeedback(bands, thetaBeta), source: 'browser-dsp' };
     } finally {
       this.isAnalyzingBrainflow = false;
     }
@@ -1332,9 +1340,8 @@ export class EEGEngine {
   }
 
   /**
-   * Populate the console's shared metric contract from browser-computed
-   * bands. These are deterministic band-power proxies, not BrainFlow's
-   * pretrained classifiers, and are marked `browser_dsp` on the data point.
+   * Populate browser-derived affective axes from band ratios. BrainFlow's
+   * mindfulness/restfulness classifiers are unavailable on this path.
    */
   private updateBrowserDerivedMetrics() {
     const ratios = this.latestServerRatios;
@@ -1346,8 +1353,6 @@ export class EEGEngine {
     const arousal = mapRatioToAxis(ratios.arousal);
     const confidenceFactor = this.serverFitState?.ready ? 1 : this.serverFitState?.state === 'good' ? 0.75 : 0.45;
     const confidence = clamp(Math.hypot(valence, arousal) * confidenceFactor, 0, 1);
-    const mindfulness = clamp(50 + 25 * valence - 20 * arousal, 0, 100);
-    const restfulness = clamp(50 + 35 * valence - 30 * arousal, 0, 100);
     const emotionLabel = Math.hypot(valence, arousal) < 0.18
       ? 'Neutral'
       : arousal > 0.35 && valence >= 0 ? 'Excited'
@@ -1357,16 +1362,14 @@ export class EEGEngine {
       : 'Neutral';
 
     this.latestBrainFlowScores = {
-      mindfulnessScore: Math.round(mindfulness),
-      restfulnessScore: Math.round(restfulness),
+      mindfulnessScore: null,
+      restfulnessScore: null,
       valence,
       arousal,
       emotionLabel,
       method: 'browser_dsp',
     };
     this.latestRawMetrics = {
-      mindfulness: Math.round(mindfulness),
-      restfulness: Math.round(restfulness),
       valence,
       arousal,
       confidence,
@@ -1470,19 +1473,8 @@ export class EEGEngine {
         // Update scores from server features
         if (response.features) {
           const f = response.features;
-          let mindfulnessScore = f.mindfulnessScore ?? null;
-          if (mindfulnessScore !== null && mindfulnessScore >= 98) {
-            const v = f.valence ?? 0;
-            const a = f.arousal ?? 0;
-            mindfulnessScore = Math.round(Math.min(94, Math.max(20, 50 + 25 * v - 20 * a)));
-          } else if (mindfulnessScore === null && (f.valence != null || f.arousal != null)) {
-            const v = f.valence ?? 0;
-            const a = f.arousal ?? 0;
-            mindfulnessScore = Math.round(Math.min(94, Math.max(20, 50 + 25 * v - 20 * a)));
-          }
-
           this.latestBrainFlowScores = {
-            mindfulnessScore,
+            mindfulnessScore: f.mindfulnessScore ?? null,
             restfulnessScore: f.restfulnessScore ?? null,
             valence: f.valence ?? null,
             arousal: f.arousal ?? null,
@@ -1493,7 +1485,12 @@ export class EEGEngine {
           this.latestMetricCalibration = { status: f.calibrationStatus ?? 'off', progress: f.calibrationProgress ?? 0, required: f.calibrationRequired ?? 24 };
           this.latestRawMetrics = f.rawMetrics ?? {};
           this.latestBaselineRelativeMetrics = f.baselineRelativeMetrics ?? {};
-          this.latestTrainingFeedback = { ratio: f.bandPowers?.ratios?.thetaBeta ?? null, inZone: f.inZone ?? null, zoneScore: f.zoneScore ?? null };
+          this.latestTrainingFeedback = {
+            ratio: f.bandPowers?.ratios?.thetaBeta ?? null,
+            metric: f.primaryMetricValue ?? null,
+            inZone: f.inZone ?? null, zoneScore: f.zoneScore ?? null,
+            source: 'brainflow',
+          };
 
           // Extract band powers from server if available
           if (f.bandPowers?.absolute) {
@@ -1623,15 +1620,6 @@ export class EEGEngine {
         bands = { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 };
       }
 
-      if (brainFlowScores?.mindfulnessScore != null && brainFlowScores.mindfulnessScore >= 98) {
-        const v = brainFlowScores.valence ?? 0;
-        const a = brainFlowScores.arousal ?? 0;
-        brainFlowScores = {
-          ...brainFlowScores,
-          mindfulnessScore: Math.round(Math.min(94, Math.max(20, 50 + 25 * v - 20 * a))),
-        };
-      }
-
       const af7 = this.rawBuffers.af7;
       rawSignal = af7.length > 0 ? af7[af7.length - 1] : 0;
     } else if (this.isDemoMode) {
@@ -1740,14 +1728,14 @@ export class EEGEngine {
         valence: ratio(bands.alpha, bands.theta + bands.beta),
         betaOverAlphaTheta: ratio(bands.beta, bands.alpha + bands.theta),
       };
-      trainingFeedback = this.calculateBrowserFeedback(bands, thetaBeta, bandAvailability);
+      trainingFeedback = { ...this.calculateBrowserFeedback(bands, thetaBeta, bandAvailability), source: 'demo' };
       brainFlowScores = {
         mindfulnessScore: Math.round((this.userFocus + this.userCalm) / 2),
         restfulnessScore: Math.round(this.userCalm),
         valence: (this.userCalm - 50) / 50,
         arousal: (this.userFocus - 50) / 50,
         emotionLabel: this.userCalm > 60 ? 'calm flow' : 'seeking focus',
-        method: 'brainflow_welch_psd',
+        method: 'demo',
       };
       // The simulator has no electrode spectra to correlate, but it still
       // needs to exercise the normal coherence field consumed by training
@@ -1779,7 +1767,12 @@ export class EEGEngine {
           : null
       : undefined;
     const localFeedback = this.evaluateFeedbackForBands(bands, bandAvailability, rewardAmplitudeUv);
-    if (this.rewardBand || !localFeedback.available) trainingFeedback = localFeedback;
+    if (this.rewardBand || !localFeedback.available) {
+      trainingFeedback = {
+        ...localFeedback,
+        source: this.rewardBand ? 'custom-raw' : this.isDemoMode ? 'demo' : this.latestBandPowerProvenance?.source ?? 'browser-dsp',
+      };
+    }
     let inZoneAvailable = trainingFeedback?.available !== false && trainingFeedback?.inZone != null;
     let inZone = trainingFeedback?.inZone ?? false;
     let zoneScore = trainingFeedback?.zoneScore ?? 0;
@@ -1787,6 +1780,7 @@ export class EEGEngine {
     // Fallback: If server has not yet returned inZone for this window, compute from live bands & protocol
     if (!this.rewardBand && !inZoneAvailable && (bands.alpha > 0 || bands.theta > 0 || bands.beta > 0 || bands.smr > 0)) {
       const fb = this.calculateBrowserFeedback(bands, thetaBetaRatio, bandAvailability);
+      trainingFeedback = { ...fb, source: this.isDemoMode ? 'demo' : this.latestBandPowerProvenance?.source ?? 'browser-dsp' };
       inZone = fb.inZone;
       zoneScore = fb.zoneScore;
       inZoneAvailable = fb.available;
@@ -1842,6 +1836,10 @@ export class EEGEngine {
       baselineRelativeMetrics: this.latestBaselineRelativeMetrics,
       thetaBetaRatio,
       thetaBetaRatioAvailable,
+      activeRewardMetric: {
+        value: inZoneAvailable && Number.isFinite(trainingFeedback?.metric) ? trainingFeedback!.metric : null,
+        source: trainingFeedback?.source ?? (this.isDemoMode ? 'demo' : 'browser-dsp'),
+      },
       coherence,
       coherenceAvailable,
       inZone,
