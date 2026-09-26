@@ -8,6 +8,7 @@ import {
 } from '../../services/clinicalProtocolTemplates';
 import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
 import { resolveProtocolRuntime, type ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
+import { DEFAULT_BETA_BAND_HZ } from './trainingTelemetry';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -151,6 +152,9 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
                     <Detail label="Min Frequency" value={`${runtime.config.rewardBand.freqMin} Hz`} />
                     <Detail label="Max Frequency" value={`${runtime.config.rewardBand.freqMax} Hz`} />
                   </>
+                )}
+                {!runtime.config.rewardBand && runtime.config.protocol === 'beta-downtraining' && (
+                  <Detail label="Feedback band" value={`${DEFAULT_BETA_BAND_HZ.demo} Hz (Demo); ${DEFAULT_BETA_BAND_HZ.brainflow} Hz (headset)`} />
                 )}
                 <Detail label="Reward when" value={describeTrainingRule(runtime.config)} />
                 <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />

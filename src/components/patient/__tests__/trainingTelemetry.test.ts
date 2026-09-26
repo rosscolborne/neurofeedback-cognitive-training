@@ -25,6 +25,10 @@ describe('training telemetry', () => {
       .toEqual({ label: 'ALPHA (8–12 Hz)', value: '12.2 µV' });
     expect(describeActiveReward(config('alpha-enhancement'), sample(12.2, 'brainflow')))
       .toEqual({ label: 'ALPHA (8–13 Hz)', value: '12.2 µV²' });
+    expect(describeActiveReward(config('beta-downtraining'), sample(13.5, 'demo')))
+      .toEqual({ label: 'BETA (15–30 Hz)', value: '13.5 µV' });
+    expect(describeActiveReward(config('beta-downtraining'), sample(13.5, 'brainflow')))
+      .toEqual({ label: 'BETA (13–30 Hz)', value: '13.5 µV²' });
   });
 
   it('uses a clinician custom reward range and the emitted feedback metric, never the legacy band value', () => {

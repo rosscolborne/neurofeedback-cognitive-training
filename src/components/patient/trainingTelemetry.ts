@@ -1,6 +1,8 @@
 import type { EEGDataPoint } from '../../types';
 import type { ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
 
+export const DEFAULT_BETA_BAND_HZ = { demo: '15–30', brainflow: '13–30' } as const;
+
 /** Display only the measurement that the engine selected for this feedback frame. */
 export function describeActiveReward(config: ProtocolRuntimeConfig, sample: EEGDataPoint | null) {
   const source = sample?.activeRewardMetric?.source;
@@ -10,7 +12,7 @@ export function describeActiveReward(config: ProtocolRuntimeConfig, sample: EEGD
     : config.protocol === 'theta-beta-ratio' ? 'THETA/BETA'
     : config.protocol === 'alpha-theta-crossover' ? 'THETA/ALPHA'
     : config.protocol === 'smr-enhancement' ? 'SMR (12–15 Hz)'
-    : config.protocol === 'beta-downtraining' ? `BETA (${isBrainflow ? '13' : '15'}–30 Hz)`
+    : config.protocol === 'beta-downtraining' ? `BETA (${DEFAULT_BETA_BAND_HZ[isBrainflow ? 'brainflow' : 'demo']} Hz)`
     : `ALPHA (8–${isBrainflow ? '13' : '12'} Hz)`;
 
   const measured = sample?.activeRewardMetric?.value;
