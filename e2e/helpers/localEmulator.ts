@@ -110,6 +110,18 @@ export async function findPendingLifecycleInvitation(clinicianUid: string, email
   return pending[0].id;
 }
 
+export async function readPendingInvitationState(clinicianUid: string, email: string) {
+  const [invitations, claim] = await Promise.all([
+    adminDb.collection('patientInvitations')
+      .where('clinicianId', '==', clinicianUid).where('patientEmail', '==', email).get(),
+    adminDb.doc(`patientInvitationClaims/${clinicianUid}/emails/${email}`).get(),
+  ]);
+  return {
+    pendingCount: invitations.docs.filter((entry) => entry.data().status === 'pending').length,
+    claimExists: claim.exists,
+  };
+}
+
 export async function seedLifecycleHistory(fixture: LocalPatientFixture): Promise<void> {
   await Promise.all([
     adminDb.doc(`sessions/lifecycle-${fixture.patient.uid}`).set({
