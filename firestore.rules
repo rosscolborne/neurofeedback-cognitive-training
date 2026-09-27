@@ -526,6 +526,34 @@ service cloud.firestore {
         validSummary();
       allow delete: if false;
 
+      match /reads/{readerId} {
+        function validReadReceipt() {
+          let summaryPath = /databases/$(database)/documents/messageThreads/$(patientId)/relationships/$(clinicianId);
+          return exists(summaryPath) &&
+            request.resource.data.keys().hasOnly([
+              'patientId', 'clinicianId', 'readerId', 'lastReadMessageId',
+              'updatedAt', 'schemaVersion'
+            ]) &&
+            request.resource.data.keys().hasAll([
+              'patientId', 'clinicianId', 'readerId', 'lastReadMessageId',
+              'updatedAt', 'schemaVersion'
+            ]) &&
+            request.resource.data.patientId == patientId &&
+            request.resource.data.clinicianId == clinicianId &&
+            request.resource.data.readerId == readerId &&
+            request.resource.data.lastReadMessageId == get(summaryPath).data.lastMessageId &&
+            get(summaryPath).data.lastSenderId != readerId &&
+            request.resource.data.updatedAt == request.time &&
+            request.resource.data.schemaVersion == 1;
+        }
+
+        allow get: if isCurrentParticipant() && request.auth.uid == readerId;
+        allow list: if false;
+        allow create, update: if isCurrentParticipant() &&
+          request.auth.uid == readerId && validReadReceipt();
+        allow delete: if false;
+      }
+
       match /messages/{messageId} {
         function validPostWriteSummary() {
           let summaryPath = /databases/$(database)/documents/messageThreads/$(patientId)/relationships/$(clinicianId);

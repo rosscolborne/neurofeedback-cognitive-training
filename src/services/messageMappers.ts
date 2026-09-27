@@ -13,6 +13,11 @@ export interface ProductionMessageThread {
   lastMessageText: string | null; lastMessageId: string | null; lastSenderId: string | null;
   lastMessageAt: Date | null; createdAt: Date | null; updatedAt: Date | null;
 }
+export interface MessageUnreadStatus {
+  relationshipKey: string;
+  latestIncomingMessageId: string | null;
+  unread: boolean;
+}
 
 type TimestampLike = { toDate?: () => Date; seconds?: number };
 export const relationshipKey = (patientId: string, clinicianId: string) => `${patientId}/${clinicianId}`;
@@ -57,6 +62,11 @@ export function mapThreadDocument(snapshot: Pick<QueryDocumentSnapshot<DocumentD
     lastSenderId: requiredString(data, 'lastSenderId'), lastMessageAt: mapMessageDate(data.lastMessageAt),
     createdAt: mapMessageDate(data.createdAt), updatedAt: mapMessageDate(data.updatedAt),
   };
+}
+
+export function messageUnreadStatus(thread: ProductionMessageThread | null, readerId: string, lastReadMessageId: string | null, key: string): MessageUnreadStatus {
+  const latestIncomingMessageId = thread?.lastSenderId && thread.lastSenderId !== readerId ? thread.lastMessageId : null;
+  return { relationshipKey: key, latestIncomingMessageId, unread: !!latestIncomingMessageId && latestIncomingMessageId !== lastReadMessageId };
 }
 
 interface LegacyMessageItem { id?: unknown; sender?: unknown; text?: unknown; timestamp?: unknown; }

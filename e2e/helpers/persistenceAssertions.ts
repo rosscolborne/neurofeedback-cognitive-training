@@ -172,11 +172,18 @@ export async function expectDisposableRolePersisted(
 }
 
 /** Used by the local messaging scenario to inspect saved data without Admin. */
-export async function readPersistedMessagesAs(page: Page, patientId: string, clinicianId: string) {
+export async function readPersistedMessagesAs(patientPage: Page, clinicianPage: Page, patientId: string, clinicianId: string) {
     const thread = `messageThreads/${patientId}/relationships/${clinicianId}`;
-    const [summary, messages] = await Promise.all([
-        documentAs(page, patientId, thread),
-        collectionAs(page, patientId, `${thread}/messages`),
+    const [summary, messages, patientRead, clinicianRead] = await Promise.all([
+        documentAs(patientPage, patientId, thread),
+        collectionAs(patientPage, patientId, `${thread}/messages`),
+        documentAs(patientPage, patientId, `${thread}/reads/${patientId}`),
+        documentAs(clinicianPage, clinicianId, `${thread}/reads/${clinicianId}`),
     ]);
-    return { summary: summary?.fields, messages: messages.map((message) => message.fields) };
+    return {
+        summary: summary?.fields,
+        messages: messages.map((message) => message.fields),
+        patientRead: patientRead?.fields,
+        clinicianRead: clinicianRead?.fields,
+    };
 }

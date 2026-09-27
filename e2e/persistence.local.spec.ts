@@ -78,6 +78,7 @@ test('persistence assertions read as patient and clinician; outsider reads are d
       { kind: 'collection', path: 'sessions', where: { field: 'patientId', equals: linked.patient.uid } },
       { kind: 'collection', path: 'appointments', where: { field: 'patientId', equals: linked.patient.uid } },
       { kind: 'collection', path: `messageThreads/${linked.patient.uid}/relationships/${linked.clinician.uid}/messages` },
+      { kind: 'document', path: `messageThreads/${linked.patient.uid}/relationships/${linked.clinician.uid}/reads/${linked.patient.uid}` },
     ];
     for (const read of forbidden) {
       const outcome = await outsider.evaluate(async ({ uid, read }) => {

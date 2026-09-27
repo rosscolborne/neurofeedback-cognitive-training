@@ -7,6 +7,7 @@ import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
 import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
+import { PatientAvatar } from './PatientAvatar';
 import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
 import {
   assessQeegRecord,
@@ -195,11 +196,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          {client.avatarUrl ? <img
-            src={client.avatarUrl}
-            alt={client.name}
-            style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover' }}
-          /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '52px', height: '52px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '18px' }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
+          <PatientAvatar avatarUrl={client.avatarUrl} size={52} />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>

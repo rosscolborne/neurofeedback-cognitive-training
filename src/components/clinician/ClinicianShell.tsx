@@ -3,6 +3,8 @@ import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } fro
 import { ClientRosterView } from './ClientRosterView';
 import { ClientDetailView } from './ClientDetailView';
 import { MessagingView } from './MessagingView';
+import { useMessageUnread } from '../messaging/useMessageUnread';
+import { messageRepository } from '../../services/messageRepository';
 import { ClinicalCalendarView } from './ClinicalCalendarView';
 import { ClinicalReportsView } from './ClinicalReportsView';
 import { ClinicSettingsView } from './ClinicSettingsView';
@@ -58,6 +60,9 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 }) => {
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
+  const messageUnread = useMessageUnread(clients.map((client) => client.id), messageRepository, !isDemoWorkspace,
+    JSON.stringify(clients.map((client) => [client.id, client.clinicianId || client.linkedClinicianCode || '']).sort()));
+  const hasUnreadMessage = clients.some((client) => messageUnread.byPatient[client.id]?.unread);
 
   const navItems: ClinicianNavItem[] = [
     { id: 'clients', label: 'Patients', icon: Users },
@@ -162,6 +167,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                     setActiveNav(item.id as any);
                     if (item.id === 'clients') setSelectedClient(null);
                   }}
+                  aria-label={item.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : item.label}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -182,6 +188,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                     <Icon size={18} />
                     <span>{item.label}</span>
                   </div>
+                  {item.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot message-unread-dot-inline" />}
                   {item.badge ? (
                     <span
                       style={{
@@ -283,8 +290,10 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
         {activeNav === 'messages' && (
           <MessagingView
-            participants={clients.map((client) => ({ patientId: client.id, name: client.name }))}
+            participants={clients.map((client) => ({ patientId: client.id, name: client.name, avatarUrl: client.avatarUrl }))}
             selectedClientId={selectedClient?.id}
+            unreadByPatient={messageUnread.byPatient}
+            notificationError={messageUnread.error}
           />
         )}
 
@@ -324,6 +333,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                 setActiveNav(item.id as any);
                 if (item.id === 'clients') setSelectedClient(null);
               }}
+              aria-label={item.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : item.label}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -341,6 +351,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             >
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                {item.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot" />}
                 {item.badge ? (
                   <span
                     style={{

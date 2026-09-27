@@ -40,12 +40,13 @@ export async function probePatientBranchRuleReads(clinicianId: string): Promise<
     if (!patientId) throw new Error('A signed-in patient is required.');
     return {
         ownMessageThread: await outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId))),
+        ownMessageReadReceipt: await outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId, 'reads', patientId))),
         ownBrainMaps: await outcome(() => getDocs(collection(db, 'clients', patientId, 'brainMaps'))),
     };
 }
 
 /** The repository rules let a clinician read its own practitioner record, present or not. Read-only. */
-export async function probeClinicianBranchRuleReads(): Promise<Record<string, string>> {
+export async function probeClinicianBranchRuleReads(patientId: string): Promise<Record<string, string>> {
     await auth.authStateReady();
     const clinicianId = auth.currentUser?.uid;
     if (!clinicianId) throw new Error('A signed-in clinician is required.');
@@ -55,5 +56,6 @@ export async function probeClinicianBranchRuleReads(): Promise<Record<string, st
             if (user.data()?.role !== 'clinician') throw Object.assign(new Error('role'), { code: 'no-clinician-role' });
         }),
         ownPractitionerRecord: await outcome(() => getDoc(doc(db, 'practitioners', clinicianId))),
+        ownMessageReadReceipt: await outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId, 'reads', clinicianId))),
     };
 }
