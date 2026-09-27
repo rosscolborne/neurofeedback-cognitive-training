@@ -32,7 +32,7 @@ import { PatientShell } from '../PatientShell';
 
 const client: ClientProfile = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', status: 'active',
-  allowedExperiences: [], brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
+  allowedExperiences: ['tidal-garden'], brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
 };
 const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 

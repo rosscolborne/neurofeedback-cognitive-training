@@ -24,6 +24,8 @@ vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 import { HomeScreen } from '../HomeScreen';
 import { PatientShell } from '../PatientShell';
 import { EXPERIENCE_CATALOGUE, EXPERIENCE_IDS } from '../experienceCatalogue';
+import { canStartAssignedExperience, getAssignedExperienceIds } from '../experienceCatalogue';
+import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 
 const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 const profile = (allowedExperiences: ExperienceType[]): ClientProfile => ({
@@ -115,17 +117,59 @@ describe('patient assigned catalogue', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('keeps the unlinked default list available and characterizes legacy mapper behavior', async () => {
+  it('keeps the unlinked default list available and falls back to it only for a missing legacy field', async () => {
     const unlinked = createBlankProfile('self', 'self@example.com');
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked)); });
     train(renderer);
     expect(renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')).toHaveLength(13);
-    expect(readClientProfile({ ...profile([]), allowedExperiences: ['spatial-audio'] }).allowedExperiences).toEqual(['generative-music', 'neuro-gambit']);
-    expect(readClientProfile({ ...profile([]), allowedExperiences: [] }).allowedExperiences).toEqual(['neuro-gambit']);
+    expect(readClientProfile({ ...profile([]), allowedExperiences: ['spatial-audio'] }).allowedExperiences).toEqual(['generative-music']);
+    expect(readClientProfile({ ...profile([]), allowedExperiences: [] }).allowedExperiences).toEqual([]);
     const missing = profile([]) as Partial<ClientProfile>;
     delete missing.allowedExperiences;
-    expect(readClientProfile(missing).allowedExperiences).toEqual([]);
+    expect(new Set(readClientProfile(missing).allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
+    expect(new Set(unlinked.allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('keeps NeuroGambit excluded by a selected template after a persisted reload', async () => {
+    const template = getClinicalProtocolTemplate('alpha-enhancement')!;
+    expect(template.recommendedExperiences).not.toContain('neuro-gambit');
+    const persisted = { ...profile(EXPERIENCE_IDS), allowedExperiences: [...template.recommendedExperiences] };
+    const reloaded = readClientProfile(persisted);
+    expect(reloaded.allowedExperiences).toEqual(template.recommendedExperiences);
+    expect(readClientProfile(persisted).allowedExperiences).not.toContain('neuro-gambit');
+    expect(getAssignedExperienceIds(reloaded.allowedExperiences)).not.toContain('neuro-gambit');
+    expect(canStartAssignedExperience(reloaded.allowedExperiences, 'neuro-gambit')).toBe(false);
+
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(shell(reloaded)); });
+    expect(text(renderer)).not.toContain('NeuroGambit');
+    const staleHomeStart = renderer.root.findByType(HomeScreen).props.onStartSession;
+    act(() => staleHomeStart('neuro-gambit'));
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
+    train(renderer);
+    expect(card(renderer, 'NeuroGambit')).toBeUndefined();
+    expect(card(renderer, 'Mandala Breathing')).toBeDefined();
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('treats an explicit empty list as no Home or Train experiences and blocks stale starts', async () => {
+    expect(getAssignedExperienceIds([])).toEqual([]);
+    expect(canStartAssignedExperience([], 'neuro-gambit')).toBe(false);
+    expect(canStartAssignedExperience([], 'skyline-drift')).toBe(false);
+    const empty = readClientProfile(profile([]));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(shell(profile(['skyline-drift']))); });
+    const staleStart = renderer.root.findByType(HomeScreen).props.onStartSession;
+    await act(async () => { renderer.update(shell(empty)); });
+    expect(text(renderer)).toContain('No assigned experience');
+    expect(renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes(' Begin Session')).length > 0)?.props.disabled).toBe(true);
+    act(() => staleStart('skyline-drift'));
+    act(() => staleStart('neuro-gambit'));
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
+    train(renderer);
+    expect(renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')).toHaveLength(0);
     await act(async () => { renderer.unmount(); });
   });
 });

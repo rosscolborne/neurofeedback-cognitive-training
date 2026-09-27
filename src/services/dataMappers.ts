@@ -6,6 +6,7 @@ import type {
   SessionRecord,
 } from '../types';
 import { inferProtocolTypeForTemplate } from './protocols';
+import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 
 const LEGACY_EXPERIENCE_RENAMES: Record<string, string> = {
   'spatial-audio': 'generative-music',
@@ -78,16 +79,13 @@ export function getReusableBaselineModel(model: unknown, now = Date.now()): Indi
 /** Read both current and legacy client documents without mutating Firestore data. */
 export function readClientProfile(data: unknown, documentId?: string): ClientProfile {
   const raw = { ...(data as Record<string, unknown>) } as unknown as ClientProfile;
+  // A missing legacy field retains the former open catalogue. A present empty
+  // list is an intentional assignment of no experiences.
   const allowed = Array.isArray(raw.allowedExperiences)
     ? raw.allowedExperiences.map((experience) =>
         (LEGACY_EXPERIENCE_RENAMES[experience] ?? experience) as ClientProfile['allowedExperiences'][number]
       )
-    : [];
-
-  // Preserve the pre-foundation compatibility behavior for existing accounts.
-  if (raw.allowedExperiences && !allowed.includes('neuro-gambit')) {
-    allowed.push('neuro-gambit');
-  }
+    : Object.prototype.hasOwnProperty.call(raw, 'allowedExperiences') ? [] : [...DEFAULT_ALLOWED_EXPERIENCES];
 
   // Custom protocol IDs were historically generated as `custom-*`, so older
   // saves could incorrectly persist Theta/Beta as the broad training mode.

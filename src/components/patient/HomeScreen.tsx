@@ -33,11 +33,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateTab,
 }) => {
   const assignmentKey = client.allowedExperiences.join('|');
-  const [selection, setSelection] = useState<{ assignmentKey: string; experience: ExperienceType }>({
+  const [selection, setSelection] = useState<{ assignmentKey: string; experience: ExperienceType | undefined }>({
     assignmentKey,
-    experience: client.allowedExperiences.length > 0
-      ? getAssignedExperienceIds(client.allowedExperiences)[0] || 'skyline-drift'
-      : 'skyline-drift',
+    experience: getAssignedExperienceIds(client.allowedExperiences)[0],
   });
   const [showScrollHint, setShowScrollHint] = useState(true);
   const [sessionState, setSessionState] = useState<{
@@ -73,7 +71,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }), [sessionStatus, sessions, nowMs]);
 
   const allowedIds = getAssignedExperienceIds(client.allowedExperiences);
-  const effectiveSelectedExp = selection.assignmentKey === assignmentKey && allowedIds.includes(selection.experience)
+  const effectiveSelectedExp = selection.assignmentKey === assignmentKey && selection.experience && allowedIds.includes(selection.experience)
     ? selection.experience : allowedIds[0];
   const activeExperience = effectiveSelectedExp ? EXPERIENCE_CATALOGUE[effectiveSelectedExp] : undefined;
   const ActiveIcon = activeExperience?.icon;
@@ -166,8 +164,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               scrollbarWidth: 'none',
             }}
           >
-            {(client.allowedExperiences.length > 0 ? allowedIds : [])
-              .map(exp => {
+            {allowedIds.map(exp => {
               const Icon = EXPERIENCE_CATALOGUE[exp].icon;
               return (
                 <button

@@ -1,6 +1,9 @@
 import type React from 'react';
 import { BookOpen, Box, CircleDot, Crown, Flower2, Headphones, Mountain, Music, Target, Tv, Waves, Wind } from 'lucide-react';
 import type { ExperienceType } from '../../types';
+import { EXPERIENCE_IDS } from '../../services/experienceIds';
+
+export { EXPERIENCE_IDS } from '../../services/experienceIds';
 
 export interface ExperienceCatalogueEntry {
   id: ExperienceType;
@@ -12,13 +15,6 @@ export interface ExperienceCatalogueEntry {
   gradient: string;
   researchUrl: string;
 }
-
-// Stable presentation order from the existing Train catalogue.
-export const EXPERIENCE_IDS: ExperienceType[] = [
-  'neuro-gambit', 'immersive-3d', 'generative-music', 'narrative-story',
-  'skyline-drift', 'tidal-garden', 'breath-weave', 'signal-sort', 'rhythm-lock',
-  'media-mode', 'soundscape-mode', 'mandala', 'eeg-mandala',
-];
 
 export const EXPERIENCE_CATALOGUE: Record<ExperienceType, ExperienceCatalogueEntry> = {
   'skyline-drift': { id: 'skyline-drift', name: 'Skyline Drift', icon: Mountain, description: 'Sustained focus glider flight over procedural alpine biomes', tag: 'Focus', badge: 'Focus', gradient: 'linear-gradient(135deg, #E8967A22, #E4B87C22)', researchUrl: 'https://doi.org/10.1109/TNSRE.2016.2626989' },
@@ -37,11 +33,10 @@ export const EXPERIENCE_CATALOGUE: Record<ExperienceType, ExperienceCatalogueEnt
 };
 
 export function getAssignedExperienceIds(allowedExperiences: ExperienceType[]): ExperienceType[] {
-  if (allowedExperiences.length === 0) return EXPERIENCE_IDS;
   const allowed = new Set(allowedExperiences);
   return EXPERIENCE_IDS.filter((id) => allowed.has(id));
 }
 
 export function canStartAssignedExperience(allowedExperiences: ExperienceType[], experience: ExperienceType): boolean {
-  return allowedExperiences.length === 0 || getAssignedExperienceIds(allowedExperiences).includes(experience);
+  return getAssignedExperienceIds(allowedExperiences).includes(experience);
 }

@@ -125,7 +125,7 @@ describe('production data migration readers', () => {
     const migrated = readClientProfile(legacy, 'document-patient');
 
     expect(migrated.id).toBe('document-patient');
-    expect(migrated.allowedExperiences).toEqual(['generative-music', 'neuro-gambit']);
+    expect(migrated.allowedExperiences).toEqual(['generative-music']);
     expect(legacy.allowedExperiences).toEqual(['spatial-audio']);
     expect(migrated.schemaVersion).toBe(1);
   });
