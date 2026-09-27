@@ -1547,7 +1547,7 @@ class StorageEngine {
       return;
     }
     if (this.isDemoWorkspace()) throw new Error(`Sample session ${sessionId} does not exist`);
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) throw new Error('Sign in to update session notes');
 
     const sessionRef = doc(db, 'sessions', sessionId);
     await runTransaction(db, async (transaction) => {

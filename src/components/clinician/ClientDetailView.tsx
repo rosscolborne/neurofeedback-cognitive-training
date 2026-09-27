@@ -9,6 +9,7 @@ import { generatePatientClinicalPDF } from '../../services/pdfReportGenerator';
 import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
 import { PatientAvatar } from './PatientAvatar';
+import { ClinicianSessionDetail } from './ClinicianSessionDetail';
 import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
 import {
   assessQeegRecord,
@@ -63,6 +64,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     state: 'ready' | 'error';
     sessions: SessionRecord[];
   } | null>(null);
+  const [selectedSession, setSelectedSession] = useState<{ clientId: string; sessionId: string } | null>(null);
+  const [openedSessions, setOpenedSessions] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -101,6 +104,15 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
   const sessions = sessionResult?.clientId === client.id ? sessionResult.sessions : [];
   const sessionsState = sessionResult?.clientId === client.id ? sessionResult.state : 'loading';
+  const openedSession = selectedSession?.clientId === client.id
+    ? sessions.find((session) => session.id === selectedSession.sessionId) : undefined;
+  const handleFeedbackSaved = (sessionId: string, clinicianNotes: string | null) => {
+    setSessionResult((current) => current?.clientId === client.id ? {
+      ...current,
+      sessions: current.sessions.map((entry) => entry.id === sessionId
+        ? { ...entry, clinicianNotes: clinicianNotes || undefined } : entry),
+    } : current);
+  };
 
   const handleDownloadPDF = () => {
     generatePatientClinicalPDF(client, sessions, brand);
@@ -589,10 +601,9 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       )}
 
       {/* TAB 5: ARCHIVED SESSION LOGS */}
-      {activeTab === 'sessions' && (
-        <div className="card-clinician" style={{ padding: '18px 16px', backgroundColor: '#FFFFFF' }}>
+      <div className="card-clinician" style={{ padding: '18px 16px', backgroundColor: '#FFFFFF', display: activeTab === 'sessions' ? 'block' : 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Archived Session Time-Series Data</h3>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Session Logs</h3>
             <button onClick={handleDownloadPDF} className="btn btn-dense" style={{ fontSize: '11px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Download size={12} /> Export PDF
             </button>
@@ -605,8 +616,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           ) : sessions.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {sessions.map((s) => (
+                <React.Fragment key={s.id}>
                 <div
-                  key={s.id}
                   style={{
                     border: '1px solid var(--border-subtle)',
                     borderRadius: 'var(--radius-sm)',
@@ -626,16 +637,20 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                       Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} | In-Zone: {finiteMetric(s.timeInZonePercent, '%')} | Coherence: {finiteMetric(s.averageCoherence, '%')}
                     </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Protocol: {s.protocol ? s.protocol.replace(/-/g, ' ') : 'Not recorded'} · Mood: {s.moodRating == null ? 'Not recorded' : `${s.moodRating}/5`} · Reflection: {s.patientNotes ? 'Recorded' : 'Not recorded'}</div>
                     {s.clinicianNotes && (
                       <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
                         Clinician: {s.clinicianNotes}
                       </div>
                     )}
                   </div>
+                  <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }}>Open {s.id}</button>
                   <button onClick={() => generatePatientClinicalPDF(client, [s], brand)} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileText size={12} /> PDF
                   </button>
                 </div>
+                {openedSessions[client.id]?.includes(s.id) && <div style={{ display: openedSession?.id === s.id ? 'block' : 'none' }}><ClinicianSessionDetail key={`${client.id}-${s.id}`} session={s} onSaved={handleFeedbackSaved} /></div>}
+                </React.Fragment>
               ))}
             </div>
           ) : (
@@ -644,7 +659,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             </div>
           )}
         </div>
-      )}
 
       {/* Protocol Builder Modal */}
       {showProtocolBuilder && (

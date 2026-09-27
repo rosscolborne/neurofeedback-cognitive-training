@@ -1419,6 +1419,13 @@ describe('write authorization safeguards', () => {
     expect(writes[0]).not.toHaveProperty('clinicianNotes');
   });
 
+  it('rejects a signed-out note patch without reporting success', async () => {
+    state.auth.currentUser = null;
+    await expect(storageEngine.patchSessionNotes('session-1', { patientNotes: 'Draft' }))
+      .rejects.toThrow('Sign in');
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
   it('allows an owning clinician to patch legacy sessions without clinicianId', async () => {
     const writes: Array<Record<string, unknown>> = [];
     const legacySession = sessionDocument('legacy-session', 'patient-1');
@@ -1440,6 +1447,20 @@ describe('write authorization safeguards', () => {
     });
 
     expect(writes[0]).toMatchObject({ clinicianNotes: 'Clinician note' });
+    expect(writes[0]).not.toHaveProperty('patientNotes');
+  });
+
+  it('preserves a clinician feedback clear as null without touching patient fields', async () => {
+    state.auth.currentUser = { uid: 'clinician-1' };
+    const writes: Array<Record<string, unknown>> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) => callback({
+      get: vi.fn()
+        .mockResolvedValueOnce(sessionDocument('session-1', 'patient-1'))
+        .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }) }),
+      set: vi.fn((_ref, payload) => writes.push(payload)),
+    }));
+    await storageEngine.patchSessionNotes('session-1', { clinicianNotes: null, patientNotes: 'Cannot alter' });
+    expect(writes[0]).toMatchObject({ clinicianNotes: null });
     expect(writes[0]).not.toHaveProperty('patientNotes');
   });
 });
