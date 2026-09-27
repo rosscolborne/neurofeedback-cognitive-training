@@ -81,6 +81,14 @@ const CANONICAL_APPOINTMENT_KEYS = new Set([
   'clinicianId', 'patientId', 'patientDisplayName', 'clinicianDisplayName', 'startsAt', 'timezone',
   'durationMinutes', 'type', 'status', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'revision', 'schemaVersion',
 ]);
+const REQUIRED_CANONICAL_APPOINTMENT_KEYS = [
+  'clinicianId', 'patientId', 'patientDisplayName', 'startsAt', 'timezone',
+  'durationMinutes', 'type', 'status', 'createdAt', 'updatedAt',
+  'createdBy', 'revision', 'schemaVersion',
+];
+const CANONICAL_APPOINTMENT_TYPES = new Set([
+  'remote-training', 'in-clinic-evaluation', 'qeeg-mapping', 'protocol-review', 'consultation',
+]);
 
 const isBoundedText = (value: unknown, maxLength: number, allowEmpty: boolean) =>
   typeof value === 'string' && value.length <= maxLength && (value === '' ? allowEmpty : value.trim() === value);
@@ -97,7 +105,13 @@ function isCancellableFutureAppointment(data: Record<string, unknown>, now: numb
     && Number.isInteger(data.revision)
     && data.schemaVersion === 1
     && data.createdAt instanceof Timestamp
+    && REQUIRED_CANONICAL_APPOINTMENT_KEYS.every((key) => key in data)
     && Object.keys(data).every((key) => CANONICAL_APPOINTMENT_KEYS.has(key))
+    && typeof data.clinicianId === 'string'
+    && typeof data.patientId === 'string' && data.patientId.length > 0 && data.patientId.length <= 128
+    && typeof data.createdBy === 'string'
+    && Number.isInteger(data.durationMinutes) && (data.durationMinutes as number) >= 15 && (data.durationMinutes as number) <= 240
+    && CANONICAL_APPOINTMENT_TYPES.has(data.type as string)
     && isBoundedText(data.patientDisplayName, 160, false)
     && isBoundedText(data.timezone, 100, false)
     && (!('clinicianDisplayName' in data) || isBoundedText(data.clinicianDisplayName, 160, false))
@@ -803,6 +817,7 @@ class StorageEngine {
     if (!auth.currentUser) return null;
     const snap = await getDoc(doc(db, 'clients', id));
     if (snap.exists()) {
+      if (snap.data().accountDeletionStartedAt && auth.currentUser.uid !== id) return null;
       return readClientProfile(snap.data(), snap.id);
     }
     return null;
@@ -821,7 +836,7 @@ class StorageEngine {
     );
     canonical.docs.forEach((entry) => {
       const profile = readClientProfile(entry.data(), entry.id);
-      if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+      if (!profile.accountDeletionStartedAt && getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
     });
 
     // Firestore rules are not post-query filters. The explicit null constraint
@@ -837,7 +852,7 @@ class StorageEngine {
       ));
       legacy.docs.forEach((entry) => {
         const profile = readClientProfile(entry.data(), entry.id);
-        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+        if (!profile.accountDeletionStartedAt && getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
       });
     } catch (error) {
       // The canonical query is complete for current records. Some deployments
@@ -846,6 +861,22 @@ class StorageEngine {
       if ((error as { code?: string })?.code !== 'permission-denied') throw error;
     }
     return [...owned.values()];
+  }
+
+  /** Notify an open clinician roster when either current or legacy links change. */
+  public subscribeToClientRoster(onChange: () => void, onError: (error: Error) => void): () => void {
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId || this.isDemoWorkspace()) return () => {};
+    const canonical = onSnapshot(
+      query(collection(db, 'clients'), where('clinicianId', '==', clinicianId)),
+      onChange, onError,
+    );
+    const legacy = onSnapshot(
+      query(collection(db, 'clients'), where('linkedClinicianCode', '==', clinicianId), where('clinicianId', '==', null)),
+      onChange,
+      (error) => { if (error.code !== 'permission-denied') onError(error); },
+    );
+    return () => { canonical(); legacy(); };
   }
 
   public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
@@ -953,6 +984,64 @@ class StorageEngine {
         transaction.delete(getInvitationClaimRef(invitation.clinicianId, invitation.uniquenessClaimId));
       }
     });
+  }
+
+  /** Resumable bounded cleanup. Auth deletion is deliberately the caller's last step. */
+  public async preparePatientAccountDeletion(expectedUid: string, onDeactivated?: (client: ClientProfile) => void): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Account deletion is unavailable in the sample workspace');
+    const uid = expectedUid;
+    const ensureIdentity = () => {
+      if (auth.currentUser?.uid !== uid) throw new Error('Your signed-in account changed. Restart account deletion.');
+    };
+    ensureIdentity();
+    const clientRef = doc(db, 'clients', uid);
+    const clientSnapshot = await getDoc(clientRef);
+    ensureIdentity();
+    if (!clientSnapshot.exists()) throw new Error('Your patient profile is unavailable. Please contact support.');
+    const client = readClientProfile(clientSnapshot.data(), uid);
+    if (!client.accountDeletionStartedAt) {
+      ensureIdentity();
+      await updateDoc(clientRef, {
+        accountDeletionStartedAt: serverTimestamp(),
+        clinicianId: null,
+        linkedClinicianCode: null,
+        clinicId: null,
+        acceptedInvitationId: null,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    ensureIdentity();
+    onDeactivated?.({ ...client, accountDeletionStartedAt: client.accountDeletionStartedAt ?? new Date(),
+      clinicianId: undefined, linkedClinicianCode: undefined, clinicId: undefined, acceptedInvitationId: undefined });
+
+    // Keep the patient role until Auth deletion succeeds. A failed Auth delete
+    // can then reload this route and resume without resurrecting the link.
+    ensureIdentity();
+    await setDoc(doc(db, 'users', uid), {
+      role: 'patient', email: null, displayName: null, accountDeletionStartedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // Cancel every future canonical appointment for this UID, including ones
+    // created by a former clinician. Pending email invitations remain usable by
+    // a new UID, so they and their claims are intentionally untouched.
+    ensureIdentity();
+    const appointments = await getDocs(query(collection(db, 'appointments'), where('patientId', '==', uid)));
+    ensureIdentity();
+    const now = Date.now();
+    for (const entry of appointments.docs) {
+      const data = entry.data() as Record<string, unknown>;
+      const startsAt = data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null;
+      if (data.status === 'scheduled' && startsAt !== null && startsAt > now && !isCancellableFutureAppointment(data, now)) {
+        throw new Error('A future appointment could not be cancelled automatically. Your clinic connection is removed; contact support to finish account deletion.');
+      }
+      if (!isCancellableFutureAppointment(data, now)) continue;
+      ensureIdentity();
+      await updateDoc(entry.ref, {
+        status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: uid,
+        cancellationRequestId: `cancel_${crypto.randomUUID().replace(/-/g, '')}`,
+        updatedAt: serverTimestamp(), revision: data.revision + 1,
+      });
+    }
   }
 
   public async unlinkPatient(patientId: string): Promise<void> {
@@ -1271,7 +1360,7 @@ class StorageEngine {
       const snap = await getDoc(clientRef);
       if (snap.exists()) {
         const existing = readClientProfile(snap.data(), snap.id);
-        if (!existing.name && user.displayName) {
+        if (!existing.accountDeletionStartedAt && !existing.name && user.displayName) {
           const name = user.displayName
             .trim()
             .replace(/[._]/g, ' ')

@@ -10,13 +10,17 @@ const state = vi.hoisted(() => ({
   getClient: vi.fn(),
   ensureGarden: vi.fn(),
   exportCsv: vi.fn(),
+  auth: { currentUser: null as null | { uid: string; email: string; delete: () => Promise<void> } },
+  reauthenticate: vi.fn(),
+  prepareDeletion: vi.fn(),
 }));
 
-vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: {} }));
-vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
+vi.mock('../../../services/firebase', () => ({ auth: state.auth, db: {} }));
+vi.mock('firebase/auth', () => ({ signOut: vi.fn(), reauthenticateWithCredential: state.reauthenticate,
+  EmailAuthProvider: { credential: (email: string, password: string) => ({ email, password }) } }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, ensureTidalGardenState: state.ensureGarden } }));
+vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, ensureTidalGardenState: state.ensureGarden, preparePatientAccountDeletion: state.prepareDeletion } }));
 vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
 vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
@@ -40,7 +44,70 @@ describe('PatientShell persisted profile writes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.getSessions.mockResolvedValue([]);
+    state.auth.currentUser = null;
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  it('does not delete a different account when Auth changes during password confirmation', async () => {
+    const originalWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { ...originalWindow, confirm: () => true } });
+    const oldUser = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
+    state.auth.currentUser = oldUser;
+    let finishReauth!: () => void;
+    state.reauthenticate.mockReturnValueOnce(new Promise<void>((resolve) => { finishReauth = resolve; }));
+    let renderer!: ReactTestRenderer;
+    try {
+      await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+      const profile = renderer.root.findAllByType('button').find((button) => button.findAllByType('span').some((span) => span.children.join('') === 'Profile'))!;
+      act(() => profile.props.onClick());
+      act(() => renderer.root.findAllByType('button').find((button) => button.children.some((child) => typeof child === 'string' && child.includes('Delete Account')))!.props.onClick());
+      act(() => renderer.root.findByProps({ id: 'account-deletion-password' }).props.onChange({ target: { value: 'secret' } }));
+      await act(async () => {
+        renderer.root.findAllByType('form').at(-1)!.props.onSubmit({ preventDefault: vi.fn() });
+        await Promise.resolve();
+      });
+      state.auth.currentUser = { uid: 'other-patient', email: 'other@example.com', delete: vi.fn(async () => {}) };
+      await act(async () => { finishReauth(); await Promise.resolve(); });
+      expect(state.prepareDeletion).not.toHaveBeenCalled();
+      expect(oldUser.delete).not.toHaveBeenCalled();
+    } finally {
+      renderer?.unmount();
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    }
+  });
+
+  it('reloads the marked finish screen and retries after Auth deletion fails', async () => {
+    const originalWindow = globalThis.window;
+    const testWindow = { ...originalWindow, location: { href: '' } };
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: testWindow });
+    const user = { uid: client.id, email: client.email, delete: vi.fn()
+      .mockRejectedValueOnce(new Error('Auth temporarily unavailable'))
+      .mockResolvedValueOnce(undefined) };
+    state.auth.currentUser = user;
+    state.reauthenticate.mockResolvedValue(undefined);
+    state.prepareDeletion.mockResolvedValue(undefined);
+    const marked = { ...client, accountDeletionStartedAt: new Date(), clinicianId: undefined, clinicId: undefined };
+    let renderer!: ReactTestRenderer;
+    try {
+      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+      const submit = async () => {
+        act(() => renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Finish account deletion')!.props.onClick());
+        act(() => renderer.root.findByProps({ id: 'account-deletion-password' }).props.onChange({ target: { value: 'secret' } }));
+        await act(async () => { renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); await Promise.resolve(); await Promise.resolve(); });
+      };
+      await submit();
+      expect(user.delete).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(renderer.toJSON())).toContain('Auth temporarily unavailable');
+      await act(async () => { renderer.unmount(); });
+      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+      expect(JSON.stringify(renderer.toJSON())).toContain('Finish deleting your account');
+      await submit();
+      expect(user.delete).toHaveBeenCalledTimes(2);
+      expect(testWindow.location.href).toBe('/welcome');
+    } finally {
+      renderer?.unmount();
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    }
   });
 
   it('waits for legacy garden initialization, offers retry, then opens with saved state', async () => {
