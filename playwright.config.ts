@@ -85,8 +85,8 @@ export default defineConfig({
         {
             name: 'clinician',
             testMatch: /clinician\.readonly\.spec\.ts/,
-            dependencies: ['auth-clinician'],
-            use: { storageState: storageStatePath.clinician },
+            dependencies: bothAccounts,
+            use: { ...noCapture, storageState: storageStatePath.clinician },
         },
         {
             name: 'deployed-rules',
