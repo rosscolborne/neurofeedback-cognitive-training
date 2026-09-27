@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { TestInfo } from '@playwright/test';
-import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import {
     FieldValue,
@@ -13,6 +13,8 @@ import {
     type Firestore,
 } from 'firebase-admin/firestore';
 import type { AuthenticatedE2EIdentity } from './auth';
+import { impersonatedE2ECredential, requireE2EAdminConfiguration } from './adminCredential';
+import { fixtureIdentities } from './fixtureModel';
 import {
     canonicalClinicianId,
     clinicExclusivityProblem,
@@ -84,39 +86,8 @@ export function setLeaseLossHandler(handler: (() => void) | undefined): void {
 // Configuration and identity checks
 // ---------------------------------------------------------------------------
 
-function requireAdminConfiguration(): { projectId: string; serviceAccountPath: string; serviceAccountEmail: string } {
-    if (process.env.E2E_ENABLE_PRIVILEGED_CLEANUP !== 'true') {
-        throw new Error(
-            'Set E2E_ENABLE_PRIVILEGED_CLEANUP=true only after confirming the E2E project and test accounts before using Admin access.',
-        );
-    }
-    const dedicatedProject = process.env.E2E_CONFIRM_DEDICATED_PROJECT === 'true';
-    const sharedProjectTestAccounts = process.env.E2E_CONFIRM_SHARED_PROJECT_TEST_ACCOUNTS === 'true';
-    if (dedicatedProject === sharedProjectTestAccounts) {
-        throw new Error(
-            'Confirm exactly one E2E target: an isolated project or exclusive test accounts in the current project.',
-        );
-    }
-
-    const projectId = process.env.E2E_FIREBASE_PROJECT_ID?.trim();
-    if (!projectId) {
-        throw new Error('Set E2E_FIREBASE_PROJECT_ID to the Firebase project used by the browser app.');
-    }
-
-    // An explicit, dedicated key only. Application Default Credentials could
-    // silently resolve to a person's own (owner-level) login.
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        throw new Error('Unset GOOGLE_APPLICATION_CREDENTIALS; the E2E harness uses only its dedicated service-account key.');
-    }
-    const serviceAccountPath = process.env.E2E_FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
-    const serviceAccountEmail = process.env.E2E_FIREBASE_SERVICE_ACCOUNT_EMAIL?.trim().toLowerCase();
-    if (!serviceAccountPath || !serviceAccountEmail) {
-        throw new Error('Set E2E_FIREBASE_SERVICE_ACCOUNT_PATH and E2E_FIREBASE_SERVICE_ACCOUNT_EMAIL for the dedicated E2E service account.');
-    }
-    if (serviceAccountEmail.startsWith('firebase-adminsdk-')) {
-        throw new Error('Refusing the default firebase-adminsdk account; use a dedicated least-privilege E2E service account.');
-    }
-    return { projectId, serviceAccountPath, serviceAccountEmail };
+function requireAdminConfiguration(): { projectId: string } {
+    return { projectId: requireE2EAdminConfiguration() };
 }
 
 export function cleanupMode(): CleanupMode {
@@ -140,42 +111,25 @@ function requireStatefulRun(): CleanupMode {
 
 function expectedIdentity(role: 'patient' | 'clinician') {
     const prefix = role === 'patient' ? 'E2E_PATIENT' : 'E2E_CLINICIAN';
-    const uid = process.env[`${prefix}_UID`]?.trim();
-    const email = process.env[`${prefix}_EMAIL`]?.trim().toLowerCase();
-    if (!uid || !email) throw new Error(`Set ${prefix}_UID and ${prefix}_EMAIL for the dedicated E2E account.`);
+    const { uid, email } = fixtureIdentities[role];
+    if (process.env[`${prefix}_UID`] && process.env[`${prefix}_UID`] !== uid) throw new Error(`${prefix}_UID differs from the pinned fixture UID.`);
+    if (process.env[`${prefix}_EMAIL`] && process.env[`${prefix}_EMAIL`]?.toLowerCase() !== email) throw new Error(`${prefix}_EMAIL differs from the pinned fixture email.`);
     return { uid, email };
 }
 
 async function adminDatabase(): Promise<Firestore> {
-    const { projectId, serviceAccountPath, serviceAccountEmail } = requireAdminConfiguration();
+    const { projectId } = requireAdminConfiguration();
     const existing = getApps().find((app) => app.name === 'neurasticity-e2e');
     if (existing) return getFirestore(existing);
 
-    const serviceAccount = JSON.parse(await readFile(resolve(serviceAccountPath), 'utf8')) as Record<string, unknown>;
-    // firebase-admin also honours camelCase aliases, which could smuggle a
-    // different identity past the snake_case checks below; refuse them.
-    if (serviceAccount.type !== 'service_account' || ['projectId', 'clientEmail', 'privateKey'].some((key) => key in serviceAccount)) {
-        throw new Error('The E2E credential must be a standard service-account key file.');
-    }
-    if (serviceAccount.project_id !== projectId) {
-        throw new Error('The E2E service-account key belongs to a different Firebase project.');
-    }
-    if (String(serviceAccount.client_email ?? '').toLowerCase() !== serviceAccountEmail) {
-        throw new Error('The E2E service-account key is not the pinned E2E_FIREBASE_SERVICE_ACCOUNT_EMAIL account.');
-    }
-    const credential = cert({
-        projectId: serviceAccount.project_id as string,
-        clientEmail: serviceAccount.client_email as string,
-        privateKey: String(serviceAccount.private_key ?? ''),
-    });
-
+    const credential = await impersonatedE2ECredential();
     const app = initializeApp({ credential, projectId }, 'neurasticity-e2e');
     const database = getFirestore(app);
     database.settings({ ignoreUndefinedProperties: true });
     return database;
 }
 
-async function adminServices() {
+export async function adminServices() {
     const database = await adminDatabase();
     const app = getApps().find((candidate) => candidate.name === 'neurasticity-e2e');
     if (!app) throw new Error('The E2E Firebase admin app was not initialized.');
@@ -212,6 +166,9 @@ async function verifyAllowedPair(
         || adminClinician.email?.toLowerCase() !== expectedClinician.email
     ) {
         throw new Error('Admin Auth identities do not match the E2E account allow-list.');
+    }
+    if (!adminPatient.emailVerified || !adminClinician.emailVerified) {
+        throw new Error('The E2E patient and clinician emails must be verified. Run npm run test:e2e:session -- reset.');
     }
 }
 
@@ -292,7 +249,7 @@ function describeBlockingLease(snapshot: DocumentSnapshot): string {
     return [
         `Stateful E2E run ${runId} did not finish cleanup (status: ${status}).`,
         'Stale baselines are never restored automatically. Review the recorded run with',
-        `E2E_CLEANUP_RUN_ID=${runId} E2E_CLEANUP_MODE=plan npm run test:e2e:cleanup,`,
+        `npm run test:e2e:recover -- ${runId} plan,`,
         'then execute it with the digest that plan prints.',
     ].join(' ');
 }
@@ -301,7 +258,8 @@ async function acquireRunLease(path: string, runId: string, fields: DocumentData
     const database = await adminDatabase();
     const reference = database.doc(path);
     await database.runTransaction(async (transaction) => {
-        const current = await transaction.get(reference);
+        const [current, reset] = await transaction.getAll(reference, database.doc('e2eHarnessLocks/fixture-reset'));
+        if (reset.exists) throw new Error('A fixture reset is running; stateful E2E cannot start.');
         if (current.exists) throw new Error(describeBlockingLease(current));
         transaction.create(reference, {
             ...fields,
@@ -1323,14 +1281,19 @@ async function claimParkedLease(path: string, runId: string): Promise<void> {
  */
 export async function cleanupRecordedE2ERun(
     runId: string,
-    identities: { patient: AuthenticatedE2EIdentity; clinician: AuthenticatedE2EIdentity },
     testInfo?: TestInfo,
 ): Promise<void> {
     const mode = cleanupMode();
     if (mode === 'execute' && process.env.npm_lifecycle_event !== 'test:e2e:cleanup') {
         throw new Error('Recovery execute runs only through npm run test:e2e:cleanup.');
     }
-    await verifyAllowedPair(identities.patient, identities.clinician);
+    // Recovery cannot depend on the browser storage states or random passwords
+    // from the failed run. Recheck the pinned Auth users through Admin instead.
+    const projectId = requireAdminConfiguration().projectId;
+    await verifyAllowedPair(
+        { ...expectedIdentity('patient'), projectId },
+        { ...expectedIdentity('clinician'), projectId },
+    );
     const database = await adminDatabase();
     const [pairLease, disposableLease] = await Promise.all([
         database.doc(pairLeasePath).get(),
@@ -1458,22 +1421,35 @@ export async function inspectE2EHarness(
 ): Promise<HarnessPreflight> {
     await verifyAllowedPair(patient, clinician);
     await verifyPrivilegedProject(patient.projectId, { writeSentinel: false });
-    const database = await adminDatabase();
+    const { database, authentication } = await adminServices();
     const findings: string[] = [
         `project ${patient.projectId}; browser identities, allow-list, and Admin Auth records agree`,
         `cleanup mode: ${process.env.E2E_CLEANUP_MODE?.trim() || '(unset)'}`,
     ];
     const blockers: Record<string, string[]> = { 'stateful-patient': [], 'stateful-clinician': [], 'stateful-isolation': [] };
     const blockAll = (reason: string) => Object.values(blockers).forEach((list) => list.push(reason));
+    try {
+        const outsider = await authentication.getUser(fixtureIdentities.outsider.uid);
+        if (outsider.email?.toLowerCase() !== fixtureIdentities.outsider.email || !outsider.emailVerified) {
+            blockers['stateful-isolation'].push('outsider Auth identity is not the verified fixture account');
+        }
+    } catch {
+        blockers['stateful-isolation'].push('outsider Auth identity is missing; run npm run test:e2e:session -- reset');
+    }
 
-    const [pairLease, disposableLease, registry, patientProfile, practitioner] = await Promise.all([
+    const [pairLease, disposableLease, resetLock, registry, patientProfile, practitioner, clinicianUser, outsiderUser, outsiderProfile] = await Promise.all([
         database.doc(pairLeasePath).get(),
         database.doc(disposableLeasePath).get(),
+        database.doc('e2eHarnessLocks/fixture-reset').get(),
         database.collection(disposableRegistryCollection).limit(20).get(),
         database.doc(`clients/${patient.uid}`).get(),
         database.doc(`practitioners/${clinician.uid}`).get(),
+        database.doc(`users/${clinician.uid}`).get(),
+        database.doc(`users/${fixtureIdentities.outsider.uid}`).get(),
+        database.doc(`clients/${fixtureIdentities.outsider.uid}`).get(),
     ]);
     findings.push(describeLease('pair lease', pairLease), describeLease('disposable lease', disposableLease));
+    if (resetLock.exists) blockAll('fixture reset lock is held');
     if (pairLease.exists) {
         blockers['stateful-patient'].push('pair lease is held');
         blockers['stateful-clinician'].push('pair lease is held');
@@ -1501,6 +1477,11 @@ export async function inspectE2EHarness(
     const practitionerOk = practitioner.exists && practitioner.get('userId') === clinician.uid;
     findings.push(`practitioner record: ${practitioner.exists ? (practitionerOk ? 'present' : 'present but userId differs') : 'missing'}`);
     if (!practitionerOk) blockers['stateful-clinician'].push('clinician practitioner record is missing or mismatched');
+    if (clinicianUser.get('role') !== 'clinician') blockAll('clinician role grant in users/{uid} is missing');
+    if (outsiderUser.get('role') !== 'patient' || !outsiderProfile.exists ||
+        outsiderProfile.get('clinicianId') || outsiderProfile.get('linkedClinicianCode') || outsiderProfile.get('clinicId')) {
+        blockers['stateful-isolation'].push('outsider fixture is missing or linked to a clinician');
+    }
 
     const clinicId = typeof practitioner.get('clinicId') === 'string' && practitioner.get('clinicId')
         ? practitioner.get('clinicId') as string

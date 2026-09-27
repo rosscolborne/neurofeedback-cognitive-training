@@ -73,7 +73,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
 
     test('clinician invitation and patient acceptance persist the roster and clinic relationship after reload', async ({ browser, stateful }) => {
         const patientEmail = process.env.E2E_PATIENT_EMAIL;
-        expect(patientEmail, 'Set E2E_PATIENT_EMAIL for the patient represented by e2e/.auth/patient.json').toBeTruthy();
+        expect(patientEmail, 'The E2E session must supply E2E_PATIENT_EMAIL for the signed-in patient.').toBeTruthy();
 
         const clinician = await openAuthenticatedPage(browser, clinicianState);
         const patient = await openAuthenticatedPage(browser, patientState);

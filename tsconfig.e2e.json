@@ -16,5 +16,5 @@
       "/e2e/*": ["e2e/*"]
     }
   },
-  "include": ["e2e/**/*.ts", "playwright.config.ts", "playwright.protocol.config.ts"]
+  "include": ["e2e/**/*.ts", "tests/e2e-fixtures/**/*.ts", "playwright.config.ts", "playwright.protocol.config.ts", "vitest.fixture.config.ts"]
 }

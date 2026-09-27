@@ -21,7 +21,7 @@ describe('canonical messaging and appointment surface wiring', () => {
   });
 
   it('exposes linked-patient messaging and appointments with honest unlinked guidance', () => {
-    expect(patientShellSource).toContain('<PatientMessagingView patientId={client.id} unreadMessageId=');
+    expect(patientShellSource).toContain('<PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread');
     expect(patientShellSource).toContain('notificationError={messageUnread.error}');
     expect(patientShellSource).toContain('<PatientAppointmentsView />');
     expect(patientShellSource).toContain('<UnlinkedCareFeature feature="messages" />');
