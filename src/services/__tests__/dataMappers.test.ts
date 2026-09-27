@@ -231,6 +231,8 @@ describe('session aggregate migration behavior', () => {
     }
     expect(getTidalGardenSessionXp(5, 600, 5)).toBe(1);
     expect(getTidalGardenSessionXp(4, 600, 20)).toBe(1); // Out-of-zone time does not subtract XP.
+    expect(getTidalGardenSessionXp(22, 60, 22)).toBe(55);
+    expect(getTidalGardenSessionXp(44, 60, 44)).toBe(110);
     for (const invalid of [Number.NaN, Infinity, -1]) {
       expect(getTidalGardenSessionXp(invalid, 600, 600)).toBe(0);
     }

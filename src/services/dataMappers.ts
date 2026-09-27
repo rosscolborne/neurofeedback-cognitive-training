@@ -198,7 +198,7 @@ export function getTidalGardenSessionXp(
   if (!Number.isFinite(inZoneSeconds) || !Number.isFinite(configuredDurationSeconds)
     || !Number.isFinite(elapsedSeconds) || configuredDurationSeconds <= 0) return 0;
   const rewardableSeconds = Math.max(0, Math.min(inZoneSeconds, configuredDurationSeconds, elapsedSeconds));
-  return Math.floor(150 * (rewardableSeconds / configuredDurationSeconds));
+  return Math.floor((150 * rewardableSeconds) / configuredDurationSeconds);
 }
 
 /** Legacy aggregate behavior, made pure so it can be applied atomically and tested. */
