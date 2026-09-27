@@ -83,6 +83,18 @@ describe('mounted patient Demo session lifecycle', () => {
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
   });
 
+  it('mounts a stage-one garden for an initialized account with an honest zero-point projection', async () => {
+    let runner!: ReactTestRenderer;
+    const initialized = { ...client, tidalGardenState: { stage: 1, growthPoints: 0, plantsUnlocked: [], lastWatered: '' } };
+    await act(async () => { runner = create(<SessionRunner client={initialized} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={vi.fn()} />); });
+    await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
+    const garden = runner.root.find((node) => (node.type as unknown) === 'experience-view');
+    expect(garden.props.stage).toBe(1);
+    expect(garden.props.growthPoints).toBe(0);
+    expect(text(runner)).not.toContain('Garden progress is unavailable');
+    await act(async () => { runner.unmount(); });
+  });
+
   it('uses self-guided provenance only for an unlinked patient', () => {
     expect(resolveSessionCareProvenance({ ...client, clinicId: undefined, clinicianId: undefined, linkedClinicianCode: undefined }))
       .toEqual({ clinicId: 'self-guided', clinicianId: undefined });

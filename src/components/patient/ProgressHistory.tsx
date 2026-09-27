@@ -17,6 +17,7 @@ interface ProgressHistoryProps {
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
+const VISIBLE_BADGE_IDS = new Set(['first-light', 'steady-state', 'deep-focus', 'garden-keeper']);
 
 const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
   Award,
@@ -65,7 +66,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     nowMs,
     chartWidth: 360,
     chartHeight: 120,
-  }), [sessionStatus, allSessions, period, nowMs]);
+    gardenStage: client.tidalGardenState?.stage,
+  }), [sessionStatus, allSessions, period, nowMs, client.tidalGardenState?.stage]);
   const historySessions = useMemo(
     () => [...progressDisplay.periodSessions].reverse(),
     [progressDisplay.periodSessions],
@@ -394,7 +396,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-          {INITIAL_BADGES.map(badge => {
+          {INITIAL_BADGES.filter(badge => VISIBLE_BADGE_IDS.has(badge.id)).map(badge => {
             const isUnlocked = progressDisplay.earnedBadgeIds?.has(badge.id) === true;
             const Icon = BADGE_ICONS[badge.iconName] || Trophy;
             return (

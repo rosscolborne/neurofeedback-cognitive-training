@@ -248,6 +248,7 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     currentStreak: 0,
     brainMaps: [],
     badges: [],
+    tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' },
     isDemo: false,
   };
 };
@@ -1306,6 +1307,30 @@ class StorageEngine {
 
     const snapshot = await getDoc(doc(db, 'clients', user.uid));
     return snapshot.exists() ? readClientProfile(snapshot.data(), snapshot.id) : null;
+  }
+
+  /** Initialize only a missing garden field; the transaction preserves concurrent growth and care fields. */
+  public async ensureTidalGardenState(patientId: string): Promise<ClientProfile> {
+    if (this.isDemoWorkspace()) {
+      const index = this.demoClients.findIndex((client) => client.id === patientId);
+      if (index < 0) throw new Error('Patient profile is unavailable. Try again.');
+      const current = this.demoClients[index];
+      if (current.tidalGardenState) return current;
+      const updated = { ...current, tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' } };
+      this.demoClients[index] = updated;
+      return updated;
+    }
+    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to open Tidal Garden.');
+    const clientRef = doc(db, 'clients', patientId);
+    return runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(clientRef);
+      if (!snapshot.exists()) throw new Error('Patient profile is unavailable. Try again.');
+      const current = readClientProfile(snapshot.data(), snapshot.id);
+      if (current.tidalGardenState) return current;
+      const tidalGardenState = { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' };
+      transaction.update(clientRef, { tidalGardenState });
+      return { ...current, tidalGardenState };
+    });
   }
 
   public setCurrentClientId(id: string) {

@@ -230,7 +230,9 @@ export function applySessionCompletionToClient(
   ) addBadge('still-waters');
 
   if (client.tidalGardenState && (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement')) {
-    client.tidalGardenState.growthPoints += Math.round(session.timeInZonePercent * 1.5);
+    const measuredPercent = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent)
+      ? Math.max(0, Math.min(100, session.timeInZonePercent)) : 0;
+    client.tidalGardenState.growthPoints += Math.round(measuredPercent * 1.5);
     if (client.tidalGardenState.growthPoints > 300 && client.tidalGardenState.stage < 2) {
       client.tidalGardenState.stage = 2;
     }

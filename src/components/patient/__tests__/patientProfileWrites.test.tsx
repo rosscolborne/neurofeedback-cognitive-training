@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   getSessions: vi.fn(),
   saveSession: vi.fn(),
   getClient: vi.fn(),
+  ensureGarden: vi.fn(),
   exportCsv: vi.fn(),
 }));
 
@@ -15,7 +16,7 @@ vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: 
 vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient } }));
+vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, ensureTidalGardenState: state.ensureGarden } }));
 vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
 vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
@@ -40,6 +41,45 @@ describe('PatientShell persisted profile writes', () => {
     vi.clearAllMocks();
     state.getSessions.mockResolvedValue([]);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  it('waits for legacy garden initialization, offers retry, then opens with saved state', async () => {
+    state.ensureGarden.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ ...client, tidalGardenState: { stage: 1, growthPoints: 0, plantsUnlocked: [], lastWatered: '' } });
+    const onClientPersistedElsewhere = vi.fn();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />); });
+    await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'home-screen').props.onStartSession('tidal-garden'); });
+    expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('offline');
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
+    await act(async () => { await renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Retry')!.props.onClick(); });
+    expect(state.ensureGarden).toHaveBeenCalledTimes(2);
+    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(expect.objectContaining({ tidalGardenState: expect.objectContaining({ stage: 1 }) }));
+    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.client.tidalGardenState.stage).toBe(1);
+    const savedSession = { id: 'garden-session', patientId: client.id, isDemo: true };
+    const grown = { ...client, tidalGardenState: { stage: 1, growthPoints: 120, plantsUnlocked: [], lastWatered: '' } };
+    state.saveSession.mockResolvedValueOnce(undefined);
+    state.getClient.mockResolvedValueOnce(grown);
+    await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.onComplete(savedSession); });
+    expect(state.saveSession).toHaveBeenCalledWith(savedSession);
+    expect(state.getClient).toHaveBeenCalledWith(client.id);
+    expect(onClientPersistedElsewhere).toHaveBeenLastCalledWith(grown);
+    renderer.unmount();
+  });
+
+  it('discards an old account garden ensure after switching patients', async () => {
+    let resolveEnsure!: (value: ClientProfile) => void;
+    state.ensureGarden.mockReturnValueOnce(new Promise((resolve) => { resolveEnsure = resolve; }));
+    const onClientPersistedElsewhere = vi.fn();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />); });
+    act(() => { void renderer.root.find((node) => (node.type as unknown) === 'home-screen').props.onStartSession('tidal-garden'); });
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
+    const nextClient = { ...client, id: 'patient-2' };
+    await act(async () => { renderer.update(<PatientShell brand={brand} client={nextClient} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />); });
+    await act(async () => { resolveEnsure({ ...client, tidalGardenState: { stage: 1, growthPoints: 0, plantsUnlocked: [], lastWatered: '' } }); });
+    expect(onClientPersistedElsewhere).not.toHaveBeenCalled();
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
+    renderer.unmount();
   });
 
   it('shows a retryable avatar persistence error and retries the same update', async () => {

@@ -221,6 +221,23 @@ describe('production data migration readers', () => {
 });
 
 describe('session aggregate migration behavior', () => {
+  it('grows only from finite completed measurements and crosses the existing strict stage thresholds', () => {
+    const gardenSession = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement', timeInZonePercent: 1 });
+    for (const [points, expectedStage, expectedBadge] of [
+      [300, 1, false], [301, 2, false], [500, 2, false], [501, 3, true], [800, 3, true], [801, 4, true],
+    ] as const) {
+      const start = { ...clientFixture(), tidalGardenState: { stage: 1, growthPoints: points - 2, plantsUnlocked: [], lastWatered: '' } };
+      const updated = applySessionCompletionToClient(start, gardenSession);
+      expect(updated.tidalGardenState?.growthPoints).toBe(points);
+      expect(updated.tidalGardenState?.stage).toBe(expectedStage);
+      expect(updated.badges.includes('garden-keeper')).toBe(expectedBadge);
+    }
+    for (const invalid of [0, Number.NaN, Infinity, undefined]) {
+      const updated = applySessionCompletionToClient(clientFixture(), { ...gardenSession, timeInZonePercent: invalid as number });
+      expect(updated.tidalGardenState?.growthPoints).toBe(0);
+    }
+    expect(applySessionCompletionToClient(clientFixture(), { ...gardenSession, isDemo: true }).tidalGardenState?.growthPoints).toBe(2);
+  });
   it('returns a new profile and leaves the source profile untouched', () => {
     const client = clientFixture();
     const updated = applySessionCompletionToClient(client, sessionFixture());
