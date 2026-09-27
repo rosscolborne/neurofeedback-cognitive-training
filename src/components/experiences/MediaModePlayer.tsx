@@ -23,7 +23,7 @@ const MEDIA_CHANNELS: MediaChannel[] = [
     id: 'nature-alpine',
     title: 'Alpine Wilderness & Clouds (4K)',
     category: 'Alpha Relaxation',
-    targetBand: 'Alpha (8-12 Hz)',
+    targetBand: 'Alpha (8–13 Hz)',
     vibe: 'Peaceful',
     icon: Sun,
     localVideoUrl: '/videos/stream1_nature.mp4',

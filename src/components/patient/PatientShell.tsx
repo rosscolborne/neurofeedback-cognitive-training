@@ -10,10 +10,16 @@ import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
+import { ChangePasswordForm } from '../account/ChangePasswordForm';
+import { PatientMessagingView } from './PatientMessagingView';
+import { useMessageUnread } from '../messaging/useMessageUnread';
+import { messageRepository } from '../../services/messageRepository';
+import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Sliders, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
+import { resolvePatientProtocol } from '../../services/protocols';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
@@ -22,31 +28,44 @@ import {
 interface PatientShellProps {
   brand: ClinicBrandConfig;
   client: ClientProfile;
-  onUpdateClient: (updated: ClientProfile) => void;
+  onUpdateClient: (updated: ClientProfile) => Promise<void>;
+  /** Update local UI for data already persisted by an atomic repository operation. */
+  onClientPersistedElsewhere: (updated: ClientProfile) => void;
   onOpenRebrand: () => void;
+  initialInvitationCode?: string;
+  onInvitationAccepted?: () => void;
 }
 
 export const PatientShell: React.FC<PatientShellProps> = ({
   brand,
   client,
   onUpdateClient,
-  onOpenRebrand,
+  onClientPersistedElsewhere,
+  initialInvitationCode,
+  onInvitationAccepted,
 }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
-  const [showClinicianLink, setShowClinicianLink] = useState(false);
-  const [invitationCode, setInvitationCode] = useState('');
+  const [showClinicianLink, setShowClinicianLink] = useState(!!initialInvitationCode);
+  const [invitationCode, setInvitationCode] = useState(initialInvitationCode || '');
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
-  const evidenceProtocol = getClinicalProtocolTemplate(client.assignedProtocol);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const resolvedProtocol = resolvePatientProtocol(client);
+  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
   const protocolAlias = client.customProtocolConfig
-    ? getProtocolAssignmentAlias(client.customProtocolConfig, client.assignedProtocol)
+    ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
+  const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
+  const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
+  const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -59,7 +78,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setLinkError(null);
     try {
       const linkedClient = await storageEngine.acceptPatientInvitation(invitationCode, client);
-      await onUpdateClient(linkedClient);
+      onClientPersistedElsewhere(linkedClient);
+      onInvitationAccepted?.();
       setInvitationCode('');
       setShowClinicianLink(false);
     } catch (error) {
@@ -90,7 +110,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const handleSessionComplete = async (session: SessionRecord) => {
     await storageEngine.saveSession(session);
     const persistedClient = await storageEngine.getClient(client.id);
-    if (persistedClient) onUpdateClient(persistedClient);
+    if (!persistedClient) throw new Error('The saved session could not be reloaded. Try again.');
+    onClientPersistedElsewhere(persistedClient);
     setActiveSessionExp(null);
     setCompletedSession(session);
   };
@@ -101,8 +122,56 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setIsMuted(newState);
   };
 
+  const clinicianConnection = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+      {isClinicianLinked ? (
+        <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)', fontSize: '13px', fontWeight: 600 }}>
+          Connected to your clinician
+        </div>
+      ) : !showClinicianLink ? (
+        <button onClick={() => setShowClinicianLink(true)} className="btn btn-secondary" style={{ width: '100%' }}>
+          Connect to Clinician
+        </button>
+      ) : (
+        <>
+          <label htmlFor="clinician-invitation-code" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Invitation code
+          </label>
+          <input
+            id="clinician-invitation-code"
+            value={invitationCode}
+            onChange={(event) => setInvitationCode(event.target.value.toUpperCase())}
+            placeholder="XXXX-XXXX-XXXX"
+            autoComplete="off"
+            autoFocus={!!initialInvitationCode}
+            className="font-mono"
+            style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '14px', letterSpacing: '0.06em' }}
+          />
+          <div style={{ color: 'var(--text-secondary)', fontSize: '11px', lineHeight: 1.4 }}>
+            Use the code from your clinician. You must be signed in with the email address they invited.
+          </div>
+          {linkError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{linkError}</div>}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => void handleLinkClinician()} disabled={isLinking || !invitationCode.trim()} className="btn btn-primary" style={{ flex: 1, padding: '11px 14px', fontSize: '13px', opacity: isLinking ? 0.7 : 1 }}>
+              {isLinking ? 'Connecting…' : 'Accept Invitation'}
+            </button>
+            <button onClick={() => { setShowClinicianLink(false); setLinkError(null); }} disabled={isLinking} className="btn btn-ghost" style={{ padding: '11px 14px' }}>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   const exportCSV = async () => {
-    const allSessions = await storageEngine.getSessions(client.id);
+    let allSessions: SessionRecord[];
+    try {
+      allSessions = await storageEngine.getSessions(client.id);
+    } catch {
+      alert('Session data is unavailable right now. Try again after the connection recovers.');
+      return;
+    }
     if (allSessions.length === 0) {
       alert('No session data to export.');
       return;
@@ -180,8 +249,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     return (
       <OnboardingFlow
         client={client}
-        onFinish={updated => {
-          onUpdateClient({ ...client, ...updated });
+        onFinish={async updated => {
+          await onUpdateClient({ ...client, ...updated });
           setShowOnboarding(false);
         }}
       />
@@ -218,7 +287,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {client.linkedClinicianCode && brand.logoUrl && brand.logoUrl.startsWith('data:image') ? (
+          {isClinicianLinked && brand.logoUrl && brand.logoUrl.startsWith('data:image') ? (
             <img
               src={brand.logoUrl}
               alt="Clinic Logo"
@@ -228,24 +297,24 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <BrandLogo size={28} variant="terracotta" />
           )}
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{client.linkedClinicianCode ? brand.name : 'Waveable'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{isClinicianLinked ? brand.name : 'Waveable'}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>
 
-        {client.linkedClinicianCode && (
-          <button
-            onClick={onOpenRebrand}
-            className="btn btn-ghost"
-            style={{ padding: '6px 10px', fontSize: '11px', gap: '4px' }}
-          >
-            <Sliders size={13} /> Clinic Theme
-          </button>
-        )}
       </header>
 
       {/* Main Tab Content */}
       <main style={{ flex: 1, padding: '20px' }}>
+        {activeTab === 'home' && !isClinicianLinked && (
+          <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700 }}>Have an invitation from your clinician?</div>
+              <div style={{ marginTop: '3px', fontSize: '12px', color: 'var(--text-secondary)' }}>Connect your account so your clinician can manage your training plan.</div>
+            </div>
+            {clinicianConnection}
+          </section>
+        )}
         {activeTab === 'home' && (
           <HomeScreen
             client={client}
@@ -363,6 +432,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
+        {activeTab === 'messages' && (isClinicianLinked
+          ? <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
+          : <UnlinkedCareFeature feature="messages" />)}
+
+        {activeTab === 'appointments' && (isClinicianLinked
+          ? <PatientAppointmentsView />
+          : <UnlinkedCareFeature feature="appointments" />)}
+
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
             {/* Profile Info Card */}
@@ -381,15 +458,26 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                         return;
                       }
                       const reader = new FileReader();
-                      reader.onloadend = () => {
+                      reader.onloadend = async () => {
                         const base64 = reader.result as string;
-                        onUpdateClient({ ...client, avatarUrl: base64 });
+                        const updated = { ...client, avatarUrl: base64 };
+                        setIsSavingProfile(true);
+                        setProfileSaveError(null);
+                        try {
+                          await onUpdateClient(updated);
+                          setPendingAvatarUrl(null);
+                        } catch (error) {
+                          setPendingAvatarUrl(base64);
+                          setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
+                        } finally {
+                          setIsSavingProfile(false);
+                        }
                       };
                       reader.readAsDataURL(file);
                     }
                   };
                   input.click();
-                }}>
+                }} role="button" aria-label="Upload profile photo" aria-disabled={isSavingProfile}>
                   {client.avatarUrl && (client.avatarUrl.startsWith('data:') || client.avatarUrl.startsWith('blob:')) ? (
                     <img
                       src={client.avatarUrl}
@@ -439,11 +527,36 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 </div>
               </div>
 
+              {profileSaveError && (
+                <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '12px' }}>
+                  {profileSaveError}
+                  <button
+                    type="button"
+                    disabled={isSavingProfile || !pendingAvatarUrl}
+                    onClick={async () => {
+                      if (!pendingAvatarUrl) return;
+                      setIsSavingProfile(true);
+                      setProfileSaveError(null);
+                      try {
+                        await onUpdateClient({ ...client, avatarUrl: pendingAvatarUrl });
+                        setPendingAvatarUrl(null);
+                      } catch (error) {
+                        setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
+                      } finally {
+                        setIsSavingProfile(false);
+                      }
+                    }}
+                    className="btn btn-ghost"
+                    style={{ marginLeft: '8px' }}
+                  >Retry</button>
+                </div>
+              )}
+
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div><strong>Goal:</strong> {client.condition}</div>
+                <div><strong>Goal:</strong> {client.condition || 'Unavailable'}</div>
                 {protocolAlias && <div><strong>Name:</strong> {protocolAlias}</div>}
-                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? client.assignedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
-                <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek} sessions / week</div>
+                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? resolvedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
+                <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable'}</div>
                 <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
               </div>
             </div>
@@ -466,39 +579,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 View Protocol Details
               </button>
 
-              {client.clinicianId ? (
-                <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)', fontSize: '13px', fontWeight: 600 }}>
-                  Connected to your clinician
-                </div>
-              ) : !showClinicianLink ? (
-                <button onClick={() => setShowClinicianLink(true)} className="btn btn-secondary" style={{ width: '100%' }}>
-                  Connect to Clinician
-                </button>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                  <label htmlFor="clinician-invitation-code" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Invitation code
-                  </label>
-                  <input
-                    id="clinician-invitation-code"
-                    value={invitationCode}
-                    onChange={(event) => setInvitationCode(event.target.value.toUpperCase())}
-                    placeholder="XXXX-XXXX-XXXX"
-                    autoComplete="off"
-                    className="font-mono"
-                    style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '14px', letterSpacing: '0.06em' }}
-                  />
-                  {linkError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{linkError}</div>}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => void handleLinkClinician()} disabled={isLinking} className="btn btn-primary" style={{ flex: 1, padding: '11px 14px', fontSize: '13px', opacity: isLinking ? 0.7 : 1 }}>
-                      {isLinking ? 'Connecting…' : 'Accept Invitation'}
-                    </button>
-                    <button onClick={() => { setShowClinicianLink(false); setLinkError(null); }} disabled={isLinking} className="btn btn-ghost" style={{ padding: '11px 14px' }}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
+              {clinicianConnection}
             </div>
 
             {/* Account Section — separated and pushed down */}
@@ -568,6 +649,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 </button>
               </div>
             </div>
+
+            <ChangePasswordForm variant="patient" />
           </div>
         )}
       </main>
@@ -595,6 +678,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           { id: 'sessions', label: 'Train', icon: Compass },
           { id: 'education', label: 'Science', icon: BookOpen },
           { id: 'progress', label: 'Progress', icon: Activity },
+          { id: 'messages', label: 'Messages', icon: MessageSquare },
+          { id: 'appointments', label: 'Visits', icon: CalendarDays },
           { id: 'profile', label: 'Profile', icon: User },
         ].map(tab => {
           const Icon = tab.icon;
@@ -603,6 +688,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
+              aria-label={tab.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : tab.label}
               style={{
                 background: 'none',
                 border: 'none',
@@ -615,7 +701,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 transition: 'color 0.15s ease',
               }}
             >
-              <Icon size={19} />
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <Icon size={19} />
+                {tab.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot" />}
+              </span>
               <span style={{ fontSize: '10px', fontWeight: isActive ? 700 : 500 }}>{tab.label}</span>
             </button>
           );
@@ -624,3 +713,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </div>
   );
 };
+
+const UnlinkedCareFeature: React.FC<{ feature: 'messages' | 'appointments' }> = ({ feature }) => (
+  <section className="card-patient" role="status" style={{ padding: '28px 22px', textAlign: 'center' }}>
+    <h1 style={{ margin: 0, fontSize: '22px', textTransform: 'capitalize' }}>{feature}</h1>
+    <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.5 }}>
+      Connect your account with a clinician before using {feature}. You can enter an invitation code from Home or Profile.
+    </p>
+  </section>
+);

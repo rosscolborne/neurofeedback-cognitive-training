@@ -134,6 +134,7 @@ class SignalFrame(BaseModel):
     timestamps_ms: list[float] | None = Field(default=None, alias="timestampsMs")
     received_at_ms: float = Field(alias="receivedAtMs")
     sequence_id: int = Field(alias="sequenceId")
+    protocol_revision: int = Field(default=0, alias="protocolRevision")
     quality: SignalQualityMetadata | None = None
     features: SignalFeatures | None = None
     training: TrainingMetricSampleModel | None = None

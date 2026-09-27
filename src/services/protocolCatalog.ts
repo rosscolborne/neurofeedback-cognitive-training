@@ -27,6 +27,8 @@ export async function resolveAssignedProtocol(
     };
   }
 
+  if (!client.assignedProtocol) return null;
+
   const entry = await catalog.getById(client.assignedProtocol, client.clinicId);
   if (!entry || entry.protocol.status === 'retired') return null;
 

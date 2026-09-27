@@ -86,7 +86,7 @@ export interface BrainFlowScores {
   valence?: number | null;       // -1 (negative) to +1 (positive)
   arousal?: number | null;       // 0 (calm) to 1 (activated)
   emotionLabel?: string | null;  // e.g. "calm", "excited", "stressed"
-  method?: 'brainflow_welch_psd' | 'browser_dsp';
+  method?: 'brainflow_welch_psd' | 'browser_dsp' | 'demo';
 }
 
 export type ServerFitChannelState = 'good' | 'adjusting' | 'poor';
@@ -131,6 +131,11 @@ export interface EEGDataPoint {
   baselineRelativeMetrics?: Record<string, number>;
   thetaBetaRatio: number;
   thetaBetaRatioAvailable: boolean;
+  /** The exact measurement selected for this frame's protocol feedback decision. */
+  activeRewardMetric?: {
+    value: number | null;
+    source: 'brainflow' | 'browser-dsp' | 'demo' | 'custom-raw';
+  };
   /** 0–100 measured coherence percentage; null when the service could not compute it. */
   coherence: number | null;
   coherenceAvailable: boolean;
@@ -226,6 +231,15 @@ export interface ProtocolTemplate {
   id: string;
   /** Broad training engine mode represented by this clinical template. */
   protocolType?: ProtocolType;
+  /** Opts a saved assignment into raw-EEG reward-band feedback, even when its values match the template. */
+  customRewardEnabled?: boolean;
+  /** A clinician-defined ratio of spectral powers. Used only by ratio protocols. */
+  ratioReward?: {
+    numerator: { freqMin: number; freqMax: number };
+    denominator: { freqMin: number; freqMax: number };
+    targetCondition: 'above' | 'below';
+    targetThreshold: number;
+  };
   /** Optional patient-facing label; `name` remains the evidence-based protocol name. */
   alias?: string;
   name: string;
@@ -295,6 +309,12 @@ export interface QEEGBrainMap {
     sensorimotorSMR: number;
   };
   dominantAlphaPeakHz: number;
+  /** Authenticated clinician who persisted this record. */
+  createdBy?: string;
+  /** Server-owned creation time for canonical records. */
+  createdAt?: PersistedTimestamp;
+  updatedAt?: PersistedTimestamp;
+  schemaVersion?: number;
   topographyColorMap?: string;
   rawTelemetrySnippet?: string;
 }
@@ -349,8 +369,8 @@ export interface SessionRecord {
   timeInZonePercent: number;
   /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
   averageCoherence: number | null;
-  peakFocusScore: number;
-  averageBands: BandPowers;
+  peakFocusScore?: number;
+  averageBands?: BandPowers;
   timeSeries: Array<{
     t: number;
     thetaBetaRatio: number;
@@ -394,11 +414,13 @@ export interface SessionCreateResult {
   session: SessionRecord;
 }
 
-export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled';
+export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled' | 'expired';
 
 export interface PatientInvitation {
   id: string;
   clinicianId: string;
+  /** Owning clinic for canonical invitations; absent only on legacy records. */
+  clinicId?: string;
   clinicianName: string;
   patientEmail: string;
   patientName: string;
@@ -411,44 +433,48 @@ export interface PatientInvitation {
   createdAt?: PersistedTimestamp;
   updatedAt?: PersistedTimestamp;
   acceptedAt?: PersistedTimestamp;
+  expiresAt?: PersistedTimestamp;
+  /** Normalized email key under patientInvitationClaims/{clinicianId}/emails. */
+  uniquenessClaimId?: string;
   schemaVersion: number;
 }
 
 export type PatientInvitationInput = Pick<
   PatientInvitation,
   'patientEmail' | 'patientName' | 'condition' | 'assignedProtocol' | 'prescribedSessionsPerWeek' | 'notes'
-> & { clinicianName: string };
+> & { clinicianName: string; clinicId: string };
 
 export interface ClientProfile {
   id: string;
   name: string;
   email: string;
-  avatarUrl: string;
-  condition: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
+  avatarUrl?: string;
+  condition?: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
   status: 'active' | 'paused' | 'completed';
-  assignedProtocol: ProtocolType;
+  assignedProtocol?: ProtocolType;
   customProtocolConfig?: ProtocolTemplate;
   individualBaselineModel?: IndividualBaselineModel;
   brainMaps: QEEGBrainMap[];
   allowedExperiences: ExperienceType[];
-  prescribedSessionsPerWeek: number;
+  prescribedSessionsPerWeek?: number;
   completedSessionsCount: number;
   currentStreak: number;
-  streakFreezeRemaining: number;
-  brainCapacityScore: number; // 0 - 100
-  lastSessionDate: string;
-  nextSessionDate: string;
+  streakFreezeRemaining?: number;
+  /** Legacy-only until a clinically/product-validated score definition exists. */
+  brainCapacityScore?: number | null;
+  lastSessionDate?: string;
+  nextSessionDate?: string;
   customThresholdBounds?: {
     min: number;
     max: number;
   };
-  tidalGardenState: {
+  tidalGardenState?: {
     stage: number;
     plantsUnlocked: string[];
     growthPoints: number;
     lastWatered: string;
   };
-  skylineBiomesUnlocked: string[];
+  skylineBiomesUnlocked?: string[];
   badges: string[];
   linkedClinicianCode?: string;
   clinicianId?: string;

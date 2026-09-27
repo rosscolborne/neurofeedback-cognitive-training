@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node", "@playwright/test", "vite/client"],
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "/src/*": ["src/*"],
+      "/e2e/*": ["e2e/*"]
+    }
+  },
+  "include": ["e2e/**/*.ts", "tests/e2e-fixtures/**/*.ts", "playwright.config.ts", "playwright.protocol.config.ts", "vitest.fixture.config.ts"]
+}

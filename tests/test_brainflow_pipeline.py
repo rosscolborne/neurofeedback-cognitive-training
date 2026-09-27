@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import pytest
 
-from brainflow_service.config import DEFAULT_PROCESSING, DEVICE_CONFIGS
+from brainflow_service.config import DEFAULT_BANDS, DEFAULT_PROCESSING, DEVICE_CONFIGS
 from brainflow_service.dsp import (
     build_eeg_window,
     extract_band_power_features,
@@ -17,7 +17,10 @@ from brainflow_service.dsp import (
     preprocess_eeg_window,
 )
 from brainflow_service.app import app
+from brainflow_service.analysis import AnalysisProviders, DEFAULT_AMPLITUDE_BANDS, DEFAULT_RATIO_BANDS, analyze_window
+from brainflow_service.headset_fit import HeuristicHeadsetFitProvider
 from brainflow_service.models import SignalFeatures
+from brainflow_service.models import SignalChannel
 from brainflow_service.runtime import BrainFlowSession
 
 
@@ -25,6 +28,22 @@ def sine_window(freq_hz: float = 10.0, sample_rate: int = 256, seconds: float = 
     t = np.arange(int(sample_rate * seconds)) / sample_rate
     signal = np.sin(2 * math.pi * freq_hz * t) * 20.0
     return np.vstack([signal, signal * 0.9, signal * 1.1, signal])
+
+
+def test_default_reward_ranges_match_overview_bands() -> None:
+    bands = {band.id: (band.low_hz, band.high_hz) for band in DEFAULT_BANDS}
+    assert bands["delta"] == (1, 4)
+    assert bands["theta"] == (4, 8)
+    assert bands["alpha"] == (8, 13)
+    assert bands["beta"] == (13, 30)
+    assert DEFAULT_AMPLITUDE_BANDS == {
+        "smr-enhancement": bands["smr"], "alpha-enhancement": bands["alpha"],
+        "beta-downtraining": bands["beta"],
+    }
+    assert DEFAULT_RATIO_BANDS == {
+        "theta-beta-ratio": (bands["theta"], bands["beta"]),
+        "alpha-theta-crossover": (bands["theta"], bands["alpha"]),
+    }
 
 
 def test_window_construction_extracts_eeg_rows() -> None:
@@ -75,6 +94,48 @@ def test_band_power_extracts_smr_from_a_12_to_15_hz_signal() -> None:
 
     assert features is not None
     assert features.absolute["smr"] > features.absolute["theta"]
+
+
+def test_beta_feedback_uses_spectral_amplitude_not_psd_band_power() -> None:
+    channels = [SignalChannel(id=name, label=name, unit="uV", index=index)
+                for index, name in enumerate(("TP9", "AF7", "AF8", "TP10"))]
+    for amplitude, in_zone in [(12, True), (16, False)]:
+        window = sine_window(freq_hz=17) * (amplitude / 20)
+        result = analyze_window(
+            providers=AnalysisProviders(headset_fit=HeuristicHeadsetFitProvider()),
+            channels=channels,
+            eeg_samples=window.T.tolist(),
+            raw_window=window,
+            sample_rate=256,
+            protocol="beta-downtraining",
+            threshold=14,
+        )
+        assert result.features is not None
+        assert result.features.primary_metric_name == "betaAmplitudeUv"
+        assert result.features.primary_metric_value == pytest.approx(amplitude, abs=.2)
+        assert result.features.in_zone is in_zone
+
+
+def test_default_alpha_reward_includes_12_5_hz_but_custom_8_to_12_does_not() -> None:
+    channels = [SignalChannel(id=name, label=name, unit="uV", index=index)
+                for index, name in enumerate(("TP9", "AF7", "AF8", "TP10"))]
+    window = sine_window(freq_hz=12.5) * .6
+    def feedback(reward: dict | None):
+        result = analyze_window(
+            providers=AnalysisProviders(headset_fit=HeuristicHeadsetFitProvider()),
+            channels=channels, eeg_samples=window.T.tolist(), raw_window=window,
+            sample_rate=256, protocol="alpha-enhancement", threshold=11, reward=reward,
+        )
+        assert result.features is not None
+        return result.features
+
+    default = feedback(None)
+    custom = feedback({"kind": "amplitude", "condition": "above",
+                       "band": {"freq_min": 8, "freq_max": 12}})
+    assert default.primary_metric_value == pytest.approx(12, abs=.2)
+    assert default.in_zone is True
+    assert custom.primary_metric_value < 1
+    assert custom.in_zone is False
 
 
 def test_interhemispheric_coherence_is_high_for_matched_left_right_signals() -> None:
@@ -200,6 +261,16 @@ def test_synthetic_session_initializes_when_brainflow_is_available() -> None:
         session.stop()
 
 
+def test_session_protocol_revision_tracks_the_entire_reward_rule() -> None:
+    session = BrainFlowSession(DEVICE_CONFIGS["brainflow-synthetic"])
+    rule = {"kind": "ratio", "condition": "above",
+            "numerator": {"freq_min": 4, "freq_max": 8},
+            "denominator": {"freq_min": 13, "freq_max": 30}}
+    assert session.update_protocol("theta-beta-ratio", 2.5, rule) == 1
+    assert session.protocol_config == ("theta-beta-ratio", 2.5, rule, 1)
+    assert session.update_protocol("theta-beta-ratio", 2.6, rule) == 2
+
+
 def test_synthetic_board_to_features_end_to_end() -> None:
     pytest.importorskip("brainflow")
 
@@ -211,11 +282,13 @@ from brainflow_service.runtime import BrainFlowSession
 async def collect_one_frame():
     session = BrainFlowSession(DEVICE_CONFIGS["brainflow-synthetic"])
     try:
+        revision = session.update_protocol("theta-beta-ratio", 1.85, None)
         session.prepare()
         session.start()
         async for frame in session.frames():
             if frame.features and frame.features.band_powers:
                 assert frame.sensor == "eeg"
+                assert frame.protocol_revision == revision
                 assert frame.features.band_powers.absolute["theta"] >= 0
                 assert frame.features.band_powers.absolute["alpha"] >= 0
                 assert frame.features.band_powers.absolute["beta"] >= 0

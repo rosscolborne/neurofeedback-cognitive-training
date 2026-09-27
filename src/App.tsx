@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { ClientProfile, ClinicBrandConfig, MessageThread, CalendarAppointment, PatientInvitation } from './types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } from './types';
 import { storageEngine } from './services/storageEngine';
-import { applyBrandToDOM } from './services/brandEngine';
+import { applyBrandToDOM, BRAND_PRESETS } from './services/brandEngine';
+import { clinicSettingsRepository } from './services/clinicSettingsRepository';
+import type { ClinicSettingsSnapshot } from './services/clinicSettingsRepository';
 import { PatientShell } from './components/patient/PatientShell';
 import { ClinicianShell } from './components/clinician/ClinicianShell';
 import { ClinicCustomizerModal } from './components/brand/ClinicCustomizerModal';
@@ -17,69 +19,137 @@ import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 
+function InvitationEntryRedirect() {
+  const { invitationCode } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (invitationCode) {
+      window.sessionStorage.setItem('waveable_pending_invitation', invitationCode.toUpperCase());
+    }
+    navigate('/welcome', { replace: true });
+  }, [invitationCode, navigate]);
+
+  return null;
+}
+
 export function App() {
-  const { user, role, loading, logout } = useAuth();
+  const { user, role, loading, logout, isDemoWorkspace } = useAuth();
+  const location = useLocation();
+  const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
+  const storedInvitationCode = typeof window === 'undefined'
+    ? undefined
+    : window.sessionStorage.getItem('waveable_pending_invitation') || undefined;
   
-  const [brand, setBrand] = useState<ClinicBrandConfig>(() => storageEngine.getBrandConfig());
+  const [brand, setBrand] = useState<ClinicBrandConfig>(() => BRAND_PRESETS[0]);
+  const [clinicId, setClinicId] = useState<string | null>(null);
+  const [clinicIdentity, setClinicIdentity] = useState('');
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [currentClient, setCurrentClient] = useState<ClientProfile | null>(null);
-  const [messages, setMessages] = useState<MessageThread[]>([]);
-  const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [patientInvitations, setPatientInvitations] = useState<PatientInvitation[]>([]);
+  const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
+  const [patientProfileReload, setPatientProfileReload] = useState(0);
+  const [clinicianRosterError, setClinicianRosterError] = useState<string | null>(null);
+  const [clinicianInvitationsError, setClinicianInvitationsError] = useState<string | null>(null);
+  const [clinicianRosterReload, setClinicianRosterReload] = useState(0);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
+  const [dataIdentity, setDataIdentity] = useState('');
+  const loadGeneration = useRef(0);
+  const brandGeneration = useRef(0);
+  const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
+  const accountIdentityRef = useRef(accountIdentity);
+  accountIdentityRef.current = accountIdentity;
+  const hasCurrentData = dataIdentity === accountIdentity;
+  const visibleClients = hasCurrentData ? clients : [];
+  const visibleCurrentClient = hasCurrentData ? currentClient : null;
+  const visibleInvitations = hasCurrentData ? patientInvitations : [];
+  const visibleBrand = hasCurrentData ? brand : BRAND_PRESETS[0];
+  const visibleClinicId = clinicIdentity === accountIdentity ? clinicId : null;
 
   useEffect(() => {
-    applyBrandToDOM(brand);
-  }, [brand]);
+    applyBrandToDOM(visibleBrand);
+  }, [visibleBrand]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadClientData() {
-      try {
-        if (role === 'patient' && user) {
-          const client = await storageEngine.getCurrentClient(user);
-          if (isMounted) setCurrentClient(client);
-        } else if (role === 'clinician') {
-          const [cls, invitations] = await Promise.all([
-            storageEngine.getClients(),
-            storageEngine.getPatientInvitationsForClinician(),
-          ]);
-          if (isMounted) {
-            setClients(cls);
-            setPatientInvitations(invitations);
-          }
-        } else {
-          const defaultClient = await storageEngine.getCurrentClient(user);
-          const cls = await storageEngine.getClients();
-          if (isMounted) {
-            setCurrentClient(defaultClient);
-            setClients(cls);
-          }
-        }
-        const appts = await storageEngine.getAppointments();
-        if (isMounted) setAppointments(appts);
-      } catch (err) {
-        console.warn('Error loading client data:', err);
-      }
+    if (routeInvitationCode) {
+      window.sessionStorage.setItem('waveable_pending_invitation', routeInvitationCode.toUpperCase());
     }
-
-    if (!loading) {
-      loadClientData();
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user, role, loading]);
+  }, [routeInvitationCode]);
 
   useEffect(() => {
-    if (!loading) {
-      const unsubscribe = storageEngine.subscribeToMessages((threads) => {
-        setMessages(threads);
-      }, role);
-      return unsubscribe;
+    const generation = ++loadGeneration.current;
+    const isCurrent = () => loadGeneration.current === generation;
+    setDataIdentity(accountIdentity);
+    setClients([]);
+    setCurrentClient(null);
+    setPatientProfileError(null);
+    setClinicianRosterError(null);
+    setClinicianInvitationsError(null);
+    setPatientInvitations([]);
+    setShowRebrandModal(false);
+
+    if (loading || !user) return;
+
+    if (role === 'patient') {
+      void storageEngine.getCurrentClient(user)
+        .then((client) => { if (isCurrent()) setCurrentClient(client); })
+        .catch((error) => {
+          if (!isCurrent()) return;
+          console.warn('Error loading patient profile:', error);
+          setPatientProfileError(error instanceof Error ? error.message : 'Your patient profile is unavailable.');
+        });
+    } else if (role === 'clinician') {
+      void storageEngine.getClients()
+        .then((nextClients) => { if (isCurrent()) setClients(nextClients); })
+        .catch((error) => {
+          if (!isCurrent()) return;
+          console.warn('Error loading clinician roster:', error);
+          setClinicianRosterError(error instanceof Error ? error.message : 'The patient roster could not be loaded.');
+        });
+      void storageEngine.getPatientInvitationsForClinician()
+        .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
+        .catch((error) => {
+          if (!isCurrent()) return;
+          console.warn('Error loading patient invitations:', error);
+          setClinicianInvitationsError(error instanceof Error ? error.message : 'Pending invitations could not be loaded.');
+        });
     }
-  }, [user, role, loading]);
+  }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, role, user]);
+
+  useEffect(() => {
+    const generation = ++brandGeneration.current;
+    const isCurrent = () => brandGeneration.current === generation;
+    setBrand(BRAND_PRESETS[0]);
+    setClinicId(null);
+    setClinicIdentity(accountIdentity);
+
+    if (loading || !user) return;
+    if (isDemoWorkspace) {
+      setBrand(storageEngine.getBrandConfig());
+      return;
+    }
+
+    if (role === 'clinician') {
+      void clinicSettingsRepository.load()
+        .then((snapshot) => {
+          if (!isCurrent()) return;
+          setClinicId(snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null);
+          setBrand(snapshot.brand ?? BRAND_PRESETS[0]);
+        })
+        .catch((error) => {
+          if (isCurrent()) console.warn('Error loading clinic branding:', error);
+        });
+      return;
+    }
+
+    if (role === 'patient' && visibleCurrentClient?.clinicId) {
+      void storageEngine.getClinicBrandConfig(visibleCurrentClient.clinicId)
+        .then((nextBrand) => { if (isCurrent()) setBrand(nextBrand); })
+        .catch((error) => {
+          if (isCurrent()) console.warn('Error loading patient clinic branding:', error);
+        });
+    }
+  }, [accountIdentity, isDemoWorkspace, loading, role, user, visibleCurrentClient?.clinicId]);
 
   if (loading) {
     return (
@@ -90,17 +160,24 @@ export function App() {
   }
 
   const handleUpdateClient = async (updated: ClientProfile) => {
-    if (currentClient && currentClient.id === updated.id) {
-      setCurrentClient(updated);
-    }
-    const next = clients.map(c => (c.id === updated.id ? updated : c));
-    setClients(next);
+    const requestIdentity = accountIdentity;
     await storageEngine.saveClient(updated);
+    if (accountIdentityRef.current !== requestIdentity) return;
+    if (visibleCurrentClient && visibleCurrentClient.id === updated.id) setCurrentClient(updated);
+    setClients((current) => current.map(c => (c.id === updated.id ? updated : c)));
   };
 
+  const handleClientPersistedElsewhere = (updated: ClientProfile) => {
+    if (accountIdentityRef.current !== accountIdentity) return;
+    if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
+    setClients((current) => current.map((client) => client.id === updated.id ? updated : client));
+  };
+
+  const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
+    storageEngine.appendBrainMap(patientId, map);
+
   const handleDeleteClient = async (clientId: string) => {
-    const client = clients.find((entry) => entry.id === clientId);
-    if (client?.isDemo || clientId.startsWith('demo-')) {
+    if (isDemoWorkspace) {
       await storageEngine.deleteClient(clientId);
     } else {
       await storageEngine.unlinkPatient(clientId);
@@ -109,22 +186,32 @@ export function App() {
   };
 
   const handleAddClient = async (newClient: Partial<ClientProfile>): Promise<PatientInvitation> => {
+    const requestIdentity = accountIdentity;
     if (!newClient.email?.trim()) throw new Error('Patient email is required');
+    if (!visibleClinicId) throw new Error('Complete clinic setup before inviting a patient');
+    if (!newClient.condition || !newClient.assignedProtocol || newClient.prescribedSessionsPerWeek == null) {
+      throw new Error('Select a clinical indication, protocol, and weekly target before inviting a patient');
+    }
     const invitation = await storageEngine.createPatientInvitation({
+      clinicId: visibleClinicId,
       clinicianName: user?.displayName || user?.email || 'Clinician',
       patientEmail: newClient.email,
       patientName: newClient.name || '',
-      condition: newClient.condition || 'Peak Performance',
-      assignedProtocol: newClient.assignedProtocol || 'theta-beta-ratio',
-      prescribedSessionsPerWeek: newClient.prescribedSessionsPerWeek || 4,
+      condition: newClient.condition,
+      assignedProtocol: newClient.assignedProtocol,
+      prescribedSessionsPerWeek: newClient.prescribedSessionsPerWeek,
       notes: newClient.notes,
     });
-    setPatientInvitations((current) => [invitation, ...current]);
+    if (accountIdentityRef.current === requestIdentity) {
+      setPatientInvitations((current) => [invitation, ...current]);
+    }
     return invitation;
   };
 
   const handleCancelPatientInvitation = async (invitationId: string) => {
+    const requestIdentity = accountIdentity;
     await storageEngine.cancelPatientInvitation(invitationId);
+    if (accountIdentityRef.current !== requestIdentity) return;
     setPatientInvitations((current) =>
       current.map((invitation) =>
         invitation.id === invitationId ? { ...invitation, status: 'cancelled' } : invitation
@@ -132,101 +219,74 @@ export function App() {
     );
   };
 
-  const handleSendMessage = async (clientId: string, text: string) => {
-    if (!text.trim()) return;
-
-    let targetThread = messages.find(t => t.clientId === clientId);
-    let updatedThread: MessageThread;
-
-    if (targetThread) {
-      updatedThread = {
-        ...targetThread,
-        clinicianId: user?.uid,
-        messages: [
-          ...targetThread.messages,
-          {
-            id: 'msg-' + Date.now(),
-            sender: 'clinician',
-            text,
-            timestamp: 'Just now',
-            isRead: true,
-          },
-        ],
-        lastMessageTime: 'Just now',
-      };
-    } else {
-      const client = clients.find(c => c.id === clientId);
-      updatedThread = {
-        clientId,
-        patientId: clientId,
-        clinicianId: user?.uid,
-        clientName: client ? client.name : 'Patient',
-        clientAvatar: client?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        lastMessageTime: 'Just now',
-        unreadCount: 0,
-        isDemo: client?.isDemo || false,
-        messages: [
-          {
-            id: 'msg-' + Date.now(),
-            sender: 'clinician',
-            text,
-            timestamp: 'Just now',
-            isRead: true,
-          },
-        ],
-      };
-    }
-
-    const nextThreads = targetThread
-      ? messages.map(t => (t.clientId === clientId ? updatedThread : t))
-      : [updatedThread, ...messages];
-
-    setMessages(nextThreads);
-    await storageEngine.saveMessageThread(updatedThread);
-  };
-
-  const handleSaveAppointment = async (appt: CalendarAppointment) => {
-    const apptWithUser = {
-      ...appt,
-      clinicianId: user?.uid || appt.clinicianId,
-    };
-    const next = appointments.some(a => a.id === appt.id)
-      ? appointments.map(a => a.id === appt.id ? apptWithUser : a)
-      : [apptWithUser, ...appointments];
-    setAppointments(next);
-    await storageEngine.saveAppointment(apptWithUser);
-  };
-
-  const handleDeleteAppointment = async (id: string) => {
-    const next = appointments.filter(a => a.id !== id);
-    setAppointments(next);
-    await storageEngine.deleteAppointment(id);
-  };
-
-  const handleClearDemoData = async () => {
-    storageEngine.clearDemoData();
-    const cls = await storageEngine.getClients();
-    setClients(cls);
-    const msgs = await storageEngine.getMessages();
-    setMessages(msgs);
-    const appts = await storageEngine.getAppointments();
-    setAppointments(appts);
-  };
-
-  const handleResetDemoData = async () => {
-    storageEngine.resetToDefaultSeed();
-    const cls = await storageEngine.getClients();
-    setClients(cls);
-    const msgs = await storageEngine.getMessages();
-    setMessages(msgs);
-    const appts = await storageEngine.getAppointments();
-    setAppointments(appts);
-  };
-
   const handleSaveBrand = (newBrand: ClinicBrandConfig) => {
+    if (accountIdentityRef.current !== accountIdentity) return;
     setBrand(newBrand);
-    storageEngine.saveBrandConfig(newBrand);
     applyBrandToDOM(newBrand);
+  };
+
+  const handleClinicSettingsSaved = (snapshot: ClinicSettingsSnapshot) => {
+    if (accountIdentityRef.current !== accountIdentity) return;
+    setClinicId(snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null);
+    setBrand(snapshot.brand ?? BRAND_PRESETS[0]);
+  };
+
+  const invitationCode = routeInvitationCode?.toUpperCase() || storedInvitationCode;
+
+  const renderPrimaryApp = () => {
+    if (!role) return <Navigate to="/role-selection" replace />;
+    if (role === 'patient') {
+      if (!visibleCurrentClient) {
+        if (patientProfileError) {
+          return (
+            <div role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', textAlign: 'center', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
+              <BrandLogo size={56} variant="terracotta" />
+              <strong style={{ color: 'var(--text-primary)' }}>Your patient profile could not be loaded.</strong>
+              <span>{patientProfileError}</span>
+              <button type="button" className="btn btn-primary" onClick={() => setPatientProfileReload((value) => value + 1)}>Retry</button>
+            </div>
+          );
+        }
+        return (
+          <div role="status" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
+            <BrandLogo size={56} variant="terracotta" glow />
+            <span>Preparing your patient profile…</span>
+          </div>
+        );
+      }
+      return (
+        <PatientShell
+          brand={visibleBrand}
+          client={visibleCurrentClient}
+          initialInvitationCode={invitationCode}
+          onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
+          onUpdateClient={handleUpdateClient}
+          onClientPersistedElsewhere={handleClientPersistedElsewhere}
+          onOpenRebrand={() => setShowRebrandModal(true)}
+        />
+      );
+    }
+    return (
+      <>
+      {clinicianRosterError && <div role="alert" style={{ padding: '10px 16px', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}><span>Patient roster unavailable: {clinicianRosterError}</span><button type="button" className="btn btn-ghost" onClick={() => setClinicianRosterReload((value) => value + 1)}>Retry</button></div>}
+      {clinicianInvitationsError && <div role="alert" style={{ padding: '10px 16px', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}><span>Pending invitations unavailable: {clinicianInvitationsError}</span><button type="button" className="btn btn-ghost" onClick={() => setClinicianRosterReload((value) => value + 1)}>Retry</button></div>}
+      <ClinicianShell
+        brand={visibleBrand}
+        clinicianLabel={user?.displayName || user?.email || undefined}
+        isDemoWorkspace={isDemoWorkspace}
+        clients={visibleClients}
+        patientInvitations={visibleInvitations}
+        onUpdateClient={handleUpdateClient}
+        onAppendBrainMap={handleAppendBrainMap}
+        onDeleteClient={handleDeleteClient}
+        onAddClient={handleAddClient}
+        onCancelPatientInvitation={handleCancelPatientInvitation}
+        onClinicSettingsSaved={handleClinicSettingsSaved}
+        onOpenRebrand={() => setShowRebrandModal(true)}
+        onLogout={logout}
+      />
+      </>
+    );
   };
 
   return (
@@ -241,6 +301,7 @@ export function App() {
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/connect/:invitationCode" element={<InvitationEntryRedirect />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (
@@ -249,57 +310,8 @@ export function App() {
             <Route path="/role-selection" element={<RoleSelection />} />
             <Route path="/hardware-setup" element={<HardwareSetup />} />
             
-            <Route path="/" element={
-              !role ? <Navigate to="/role-selection" replace /> :
-              role === 'patient' ? (
-                <PatientShell
-                  brand={brand}
-                  client={currentClient || {
-                    id: user?.uid || 'patient',
-                    name: user?.displayName || 'Patient',
-                    email: user?.email || 'patient@waveable.app',
-                    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-                    condition: 'Peak Performance',
-                    status: 'active',
-                    assignedProtocol: 'theta-beta-ratio',
-                    brainMaps: [],
-                    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'tidal-garden', 'breath-weave', 'signal-sort', 'rhythm-lock', 'media-mode', 'soundscape-mode', 'mandala', 'eeg-mandala', 'neuro-gambit'],
-                    prescribedSessionsPerWeek: 4,
-                    completedSessionsCount: 0,
-                    currentStreak: 0,
-                    streakFreezeRemaining: 1,
-                    brainCapacityScore: 60,
-                    lastSessionDate: 'Just Enrolled',
-                    nextSessionDate: 'Ready to schedule',
-                    tidalGardenState: { stage: 1, plantsUnlocked: ['amber-coral'], growthPoints: 0, lastWatered: new Date().toISOString().split('T')[0] },
-                    skylineBiomesUnlocked: ['Alpine Meadows'],
-                    badges: ['first-light'],
-                  }}
-                  onUpdateClient={handleUpdateClient}
-                  onOpenRebrand={() => setShowRebrandModal(true)}
-                />
-              ) : (
-                <ClinicianShell
-                  brand={brand}
-                  clinicianLabel={user?.displayName || user?.email || undefined}
-                  clients={clients}
-                  patientInvitations={patientInvitations}
-                  messages={messages}
-                  appointments={appointments}
-                  onUpdateClient={handleUpdateClient}
-                  onDeleteClient={handleDeleteClient}
-                  onAddClient={handleAddClient}
-                  onCancelPatientInvitation={handleCancelPatientInvitation}
-                  onSendMessage={handleSendMessage}
-                  onSaveAppointment={handleSaveAppointment}
-                  onDeleteAppointment={handleDeleteAppointment}
-                  onClearDemoData={handleClearDemoData}
-                  onResetDemoData={handleResetDemoData}
-                  onOpenRebrand={() => setShowRebrandModal(true)}
-                  onLogout={logout}
-                />
-              )
-            } />
+            <Route path="/" element={renderPrimaryApp()} />
+            <Route path="/connect/:invitationCode" element={renderPrimaryApp()} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         )}
@@ -307,7 +319,7 @@ export function App() {
 
       {showRebrandModal && (
         <ClinicCustomizerModal
-          currentBrand={brand}
+          currentBrand={visibleBrand}
           onSave={handleSaveBrand}
           onClose={() => setShowRebrandModal(false)}
         />

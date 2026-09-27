@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyC1dgTlWEo6ZRdz1XGQqzPN0FNFDGyd1rw',
@@ -28,3 +28,13 @@ export const auth = authInstance;
 
 // Initialize Cloud Firestore
 export const db = getFirestore(app);
+
+// The local protocol E2E suite must never fall through to the configured
+// Firebase project if an emulator fails to start or its env is misconfigured.
+if (import.meta.env.VITE_E2E_EMULATORS === 'true') {
+  if (!import.meta.env.DEV || firebaseConfig.projectId !== 'demo-neurasticity-protocol-e2e') {
+    throw new Error('Protocol E2E emulators require the local demo project.');
+  }
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+}

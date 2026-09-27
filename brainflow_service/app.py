@@ -7,7 +7,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .analysis import AnalysisSessionStore
 from .analysis import analyze_window as analyze_eeg_window
@@ -35,6 +35,44 @@ from .models import (
 from .runtime import SessionStore, sse_event
 
 
+class RewardFrequencyRange(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    freq_min: float = Field(alias="freqMin")
+    freq_max: float = Field(alias="freqMax")
+
+    @model_validator(mode="after")
+    def valid_range(self) -> RewardFrequencyRange:
+        if not np.isfinite(self.freq_min) or not np.isfinite(self.freq_max) or self.freq_min < 3 or self.freq_max > 45 or self.freq_max - self.freq_min < .5:
+            raise ValueError("Reward frequencies must span at least 0.5 Hz within 3–45 Hz.")
+        return self
+
+
+class RewardRuleRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    kind: Literal["amplitude", "ratio"]
+    condition: Literal["above", "below"]
+    band: RewardFrequencyRange | None = None
+    numerator: RewardFrequencyRange | None = None
+    denominator: RewardFrequencyRange | None = None
+
+    @model_validator(mode="after")
+    def valid_shape(self) -> RewardRuleRequest:
+        if self.kind == "amplitude" and (self.band is None or self.numerator is not None or self.denominator is not None):
+            raise ValueError("Amplitude reward requires exactly one band.")
+        if self.kind == "ratio" and (self.band is not None or self.numerator is None or self.denominator is None):
+            raise ValueError("Ratio reward requires numerator and denominator bands.")
+        return self
+
+
+def validate_reward_for_protocol(protocol: str, reward: RewardRuleRequest | None) -> None:
+    if reward is None:
+        return
+    supported = {"theta-beta-ratio", "alpha-theta-crossover", "smr-enhancement", "alpha-enhancement", "beta-downtraining"}
+    ratio_modes = {"theta-beta-ratio", "alpha-theta-crossover"}
+    if protocol not in supported or (reward.kind == "ratio" and protocol not in ratio_modes):
+        raise HTTPException(status_code=422, detail="This reward kind is unsupported for the selected protocol.")
+
+
 class StartSessionRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -43,6 +81,7 @@ class StartSessionRequest(BaseModel):
     serial_number: str | None = Field(default=None, alias="serialNumber")
     protocol: str = "theta-beta-ratio"
     threshold: float = 1.85
+    reward: RewardRuleRequest | None = None
 
 
 class StartSessionResponse(BaseModel):
@@ -56,6 +95,7 @@ class StartSessionResponse(BaseModel):
 class ProtocolConfigurationRequest(BaseModel):
     protocol: str
     threshold: float
+    reward: RewardRuleRequest | None = None
 
 
 class AnalyzeWindowRequest(BaseModel):
@@ -109,6 +149,7 @@ class AnalyzeSessionWindowRequest(BaseModel):
     channel_ids: list[str] = Field(alias="channelIds")
     protocol: str = "theta-beta-ratio"
     threshold: float = 1.85
+    reward: RewardRuleRequest | None = None
 
 
 class AnalyzeSessionWindowResponse(BaseModel):
@@ -292,6 +333,7 @@ def analyze_session_window(
     the stateless `/analyze-window` and `.../assess` separately -- one
     session-scoped call now does both, with real smoothing instead of
     single-window scores."""
+    validate_reward_for_protocol(request.protocol, request.reward)
     sample_rate = int(round(request.sample_rate_hz))
     if sample_rate <= 0:
         raise HTTPException(status_code=400, detail="sampleRateHz must be positive.")
@@ -333,6 +375,7 @@ def analyze_session_window(
         sample_rate=sample_rate,
         protocol=request.protocol,
         threshold=request.threshold,
+        reward=request.reward.model_dump() if request.reward else None,
     )
     return AnalyzeSessionWindowResponse(
         features=result.features, quality=result.quality, training=result.training,
@@ -366,6 +409,7 @@ def _get_analysis_session_or_404(fit_session_id: str):
 
 @app.post("/sessions")
 def start_session(request: StartSessionRequest) -> StartSessionResponse:
+    validate_reward_for_protocol(request.protocol, request.reward)
     if request.device_id not in DEVICE_CONFIGS:
         raise HTTPException(status_code=404, detail="Unknown BrainFlow device.")
     config = DEVICE_CONFIGS[request.device_id]
@@ -380,6 +424,7 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
             serial_number=request.serial_number,
             protocol=request.protocol,
             threshold=request.threshold,
+            reward=request.reward.model_dump() if request.reward else None,
         )
         try:
             device_info = session.prepare()
@@ -437,12 +482,15 @@ def stop_session(session_id: str) -> dict[str, str]:
 @app.put("/sessions/{session_id}/protocol")
 def update_session_protocol(
     session_id: str, request: ProtocolConfigurationRequest,
-) -> dict[str, float | str]:
+) -> dict[str, float | str | int]:
     """Apply Debug Console protocol changes to a running BrainFlow session."""
+    validate_reward_for_protocol(request.protocol, request.reward)
     session = _get_session_or_404(session_id)
-    session.protocol = request.protocol
-    session.threshold = request.threshold
-    return {"protocol": session.protocol, "threshold": session.threshold}
+    revision = session.update_protocol(
+        request.protocol, request.threshold,
+        request.reward.model_dump() if request.reward else None,
+    )
+    return {"protocol": request.protocol, "threshold": request.threshold, "protocolRevision": revision}
 
 
 @app.post("/sessions/{session_id}/metrics/calibration")

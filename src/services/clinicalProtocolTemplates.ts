@@ -1,5 +1,7 @@
 import type { ProtocolTemplate, ProtocolType } from '../types';
 
+// These are reference definitions. Uncustomized assignments use the broad-mode
+// runtime defaults in protocols.ts; a clinician can opt into this reward band.
 export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
   {
     id: 'proto-lubar-tbr',
@@ -73,7 +75,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     id: 'proto-hardt-alpha',
     protocolType: 'alpha-enhancement',
     name: 'Hardt Alpha Synchrony Protocol',
-    clinicalName: 'Parieto-Occipital Alpha (8-12 Hz) Enhancement',
+    clinicalName: 'Parieto-Occipital Alpha (8-13 Hz) Enhancement',
     leadInvestigator: 'James V. Hardt, Ph.D. (Biocybernaut Institute)',
     indication: 'Generalized Anxiety, Somatic Worry, Executive Burnout',
     montageSite: 'Pz / Oz (Parietal-Occipital)',
@@ -81,7 +83,7 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
     rewardBand: {
       name: 'Alpha Synchrony',
       freqMin: 8.0,
-      freqMax: 12.0,
+      freqMax: 13.0,
       targetCondition: 'above',
       targetThreshold: 11.5,
     },
@@ -157,6 +159,25 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
 
 export function getClinicalProtocolTemplate(protocolType: ProtocolType): ProtocolTemplate | undefined {
   return CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.protocolType === protocolType);
+}
+
+export function hasCanonicalRewardDefinition(
+  rewardBand: ProtocolTemplate['rewardBand'] | undefined,
+  canonical: ProtocolTemplate['rewardBand'],
+  protocolType: ProtocolType,
+): boolean {
+  const sameReference = rewardBand?.freqMin === canonical.freqMin
+    && rewardBand?.freqMax === canonical.freqMax
+    && rewardBand?.targetCondition === canonical.targetCondition
+    && rewardBand?.targetThreshold === canonical.targetThreshold;
+  if (sameReference) return true;
+  // Assignments saved before the alpha default changed to 8–13 Hz carried
+  // 8–12 Hz template metadata even when the clinician had not customized it.
+  return protocolType === 'alpha-enhancement'
+    && canonical.freqMin === 8 && canonical.freqMax === 13
+    && rewardBand?.freqMin === 8 && rewardBand?.freqMax === 12
+    && rewardBand?.targetCondition === canonical.targetCondition
+    && rewardBand?.targetThreshold === canonical.targetThreshold;
 }
 
 /** Read aliases saved before `alias` was introduced without changing Firestore data. */

@@ -1,75 +1,171 @@
 import React, { useState } from 'react';
-import { ProtocolTemplate } from '../../types';
+import { ProtocolTemplate, ProtocolType } from '../../types';
 import { CheckCircle2, X } from 'lucide-react';
 import {
   CLINICAL_PROTOCOL_TEMPLATES,
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
+  hasCanonicalRewardDefinition,
 } from '../../services/clinicalProtocolTemplates';
-import { getProtocolTypeForTemplate } from '../../services/protocols';
+import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS, getProtocolTypeForTemplate } from '../../services/protocols';
+import { validateCustomRatioReward, validateCustomRewardBand } from '../../services/adaptiveEngine';
 
 interface ProtocolBuilderModalProps {
+  assignedProtocol?: ProtocolType;
   initialProtocol?: ProtocolTemplate;
-  onSave: (template: ProtocolTemplate) => void;
+  onSave: (template: ProtocolTemplate) => Promise<void>;
   onClose: () => void;
 }
 
 export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
+  assignedProtocol,
   initialProtocol,
   onSave,
   onClose,
 }) => {
-  const initialProtocolType = initialProtocol
-    ? getProtocolTypeForTemplate(initialProtocol)
-    : CLINICAL_PROTOCOL_TEMPLATES[0].protocolType!;
+  const initialProtocolType = assignedProtocol
+    ?? (initialProtocol ? getProtocolTypeForTemplate(initialProtocol) : CLINICAL_PROTOCOL_TEMPLATES[0].protocolType!);
   const initialEvidenceTemplate = getClinicalProtocolTemplate(initialProtocolType) ?? CLINICAL_PROTOCOL_TEMPLATES[0];
+  const initialSingle = DEFAULT_SINGLE_BAND_REWARDS[initialProtocolType];
+  const initialRatio = DEFAULT_RATIO_REWARDS[initialProtocolType];
+  const initialCustomReward = initialProtocol
+    ? initialProtocol.customRewardEnabled ?? Boolean(
+      (initialRatio && initialProtocol.ratioReward)
+      || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand, initialProtocolType))
+    : false;
+  const initialActiveRatioReward = initialCustomReward && initialRatio ? initialProtocol?.ratioReward : undefined;
   const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate>(
     initialEvidenceTemplate
   );
   const [alias, setAlias] = useState(
     initialProtocol ? getProtocolAssignmentAlias(initialProtocol, initialProtocolType) ?? '' : ''
   );
-  const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || CLINICAL_PROTOCOL_TEMPLATES[0].montageSite);
+  const [montageSite, setMontageSite] = useState(initialProtocol?.montageSite || initialEvidenceTemplate.montageSite);
   const [museMapping, setMuseMapping] = useState(
-    initialProtocol?.museChannelMapping || CLINICAL_PROTOCOL_TEMPLATES[0].museChannelMapping || 'AF7 / AF8 Frontal'
+    initialProtocol?.museChannelMapping || initialEvidenceTemplate.museChannelMapping || 'AF7 / AF8 Frontal'
   );
-  const [rewardMin, setRewardMin] = useState(initialProtocol?.rewardBand.freqMin || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMin);
-  const [rewardMax, setRewardMax] = useState(initialProtocol?.rewardBand.freqMax || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.freqMax);
-  const [rewardThreshold, setRewardThreshold] = useState(initialProtocol?.rewardBand.targetThreshold || CLINICAL_PROTOCOL_TEMPLATES[0].rewardBand.targetThreshold);
-  const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || CLINICAL_PROTOCOL_TEMPLATES[0].sessionDurationMinutes);
-  const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || CLINICAL_PROTOCOL_TEMPLATES[0].clinicalNotes);
+  const [rewardMin, setRewardMin] = useState(initialCustomReward && !initialRatio && initialProtocol
+    ? initialProtocol.rewardBand.freqMin : initialSingle?.freqMin ?? 0);
+  const [rewardMax, setRewardMax] = useState(initialCustomReward && !initialRatio && initialProtocol
+    ? initialProtocol.rewardBand.freqMax : initialSingle?.freqMax ?? 0);
+  const [rewardCondition, setRewardCondition] = useState<'above' | 'below'>(
+    initialActiveRatioReward?.targetCondition
+      ?? (initialCustomReward && !initialRatio ? initialProtocol?.rewardBand.targetCondition : undefined)
+      ?? initialRatio?.targetCondition ?? initialSingle?.targetCondition ?? 'above');
+  const [rewardThreshold, setRewardThreshold] = useState(
+    initialActiveRatioReward?.targetThreshold
+      ?? (initialCustomReward && !initialRatio ? initialProtocol?.rewardBand.targetThreshold : undefined)
+      ?? initialRatio?.targetThreshold ?? initialSingle?.targetThreshold ?? 0);
+  const [numeratorMin, setNumeratorMin] = useState(initialActiveRatioReward?.numerator.freqMin ?? initialRatio?.numerator.freqMin ?? 0);
+  const [numeratorMax, setNumeratorMax] = useState(initialActiveRatioReward?.numerator.freqMax ?? initialRatio?.numerator.freqMax ?? 0);
+  const [denominatorMin, setDenominatorMin] = useState(initialActiveRatioReward?.denominator.freqMin ?? initialRatio?.denominator.freqMin ?? 0);
+  const [denominatorMax, setDenominatorMax] = useState(initialActiveRatioReward?.denominator.freqMax ?? initialRatio?.denominator.freqMax ?? 0);
+  const [ratioConversionConfirmed, setRatioConversionConfirmed] = useState(false);
+  const [durationMins, setDurationMins] = useState(initialProtocol?.sessionDurationMinutes || initialEvidenceTemplate.sessionDurationMinutes);
+  const [clinicalNotes, setClinicalNotes] = useState(initialProtocol?.clinicalNotes || initialEvidenceTemplate.clinicalNotes);
+  const [customRewardEnabled, setCustomRewardEnabled] = useState(initialCustomReward);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const selectedRatio = DEFAULT_RATIO_REWARDS[selectedTemplate.protocolType!];
+  const selectedSingle = DEFAULT_SINGLE_BAND_REWARDS[selectedTemplate.protocolType!];
+  const legacySingleBandRatio = Boolean(initialRatio && initialProtocol && customRewardEnabled
+    && !initialProtocol.ratioReward && (initialProtocol.customRewardEnabled
+      || !hasCanonicalRewardDefinition(initialProtocol.rewardBand, initialEvidenceTemplate.rewardBand, initialProtocolType))
+    && selectedTemplate.protocolType === initialProtocolType);
+
+  const resetRewardFields = (type: ProtocolType) => {
+    const ratio = DEFAULT_RATIO_REWARDS[type];
+    const single = DEFAULT_SINGLE_BAND_REWARDS[type];
+    if (ratio) {
+      setNumeratorMin(ratio.numerator.freqMin); setNumeratorMax(ratio.numerator.freqMax);
+      setDenominatorMin(ratio.denominator.freqMin); setDenominatorMax(ratio.denominator.freqMax);
+      setRewardCondition(ratio.targetCondition); setRewardThreshold(ratio.targetThreshold);
+    } else if (single) {
+      setRewardMin(single.freqMin); setRewardMax(single.freqMax);
+      setRewardCondition(single.targetCondition); setRewardThreshold(single.targetThreshold);
+    }
+  };
 
   const handleSelectTemplate = (tmpl: ProtocolTemplate) => {
     setSelectedTemplate(tmpl);
     setMontageSite(tmpl.montageSite);
     setMuseMapping(tmpl.museChannelMapping || 'AF7 / AF8 Frontal');
-    setRewardMin(tmpl.rewardBand.freqMin);
-    setRewardMax(tmpl.rewardBand.freqMax);
-    setRewardThreshold(tmpl.rewardBand.targetThreshold);
+    resetRewardFields(tmpl.protocolType!);
+    setCustomRewardEnabled(false);
+    setRatioConversionConfirmed(false);
+    setSaveError(null);
     setDurationMins(tmpl.sessionDurationMinutes);
     setClinicalNotes(tmpl.clinicalNotes);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (legacySingleBandRatio && !ratioConversionConfirmed) {
+      setSaveError('Confirm conversion of this older single-band reward to a two-band ratio before saving.');
+      return;
+    }
     const updated: ProtocolTemplate = {
       ...selectedTemplate,
       id: 'custom-' + Date.now(),
       alias: alias.trim() || undefined,
       montageSite,
       museChannelMapping: museMapping,
-      rewardBand: {
+      customRewardEnabled,
+      ...(customRewardEnabled && selectedRatio ? { ratioReward: {
+        numerator: { freqMin: Number(numeratorMin), freqMax: Number(numeratorMax) },
+        denominator: { freqMin: Number(denominatorMin), freqMax: Number(denominatorMax) },
+        targetCondition: rewardCondition, targetThreshold: Number(rewardThreshold),
+      } } : {}),
+      rewardBand: customRewardEnabled && !selectedRatio ? {
         ...selectedTemplate.rewardBand,
         freqMin: Number(rewardMin),
         freqMax: Number(rewardMax),
+        targetCondition: rewardCondition,
         targetThreshold: Number(rewardThreshold),
-      },
+      } : { ...selectedTemplate.rewardBand },
       sessionDurationMinutes: Number(durationMins),
       clinicalNotes,
     };
-    onSave(updated);
-    onClose();
+    if (customRewardEnabled) {
+      const error = selectedRatio
+        ? validateCustomRatioReward(updated.ratioReward)
+        : validateCustomRewardBand(updated.rewardBand);
+      if (error) { setSaveError(error); return; }
+    }
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await onSave(updated);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'The protocol assignment could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const conditionField = <div>
+    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Reward condition</label>
+    <select aria-label="Reward condition" value={rewardCondition}
+      onChange={(e) => setRewardCondition(e.target.value as 'above' | 'below')}
+      style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}>
+      <option value="above">Above</option><option value="below">Below</option>
+    </select>
+  </div>;
+  const thresholdField = <div>
+    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+      {selectedRatio ? 'Reward threshold (ratio)' : 'Reward threshold (µV)'}
+    </label>
+    <input type="number" aria-label="Reward threshold" min="0" max="1000" step="0.01" value={rewardThreshold}
+      onChange={(e) => setRewardThreshold(parseFloat(e.target.value))}
+      style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }} />
+  </div>;
+  const durationField = <div>
+    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Duration (Min)</label>
+    <input type="number" aria-label="Duration" value={durationMins}
+      onChange={(e) => setDurationMins(parseInt(e.target.value))}
+      style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }} />
+  </div>;
 
   return (
     <div
@@ -203,57 +299,78 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               />
             </div>
           </div>
-
-          {/* Reward & Inhibit Frequency Bounds */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Min (Hz)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                value={rewardMin}
-                onChange={(e) => setRewardMin(parseFloat(e.target.value))}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Reward Max (Hz)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                value={rewardMax}
-                onChange={(e) => setRewardMax(parseFloat(e.target.value))}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Threshold (µV)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                value={rewardThreshold}
-                onChange={(e) => setRewardThreshold(parseFloat(e.target.value))}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Duration (Min)
-              </label>
-              <input
-                type="number"
-                value={durationMins}
-                onChange={(e) => setDurationMins(parseInt(e.target.value))}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
-              />
-            </div>
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+            Site, channel mapping, and clinical notes document this assignment; they do not change training feedback.
           </div>
+
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            {selectedRatio
+              ? `Default training compares ${selectedRatio.numerator.freqMin}–${selectedRatio.numerator.freqMax} Hz power with ${selectedRatio.denominator.freqMin}–${selectedRatio.denominator.freqMax} Hz power. Reward when the ratio is ${selectedRatio.targetCondition} ${selectedRatio.targetThreshold}.`
+              : selectedSingle
+                ? `Default training measures ${selectedSingle.freqMin}–${selectedSingle.freqMax} Hz spectral amplitude. Reward when ${selectedSingle.targetCondition} ${selectedSingle.targetThreshold} µV.`
+                : 'This protocol has no supported reward definition.'}
+          </div>
+          {legacySingleBandRatio && !ratioConversionConfirmed && (
+            <div role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)' }}>
+              This older assignment uses a single-band amplitude reward. Converting it changes training to a two-band ratio.
+              <button type="button" className="btn btn-ghost" onClick={() => { resetRewardFields(selectedTemplate.protocolType!); setRatioConversionConfirmed(true); setSaveError(null); }}>
+                Convert to ratio reward
+              </button>
+            </div>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              aria-label="Use clinician-defined reward criteria"
+              checked={customRewardEnabled}
+              onChange={(e) => {
+                setCustomRewardEnabled(e.target.checked);
+                setSaveError(null);
+                resetRewardFields(selectedTemplate.protocolType!);
+              }}
+            />
+            Use clinician-defined reward criteria for training
+          </label>
+
+          {customRewardEnabled && selectedRatio ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
+                {([
+                  ['Theta Min Frequency', numeratorMin, setNumeratorMin],
+                  ['Theta Max Frequency', numeratorMax, setNumeratorMax],
+                  [`${selectedTemplate.protocolType === 'theta-beta-ratio' ? 'Beta' : 'Alpha'} Min Frequency`, denominatorMin, setDenominatorMin],
+                  [`${selectedTemplate.protocolType === 'theta-beta-ratio' ? 'Beta' : 'Alpha'} Max Frequency`, denominatorMax, setDenominatorMax],
+                ] as const).map(([label, value, setter]) => (
+                  <div key={label}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>{label} (Hz)</label>
+                    <input type="number" aria-label={label} min="3" max="45" step="0.5" value={value}
+                      onChange={(e) => setter(parseFloat(e.target.value))}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
+                {conditionField}{thresholdField}{durationField}
+              </div>
+            </div>
+          ) : <>
+            {customRewardEnabled && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Min Frequency (Hz)</label>
+                <input type="number" aria-label="Min Frequency" min="3" max="44.5" step="0.5" value={rewardMin}
+                  onChange={(e) => setRewardMin(parseFloat(e.target.value))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Max Frequency (Hz)</label>
+                <input type="number" aria-label="Max Frequency" min="3.5" max="45" step="0.5" value={rewardMax}
+                  onChange={(e) => setRewardMax(parseFloat(e.target.value))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }} />
+              </div>
+              {conditionField}{thresholdField}
+            </div>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>{durationField}</div>
+          </>}
 
           <div>
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
@@ -274,10 +391,12 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             />
           </div>
 
+          {saveError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{saveError}</div>}
+
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
-            <button type="submit" className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
-              Assign Protocol Configuration
+            <button type="submit" disabled={isSaving} className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
+              {isSaving ? 'Saving…' : 'Assign Protocol Configuration'}
             </button>
             <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>
               Cancel

@@ -32,6 +32,14 @@ build/output/
 .env.local
 .env.*.local
 !.env.example
+.env.e2e
+.e2e-service-account.json
+e2e/.cleanup-reports/
+
+# Playwright E2E authentication state and artifacts
+e2e/.auth/
+playwright-report/
+test-results/
 
 # Local Python environment and test artifacts
 .venv/

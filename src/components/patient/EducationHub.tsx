@@ -8,7 +8,7 @@ const QUIZ_QUESTIONS = [
     question: 'What do Alpha waves feel like?',
     options: ['Intense problem-solving', 'Calm alertness, like closing your eyes on a warm day', 'Deep sleep', 'Rapid mental calculations'],
     correctIndex: 1,
-    explanation: 'Alpha waves (8-12 Hz) are the bridge between awake and subconscious — they increase when you close your eyes or feel relaxed but alert.',
+    explanation: 'Alpha waves (8–13 Hz) are the bridge between awake and subconscious — they increase when you close your eyes or feel relaxed but alert.',
   },
   {
     question: 'How does neurofeedback actually train your brain?',

@@ -2,384 +2,269 @@ import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { ClientProfile, ClinicBrandConfig, SessionRecord } from '../types';
+import type { ClientProfile, ClinicBrandConfig, SessionRecord } from '../types';
+import type { ClinicalReportAnalytics } from '../components/clinician/clinicalReportAnalytics';
+import { buildClinicalReportAnalytics, formatMetric } from '../components/clinician/clinicalReportAnalytics';
+
+export interface ReportTextContent {
+  title: string;
+  metadata: string[];
+  metrics: string[];
+  notes: string[];
+  tableHeader: string;
+  tableRows: string[];
+}
+
+function reportInterval(analytics: ClinicalReportAnalytics): string {
+  const { interval } = analytics;
+  return `${interval.startLabel} – ${interval.endLabel}`;
+}
+
+function generatedLabel(generatedAt: number, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(generatedAt));
+}
+
+function coverage(recorded: number, eligible: number): string {
+  return `${recorded}/${eligible} eligible sessions recorded`;
+}
+
+export function buildPracticeReportText(
+  analytics: ClinicalReportAnalytics,
+  brand: ClinicBrandConfig,
+  generatedAt = Date.now(),
+): ReportTextContent {
+  const deviceModels = analytics.deviceModels.length > 0
+    ? analytics.deviceModels.map(item => `${item.model} (${item.sessions})`).join(', ')
+    : 'Unavailable';
+  const trend = analytics.timeInZoneTrend
+    ? `Observed in-zone change: ${analytics.timeInZoneTrend.firstAverage}% first-half average to ${analytics.timeInZoneTrend.recentAverage}% recent-half average (${analytics.timeInZoneTrend.change > 0 ? '+' : ''}${analytics.timeInZoneTrend.change} percentage points; descriptive only).`
+    : 'Observed in-zone change: Unavailable (fewer than two recorded measurements).';
+
+  return {
+    title: 'Practice Session Activity Report',
+    metadata: [
+      `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
+      `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
+      `Reporting interval: ${reportInterval(analytics)}`,
+      `Reporting timezone: ${analytics.interval.timeZone}`,
+      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
+    ],
+    metrics: [
+      `Selected cohort: ${analytics.clients.length} patient profiles`,
+      `Persisted sessions: ${analytics.totalSessions}`,
+      `Training Demo completions: ${analytics.demoSessionCount} (included in aggregates; synthetic provenance)`,
+      `Sample workspace records: ${analytics.sampleSessionCount} (fictional; excluded from persisted-session aggregates)`,
+      `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
+      `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
+      `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'schedule unavailable' : `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions`})`,
+      `Average in-zone time: ${formatMetric(analytics.averageInZonePercent.value, '%')} (${coverage(analytics.averageInZonePercent.recordedSessions, analytics.averageInZonePercent.eligibleSessions)})`,
+      `Device snapshot coverage: ${formatMetric(analytics.deviceCoverage.value, '%')} (${coverage(analytics.deviceCoverage.recordedSessions, analytics.deviceCoverage.eligibleSessions)})`,
+      `Recorded device models: ${deviceModels}`,
+      trend,
+    ],
+    notes: [
+      `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Intentional training Demo sessions are included in aggregates and labeled as synthetic. Fictional sample-workspace records are counted separately and excluded.',
+      'In-zone values and their change are descriptive session measurements, not diagnoses, benchmark comparisons, treatment outcomes, or statistical significance claims.',
+      'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
+      'Unavailable values are not replaced with cohort defaults or zero.',
+    ],
+    tableHeader: 'Patient | Persisted sessions | Training Demo | Sample workspace | Duration | Adherence | In-zone | Device snapshots',
+    tableRows: analytics.patientRows.map(row => [
+      `${row.client.name}${row.client.isDemo ? ' (Sample record)' : ''}`,
+      row.sessionCount,
+      row.demoSessionCount,
+      row.sampleSessionCount,
+      formatMetric(row.durationMinutes, ' min'),
+      formatMetric(row.adherencePercent, '%'),
+      `${formatMetric(row.averageInZonePercent, '%')} (${row.inZoneRecordedSessions}/${row.sessionCount})`,
+      row.sessionCount === 0 ? 'Unavailable' : `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}% (${row.deviceRecordedSessions}/${row.sessionCount})`,
+    ].join(' | ')),
+  };
+}
+
+export function buildPatientReportText(
+  client: ClientProfile,
+  analytics: ClinicalReportAnalytics,
+  brand: ClinicBrandConfig,
+  generatedAt = Date.now(),
+): ReportTextContent {
+  const row = analytics.patientRows.find(item => item.client.id === client.id);
+  const sessions = row?.sessions ?? [];
+  return {
+    title: 'Patient Session Activity Report',
+    metadata: [
+      `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
+      `Patient: ${client.name || 'Unavailable'}${client.isDemo ? ' (Sample record)' : ''}`,
+      `Configured indication: ${client.condition || 'Unavailable'}`,
+      `Configured protocol: ${client.assignedProtocol?.replace(/-/g, ' ') || 'Unavailable'}`,
+      `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
+      `Reporting interval: ${reportInterval(analytics)}`,
+      `Reporting timezone: ${analytics.interval.timeZone}`,
+      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
+    ],
+    metrics: [
+      `Persisted sessions: ${row?.sessionCount ?? 0}`,
+      `Training Demo completions: ${row?.demoSessionCount ?? 0} (included in aggregates; synthetic provenance)`,
+      `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from persisted-session aggregates)`,
+      `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
+      `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`,
+      `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
+      `Device snapshot coverage: ${row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'} (${coverage(row?.deviceRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
+    ],
+    notes: [
+      `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      'Intentional training Demo sessions are included and labeled as synthetic. Fictional sample-workspace records are separate and excluded.',
+      'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
+      'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
+    ],
+    tableHeader: 'Date/time | Source | Duration | In-zone | Device',
+    tableRows: sessions.map(session => {
+      const when = typeof session.timestamp === 'number' && Number.isFinite(session.timestamp) && session.timestamp > 0
+        ? new Intl.DateTimeFormat('en-US', {
+            timeZone: analytics.interval.timeZone,
+            year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          }).format(new Date(session.timestamp))
+        : 'Unavailable';
+      const duration = typeof session.durationSeconds === 'number' && Number.isFinite(session.durationSeconds) && session.durationSeconds >= 0
+        ? `${Math.round(session.durationSeconds / 60)} min`
+        : 'Unavailable';
+      const inZone = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100
+        ? `${session.timeInZonePercent}%`
+        : 'Unavailable';
+      const source = session.isDemo === true ? 'Training Demo (synthetic)' : 'Non-Demo';
+      return `${when} | ${source} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
+    }),
+  };
+}
+
+function renderReport(content: ReportTextContent): jsPDF {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  let y = 18;
+  const write = (text: string, options: { bold?: boolean; size?: number; indent?: number } = {}) => {
+    doc.setFont('helvetica', options.bold ? 'bold' : 'normal');
+    doc.setFontSize(options.size ?? 9);
+    const lines = doc.splitTextToSize(text, 180 - (options.indent ?? 0));
+    if (y + lines.length * 5 > 282) {
+      doc.addPage();
+      y = 18;
+    }
+    doc.text(lines, 15 + (options.indent ?? 0), y);
+    y += lines.length * 5;
+  };
+
+  write(content.title, { bold: true, size: 16 });
+  y += 2;
+  content.metadata.forEach(line => write(line));
+  y += 4;
+  write('Summary', { bold: true, size: 11 });
+  content.metrics.forEach(line => write(line, { indent: 2 }));
+  y += 4;
+  write('Data interpretation', { bold: true, size: 11 });
+  content.notes.forEach(line => write(line, { indent: 2 }));
+  y += 4;
+  write('Session detail', { bold: true, size: 11 });
+  write(content.tableHeader, { bold: true, size: 8 });
+  if (content.tableRows.length === 0) write('No eligible sessions in the selected interval.', { size: 8 });
+  content.tableRows.forEach(line => write(line, { size: 8 }));
+  return doc;
+}
 
 export async function saveOrExportPDF(doc: jsPDF, filename: string): Promise<void> {
-  // If running inside Capacitor (iOS / iPadOS / macOS Catalyst)
   if (Capacitor.isNativePlatform()) {
     try {
       const dataUri = doc.output('datauristring');
-      const base64Data = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
-
       const fileResult = await Filesystem.writeFile({
         path: filename,
-        data: base64Data,
+        data: dataUri.includes(',') ? dataUri.split(',')[1] : dataUri,
         directory: Directory.Cache,
       });
-
-      await Share.share({
-        title: filename,
-        url: fileResult.uri,
-        dialogTitle: 'Export PDF Report',
-      });
+      await Share.share({ title: filename, url: fileResult.uri, dialogTitle: 'Export PDF Report' });
       return;
-    } catch (e: any) {
-      if (e?.name === 'AbortError' || e?.message?.includes('canceled') || e?.message?.includes('cancelled')) {
-        return;
-      }
-      console.warn('Native Capacitor Share failed, trying Web Share API fallback...', e);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '';
+      if ((error instanceof Error && error.name === 'AbortError') || /cancell?ed/i.test(message)) return;
+      console.warn('Native share failed; trying browser export.', error);
     }
   }
 
-  // Web Share API fallback for mobile browsers
   if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
     try {
-      const blob = doc.output('blob');
-      const file = new File([blob], filename, { type: 'application/pdf' });
+      const file = new File([doc.output('blob')], filename, { type: 'application/pdf' });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: filename,
-        });
+        await navigator.share({ files: [file], title: filename });
         return;
       }
-    } catch (e: any) {
-      if (e?.name === 'AbortError') return;
-      console.warn('Web Share failed, falling back to doc.save()...', e);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      console.warn('Browser share failed; downloading the PDF.', error);
     }
   }
-
-  // Standard web browser fallback
   doc.save(filename);
 }
 
 export async function generatePatientClinicalPDF(
   client: ClientProfile,
-  sessions: SessionRecord[],
+  analyticsOrSessions: ClinicalReportAnalytics | SessionRecord[],
   brand: ClinicBrandConfig,
-  doctorName = 'Dr. Vance Aris, MD, BCN'
 ): Promise<void> {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const reportDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-  // 1. Header Banner
-  doc.setFillColor(248, 247, 244);
-  doc.rect(0, 0, 210, 38, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(26, 26, 26);
-  doc.text((brand?.name || 'Clinic').toUpperCase(), 15, 16);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(107, 101, 96);
-  doc.text('CLINICAL NEUROFEEDBACK & QUANTITATIVE EEG PROGRESS EVALUATION', 15, 22);
-  doc.text(`Attending Physician: ${doctorName} | Board Certified Neurotherapist (BCN)`, 15, 27);
-
-  doc.text(`Generated: ${reportDate}`, 150, 16);
-  doc.text(`Protocol: ${(client?.assignedProtocol || 'unknown').replace(/-/g, ' ').toUpperCase()}`, 150, 22);
-  doc.text(`Hardware: Muse S (Athena) 4-Ch`, 150, 27);
-
-  // 2. Patient Demographics Box
-  doc.setDrawColor(232, 230, 225);
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(15, 44, 180, 26, 2, 2, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(26, 26, 26);
-  doc.text('PATIENT IDENTIFIER:', 20, 52);
-  doc.text('PRIMARY INDICATION:', 20, 60);
-
-  doc.text('TREATMENT COMPLIANCE:', 110, 52);
-  doc.text('BRAIN CAPACITY INDEX:', 110, 60);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${client?.name || 'Patient'} ${client?.isDemo ? '(Sample Record)' : ''}`, 65, 52);
-  doc.text(client?.condition || 'Unknown', 65, 60);
-  doc.text(`${client?.completedSessionsCount || 0} of ${(client?.prescribedSessionsPerWeek || 4) * 4} Prescribed Sessions`, 160, 52);
-  doc.text(`${client?.brainCapacityScore || 0}% (Active Neuroplastic Score)`, 160, 60);
-
-  // 3. Clinical Trajectory & Quantitative EEG Findings
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('1. SESSION SUMMARY & SPECTRAL BAND AVERAGES', 15, 80);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(40, 40, 40);
-
-  const totalSessions = sessions.length;
-  const avgInZone = totalSessions > 0 ? Math.round(sessions.reduce((s, r) => s + r.timeInZonePercent, 0) / totalSessions) : 0;
-  const coherenceValues = sessions
-    .map(session => session.averageCoherence)
-    .filter((value): value is number => value != null);
-  const avgCoherence = coherenceValues.length > 0
-    ? Math.round(coherenceValues.reduce((sum, value) => sum + value, 0) / coherenceValues.length)
-    : null;
-
-  const summaryText = [
-    `Patient completed ${totalSessions} neurofeedback session${totalSessions !== 1 ? 's' : ''} using the ${(client?.assignedProtocol || '').replace(/-/g, ' ')} protocol.`,
-    `Average time in target neural zone: ${avgInZone}%. Average inter-hemispheric coherence: ${avgCoherence == null ? '--' : `${avgCoherence}%`}.`,
-    `Band power averages below are computed from real EEG telemetry recorded during training sessions at AF7, AF8, TP9, TP10.`,
-  ];
-  doc.text(summaryText, 15, 86, { maxWidth: 180, lineHeightFactor: 1.4 });
-
-  // 4. Spectral Quantification Table
-  let tableY = 108;
-  doc.setFillColor(242, 241, 238);
-  doc.rect(15, tableY, 180, 7, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(26, 26, 26);
-  doc.text('METRIC / BAND', 20, tableY + 5);
-  doc.text('AVERAGE (µV)', 80, tableY + 5);
-  doc.text('SESSIONS RECORDED', 130, tableY + 5);
-
-  const bandKeys: Array<keyof typeof sessions[0]['averageBands']> = ['delta', 'theta', 'alpha', 'smr', 'beta', 'gamma'];
-  const bandLabels: Record<string, string> = {
-    delta: 'Delta (1-4 Hz)',
-    theta: 'Theta (4-8 Hz)',
-    alpha: 'Alpha (8-12 Hz)',
-    smr: 'SMR (12-15 Hz)',
-    beta: 'Beta (15-30 Hz)',
-    gamma: 'Gamma (30-45 Hz)',
-  };
-
-  const metricsData = bandKeys.map(key => {
-    const avg = totalSessions > 0
-      ? Math.round((sessions.reduce((s, r) => s + (r.averageBands ? r.averageBands[key] || 0 : 0), 0) / totalSessions) * 10) / 10
-      : (key === 'theta' ? 7.2 : key === 'alpha' ? 11.4 : key === 'beta' ? 9.8 : 6.0);
-    return { label: bandLabels[key], value: `${avg} µV`, count: `${totalSessions || 1}` };
-  });
-
-  tableY += 7;
-  metricsData.forEach((row, i) => {
-    doc.setFillColor(i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250);
-    doc.rect(15, tableY, 180, 6, 'F');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(row.label, 20, tableY + 4.5);
-    doc.text(row.value, 80, tableY + 4.5);
-    doc.text(row.count, 130, tableY + 4.5);
-    tableY += 6;
-  });
-
-  // 5. Recent Training Sessions Log Table
-  tableY += 8;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('2. RECENT AT-HOME TRAINING SESSION LOGS', 15, tableY);
-
-  tableY += 6;
-  doc.setFillColor(242, 241, 238);
-  doc.rect(15, tableY, 180, 7, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('DATE', 20, tableY + 5);
-  doc.text('EXPERIENCE / MODALITY', 55, tableY + 5);
-  doc.text('DURATION', 105, tableY + 5);
-  doc.text('IN-ZONE %', 135, tableY + 5);
-  doc.text('PEAK SCORE', 165, tableY + 5);
-
-  tableY += 7;
-  const recentSessions = sessions.slice(0, 5);
-  if (recentSessions.length > 0) {
-    recentSessions.forEach((s, i) => {
-      doc.setFillColor(i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250);
-      doc.rect(15, tableY, 180, 6, 'F');
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.text(s.date || 'Unknown', 20, tableY + 4.5);
-      doc.text((s.experience || 'unknown').replace(/-/g, ' ').toUpperCase(), 55, tableY + 4.5);
-      doc.text(`${Math.round((s.durationSeconds || 0) / 60)} min`, 105, tableY + 4.5);
-      doc.text(`${s.timeInZonePercent || 0}%`, 135, tableY + 4.5);
-      doc.text(`${s.peakFocusScore || 0}`, 165, tableY + 4.5);
-      tableY += 6;
-    });
-  } else {
-    doc.setFillColor(255, 255, 255);
-    doc.rect(15, tableY, 180, 6, 'F');
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8);
-    doc.text('No completed sessions logged yet.', 20, tableY + 4.5);
-    tableY += 6;
-  }
-
-  // 6. Clinical Assessment & Doctor Signature
-  tableY += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('3. PHYSICIAN CLINICAL ASSESSMENT & PLAN', 15, tableY);
-
-  tableY += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  const latestSession = sessions[0];
-  const planNotes = [
-    `Patient has completed ${client?.completedSessionsCount || 0} of their ${(client?.prescribedSessionsPerWeek || 4) * 4} prescribed sessions.`,
-    `Recommend continuing current ${(client?.assignedProtocol || '').replace(/-/g, ' ')} regimen at ${client?.prescribedSessionsPerWeek || 4} sessions/week.`,
-    latestSession ? `Latest recorded session showed a peak focus score of ${latestSession.peakFocusScore || 0} and ${latestSession.timeInZonePercent || 0}% time in zone.` : 'Prescription active. Baseline awaiting recording.',
-  ];
-  doc.text(planNotes, 15, tableY, { maxWidth: 180, lineHeightFactor: 1.4 });
-
-  // Signature Block
-  tableY += 24;
-  doc.setDrawColor(180, 180, 180);
-  doc.line(15, tableY, 80, tableY);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.text(doctorName, 15, tableY + 5);
-  doc.text('Board Certified in Neurofeedback (BCN), License #NFB-88421', 15, tableY + 9);
-
-  doc.line(125, tableY, 195, tableY);
-  doc.text('Clinical Quality Director Approval', 125, tableY + 5);
-  doc.text(`Official Document Seal • Verified ${reportDate}`, 125, tableY + 9);
-
-  // Download or Share PDF
-  const filename = `Neurofeedback_Report_${(client?.name || 'Patient').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+  const generatedAt = Date.now();
+  const analytics = Array.isArray(analyticsOrSessions)
+    ? buildPatientSelectionReportAnalytics(client, analyticsOrSessions, generatedAt)
+    : analyticsOrSessions;
+  const doc = renderReport(buildPatientReportText(client, analytics, brand, generatedAt));
+  const filename = `Session_Activity_${(client.name || 'Patient').replace(/\s+/g, '_')}_${new Date(generatedAt).toISOString().slice(0, 10)}.pdf`;
   await saveOrExportPDF(doc, filename);
 }
 
-export async function generatePracticeOutcomePDF(
-  clients: ClientProfile[],
+/**
+ * Compatibility for the patient-detail export buttons. That screen supplies an
+ * explicit session selection rather than a report window, so adherence is kept
+ * unavailable instead of being inferred from an arbitrary subset.
+ */
+export function buildPatientSelectionReportAnalytics(
+  client: ClientProfile,
   sessions: SessionRecord[],
+  generatedAt: number,
+): ClinicalReportAnalytics {
+  const validTimes = sessions.map(session => session.timestamp).filter(time => Number.isFinite(time) && time > 0);
+  const startMs = validTimes.length ? Math.min(...validTimes) : generatedAt;
+  const endMs = Math.max(generatedAt, ...(validTimes.length ? validTimes : [generatedAt]));
+  const label = (timestamp: number) => new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
+  }).format(new Date(timestamp));
+  const analytics = buildClinicalReportAnalytics([client], sessions, {
+    range: 'ytd',
+    label: 'Selected sessions',
+    startMs,
+    endMs,
+    startLabel: label(startMs),
+    endLabel: label(endMs),
+    dayCount: Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1),
+    timeZone: 'UTC',
+  }, { mode: 'explicit-selection' });
+  return {
+    ...analytics,
+    adherencePercent: null,
+    expectedSessions: null,
+    patientRows: analytics.patientRows.map(row => ({ ...row, adherencePercent: null, expectedSessions: null })),
+  };
+}
+
+export async function generatePracticeOutcomePDF(
+  analytics: ClinicalReportAnalytics,
   brand: ClinicBrandConfig,
-  doctorName = 'Dr. Vance Aris, MD, BCN'
 ): Promise<void> {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const reportDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-  // 1. Header Banner
-  doc.setFillColor(248, 247, 244);
-  doc.rect(0, 0, 210, 38, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(26, 26, 26);
-  doc.text((brand?.name || 'Clinic').toUpperCase(), 15, 16);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(107, 101, 96);
-  doc.text('PRACTICE-WIDE CLINICAL OUTCOME & COHORT ADHERENCE AUDIT', 15, 22);
-  doc.text(`Clinical Director: ${doctorName} | BCN Certified Practice`, 15, 27);
-
-  doc.text(`Generated: ${reportDate}`, 150, 16);
-  doc.text(`Active Cohort: ${clients.length} Patients`, 150, 22);
-  doc.text(`Hardware: Muse S Athena / QEEG`, 150, 27);
-
-  // 2. Practice Metric KPI Grid
-  const totalSessions = sessions.length;
-  const avgCompliance = clients.length > 0
-    ? Math.round(clients.reduce((acc, c) => acc + Math.min(100, (c.completedSessionsCount / (c.prescribedSessionsPerWeek * 4)) * 100), 0) / clients.length)
-    : 85;
-  const avgInZone = totalSessions > 0
-    ? Math.round(sessions.reduce((acc, s) => acc + s.timeInZonePercent, 0) / totalSessions)
-    : 81;
-
-  doc.setDrawColor(232, 230, 225);
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(15, 44, 180, 28, 2, 2, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(107, 101, 96);
-  doc.text('TOTAL ENROLLED', 20, 52);
-  doc.text('COMPLETED SESSIONS', 65, 52);
-  doc.text('AVG COMPLIANCE', 115, 52);
-  doc.text('AVG IN-ZONE TIME', 155, 52);
-
-  doc.setFontSize(14);
-  doc.setTextColor(26, 26, 26);
-  doc.text(`${clients.length} Patients`, 20, 62);
-  doc.text(`${totalSessions} Sessions`, 65, 62);
-  doc.text(`${avgCompliance}%`, 115, 62);
-  doc.text(`${avgInZone}%`, 155, 62);
-
-  // 3. Clinical Summary
-  let tableY = 82;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('1. COHORT ADHERENCE & NEUROPLASTIC PROGRESSION', 15, tableY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(40, 40, 40);
-  const narrative = [
-    `This practice-wide audit summarizes ${clients.length} enrolled patients undergoing personalized neurofeedback protocols.`,
-    `The overall cohort demonstrates an adherence rate of ${avgCompliance}%, with sustained target neural band modulation (time-in-zone) averaging ${avgInZone}%.`,
-    `Protocols utilize calibrated Muse S (Athena) 4-channel telemetry across frontal (AF7/AF8) and temporoparietal (TP9/TP10) sensor sites.`,
-  ];
-  doc.text(narrative, 15, tableY + 6, { maxWidth: 180, lineHeightFactor: 1.4 });
-
-  // 4. Patient Cohort Breakdown Table
-  tableY += 26;
-  doc.setFillColor(242, 241, 238);
-  doc.rect(15, tableY, 180, 7, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(26, 26, 26);
-  doc.text('PATIENT NAME', 20, tableY + 5);
-  doc.text('INDICATION / PROTOCOL', 65, tableY + 5);
-  doc.text('COMPLETED', 125, tableY + 5);
-  doc.text('CAPACITY', 150, tableY + 5);
-  doc.text('STATUS', 175, tableY + 5);
-
-  tableY += 7;
-  clients.forEach((client, i) => {
-    doc.setFillColor(i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 250);
-    doc.rect(15, tableY, 180, 6.5, 'F');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(client.name + (client.isDemo ? ' *' : ''), 20, tableY + 4.5);
-    doc.text(`${(client?.condition || 'Unknown').slice(0, 18)} (${(client?.assignedProtocol || '').replace(/-/g, ' ')})`, 65, tableY + 4.5);
-    doc.text(`${client.completedSessionsCount} / ${client.prescribedSessionsPerWeek * 4}`, 125, tableY + 4.5);
-    doc.text(`${client.brainCapacityScore}%`, 150, tableY + 4.5);
-    doc.text(client.status.toUpperCase(), 175, tableY + 4.5);
-    tableY += 6.5;
-  });
-
-  // 5. Clinical Certification & Sign-off Block
-  tableY += 12;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('2. MEDICAL DIRECTOR PRACTICE CERTIFICATION', 15, tableY);
-
-  tableY += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  const certText = [
-    `I hereby certify that the clinical neurofeedback data presented in this report was collected via calibrated EEG biosensors and processed in accordance with BCN clinical guidelines.`,
-    `Patient protocol adjustments and session compliance metrics have been reviewed for ongoing quality assurance.`,
-  ];
-  doc.text(certText, 15, tableY, { maxWidth: 180, lineHeightFactor: 1.4 });
-
-  // Signature Block
-  tableY += 24;
-  doc.setDrawColor(180, 180, 180);
-  doc.line(15, tableY, 80, tableY);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.text(doctorName, 15, tableY + 5);
-  doc.text('Medical Director & Board Certified Neurotherapist (BCN)', 15, tableY + 9);
-
-  doc.line(125, tableY, 195, tableY);
-  doc.text('Clinic Quality Assurance Verification', 125, tableY + 5);
-  doc.text(`Official Practice Seal • Verified ${reportDate}`, 125, tableY + 9);
-
-  // Download or Share Practice PDF
-  const filename = `Practice_Outcome_Report_${(brand?.name || 'Clinic').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+  const generatedAt = Date.now();
+  const doc = renderReport(buildPracticeReportText(analytics, brand, generatedAt));
+  const filename = `Practice_Session_Activity_${(brand?.name || 'Clinic').replace(/\s+/g, '_')}_${new Date(generatedAt).toISOString().slice(0, 10)}.pdf`;
   await saveOrExportPDF(doc, filename);
 }
