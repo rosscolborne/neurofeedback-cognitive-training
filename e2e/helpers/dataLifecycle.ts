@@ -969,12 +969,6 @@ export async function finishE2EPairRun(run: E2EPairRun, testInfo?: TestInfo): Pr
     }
 }
 
-/** Admin-side read access for persistence assertions; scoped to a live run. */
-export async function adminFirestoreForRun(run: { runId: string }): Promise<Firestore> {
-    assertHeartbeatHealthy(run.runId);
-    return adminDatabase();
-}
-
 // ---------------------------------------------------------------------------
 // Fresh-account (disposable identity) runs
 // ---------------------------------------------------------------------------

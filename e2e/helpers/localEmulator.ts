@@ -47,9 +47,21 @@ export async function seedLinkedPatient(extra: Record<string, unknown> = {}): Pr
   return { clinician, patient, name };
 }
 
-export async function persistedMessages(patientId: string, clinicianId: string) {
-  const thread = `messageThreads/${patientId}/relationships/${clinicianId}`;
-  const summary = await adminDb.doc(thread).get();
-  const messages = await adminDb.collection(`${thread}/messages`).get();
-  return { summary: summary.data(), messages: messages.docs.map((entry) => entry.data()) };
+/** Provision records only in the isolated emulator for rules-bound persistence tests. */
+export async function seedPersistenceRecords(fixture: LocalPatientFixture, marker: string): Promise<string> {
+  const { patient, clinician } = fixture;
+  const invitationCode = `invitation-${randomUUID()}`;
+  const thread = `messageThreads/${patient.uid}/relationships/${clinician.uid}`;
+  await Promise.all([
+    adminDb.doc(`users/${patient.uid}`).set({ role: 'patient', email: patient.email }),
+    adminDb.doc(`users/${clinician.uid}`).set({ role: 'clinician', email: clinician.email }),
+    adminDb.doc(`clients/${patient.uid}`).update({ recentCompletedSessionIds: [`session-${marker}`], acceptedInvitationId: invitationCode }),
+    adminDb.doc(`clinics/${clinician.uid}`).update({ branding: { name: `Brand ${marker}` } }),
+    adminDb.doc(`sessions/session-${marker}`).set({ patientId: patient.uid, clinicianId: clinician.uid, clinicId: clinician.uid, patientNotes: marker, isDemo: true }),
+    adminDb.doc(`appointments/appointment-${marker}`).set({ patientId: patient.uid, clinicianId: clinician.uid, createdBy: clinician.uid, notes: marker, status: 'scheduled', durationMinutes: 45, type: 'remote-training' }),
+    adminDb.doc(`patientInvitations/${invitationCode}`).set({ patientEmail: patient.email, patientName: marker, patientId: patient.uid, clinicianId: clinician.uid, status: 'accepted' }),
+    adminDb.doc(thread).set({ patientId: patient.uid, clinicianId: clinician.uid, lastMessageText: marker }),
+    adminDb.doc(`${thread}/messages/message-${marker}`).set({ text: marker, senderRole: 'patient', senderId: patient.uid }),
+  ]);
+  return invitationCode;
 }

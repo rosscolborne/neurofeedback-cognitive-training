@@ -1,137 +1,182 @@
-import { expect } from '@playwright/test';
-import type { DocumentData, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { expect, type Page } from '@playwright/test';
 import { containsRunMarker } from './cleanupPlan';
-import { adminFirestoreForRun, type DisposableE2EAccount, type DisposableE2ERun, type E2EPairRun } from './dataLifecycle';
+import type { DisposableE2EAccount, DisposableE2ERun, E2EPairRun } from './dataLifecycle';
+import type { AuthorizedDocument, AuthorizedRead } from './authorizedFirestore';
 
-/**
- * Admin-side reads that confirm what the UI claims was saved actually reached
- * Firestore. They only read; every match is restricted to the run's marker and
- * to documents created after the run started.
- */
-
+/** Persistence reads use the signed-in page's Firebase ID token and Firestore rules. */
 const persistenceTimeout = { timeout: 15_000 };
 
-function createdDuringRun(run: E2EPairRun, document: QueryDocumentSnapshot<DocumentData>): boolean {
-    return document.createTime.toMillis() >= run.runStartMs;
+async function readAs(page: Page, uid: string, read: AuthorizedRead, projectId = process.env.E2E_FIREBASE_PROJECT_ID): Promise<AuthorizedDocument | AuthorizedDocument[] | null> {
+    return page.evaluate(async ({ uid, read, projectId }) => {
+        const { authorizedFirestoreRead } = await import('/e2e/helpers/authorizedFirestore.ts');
+        return authorizedFirestoreRead(uid, read, projectId);
+    }, { uid, read, projectId });
 }
 
-async function runDocuments(run: E2EPairRun, collection: 'sessions' | 'appointments', markerField: string) {
-    const database = await adminFirestoreForRun(run);
-    const snapshot = await database.collection(collection).where('patientId', '==', run.scope.patientId).get();
-    return snapshot.docs.filter((document) =>
-        createdDuringRun(run, document) && containsRunMarker(document.get(markerField), run.runMarker));
+async function documentAs(page: Page, uid: string, path: string, projectId?: string): Promise<AuthorizedDocument | null> {
+    return readAs(page, uid, { kind: 'document', path }, projectId) as Promise<AuthorizedDocument | null>;
 }
 
-/** The Demo session saved through the UI exists once, is labelled synthetic, and carries the run note. */
-export async function expectDemoSessionPersisted(run: E2EPairRun): Promise<string> {
+async function collectionAs(page: Page, uid: string, path: string, where?: { field: string; equals: string }): Promise<AuthorizedDocument[]> {
+    return readAs(page, uid, { kind: 'collection', path, where }) as Promise<AuthorizedDocument[]>;
+}
+
+function field(document: AuthorizedDocument | null, name: string): unknown {
+    return name.split('.').reduce<unknown>((value, part) =>
+        value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined, document?.fields);
+}
+
+async function runDocuments(
+    page: Page,
+    run: E2EPairRun,
+    collection: 'sessions' | 'appointments',
+    markerField: string,
+): Promise<AuthorizedDocument[]> {
+    const documents = await collectionAs(page, run.scope.patientId, collection, {
+        field: 'patientId', equals: run.scope.patientId,
+    });
+    return documents.filter((document) =>
+        document.createTimeMs >= run.runStartMs && containsRunMarker(field(document, markerField), run.runMarker));
+}
+
+/** The Demo session and completion ledger are readable by the owning patient. */
+export async function expectDemoSessionPersisted(run: E2EPairRun, patientPage: Page): Promise<string> {
     let sessionId = '';
     await expect.poll(async () => {
-        const sessions = await runDocuments(run, 'sessions', 'patientNotes');
+        const sessions = await runDocuments(patientPage, run, 'sessions', 'patientNotes');
         sessionId = sessions.length === 1 ? sessions[0].id : '';
         return sessions.map((document) => ({
-            isDemo: document.get('isDemo'),
-            patientId: document.get('patientId'),
+            isDemo: field(document, 'isDemo'),
+            patientId: field(document, 'patientId'),
         }));
     }, persistenceTimeout).toEqual([{ isDemo: true, patientId: run.scope.patientId }]);
 
-    const database = await adminFirestoreForRun(run);
-    const patient = await database.doc(`clients/${run.scope.patientId}`).get();
-    const ledger = patient.get('recentCompletedSessionIds');
-    expect(Array.isArray(ledger) && ledger.includes(sessionId), 'patient completion ledger records the Demo session').toBe(true);
+    await expect.poll(async () => {
+        const patient = await documentAs(patientPage, run.scope.patientId, `clients/${run.scope.patientId}`);
+        const ledger = field(patient, 'recentCompletedSessionIds');
+        return Array.isArray(ledger) && ledger.includes(sessionId);
+    }, persistenceTimeout).toBe(true);
     return sessionId;
 }
 
 export async function expectAppointmentPersisted(
     run: E2EPairRun,
+    patientPage: Page,
+    clinicianPage: Page,
     expected: { notes: string; status: 'scheduled' | 'cancelled'; durationMinutes: number; type: string },
 ): Promise<void> {
+    const expectedRecord = [{ ...expected, clinicianId: run.scope.clinicianId, createdBy: run.scope.clinicianId }];
+    const appointmentRecord = (document: AuthorizedDocument) => ({
+        notes: field(document, 'notes'),
+        status: field(document, 'status'),
+        durationMinutes: field(document, 'durationMinutes'),
+        type: field(document, 'type'),
+        clinicianId: field(document, 'clinicianId'),
+        createdBy: field(document, 'createdBy'),
+    });
+    let appointmentId = '';
     await expect.poll(async () => {
-        const appointments = await runDocuments(run, 'appointments', 'notes');
-        return appointments.map((document) => ({
-            notes: document.get('notes'),
-            status: document.get('status'),
-            durationMinutes: document.get('durationMinutes'),
-            type: document.get('type'),
-            clinicianId: document.get('clinicianId'),
-            createdBy: document.get('createdBy'),
-        }));
-    }, persistenceTimeout).toEqual([{
-        ...expected,
-        clinicianId: run.scope.clinicianId,
-        createdBy: run.scope.clinicianId,
-    }]);
+        const documents = await runDocuments(patientPage, run, 'appointments', 'notes');
+        appointmentId = documents.length === 1 ? documents[0].id : '';
+        return documents.map(appointmentRecord);
+    }, persistenceTimeout).toEqual(expectedRecord);
+    // A direct document read exercises the clinician's grant without a broad
+    // query that the application itself does not issue.
+    await expect.poll(async () => {
+        const document = await documentAs(clinicianPage, run.scope.clinicianId, `appointments/${appointmentId}`);
+        return document && appointmentRecord(document);
+    }, persistenceTimeout).toEqual(expectedRecord[0]);
 }
 
 export async function expectMessagesPersisted(
     run: E2EPairRun,
+    patientPage: Page,
+    clinicianPage: Page,
     expected: { text: string; senderRole: 'patient' | 'clinician' }[],
 ): Promise<void> {
-    const database = await adminFirestoreForRun(run);
-    const messages = database
-        .doc(`messageThreads/${run.scope.patientId}/relationships/${run.scope.clinicianId}`)
-        .collection('messages');
-    await expect.poll(async () => {
-        const snapshot = await messages.get();
-        return snapshot.docs
-            .filter((document) => createdDuringRun(run, document) && containsRunMarker(document.get('text'), run.runMarker))
-            .map((document) => ({
-                text: document.get('text'),
-                senderRole: document.get('senderRole'),
-                senderId: document.get('senderId'),
-            }))
-            .sort((left, right) => left.text.localeCompare(right.text));
-    }, persistenceTimeout).toEqual(expected
-        .map((message) => ({
-            ...message,
-            senderId: message.senderRole === 'patient' ? run.scope.patientId : run.scope.clinicianId,
-        }))
-        .sort((left, right) => left.text.localeCompare(right.text)));
+    const path = `messageThreads/${run.scope.patientId}/relationships/${run.scope.clinicianId}/messages`;
+    const expectedRecords = expected.map((message) => ({
+        ...message,
+        senderId: message.senderRole === 'patient' ? run.scope.patientId : run.scope.clinicianId,
+    })).sort((left, right) => left.text.localeCompare(right.text));
+    for (const [page, uid] of [[patientPage, run.scope.patientId], [clinicianPage, run.scope.clinicianId]] as const) {
+        await expect.poll(async () => {
+            const documents = await collectionAs(page, uid, path);
+            return documents
+                .filter((document) => document.createTimeMs >= run.runStartMs && containsRunMarker(field(document, 'text'), run.runMarker))
+                .map((document) => ({
+                    text: field(document, 'text'),
+                    senderRole: field(document, 'senderRole'),
+                    senderId: field(document, 'senderId'),
+                }))
+                .sort((left, right) => String(left.text).localeCompare(String(right.text)));
+        }, persistenceTimeout).toEqual(expectedRecords);
+    }
 }
 
-/** The run's invitation was accepted by the approved patient, who is now canonically linked. */
-export async function expectInvitationAcceptedPersisted(run: E2EPairRun, invitationCode: string): Promise<void> {
-    const database = await adminFirestoreForRun(run);
-    await expect.poll(async () => {
-        const [invitation, patient, claim] = await Promise.all([
-            database.doc(`patientInvitations/${invitationCode}`).get(),
-            database.doc(`clients/${run.scope.patientId}`).get(),
-            database.doc(`patientInvitationClaims/${run.scope.clinicianId}/emails/${run.scope.patientEmail}`).get(),
-        ]);
-        return {
-            invitationMarked: containsRunMarker(invitation.get('patientName'), run.runMarker),
-            invitationStatus: invitation.get('status'),
-            invitationPatientId: invitation.get('patientId'),
-            patientClinicianId: patient.get('clinicianId'),
-            patientAcceptedInvitationId: patient.get('acceptedInvitationId'),
-            claimExists: claim.exists,
-        };
-    }, persistenceTimeout).toEqual({
-        invitationMarked: true,
-        invitationStatus: 'accepted',
-        invitationPatientId: run.scope.patientId,
-        patientClinicianId: run.scope.clinicianId,
-        patientAcceptedInvitationId: invitationCode,
-        claimExists: false,
-    });
+/** Both participants can read the accepted invitation and patient relationship; only its clinician can read the released claim. */
+export async function expectInvitationAcceptedPersisted(
+    run: E2EPairRun,
+    patientPage: Page,
+    clinicianPage: Page,
+    invitationCode: string,
+): Promise<void> {
+    for (const [page, uid] of [[patientPage, run.scope.patientId], [clinicianPage, run.scope.clinicianId]] as const) {
+        await expect.poll(async () => {
+            const [invitation, patient] = await Promise.all([
+                documentAs(page, uid, `patientInvitations/${invitationCode}`),
+                documentAs(page, uid, `clients/${run.scope.patientId}`),
+            ]);
+            return {
+                invitationMarked: containsRunMarker(field(invitation, 'patientName'), run.runMarker),
+                invitationStatus: field(invitation, 'status'),
+                invitationPatientId: field(invitation, 'patientId'),
+                patientClinicianId: field(patient, 'clinicianId'),
+                patientAcceptedInvitationId: field(patient, 'acceptedInvitationId'),
+            };
+        }, persistenceTimeout).toEqual({
+            invitationMarked: true,
+            invitationStatus: 'accepted',
+            invitationPatientId: run.scope.patientId,
+            patientClinicianId: run.scope.clinicianId,
+            patientAcceptedInvitationId: invitationCode,
+        });
+    }
+    await expect.poll(async () => documentAs(
+        clinicianPage, run.scope.clinicianId,
+        `patientInvitationClaims/${run.scope.clinicianId}/emails/${run.scope.patientEmail}`,
+    ), persistenceTimeout).toBeNull();
 }
 
-export async function expectClinicBrandPersisted(run: E2EPairRun, brandName: string): Promise<void> {
-    const database = await adminFirestoreForRun(run);
-    await expect.poll(async () => {
-        const clinic = await database.doc(`clinics/${run.clinicId}`).get();
-        return clinic.get('branding.name');
-    }, persistenceTimeout).toBe(brandName);
+export async function expectClinicBrandPersisted(run: E2EPairRun, patientPage: Page, clinicianPage: Page, brandName: string): Promise<void> {
+    for (const [page, uid] of [[patientPage, run.scope.patientId], [clinicianPage, run.scope.clinicianId]] as const) {
+        await expect.poll(async () => {
+            const clinic = await documentAs(page, uid, `clinics/${run.clinicId}`);
+            return field(clinic, 'branding.name');
+        }, persistenceTimeout).toBe(brandName);
+    }
 }
 
-/** A disposable signup persisted its own user profile with the chosen role. */
+/** A disposable signup reads its own user profile through its own rules grant. */
 export async function expectDisposableRolePersisted(
     run: DisposableE2ERun,
     account: DisposableE2EAccount,
     role: 'patient' | 'clinician',
+    accountPage: Page,
 ): Promise<void> {
-    const database = await adminFirestoreForRun(run);
+    expect(run.emails).toContain(account.email.toLowerCase());
     await expect.poll(async () => {
-        const user = await database.doc(`users/${account.uid}`).get();
-        return { email: user.get('email')?.toLowerCase(), role: user.get('role') };
+        const user = await documentAs(accountPage, account.uid, `users/${account.uid}`, run.projectId);
+        return { email: String(field(user, 'email') ?? '').toLowerCase(), role: field(user, 'role') };
     }, persistenceTimeout).toEqual({ email: account.email.toLowerCase(), role });
+}
+
+/** Used by the local messaging scenario to inspect saved data without Admin. */
+export async function readPersistedMessagesAs(page: Page, patientId: string, clinicianId: string) {
+    const thread = `messageThreads/${patientId}/relationships/${clinicianId}`;
+    const [summary, messages] = await Promise.all([
+        documentAs(page, patientId, thread),
+        collectionAs(page, patientId, `${thread}/messages`),
+    ]);
+    return { summary: summary?.fields, messages: messages.map((message) => message.fields) };
 }

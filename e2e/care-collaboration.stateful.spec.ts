@@ -95,7 +95,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await brandingPanel.getByRole('button', { name: 'Save and apply clinic branding', exact: true }).click();
             await expect(clinician.page.getByRole('heading', { name: 'Clinic Branding & Theme Customizer', exact: true })).toBeHidden();
             await expect(clinician.page.getByText(clinicBrandName, { exact: true }).first()).toBeVisible();
-            await expectClinicBrandPersisted(run, clinicBrandName);
+            await expectClinicBrandPersisted(run, patient.page, clinician.page, clinicBrandName);
             await clinician.page.reload();
             await arriveAtClinicianDashboard(clinician.page);
             await expect(clinician.page.getByText(clinicBrandName, { exact: true }).first()).toBeVisible();
@@ -129,7 +129,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await patient.page.getByLabel('Invitation code', { exact: true }).fill(invitationCode);
             await patient.page.getByRole('button', { name: 'Accept Invitation', exact: true }).click();
             await expect(patient.page.getByText('Connected to your clinician', { exact: true })).toBeVisible({ timeout: 15_000 });
-            await expectInvitationAcceptedPersisted(run, invitationCode);
+            await expectInvitationAcceptedPersisted(run, patient.page, clinician.page, invitationCode);
 
             await patient.page.reload();
             await arriveAtPatientDashboard(patient.page);
@@ -217,7 +217,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await clinician.page.getByLabel(`Message ${patientName}`, { exact: true }).fill(clinicianMessage);
             await clinician.page.getByRole('button', { name: 'Send', exact: true }).click();
             await expect(clinician.page.getByText(clinicianMessage, { exact: true })).toBeVisible();
-            await expectMessagesPersisted(run, [{ text: clinicianMessage, senderRole: 'clinician' }]);
+            await expectMessagesPersisted(run, patient.page, clinician.page, [{ text: clinicianMessage, senderRole: 'clinician' }]);
 
             await patient.page.reload();
             await arriveAtPatientDashboard(patient.page);
@@ -226,7 +226,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await patient.page.getByLabel('Message your clinician', { exact: true }).fill(patientMessage);
             await patient.page.getByRole('button', { name: 'Send', exact: true }).click();
             await expect(patient.page.getByText(patientMessage, { exact: true })).toBeVisible();
-            await expectMessagesPersisted(run, [
+            await expectMessagesPersisted(run, patient.page, clinician.page, [
                 { text: clinicianMessage, senderRole: 'clinician' },
                 { text: patientMessage, senderRole: 'patient' },
             ]);
@@ -279,7 +279,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             let clinicianAppointment = clinician.page.getByRole('article').filter({ hasText: appointmentLabel });
             await expect(clinicianAppointment).toHaveCount(1);
             await expect(clinicianAppointment.getByText('scheduled', { exact: true })).toBeVisible();
-            await expectAppointmentPersisted(run, { notes: appointmentLabel, status: 'scheduled', durationMinutes: 45, type: 'remote-training' });
+            await expectAppointmentPersisted(run, patient.page, clinician.page, { notes: appointmentLabel, status: 'scheduled', durationMinutes: 45, type: 'remote-training' });
 
             await clinician.page.reload();
             await arriveAtClinicianDashboard(clinician.page);
@@ -302,7 +302,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             clinicianAppointment = clinician.page.getByRole('article').filter({ hasText: editedLabel });
             await expect(clinicianAppointment).toContainText('Protocol review');
             await expect(clinicianAppointment).toContainText('60 min');
-            await expectAppointmentPersisted(run, { notes: editedLabel, status: 'scheduled', durationMinutes: 60, type: 'protocol-review' });
+            await expectAppointmentPersisted(run, patient.page, clinician.page, { notes: editedLabel, status: 'scheduled', durationMinutes: 60, type: 'protocol-review' });
 
             await patient.page.reload();
             await arriveAtPatientDashboard(patient.page);
@@ -319,7 +319,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             clinician.page.once('dialog', (dialog) => dialog.accept());
             await clinicianAppointment.getByRole('button', { name: 'Cancel', exact: true }).click();
             await expect(clinicianAppointment.getByText('cancelled', { exact: true })).toBeVisible();
-            await expectAppointmentPersisted(run, { notes: editedLabel, status: 'cancelled', durationMinutes: 60, type: 'protocol-review' });
+            await expectAppointmentPersisted(run, patient.page, clinician.page, { notes: editedLabel, status: 'cancelled', durationMinutes: 60, type: 'protocol-review' });
 
             await clinician.page.reload();
             await arriveAtClinicianDashboard(clinician.page);
