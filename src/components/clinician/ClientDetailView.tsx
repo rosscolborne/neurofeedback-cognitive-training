@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { getCalibrationDisplayState } from '../../services/dataMappers';
@@ -66,6 +66,23 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   } | null>(null);
   const [selectedSession, setSelectedSession] = useState<{ clientId: string; sessionId: string } | null>(null);
   const [openedSessions, setOpenedSessions] = useState<Record<string, string[]>>({});
+  const [pdfUi, setPdfUi] = useState<{ clientId: string; pendingSessionId: string | null | undefined; error: string | null }>({
+    clientId: client.id, pendingSessionId: undefined, error: null,
+  });
+  if (pdfUi.clientId !== client.id) setPdfUi({ clientId: client.id, pendingSessionId: undefined, error: null });
+  const pdfRequestRef = useRef<{ clientId: string; generation: number } | null>(null);
+  const pdfGenerationRef = useRef(0);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    pdfGenerationRef.current += 1;
+    return () => { pdfGenerationRef.current += 1; };
+  }, [client.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -114,8 +131,25 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     } : current);
   };
 
-  const handleDownloadPDF = () => {
-    generatePatientClinicalPDF(client, sessions, brand);
+  const handleDownloadPDF = async (selected?: SessionRecord) => {
+    if (sessionsState !== 'ready' || (pdfRequestRef.current?.clientId === client.id && pdfRequestRef.current.generation === pdfGenerationRef.current)) return;
+    const request = { clientId: client.id, generation: pdfGenerationRef.current };
+    pdfRequestRef.current = request;
+    setPdfUi({ clientId: client.id, pendingSessionId: selected?.id ?? null, error: null });
+    try {
+      await generatePatientClinicalPDF(client, selected ? [selected] : sessions, brand);
+    } catch {
+      if (mountedRef.current && pdfGenerationRef.current === request.generation) {
+        setPdfUi((current) => current.clientId === client.id
+          ? { ...current, error: 'PDF export failed. Please try again.' } : current);
+      }
+    } finally {
+      if (pdfRequestRef.current === request) pdfRequestRef.current = null;
+      if (mountedRef.current && pdfGenerationRef.current === request.generation) {
+        setPdfUi((current) => current.clientId === client.id
+          ? { ...current, pendingSessionId: undefined } : current);
+      }
+    }
   };
 
   const handleSaveProtocol = async (newTemplate: ProtocolTemplate) => {
@@ -170,6 +204,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     : imprintState.status === 'expired' ? 'Expired'
       : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
   const learningScoreContentState = getLearningScoreContentState(sessionContentState, learningScores.points.length);
+  const pdfIsPending = pdfUi.clientId === client.id && pdfUi.pendingSessionId !== undefined;
+  const pdfExportDisabled = sessionsState !== 'ready' || pdfIsPending;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -193,7 +229,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <Upload size={14} /> Add Manual QEEG Record
           </button>
           <button
-            onClick={handleDownloadPDF}
+            onClick={() => { void handleDownloadPDF(); }}
+            disabled={pdfExportDisabled}
             className="btn btn-dense"
             style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
@@ -201,6 +238,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           </button>
         </div>
       </div>
+      {pdfUi.clientId === client.id && pdfUi.error && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '13px' }}>{pdfUi.error}</div>}
+      {pdfIsPending && <div role="status" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{pdfUi.pendingSessionId ? `Exporting session ${pdfUi.pendingSessionId} PDF…` : 'Exporting clinical PDF…'}</div>}
 
       {/* Client Profile Header Card */}
       <div
@@ -604,7 +643,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       <div className="card-clinician" style={{ padding: '18px 16px', backgroundColor: '#FFFFFF', display: activeTab === 'sessions' ? 'block' : 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Session Logs</h3>
-            <button onClick={handleDownloadPDF} className="btn btn-dense" style={{ fontSize: '11px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button onClick={() => { void handleDownloadPDF(); }} disabled={pdfExportDisabled} className="btn btn-dense" style={{ fontSize: '11px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Download size={12} /> Export PDF
             </button>
           </div>
@@ -645,7 +684,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                     )}
                   </div>
                   <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }}>Open {s.id}</button>
-                  <button onClick={() => generatePatientClinicalPDF(client, [s], brand)} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <FileText size={12} /> PDF
                   </button>
                 </div>
