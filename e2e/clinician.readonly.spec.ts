@@ -15,10 +15,14 @@ function rosterRows(page: import('@playwright/test').Page) {
     return page.getByRole('table').locator('tbody tr');
 }
 
+function patientRosterRows(page: import('@playwright/test').Page) {
+    return rosterRows(page).filter({ has: page.locator('td:first-child span') });
+}
+
 async function firstRosterPatient(page: import('@playwright/test').Page) {
-    const row = rosterRows(page).first();
+    const row = patientRosterRows(page).first();
     await expect(row, 'The read-only clinician fixture needs a linked patient').toBeVisible();
-    const name = (await row.locator('td').first().locator('span').first().innerText()).trim();
+    const name = (await row.locator('td').first().innerText()).split('\n')[0].trim();
     expect(name).not.toBe('');
     await row.click();
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
@@ -141,7 +145,9 @@ test('sample workspace and a second login never display the prior account’s ro
     await page.goto('/');
     await arriveAtClinicianDashboard(page);
     await expect(page.getByText(/Sample clinician workspace · fictional demonstration data/)).toHaveCount(0);
-    const rosterName = (await rosterRows(page).first().locator('td').first().locator('span').first().innerText()).trim();
+    await expect(patientRosterRows(page).first(), 'The read-only clinician fixture needs a linked patient').toBeVisible();
+    const rosterName = (await patientRosterRows(page).first().locator('td').first().innerText()).split('\n')[0].trim();
+    expect(rosterName).not.toBe('');
     await page.getByRole('button', { name: 'Sign out', exact: true }).first().click();
     await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
 
@@ -156,8 +162,8 @@ test('sample workspace and a second login never display the prior account’s ro
     await page.getByRole('button', { name: 'Sign In', exact: true }).click();
     await page.getByRole('button', { name: 'Open Sample Clinician Workspace', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Sample clinician workspace · fictional demonstration data · isolated from production accounts' })).toBeVisible();
-    await expect(rosterRows(page).first()).toBeVisible();
-    const sampleName = (await rosterRows(page).first().locator('td').first().locator('span').first().innerText()).trim();
+    await expect(patientRosterRows(page).first()).toBeVisible();
+    const sampleName = (await patientRosterRows(page).first().locator('td').first().innerText()).split('\n')[0].trim();
     expect(sampleName).not.toBe(rosterName);
     await expect(rosterRows(page).filter({ hasText: rosterName })).toHaveCount(0);
     await page.getByRole('button', { name: 'Sign out', exact: true }).first().click();
