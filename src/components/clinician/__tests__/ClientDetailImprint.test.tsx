@@ -43,4 +43,13 @@ describe('clinician Neural Imprint status', () => {
     expect(JSON.stringify(renderer.toJSON())).toContain('Expired');
     renderer.unmount();
   });
+
+  it('exposes the detail Schedule action for the selected patient', async () => {
+    const onScheduleClient = vi.fn();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<ClientDetailView client={client('b')} brand={brand} onBack={vi.fn()} onUpdateClient={vi.fn()} onSendMessage={vi.fn()} onScheduleClient={onScheduleClient} />); });
+    const schedule = renderer.root.findAllByType('button').find((node) => node.children.some((child) => child === ' Schedule'))!;
+    await act(async () => schedule.props.onClick());
+    expect(onScheduleClient).toHaveBeenCalledOnce();
+  });
 });

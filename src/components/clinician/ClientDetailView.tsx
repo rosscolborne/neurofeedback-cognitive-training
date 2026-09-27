@@ -23,6 +23,7 @@ import {
 import {
   ArrowLeft,
   Send,
+  Calendar,
   Settings2,
   Download,
   Upload,
@@ -38,6 +39,7 @@ interface ClientDetailViewProps {
   /** Integration seam for the centrally owned authorized append transaction. */
   onAppendBrainMap?: ManualBrainMapSave;
   onSendMessage: () => void;
+  onScheduleClient?: () => void;
 }
 
 export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
@@ -47,6 +49,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   onUpdateClient,
   onAppendBrainMap,
   onSendMessage,
+  onScheduleClient,
 }) => {
   const [activeTab, setActiveTab] = useState<'eeg' | 'protocol' | 'brainmaps' | 'telemetry' | 'sessions'>('eeg');
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
@@ -236,6 +239,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           >
             <Send size={14} /> Message Patient
           </button>
+          {onScheduleClient && <button type="button" onClick={onScheduleClient} className="btn btn-secondary" style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={14} /> Schedule</button>}
         </div>
       </div>
 
