@@ -4,6 +4,7 @@ import { timestampToMillis } from '../../services/dataMappers';
 import { resolvePatientProtocol } from '../../services/protocols';
 import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemplates';
 import { PatientAvatar } from './PatientAvatar';
+import { formatLastSessionDate } from './formatLastSessionDate';
 import {
   Search,
   Plus,
@@ -444,7 +445,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                    {client.lastSessionDate || 'No recorded session'}
+                    {formatLastSessionDate(client.lastSessionDate)}
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-tertiary)' }}>Unavailable</td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
@@ -452,6 +453,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                      {onMessageClient && <button type="button" onClick={(e) => { e.stopPropagation(); onMessageClient(client.id); }} className="btn btn-ghost" style={{ padding: '4px 6px', fontSize: '11px' }} aria-label={`Message ${client.name}`} title={`Message ${client.name}`}><MessageSquare size={14} /></button>}
                       <button
                         onClick={(e) => handleOpenEdit(client, e)}
                         className="btn btn-ghost"
@@ -527,13 +529,16 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 <span style={{ color: 'var(--text-tertiary)', marginLeft: '12px' }}>Sessions: </span>
                 <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
               </div>
-              <button
-                onClick={(e) => handleOpenEdit(client, e)}
-                className="btn btn-ghost"
-                style={{ padding: '4px 8px', fontSize: '11px' }}
-              >
-                <Edit size={12} /> Edit
-              </button>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {onMessageClient && <button type="button" onClick={(e) => { e.stopPropagation(); onMessageClient(client.id); }} className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '11px' }} aria-label={`Message ${client.name}`}><MessageSquare size={12} /> Message</button>}
+                <button
+                  onClick={(e) => handleOpenEdit(client, e)}
+                  className="btn btn-ghost"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                >
+                  <Edit size={12} /> Edit
+                </button>
+              </div>
             </div>
           </div>
         ))}

@@ -15,7 +15,8 @@ describe('canonical messaging and appointment surface wiring', () => {
   it('gives the clinician canonical repository-backed surfaces', () => {
     expect(clinicianShellSource).toContain('participants={clients.map');
     expect(clinicianShellSource).toContain('patientId: client.id');
-    expect(clinicianShellSource).toContain('preSelectedClientId={selectedClient?.id}');
+    expect(clinicianShellSource).toContain('const linkedSelectedClient = clients.find((client) => client.id === selectedClient?.id) ?? null');
+    expect(clinicianShellSource).toContain('preSelectedClientId={linkedSelectedClient?.id}');
     expect(clinicianShellSource).not.toContain('threads={messages}');
     expect(clinicianShellSource).not.toContain('appointments={appointments}');
   });

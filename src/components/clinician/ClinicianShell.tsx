@@ -10,6 +10,7 @@ import { ClinicalReportsView } from './ClinicalReportsView';
 import { ClinicSettingsView } from './ClinicSettingsView';
 import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { BrandLogo } from '../brand/BrandLogo';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Users,
   Calendar,
@@ -25,6 +26,7 @@ interface ClinicianShellProps {
   clinicianLabel?: string;
   isDemoWorkspace?: boolean;
   clients: ClientProfile[];
+  rosterStatus: 'loading' | 'ready' | 'error';
   patientInvitations: PatientInvitation[];
   onUpdateClient: (updated: ClientProfile) => Promise<void>;
   onAppendBrainMap: (patientId: string, map: QEEGBrainMap) => Promise<QEEGBrainMap>;
@@ -48,6 +50,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   clinicianLabel,
   isDemoWorkspace = false,
   clients,
+  rosterStatus,
   patientInvitations,
   onUpdateClient,
   onAppendBrainMap,
@@ -58,29 +61,40 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   onClinicSettingsSaved,
   onLogout,
 }) => {
+  const { user } = useAuth();
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
+  const linkedSelectedClient = clients.find((client) => client.id === selectedClient?.id) ?? null;
   const messageUnread = useMessageUnread(clients.map((client) => client.id), messageRepository, !isDemoWorkspace,
-    JSON.stringify(clients.map((client) => [client.id, client.clinicianId || client.linkedClinicianCode || '']).sort()));
-  const hasUnreadMessage = clients.some((client) => messageUnread.byPatient[client.id]?.unread);
+    JSON.stringify({ accountId: user?.uid ?? null, relationships: clients.map((client) => [client.id, client.clinicianId || client.linkedClinicianCode || '']).sort() }));
+  const unreadConversationCount = clients.filter((client) => messageUnread.byPatient[client.id]?.unread).length;
+  const messageCountKnown = rosterStatus === 'ready' && messageUnread.isComplete;
 
   const navItems: ClinicianNavItem[] = [
     { id: 'clients', label: 'Patients', icon: Users },
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'messages', label: 'Messages', icon: MessageSquare, badge: messageCountKnown ? unreadConversationCount : undefined },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const handleSelectClient = (client: ClientProfile) => {
-    setSelectedClient(client);
+    const linkedClient = clients.find((candidate) => candidate.id === client.id);
+    if (!linkedClient) return;
+    setSelectedClient(linkedClient);
     setActiveNav('clients');
   };
 
   const handleOpenMessagesForClient = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId) || null;
+    if (!client) return;
     setSelectedClient(client);
     setActiveNav('messages');
+  };
+
+  const handleOpenChartForClient = (clientId: string) => {
+    const client = clients.find((c) => c.id === clientId);
+    if (client) handleSelectClient(client);
   };
 
   return (
@@ -167,7 +181,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                     setActiveNav(item.id as any);
                     if (item.id === 'clients') setSelectedClient(null);
                   }}
-                  aria-label={item.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : item.label}
+                  aria-label={item.id === 'messages' ? messageCountKnown ? `Messages, ${unreadConversationCount} unread conversations` : 'Messages, unread count unavailable' : item.label}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -188,7 +202,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                     <Icon size={18} />
                     <span>{item.label}</span>
                   </div>
-                  {item.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot message-unread-dot-inline" />}
+                  {item.id === 'messages' && !messageCountKnown && <span aria-hidden="true" title="Unread count unavailable" style={{ color: 'var(--text-secondary)' }}>…</span>}
                   {item.badge ? (
                     <span
                       style={{
@@ -254,7 +268,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
 
       {/* Main Content Area */}
       <main className="clinician-main-content">
-        {activeNav === 'clients' && !selectedClient && (
+        {activeNav === 'clients' && !linkedSelectedClient && (
           <ClientRosterView
             clients={clients}
             invitations={patientInvitations}
@@ -265,33 +279,34 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             onDeleteClient={onDeleteClient}
             onScheduleClient={(clientId) => {
               const client = clients.find((c) => c.id === clientId);
-              if (client) setSelectedClient(client);
-              setActiveNav('calendar');
+              if (client) { setSelectedClient(client); setActiveNav('calendar'); }
             }}
             onMessageClient={handleOpenMessagesForClient}
           />
         )}
 
-        {activeNav === 'clients' && selectedClient && (
+        {activeNav === 'clients' && linkedSelectedClient && (
           <ClientDetailView
-            client={selectedClient}
+            client={linkedSelectedClient}
             brand={brand}
             onBack={() => setSelectedClient(null)}
             onUpdateClient={async (c) => {
               await onUpdateClient(c);
               setSelectedClient(c);
             }}
-            onAppendBrainMap={(map) => onAppendBrainMap(selectedClient.id, map)}
+            onAppendBrainMap={(map) => onAppendBrainMap(linkedSelectedClient.id, map)}
             onSendMessage={() => {
               setActiveNav('messages');
             }}
+            onScheduleClient={() => setActiveNav('calendar')}
           />
         )}
 
         {activeNav === 'messages' && (
           <MessagingView
             participants={clients.map((client) => ({ patientId: client.id, name: client.name, avatarUrl: client.avatarUrl }))}
-            selectedClientId={selectedClient?.id}
+            selectedClientId={linkedSelectedClient?.id}
+            onOpenChart={handleOpenChartForClient}
             unreadByPatient={messageUnread.byPatient}
             notificationError={messageUnread.error}
           />
@@ -300,7 +315,9 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
         {activeNav === 'calendar' && (
           <ClinicalCalendarView
             clients={clients}
-            preSelectedClientId={selectedClient?.id}
+            preSelectedClientId={linkedSelectedClient?.id}
+            onSelectClient={handleSelectClient}
+            onOpenMessages={handleOpenMessagesForClient}
           />
         )}
 
@@ -333,7 +350,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                 setActiveNav(item.id as any);
                 if (item.id === 'clients') setSelectedClient(null);
               }}
-              aria-label={item.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : item.label}
+              aria-label={item.id === 'messages' ? messageCountKnown ? `Messages, ${unreadConversationCount} unread conversations` : 'Messages, unread count unavailable' : item.label}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -351,7 +368,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             >
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
-                {item.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot" />}
+                {item.id === 'messages' && !messageCountKnown && <span aria-hidden="true" title="Unread count unavailable" style={{ fontSize: '11px' }}>…</span>}
                 {item.badge ? (
                   <span
                     style={{

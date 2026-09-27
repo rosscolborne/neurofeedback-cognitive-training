@@ -53,6 +53,7 @@ export function App() {
   const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
   const [patientProfileReload, setPatientProfileReload] = useState(0);
   const [clinicianRosterError, setClinicianRosterError] = useState<string | null>(null);
+  const [clinicianRosterLoad, setClinicianRosterLoad] = useState<{ key: string; status: 'loading' | 'ready' | 'error' }>({ key: '', status: 'loading' });
   const [clinicianInvitationsError, setClinicianInvitationsError] = useState<string | null>(null);
   const [clinicianRosterReload, setClinicianRosterReload] = useState(0);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
@@ -64,8 +65,10 @@ export function App() {
   accountIdentityRef.current = accountIdentity;
   const profileRoutePhase = location.pathname === '/hardware-setup' ? 'hardware-setup' : 'app';
   const profileDataIdentity = `${accountIdentity}:${profileRoutePhase}`;
+  const clinicianRosterLoadKey = `${profileDataIdentity}:${clinicianRosterReload}`;
   const hasCurrentData = dataIdentity === profileDataIdentity;
   const visibleClients = hasCurrentData ? clients : [];
+  const visibleRosterStatus = hasCurrentData && clinicianRosterLoad.key === clinicianRosterLoadKey ? clinicianRosterLoad.status : 'loading';
   const visibleCurrentClient = hasCurrentData ? currentClient : null;
   const visibleInvitations = hasCurrentData ? patientInvitations : [];
   const visibleBrand = hasCurrentData ? brand : BRAND_PRESETS[0];
@@ -91,6 +94,7 @@ export function App() {
     setCurrentClient(null);
     setPatientProfileError(null);
     setClinicianRosterError(null);
+    setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'loading' });
     setClinicianInvitationsError(null);
     setPatientInvitations([]);
     setShowRebrandModal(false);
@@ -113,11 +117,16 @@ export function App() {
         });
     } else if (role === 'clinician') {
       void storageEngine.getClients()
-        .then((nextClients) => { if (isCurrent()) setClients(nextClients); })
+        .then((nextClients) => {
+          if (!isCurrent()) return;
+          setClients(nextClients);
+          setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'ready' });
+        })
         .catch((error) => {
           if (!isCurrent()) return;
           console.warn('Error loading clinician roster:', error);
           setClinicianRosterError(error instanceof Error ? error.message : 'The patient roster could not be loaded.');
+          setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'error' });
         });
       void storageEngine.getPatientInvitationsForClinician()
         .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
@@ -131,7 +140,7 @@ export function App() {
       active = false;
       eegEngine.individualBaselineModel = null;
     };
-  }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
+  }, [accountIdentity, clinicianRosterLoadKey, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
 
   useEffect(() => {
     const generation = ++brandGeneration.current;
@@ -299,6 +308,7 @@ export function App() {
         clinicianLabel={user?.displayName || user?.email || undefined}
         isDemoWorkspace={isDemoWorkspace}
         clients={visibleClients}
+        rosterStatus={visibleRosterStatus}
         patientInvitations={visibleInvitations}
         onUpdateClient={handleUpdateClient}
         onAppendBrainMap={handleAppendBrainMap}

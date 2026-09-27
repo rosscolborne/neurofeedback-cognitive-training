@@ -12,6 +12,7 @@ import { PatientAvatar } from './PatientAvatar';
 export interface MessagingParticipant { patientId: string; name: string; avatarUrl?: string; }
 interface MessagingViewProps {
   threads?: MessageThread[]; selectedClientId?: string;
+  onOpenChart?: (clientId: string) => void;
   onSendMessage?: (clientId: string, text: string) => void | Promise<void>;
   participants?: MessagingParticipant[]; repository?: MessageRepository;
   unreadByPatient?: Record<string, MessageUnreadStatus>; notificationError?: string | null;
@@ -23,7 +24,7 @@ const QUICK_TEMPLATES = [
   'Would you like to schedule a protocol check-in?',
 ];
 
-export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [], selectedClientId, repository = messageRepository, unreadByPatient = {}, notificationError }) => {
+export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [], selectedClientId, onOpenChart, repository = messageRepository, unreadByPatient = {}, notificationError }) => {
   const [activePatientId, setActivePatientId] = useState<string | null>(selectedClientId ?? null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
@@ -66,7 +67,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
       </div>
     </section>
     {currentActivePatientId && <section style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 10 }}>{isMobile && <button type="button" className="btn btn-ghost" aria-label="Back to conversations" onClick={() => setActivePatientId(null)}><ArrowLeft size={18} /></button>}<PatientAvatar avatarUrl={activeParticipant?.avatarUrl} size={36} /><div><strong>{activeName}</strong><div style={{ fontSize: 11 }}>Private care-team conversation</div></div></header>
+        <header style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 10 }}>{isMobile && <button type="button" className="btn btn-ghost" aria-label="Back to conversations" onClick={() => setActivePatientId(null)}><ArrowLeft size={18} /></button>}<PatientAvatar avatarUrl={activeParticipant?.avatarUrl} size={36} /><div><strong>{activeName}</strong><div style={{ fontSize: 11 }}>Private care-team conversation</div></div>{onOpenChart && activeParticipant && <button type="button" className="btn btn-ghost" style={{ marginLeft: 'auto' }} aria-label={`Open ${activeName} chart`} onClick={() => onOpenChart(activeParticipant.patientId)}>View chart</button>}</header>
         <div aria-live="polite" style={{ flex: 1, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {conversation.cursor && <button type="button" className="btn btn-ghost" disabled={conversation.isLoadingOlder} onClick={() => void conversation.loadOlder()}>{conversation.isLoadingOlder ? 'Loading…' : 'Load older messages'}</button>}
           {conversation.loadState === 'loading' && <StatusNotice text="Loading messages…" />}

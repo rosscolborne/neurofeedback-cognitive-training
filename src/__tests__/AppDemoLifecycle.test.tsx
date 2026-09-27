@@ -182,6 +182,35 @@ describe('mounted App account/workspace lifecycle', () => {
     renderer.unmount();
   });
 
+  it('distinguishes pending, failed, retried and loaded-empty clinician rosters across accounts', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let rejectFirst!: (error: Error) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectFirst = reject; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    expect(shell(renderer).props.rosterStatus).toBe('loading');
+    await act(async () => { rejectFirst(new Error('roster offline')); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('error');
+
+    let resolveRetry!: (clients: unknown[]) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveRetry = resolve; }));
+    const retry = renderer.root.findAllByType('button').find((item) => item.children.join('') === 'Retry')!;
+    await act(async () => { retry.props.onClick(); });
+    expect(shell(renderer).props.rosterStatus).toBe('loading');
+    await act(async () => { resolveRetry([]); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    expect(shell(renderer).props.clients).toEqual([]);
+
+    authState.value = { user: { uid: 'clinician-two' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let resolveSecond!: (clients: unknown[]) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+    await act(async () => { renderer.update(<App />); });
+    expect(shell(renderer).props.rosterStatus).toBe('loading');
+    await act(async () => { resolveSecond([]); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    renderer.unmount();
+  });
+
   it('rejects stale async and subscription results from the prior workspace generation', async () => {
     let resolveDemoRoster!: (value: unknown[]) => void;
     storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveDemoRoster = resolve; }));
