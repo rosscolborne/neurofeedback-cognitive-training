@@ -18,7 +18,7 @@ async function probeAs(browser: Browser, role: E2ERole, otherUid: string): Promi
             const probes = await import('/e2e/helpers/firestoreProbe.ts');
             return role === 'patient'
                 ? probes.probePatientBranchRuleReads(otherUid)
-                : probes.probeClinicianBranchRuleReads();
+                : probes.probeClinicianBranchRuleReads(otherUid);
         }, { role, otherUid });
     } finally {
         await context.close();
@@ -36,7 +36,7 @@ test('deployed Firestore rules grant the reads this branch relies on', async ({ 
     console.log(`[deployed-rules] ${JSON.stringify(outcomes)}`);
 
     expect(outcomes, 'Deployed rules differ from this branch; deploy firestore.rules as a separate release decision').toEqual({
-        patient: { ownMessageThread: 'allowed', ownBrainMaps: 'allowed' },
-        clinician: { ownUserRole: 'allowed', ownPractitionerRecord: 'allowed' },
+        patient: { ownMessageThread: 'allowed', ownMessageReadReceipt: 'allowed', ownBrainMaps: 'allowed' },
+        clinician: { ownUserRole: 'allowed', ownPractitionerRecord: 'allowed', ownMessageReadReceipt: 'allowed' },
     });
 });

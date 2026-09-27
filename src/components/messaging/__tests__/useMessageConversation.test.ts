@@ -48,6 +48,7 @@ const repository = (overrides: Partial<MessageRepository> = {}): MessageReposito
   getRelationshipThread: vi.fn(async () => null),
   listMessages: vi.fn(async () => ({ messages: [], nextCursor: null })),
   listLegacyMessages: vi.fn(async () => []), subscribeToMessages: vi.fn(() => () => {}),
+  subscribeToUnread: vi.fn(() => () => {}), markThreadRead: vi.fn(async () => {}),
   prepareMessage: vi.fn((value, text) => ({ id: `id-${value.patientId}`, relationship: value, text: text.trim() })),
   sendPreparedMessage: vi.fn(async (attempt) => ({ id: attempt.id, relationshipKey: attempt.relationship.key, patientId: attempt.relationship.patientId, clinicianId: attempt.relationship.clinicianId, senderId: attempt.relationship.patientId, senderRole: 'patient' as const, text: attempt.text, createdAt: null, source: 'canonical' as const, readOnly: false })),
   ...overrides,

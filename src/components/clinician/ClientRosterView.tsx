@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
 import { resolvePatientProtocol } from '../../services/protocols';
 import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemplates';
+import { PatientAvatar } from './PatientAvatar';
 import {
   Search,
   Plus,
@@ -11,7 +12,6 @@ import {
   Calendar,
   MessageSquare,
   FileText,
-  User,
   Clock3,
   Copy,
   CheckCircle2,
@@ -317,11 +317,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 >
                   <td style={{ padding: '14px 16px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {client.avatarUrl ? <img
-                        src={client.avatarUrl}
-                        alt={client.name}
-                        style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
-                      /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '34px', height: '34px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700 }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
+                      <PatientAvatar avatarUrl={client.avatarUrl} size={34} />
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{client.name}</span>
@@ -399,11 +395,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {client.avatarUrl ? <img
-                  src={client.avatarUrl}
-                  alt={client.name}
-                  style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
-                /> : <div aria-label={`${client.name || 'Patient'} initials`} style={{ width: '42px', height: '42px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 700 }}>{(client.name || client.email || '?').trim().charAt(0).toUpperCase()}</div>}
+                <PatientAvatar avatarUrl={client.avatarUrl} size={42} />
                 <div>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>{client.name}</span>

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MessagingView } from '../src/components/clinician/MessagingView';
 import { PatientMessagingView } from '../src/components/patient/PatientMessagingView';
 import type { MessageRepository } from '../src/services/messageRepository';
+import '../src/styles/index.css';
 
 // This browser-only fixture exercises the real views without using shared accounts or Firestore.
 const repository: MessageRepository = {
@@ -11,6 +12,8 @@ const repository: MessageRepository = {
   listMessages: async () => ({ messages: [], nextCursor: null }),
   listLegacyMessages: async () => [],
   subscribeToMessages: () => () => {},
+  subscribeToUnread: () => () => {},
+  markThreadRead: async () => {},
   prepareMessage: (relationship, text) => ({ id: 'test-message', relationship, text: text.trim() }),
   sendPreparedMessage: async () => {},
 };

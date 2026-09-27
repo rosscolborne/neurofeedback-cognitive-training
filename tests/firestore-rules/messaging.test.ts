@@ -113,6 +113,45 @@ describe('messageThreads: reading', () => {
     });
 });
 
+describe('messageThreads: unread markers', () => {
+    const threadPath = `messageThreads/${ids.patientA}/relationships/${ids.clinicianA}`;
+    const receiptPath = `${threadPath}/reads/${ids.patientA}`;
+    const receipt = (messageId: string = seededMessageId, readerId: string = ids.patientA) => ({
+        patientId: ids.patientA, clinicianId: ids.clinicianA, readerId,
+        lastReadMessageId: messageId, updatedAt: serverTimestamp(), schemaVersion: 1,
+    });
+
+    it('lets the recipient mark the current incoming message as read and update the marker', async () => {
+        const patient = await as(ids.patientA);
+        await assertSucceeds(getDoc(doc(patient, receiptPath)));
+        await assertSucceeds(setDoc(doc(patient, receiptPath), receipt()));
+        await assertSucceeds(send(await as(ids.clinicianA), ids.clinicianA, 'next-incoming'));
+        await assertSucceeds(setDoc(doc(patient, receiptPath), receipt('next-incoming')));
+    });
+
+    it('denies forged readers, outsiders, future messages, arbitrary fields, and deletion', async () => {
+        const patient = await as(ids.patientA);
+        await assertFails(setDoc(doc(patient, receiptPath), receipt(seededMessageId, ids.clinicianA)));
+        await assertFails(setDoc(doc(patient, receiptPath), receipt('future-message')));
+        await assertFails(setDoc(doc(patient, receiptPath), { ...receipt(), unreadCount: 0 }));
+        await assertFails(setDoc(doc(await as(ids.clinicianA), receiptPath), receipt()));
+        await assertFails(getDoc(doc(await as(ids.clinicianA), receiptPath)));
+        await assertFails(getDoc(doc(await as(ids.patientB), receiptPath)));
+        await assertFails(deleteDoc(doc(patient, receiptPath)));
+    });
+
+    it('does not let a sender mark their own latest message or a former clinician mark a relinked thread', async () => {
+        const clinician = await as(ids.clinicianA);
+        await assertFails(setDoc(doc(clinician, `${threadPath}/reads/${ids.clinicianA}`), receipt(seededMessageId, ids.clinicianA)));
+        const former = `messageThreads/${ids.unlinked}/relationships/${ids.clinicianA}/reads/${ids.clinicianA}`;
+        await assertFails(getDoc(doc(clinician, former)));
+        await assertFails(setDoc(doc(clinician, former), {
+            patientId: ids.unlinked, clinicianId: ids.clinicianA, readerId: ids.clinicianA,
+            lastReadMessageId: 'old', updatedAt: serverTimestamp(), schemaVersion: 1,
+        }));
+    });
+});
+
 describe('legacy messages/{patientId}', () => {
     it('is readable by the patient and their current clinician and never writable', async () => {
         await assertSucceeds(getDoc(doc(await as(ids.patientA), `messages/${ids.patientA}`)));

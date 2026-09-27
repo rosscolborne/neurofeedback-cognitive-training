@@ -12,6 +12,8 @@ import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { PatientMessagingView } from './PatientMessagingView';
+import { useMessageUnread } from '../messaging/useMessageUnread';
+import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, BookOpen, Activity, User, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
@@ -62,6 +64,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
+  const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
+  const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -429,7 +433,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
         {activeTab === 'messages' && (isClinicianLinked
-          ? <PatientMessagingView patientId={client.id} />
+          ? <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
           : <UnlinkedCareFeature feature="messages" />)}
 
         {activeTab === 'appointments' && (isClinicianLinked
@@ -684,6 +688,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
+              aria-label={tab.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : tab.label}
               style={{
                 background: 'none',
                 border: 'none',
@@ -696,7 +701,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 transition: 'color 0.15s ease',
               }}
             >
-              <Icon size={19} />
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <Icon size={19} />
+                {tab.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot" />}
+              </span>
               <span style={{ fontSize: '10px', fontWeight: isActive ? 700 : 500 }}>{tab.label}</span>
             </button>
           );
