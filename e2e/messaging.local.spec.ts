@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { persistedMessages, seedLinkedPatient } from './helpers/localEmulator';
+import { seedLinkedPatient } from './helpers/localEmulator';
+import { readPersistedMessagesAs } from './helpers/persistenceAssertions';
+
+test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 test('linked patient and clinician exchange persisted messages while an unrelated account is denied', async ({ browser, permissionErrorGuard }) => {
   const linked = await seedLinkedPatient();
@@ -78,7 +81,7 @@ test('linked patient and clinician exchange persisted messages while an unrelate
     await expect(clinician.getByText(patientText, { exact: true })).toBeVisible();
     await expect(clinician.getByText(clinicianText, { exact: true })).toBeVisible();
 
-    const stored = await persistedMessages(linked.patient.uid, linked.clinician.uid);
+    const stored = await readPersistedMessagesAs(patient, clinician, linked.patient.uid, linked.clinician.uid);
     expect(stored.summary?.lastMessageText).toBe(clinicianText);
     expect(stored.clinicianRead?.lastReadMessageId).toBe(stored.messages.find((message) => message.text === patientText)?.id);
     expect(stored.patientRead?.lastReadMessageId).toBe(stored.messages.find((message) => message.text === clinicianText)?.id);

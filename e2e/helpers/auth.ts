@@ -1,4 +1,7 @@
 import { expect, type Browser, type Page } from '@playwright/test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export type E2ERole = 'patient' | 'clinician';
 
@@ -8,9 +11,17 @@ export type AuthenticatedE2EIdentity = {
     projectId: string;
 };
 
+const suppliedAuthStateDirectory = process.env.E2E_AUTH_STATE_DIR;
+const authStateDirectory = suppliedAuthStateDirectory ?? mkdtempSync(join(tmpdir(), 'neurasticity-e2e-auth-'));
+if (!suppliedAuthStateDirectory) {
+    // Playwright's config process passes this path to workers and removes it
+    // after the run. Standalone auth setup no longer leaves reusable tokens.
+    process.env.E2E_AUTH_STATE_DIR = authStateDirectory;
+    process.once('exit', () => rmSync(authStateDirectory, { recursive: true, force: true }));
+}
 export const storageStatePath: Record<E2ERole, string> = {
-    patient: 'e2e/.auth/patient.json',
-    clinician: 'e2e/.auth/clinician.json',
+    patient: join(authStateDirectory, 'patient.json'),
+    clinician: join(authStateDirectory, 'clinician.json'),
 };
 
 type Credentials = {
