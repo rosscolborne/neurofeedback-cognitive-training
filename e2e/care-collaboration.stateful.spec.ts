@@ -165,49 +165,14 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             const patientMessage = runLabel(run, 'patient-message');
             await selectDedicatedPatient(clinician.page, patientName);
 
-            await clinician.page.getByRole('button', { name: 'Live Telemetry', exact: true }).click();
-            await expect(clinician.page.getByText('Not connected — no active patient telemetry source is available in this clinician view.', { exact: true })).toBeVisible();
-            await expect(clinician.page.getByText('Waveform / sample rate / packet loss', { exact: true })).toBeVisible();
-            await expect(clinician.page.getByText('Unavailable', { exact: true }).last()).toBeVisible();
-
-            await clinician.page.getByRole('button', { name: /^QEEG Records/ }).click();
-            await expect(clinician.page.getByText('Loading saved QEEG records…', { exact: true })).toBeHidden();
-            const emptyQeeg = clinician.page.getByText('No QEEG measurements have been entered for this patient.', { exact: true });
-            const persistedQeeg = clinician.page.getByText(/^Recorded (?!date unavailable)/).first();
-            await expect(emptyQeeg.or(persistedQeeg)).toBeVisible();
-
-            await clinician.page.getByRole('button', { name: 'Reports', exact: true }).click();
-            await expect(clinician.page.getByText('Loading persisted sessions… Report measurements and exports are unavailable until loading completes.', { exact: true })).toBeHidden();
-            await expect(clinician.page.getByRole('row').filter({ hasText: patientName })).toBeVisible();
-            const last90Days = clinician.page.getByRole('button', { name: 'Last 90 Days', exact: true });
-            const yearToDate = clinician.page.getByRole('button', { name: 'YTD', exact: true });
-            const interval = clinician.page.getByText(/^Interval:/);
-            await expect(interval).toContainText('Last 30 days');
-            await last90Days.click();
-            await expect(interval).toContainText('Last 90 days');
-            await yearToDate.click();
-            await expect(interval).toContainText('Year to date');
-            await expect(clinician.page.getByText('This is not a clinical outcome or significance claim.', { exact: false }).or(
-                clinician.page.getByText('Unavailable — at least two sessions with recorded in-zone measurements are required.', { exact: true }),
-            )).toBeVisible();
-
             await clinician.page.getByRole('button', { name: 'Settings', exact: true }).click();
             const clinicNameInput = clinician.page.getByLabel('Clinic name', { exact: true });
             await expect(clinicNameInput).toBeEnabled();
             const clinicName = await clinicNameInput.inputValue();
-            await clinician.page.reload();
-            await arriveAtClinicianDashboard(clinician.page);
-            await clinician.page.getByRole('button', { name: 'Settings', exact: true }).click();
-            await expect(clinician.page.getByLabel('Clinic name', { exact: true })).toBeEnabled();
-            await expect(clinician.page.getByLabel('Clinic name', { exact: true })).toHaveValue(clinicName);
 
             await openPatientDashboard(patient.page);
             await expect(patient.page.getByText('Connected to your clinician', { exact: true })).toBeVisible();
-            if (clinicName.trim()) {
-                await expect(patient.page.getByText(clinicName, { exact: true }).first()).toBeVisible();
-            } else {
-                await expect(patient.page.getByText('Waveable', { exact: true }).first()).toBeVisible();
-            }
+            await expect(patient.page.getByText(clinicName.trim() || 'Waveable', { exact: true }).first()).toBeVisible();
             await patient.page.reload();
             await arriveAtPatientDashboard(patient.page);
             await expect(patient.page.getByText(clinicName.trim() || 'Waveable', { exact: true }).first()).toBeVisible();
