@@ -481,6 +481,8 @@ export interface ClientProfile {
   linkedClinicianCode?: string;
   clinicianId?: string;
   acceptedInvitationId?: string;
+  /** Set once account deletion starts. Retained profiles can never be linked again. */
+  accountDeletionStartedAt?: PersistedTimestamp;
   patientId?: string;
   isDemo?: boolean;
   notes?: string;

@@ -1,7 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { signOut } from 'firebase/auth';
-import { auth, db } from '../../services/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { EmailAuthProvider, reauthenticateWithCredential, signOut } from 'firebase/auth';
+import { auth } from '../../services/firebase';
 import { ClientProfile, ClinicBrandConfig, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
 import { getCalibrationDisplayState } from '../../services/dataMappers';
 import { HomeScreen } from './HomeScreen';
@@ -79,6 +78,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
   const resolvedProtocol = resolvePatientProtocol(client);
   const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
   const protocolAlias = client.customProtocolConfig
@@ -118,18 +121,40 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   const handleDeleteAccount = async () => {
-    if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-      if (auth.currentUser) {
-        try {
-          await deleteDoc(doc(db, 'users', auth.currentUser.uid));
-          await auth.currentUser.delete();
-          window.location.href = '/welcome';
-        } catch (err) {
-          alert('Failed to delete account. Please log out and log back in to verify your identity, then try again.');
-        }
-      }
+    if (isDeletingAccount || !deletePassword) return;
+    const user = auth.currentUser;
+    if (!user?.email || user.uid !== client.id) {
+      setAccountDeletionError('Your signed-in account changed. Restart account deletion.');
+      return;
+    }
+    setIsDeletingAccount(true);
+    setAccountDeletionError(null);
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, deletePassword));
+      if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
+      await storageEngine.preparePatientAccountDeletion(user.uid, onClientPersistedElsewhere);
+      if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
+      await user.delete();
+      window.location.href = '/welcome';
+    } catch (err) {
+      setAccountDeletionError(err instanceof Error ? err.message : 'Account deletion could not finish. Please try again.');
+    } finally {
+      setDeletePassword('');
+      setIsDeletingAccount(false);
     }
   };
+
+  const openAccountDeletion = () => {
+    if (!client.accountDeletionStartedAt && !window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) return;
+    setAccountDeletionError(null);
+    setShowDeletePassword(true);
+  };
+
+  const deletionPasswordForm = showDeletePassword && <form onSubmit={(event) => { event.preventDefault(); void handleDeleteAccount(); }} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <label htmlFor="account-deletion-password">Enter your password to confirm account deletion</label>
+    <input id="account-deletion-password" type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
+    <button className="btn btn-primary" type="submit" disabled={isDeletingAccount || !deletePassword}>{isDeletingAccount ? 'Finishing…' : 'Confirm account deletion'}</button>
+  </form>;
 
   const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
     if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
@@ -271,6 +296,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         <button className="btn btn-primary" onClick={() => void handleStartSession('tidal-garden')}>Retry</button>
         <button className="btn btn-ghost" onClick={() => setGardenOpening('idle')}>Back</button>
       </>}
+    </div>;
+  }
+
+  if (client.accountDeletionStartedAt) {
+    return <div role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
+      <h1>Finish deleting your account</h1>
+      <p>Your clinic connection has been removed. Confirm your password to finish deleting your sign-in.</p>
+      {accountDeletionError && <p>{accountDeletionError}</p>}
+      <button className="btn btn-primary" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
+      {deletionPasswordForm}
+      <button className="btn btn-secondary" type="button" onClick={() => void handleLogout()}>Log Out</button>
     </div>;
   }
 
@@ -670,7 +706,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 </button>
 
                 <button
-                  onClick={handleDeleteAccount}
+                  onClick={openAccountDeletion}
+                  disabled={isDeletingAccount}
                   className="btn btn-secondary"
                   style={{
                     width: '100%',
@@ -684,6 +721,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 >
                   <Trash2 size={15} /> Delete Account
                 </button>
+                {accountDeletionError && <p role="alert">{accountDeletionError}</p>}
+                {deletionPasswordForm}
               </div>
             </div>
 

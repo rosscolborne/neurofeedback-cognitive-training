@@ -246,6 +246,21 @@ service cloud.firestore {
           request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null);
       }
 
+      function startsAccountDeletion() {
+        return request.auth.uid == clientId &&
+          resource.data.get('accountDeletionStartedAt', null) == null &&
+          request.resource.data.get('accountDeletionStartedAt', null) == request.time &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'accountDeletionStartedAt', 'clinicianId', 'linkedClinicianCode',
+            'clinicId', 'acceptedInvitationId', 'updatedAt'
+          ]) &&
+          request.resource.data.get('clinicianId', null) == null &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          request.resource.data.get('clinicId', null) == null &&
+          request.resource.data.get('acceptedInvitationId', null) == null &&
+          request.resource.data.get('updatedAt', null) == request.time;
+      }
+
       // Linking consumes a still-pending invitation in the same write, so an
       // invitation accepted earlier cannot be replayed after an unlink.
       function acceptsValidInvitation() {
@@ -302,6 +317,7 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.auth.uid == clientId &&
         request.resource.data.id == clientId &&
+        request.resource.data.get('accountDeletionStartedAt', null) == null &&
         (
           (
             request.resource.data.get('clinicId', null) == null &&
@@ -311,7 +327,8 @@ service cloud.firestore {
           ) || createsWithValidInvitation()
         );
       allow update: if isAuthenticated() &&
-        (
+        (startsAccountDeletion() || (resource.data.get('accountDeletionStartedAt', null) == null &&
+        request.resource.data.get('accountDeletionStartedAt', null) == null && (
         (
           request.auth.uid == clientId &&
           (
@@ -337,9 +354,10 @@ service cloud.firestore {
           request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null) &&
           request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null)
         )
-      );
+      )));
       allow delete: if isAuthenticated() && (
         request.auth.uid == clientId &&
+        resource.data.get('accountDeletionStartedAt', null) == null &&
         resource.data.get('clinicianId', null) == null &&
         resource.data.get('linkedClinicianCode', null) == null &&
         resource.data.get('acceptedInvitationId', null) == null
@@ -687,6 +705,43 @@ service cloud.firestore {
         return resource.data.get('patientId', null) is string;
       }
 
+      function patientCancelsForAccountDeletion() {
+        return isCanonicalAppointment() &&
+          resource.data.patientId == request.auth.uid &&
+          get(/databases/$(database)/documents/clients/$(request.auth.uid))
+            .data.get('accountDeletionStartedAt', null) is timestamp &&
+          resource.data.status == 'scheduled' &&
+          resource.data.startsAt is timestamp &&
+          resource.data.startsAt > request.time &&
+          request.resource.data.keys().hasOnly([
+            'clinicianId', 'patientId', 'patientDisplayName', 'clinicianDisplayName',
+            'startsAt', 'timezone', 'durationMinutes', 'type', 'status', 'notes',
+            'createdAt', 'updatedAt', 'createdBy', 'cancelledAt', 'cancelledBy',
+            'cancellationRequestId', 'revision', 'schemaVersion'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'clinicianId', 'patientId', 'patientDisplayName', 'startsAt', 'timezone',
+            'durationMinutes', 'type', 'status', 'createdAt', 'updatedAt',
+            'createdBy', 'cancelledAt', 'cancelledBy', 'cancellationRequestId',
+            'revision', 'schemaVersion'
+          ]) &&
+          validCanonicalAppointmentFields() &&
+          request.resource.data.status == 'cancelled' &&
+          request.resource.data.cancelledAt == request.time &&
+          request.resource.data.cancelledBy == request.auth.uid &&
+          request.resource.data.cancellationRequestId is string &&
+          request.resource.data.cancellationRequestId.matches('^cancel_[A-Za-z0-9_-]{20,100}$') &&
+          request.resource.data.revision == resource.data.revision + 1 &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'cancelledAt', 'cancelledBy', 'cancellationRequestId',
+            'updatedAt', 'revision'
+          ]) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasAll([
+            'status', 'cancelledAt', 'cancelledBy', 'cancellationRequestId',
+            'updatedAt', 'revision'
+          ]);
+      }
+
       allow read: if isAuthenticated() && (
         (
           isCanonicalAppointment() &&
@@ -724,7 +779,7 @@ service cloud.firestore {
         request.resource.data.updatedAt == request.time &&
         request.resource.data.revision == 1 &&
         validScheduledAppointment();
-      allow update: if isClinician() &&
+      allow update: if patientCancelsForAccountDeletion() || (isClinician() &&
         isCanonicalAppointment() &&
         resource.data.clinicianId == request.auth.uid &&
         isPatientClinician(resource.data.patientId) &&
@@ -775,7 +830,7 @@ service cloud.firestore {
               'updatedAt', 'revision'
             ])
           )
-        );
+        ));
       allow delete: if false;
     }
 

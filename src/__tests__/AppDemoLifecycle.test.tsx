@@ -8,6 +8,7 @@ const authState = vi.hoisted(() => ({
 const storage = vi.hoisted(() => ({
   getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
   getClients: vi.fn(), getPatientInvitationsForClinician: vi.fn(), getCurrentClient: vi.fn(),
+  subscribeToClientRoster: vi.fn((_onChange: () => void, _onError: (error: Error) => void) => vi.fn()),
   getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(), cancelPatientInvitation: vi.fn(),
   saveClient: vi.fn(),
 }));
@@ -223,6 +224,58 @@ describe('mounted App account/workspace lifecycle', () => {
     act(() => { renderer.update(<App />); });
     await act(async () => { resolveDemoRoster([{ id: 'late-sample-patient' }]); await flush(); });
     expect(shell(renderer).props.clients).toEqual([]);
+    renderer.unmount();
+  });
+
+  it('refreshes an open roster, clears stale rows on error, and disposes account-scoped listeners', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let change!: () => void;
+    let fail!: (error: Error) => void;
+    const stop = vi.fn();
+    storage.subscribeToClientRoster.mockImplementationOnce((onChange, onError) => {
+      change = onChange; fail = onError; return stop;
+    });
+    storage.getClients.mockResolvedValueOnce([{ id: 'old-patient' }]);
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([{ id: 'old-patient' }]);
+
+    storage.getClients.mockResolvedValueOnce([]);
+    await act(async () => { change(); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([]);
+    await act(async () => { fail(new Error('roster listener offline')); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('error');
+    expect(shell(renderer).props.clients).toEqual([]);
+    storage.getClients.mockResolvedValueOnce([{ id: 'new-patient' }]);
+    await act(async () => { change(); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    expect(shell(renderer).props.clients).toEqual([{ id: 'new-patient' }]);
+
+    authState.value = { user: { uid: 'clinician-two' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getClients.mockResolvedValueOnce([]);
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(stop).toHaveBeenCalledTimes(1);
+    await act(async () => { change(); fail(new Error('stale listener')); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([]);
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    renderer.unmount();
+  });
+
+  it('does not repopulate a roster from a read that completes after a listener error', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let fail!: (error: Error) => void;
+    storage.subscribeToClientRoster.mockImplementationOnce((_change, onError) => {
+      fail = onError; return vi.fn();
+    });
+    let resolveRoster!: (rows: unknown[]) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveRoster = resolve; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    await act(async () => { fail(new Error('listener offline')); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('error');
+    await act(async () => { resolveRoster([{ id: 'stale-patient' }]); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([]);
+    expect(shell(renderer).props.rosterStatus).toBe('error');
     renderer.unmount();
   });
 

@@ -87,6 +87,8 @@ export function App() {
   useEffect(() => {
     const generation = ++loadGeneration.current;
     let active = true;
+    let stopRoster = () => {};
+    let rosterRequest = 0;
     const isCurrent = () => active && loadGeneration.current === generation && accountIdentityRef.current === accountIdentity;
     eegEngine.individualBaselineModel = null;
     setDataIdentity(profileDataIdentity);
@@ -116,18 +118,30 @@ export function App() {
           setPatientProfileError(error instanceof Error ? error.message : 'Your patient profile is unavailable.');
         });
     } else if (role === 'clinician') {
-      void storageEngine.getClients()
-        .then((nextClients) => {
-          if (!isCurrent()) return;
+      const loadRoster = () => {
+        const request = ++rosterRequest;
+        void storageEngine.getClients().then((nextClients) => {
+          if (!isCurrent() || request !== rosterRequest) return;
           setClients(nextClients);
+          setClinicianRosterError(null);
           setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'ready' });
         })
         .catch((error) => {
-          if (!isCurrent()) return;
+          if (!isCurrent() || request !== rosterRequest) return;
           console.warn('Error loading clinician roster:', error);
+          setClients([]);
           setClinicianRosterError(error instanceof Error ? error.message : 'The patient roster could not be loaded.');
           setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'error' });
         });
+      };
+      loadRoster();
+      stopRoster = storageEngine.subscribeToClientRoster(loadRoster, (error) => {
+        if (!isCurrent()) return;
+        ++rosterRequest;
+        setClients([]);
+        setClinicianRosterError(error.message);
+        setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'error' });
+      });
       void storageEngine.getPatientInvitationsForClinician()
         .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
         .catch((error) => {
@@ -138,6 +152,7 @@ export function App() {
     }
     return () => {
       active = false;
+      stopRoster();
       eegEngine.individualBaselineModel = null;
     };
   }, [accountIdentity, clinicianRosterLoadKey, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);

@@ -55,6 +55,106 @@ import { EXPERIENCE_IDS } from '../experienceIds';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
+describe('patient account deletion preparation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'old-uid', email: 'same@example.com' };
+  });
+
+  it('clears the live link before cancelling future appointments and preserves pending invitations', async () => {
+    const profile = { ...createBlankProfile('old-uid', 'same@example.com'), clinicianId: 'clinician-1',
+      clinicId: 'clinic-1', linkedClinicianCode: 'clinician-1', acceptedInvitationId: 'OLD-CODE' };
+    firestore.getDoc.mockResolvedValueOnce({ exists: () => true, data: () => profile });
+    const future = Date.now() + 86_400_000;
+    const appt = (id: string, status: string, time: number) => ({ id,
+      ref: { type: 'doc', path: 'appointments', id }, data: () => ({
+        clinicianId: 'clinician-1', patientId: 'old-uid', patientDisplayName: 'Patient', timezone: 'UTC',
+        durationMinutes: 45, type: 'consultation', status, startsAt: new MockTimestamp(time),
+        createdAt: new MockTimestamp(1), updatedAt: new MockTimestamp(1), createdBy: 'clinician-1',
+        revision: 2, schemaVersion: 1,
+      }),
+    });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [
+      appt('future', 'scheduled', future), appt('past', 'scheduled', Date.now() - 86_400_000),
+      appt('cancelled', 'cancelled', future),
+    ] });
+    const deactivated = vi.fn();
+    await storageEngine.preparePatientAccountDeletion('old-uid', deactivated);
+    expect(firestore.updateDoc).toHaveBeenNthCalledWith(1,
+      { type: 'doc', path: 'clients', id: 'old-uid' },
+      expect.objectContaining({ clinicianId: null, clinicId: null, linkedClinicianCode: null,
+        acceptedInvitationId: null, accountDeletionStartedAt: expect.anything() }));
+    expect(deactivated).toHaveBeenCalledWith(expect.objectContaining({ clinicianId: undefined,
+      clinicId: undefined, accountDeletionStartedAt: expect.anything() }));
+    expect(firestore.setDoc).toHaveBeenCalledWith({ type: 'doc', path: 'users', id: 'old-uid' },
+      expect.objectContaining({ role: 'patient', email: null, displayName: null }), { merge: true });
+    expect(firestore.updateDoc).toHaveBeenCalledTimes(2);
+    expect(firestore.updateDoc).toHaveBeenNthCalledWith(2,
+      { type: 'doc', path: 'appointments', id: 'future' },
+      expect.objectContaining({ status: 'cancelled', cancelledBy: 'old-uid', revision: 3 }));
+    expect(firestore.getDocs.mock.calls[0][0]).toMatchObject({ constraints: [{ field: 'patientId', op: '==', value: 'old-uid' }] });
+    expect(firestore.deleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('resumes a marked profile without rewriting its relationship', async () => {
+    firestore.getDoc.mockResolvedValueOnce({ exists: () => true, data: () => ({
+      ...createBlankProfile('old-uid', 'same@example.com'), accountDeletionStartedAt: new MockTimestamp(1),
+    }) });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [] });
+    await storageEngine.preparePatientAccountDeletion('old-uid');
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('retries appointment cleanup after a post-marker read failure without restoring the link', async () => {
+    const marked = { ...createBlankProfile('old-uid', 'same@example.com'),
+      accountDeletionStartedAt: new MockTimestamp(1), clinicianId: null, clinicId: null };
+    firestore.getDoc.mockResolvedValue({ exists: () => true, data: () => marked });
+    firestore.getDocs.mockRejectedValueOnce(new Error('appointments offline')).mockResolvedValueOnce({ docs: [] });
+    await expect(storageEngine.preparePatientAccountDeletion('old-uid')).rejects.toThrow('appointments offline');
+    await expect(storageEngine.preparePatientAccountDeletion('old-uid')).resolves.toBeUndefined();
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops before writing if the signed-in UID changes during the profile read', async () => {
+    let resolveRead!: (value: unknown) => void;
+    firestore.getDoc.mockReturnValueOnce(new Promise((resolve) => { resolveRead = resolve; }));
+    const pending = storageEngine.preparePatientAccountDeletion('old-uid');
+    state.auth.currentUser = { uid: 'other-uid', email: 'other@example.com' };
+    resolveRead({ exists: () => true, data: () => createBlankProfile('old-uid', 'same@example.com') });
+    await expect(pending).rejects.toThrow('signed-in account changed');
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('leaves Auth deletion pending when a future appointment is malformed', async () => {
+    firestore.getDoc.mockResolvedValueOnce({ exists: () => true, data: () => createBlankProfile('old-uid', 'same@example.com') });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [{ data: () => ({
+      patientId: 'old-uid', status: 'scheduled', startsAt: new MockTimestamp(Date.now() + 86_400_000),
+      schemaVersion: 1, revision: 1,
+    }) }] });
+    await expect(storageEngine.preparePatientAccountDeletion('old-uid')).rejects.toThrow('future appointment could not be cancelled');
+    expect(firestore.updateDoc).toHaveBeenCalledTimes(1);
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: 'old-uid' }, expect.objectContaining({ accountDeletionStartedAt: expect.anything() }),
+    );
+  });
+
+  it('omits a retained marked client from the active roster', async () => {
+    state.auth.currentUser = { uid: 'clinician-1' };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ id: 'old-uid', data: () => ({
+        ...createBlankProfile('old-uid', 'same@example.com'), clinicianId: 'clinician-1',
+        accountDeletionStartedAt: new MockTimestamp(1),
+      }) }, { id: 'new-uid', data: () => ({
+        ...createBlankProfile('new-uid', 'same@example.com'), clinicianId: 'clinician-1',
+      }) }] })
+      .mockResolvedValueOnce({ docs: [] });
+    await expect(storageEngine.getClients()).resolves.toEqual([expect.objectContaining({ id: 'new-uid' })]);
+  });
+});
+
 const sessionDocument = (id: string, patientId: string) => ({
   id,
   exists: () => true,

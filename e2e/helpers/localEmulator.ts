@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
 
 const projectId = 'demo-neurasticity-protocol-e2e';
 if (process.env.GCLOUD_PROJECT !== projectId ||
@@ -64,4 +65,73 @@ export async function seedPersistenceRecords(fixture: LocalPatientFixture, marke
     adminDb.doc(`${thread}/messages/message-${marker}`).set({ text: marker, senderRole: 'patient', senderId: patient.uid }),
   ]);
   return invitationCode;
+}
+
+/** Legacy pending email invitation deliberately coexists with the old link. */
+export async function seedPendingLifecycleInvitation(fixture: LocalPatientFixture): Promise<string> {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const code = 'LIFE-' + Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]).join('') + '-REEN';
+  const now = Timestamp.now();
+  const expiresAt = Timestamp.fromMillis(Date.now() + 7 * 86_400_000);
+  const email = fixture.patient.email;
+  await Promise.all([
+    adminDb.doc(`patientInvitations/${code}`).set({
+      id: code, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+      clinicianName: 'Local Clinician', patientEmail: email, patientName: fixture.name,
+      condition: 'ADHD (Inattentive)', assignedProtocol: 'theta-beta-ratio',
+      prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: email,
+      schemaVersion: 1, createdAt: now, updatedAt: now, expiresAt,
+    }),
+    adminDb.doc(`patientInvitationClaims/${fixture.clinician.uid}/emails/${email}`).set({
+      clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+      patientEmail: email, invitationId: code, status: 'pending', expiresAt, createdAt: now,
+    }),
+  ]);
+  await seedFutureLifecycleAppointment(fixture);
+  return code;
+}
+
+export async function seedFutureLifecycleAppointment(fixture: LocalPatientFixture): Promise<void> {
+  const now = Timestamp.now();
+  const startsAt = Timestamp.fromMillis(Date.now() + 7 * 86_400_000);
+  await adminDb.doc(`appointments/appt_${randomUUID().replace(/-/g, '')}`).set({
+      clinicianId: fixture.clinician.uid, patientId: fixture.patient.uid,
+      patientDisplayName: fixture.name, startsAt, timezone: 'America/Toronto',
+      durationMinutes: 45, type: 'consultation', status: 'scheduled', notes: '',
+      createdAt: now, updatedAt: now, createdBy: fixture.clinician.uid, revision: 1, schemaVersion: 1,
+    });
+}
+
+export async function findPendingLifecycleInvitation(clinicianUid: string, email: string): Promise<string> {
+  const invitations = await adminDb.collection('patientInvitations')
+    .where('clinicianId', '==', clinicianUid).where('patientEmail', '==', email).get();
+  const pending = invitations.docs.filter((entry) => entry.data().status === 'pending');
+  if (pending.length !== 1) throw new Error(`Expected one pending invitation, found ${pending.length}`);
+  return pending[0].id;
+}
+
+export async function seedLifecycleHistory(fixture: LocalPatientFixture): Promise<void> {
+  await Promise.all([
+    adminDb.doc(`sessions/lifecycle-${fixture.patient.uid}`).set({
+      patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+      timestamp: Date.now(), isDemo: false,
+    }),
+    adminDb.doc(`messageThreads/${fixture.patient.uid}/relationships/${fixture.clinician.uid}`).set({
+      patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid,
+      participantIds: [fixture.patient.uid, fixture.clinician.uid], lastMessageText: 'historical',
+    }),
+  ]);
+}
+
+export async function readLifecycleRecords(oldUid: string, newUid: string, clinicianUid: string, code: string, email: string) {
+  const [oldClient, newClient, invitation, claim, oldAuth, appointments] = await Promise.all([
+    adminDb.doc(`clients/${oldUid}`).get(), adminDb.doc(`clients/${newUid}`).get(),
+    adminDb.doc(`patientInvitations/${code}`).get(),
+    adminDb.doc(`patientInvitationClaims/${clinicianUid}/emails/${email}`).get(),
+    adminAuth.getUser(oldUid).then(() => true, () => false),
+    adminDb.collection('appointments').where('patientId', '==', oldUid).get(),
+  ]);
+  return { oldClient: oldClient.data(), newClient: newClient.data(), invitation: invitation.data(),
+    claimExists: claim.exists, oldAuthExists: oldAuth,
+    appointmentStatuses: appointments.docs.map((entry) => entry.data().status as string) };
 }
