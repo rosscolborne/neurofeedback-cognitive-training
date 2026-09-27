@@ -707,10 +707,10 @@ describe('production and sample workspace separation', () => {
       expect.objectContaining({ id: user.uid, patientId: user.uid }),
     );
     const saved = firestore.setDoc.mock.calls[0][1] as Record<string, unknown>;
-    expect(new Set(saved.allowedExperiences as string[])).toEqual(new Set(EXPERIENCE_IDS));
+    expect(saved.assignedProtocol).toBe('theta-beta-ratio');
+    expect(saved.allowedExperiences).toEqual(getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences);
     expect(saved).not.toHaveProperty('avatarUrl');
     expect(saved).not.toHaveProperty('condition');
-    expect(saved).not.toHaveProperty('assignedProtocol');
     expect(saved).not.toHaveProperty('prescribedSessionsPerWeek');
     expect(saved).not.toHaveProperty('brainCapacityScore');
     expect(saved.tidalGardenState).toEqual({ stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' });
@@ -759,11 +759,11 @@ describe('production and sample workspace separation', () => {
     expect(reloaded?.condition).toBeUndefined();
   });
 
-  it('includes a full assignment when a merge save creates from a legacy profile, but preserves an explicit empty list', async () => {
+  it('retains the full-catalogue legacy missing-field save fallback, but preserves an explicit empty list', async () => {
     const legacy = createBlankProfile('patient-1', 'patient@example.test') as Partial<ClientProfile>;
     delete legacy.allowedExperiences;
     await storageEngine.saveClient(legacy as ClientProfile);
-    expect((firestore.setDoc.mock.calls[0][1] as ClientProfile).allowedExperiences).toEqual(createBlankProfile('patient-1', 'patient@example.test').allowedExperiences);
+    expect(new Set((firestore.setDoc.mock.calls[0][1] as ClientProfile).allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
 
     await storageEngine.saveClient({ ...createBlankProfile('patient-2', 'other@example.test'), allowedExperiences: [] });
     expect((firestore.setDoc.mock.calls[1][1] as ClientProfile).allowedExperiences).toEqual([]);

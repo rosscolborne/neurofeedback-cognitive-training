@@ -19,6 +19,7 @@ import {
 import { BRAND_PRESETS } from './brandEngine';
 import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
+import { DEFAULT_PROTOCOL } from './protocols';
 import { auth, db } from './firebase';
 import {
   collection,
@@ -236,6 +237,8 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
 ];
 
 export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
+  const defaultTemplate = getClinicalProtocolTemplate(DEFAULT_PROTOCOL);
+  if (!defaultTemplate) throw new Error('The default clinical protocol is unavailable');
   const name = displayName?.trim() || '';
   const cleanName = name
     .replace(/[._]/g, ' ')
@@ -246,7 +249,8 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     name: cleanName,
     email: email,
     status: 'active',
-    allowedExperiences: [...DEFAULT_ALLOWED_EXPERIENCES],
+    assignedProtocol: DEFAULT_PROTOCOL,
+    allowedExperiences: [...defaultTemplate.recommendedExperiences],
     completedSessionsCount: 0,
     currentStreak: 0,
     brainMaps: [],

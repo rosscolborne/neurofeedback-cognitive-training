@@ -361,7 +361,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <OnboardingFlow
         client={client}
         onFinish={async updated => {
-          await onUpdateClient({ ...client, ...updated });
+          const nextProtocol = updated.assignedProtocol;
+          const template = !isClinicianLinked && nextProtocol
+            ? getClinicalProtocolTemplate(nextProtocol) : undefined;
+          if (!isClinicianLinked && nextProtocol && !template) {
+            throw new Error('The selected clinical protocol is unavailable');
+          }
+          await onUpdateClient({
+            ...client, ...updated,
+            allowedExperiences: template ? [...template.recommendedExperiences] : client.allowedExperiences,
+            customProtocolConfig: template ? undefined : client.customProtocolConfig,
+          });
           setShowOnboarding(false);
         }}
       />

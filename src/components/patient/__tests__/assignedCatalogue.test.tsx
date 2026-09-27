@@ -117,18 +117,39 @@ describe('patient assigned catalogue', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('keeps the unlinked default list available and falls back to it only for a missing legacy field', async () => {
+  it('gives a fresh unlinked patient the default TBR list and keeps the missing-field legacy fallback', async () => {
     const unlinked = createBlankProfile('self', 'self@example.com');
+    const tbr = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
+    expect(unlinked.assignedProtocol).toBe('theta-beta-ratio');
+    expect(unlinked.allowedExperiences).toEqual(tbr);
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked)); });
     train(renderer);
-    expect(renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')).toHaveLength(13);
+    expect(renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')).toHaveLength(tbr.length);
     expect(readClientProfile({ ...profile([]), allowedExperiences: ['spatial-audio'] }).allowedExperiences).toEqual(['generative-music']);
     expect(readClientProfile({ ...profile([]), allowedExperiences: [] }).allowedExperiences).toEqual([]);
     const missing = profile([]) as Partial<ClientProfile>;
     delete missing.allowedExperiences;
     expect(new Set(readClientProfile(missing).allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
-    expect(new Set(unlinked.allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('keeps an unlinked assessment protocol and its experiences paired', async () => {
+    const unlinked = {
+      ...createBlankProfile('self', 'self@example.com'),
+      customProtocolConfig: getClinicalProtocolTemplate('theta-beta-ratio'),
+    };
+    const onUpdateClient = vi.fn().mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={unlinked} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    act(() => renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Profile')!.props.onClick());
+    act(() => renderer.root.findAllByType('button').find((node) => node.children.includes('Re-run Assessment & Headband Setup'))!.props.onClick());
+    await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'alpha-enhancement' }); });
+    expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
+      assignedProtocol: 'alpha-enhancement',
+      allowedExperiences: getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences,
+      customProtocolConfig: undefined,
+    }));
     await act(async () => { renderer.unmount(); });
   });
 
