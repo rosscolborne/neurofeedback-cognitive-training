@@ -150,11 +150,32 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setShowDeletePassword(true);
   };
 
-  const deletionPasswordForm = showDeletePassword && <form onSubmit={(event) => { event.preventDefault(); void handleDeleteAccount(); }} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-    <label htmlFor="account-deletion-password">Enter your password to confirm account deletion</label>
-    <input id="account-deletion-password" type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
-    <button className="btn btn-primary" type="submit" disabled={isDeletingAccount || !deletePassword}>{isDeletingAccount ? 'Finishing…' : 'Confirm account deletion'}</button>
-  </form>;
+  const deletionPasswordForm = showDeletePassword && (
+    <form
+      className="account-deletion-confirmation"
+      onSubmit={(event) => { event.preventDefault(); void handleDeleteAccount(); }}
+      aria-busy={isDeletingAccount}
+    >
+      <label className="account-deletion-label" htmlFor="account-deletion-password">
+        Enter your password to confirm account deletion
+        <input
+          className="account-deletion-password"
+          id="account-deletion-password"
+          type="password"
+          autoComplete="current-password"
+          value={deletePassword}
+          onChange={(event) => setDeletePassword(event.target.value)}
+          disabled={isDeletingAccount}
+          aria-invalid={!!accountDeletionError}
+          aria-describedby={accountDeletionError ? 'account-deletion-error' : undefined}
+        />
+      </label>
+      {accountDeletionError && <p className="account-deletion-error" id="account-deletion-error" role="alert">{accountDeletionError}</p>}
+      <button className="btn account-deletion-submit" type="submit" disabled={isDeletingAccount || !deletePassword}>
+        {isDeletingAccount ? 'Finishing…' : 'Confirm account deletion'}
+      </button>
+    </form>
+  );
 
   const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
     if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
@@ -300,11 +321,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   }
 
   if (client.accountDeletionStartedAt) {
-    return <div role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
+    return <div className="account-deletion-recovery" role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
       <h1>Finish deleting your account</h1>
       <p>Your clinic connection has been removed. Confirm your password to finish deleting your sign-in.</p>
-      {accountDeletionError && <p>{accountDeletionError}</p>}
-      <button className="btn btn-primary" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
+      <button className="btn btn-secondary account-deletion-trigger account-deletion-finish" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
       {deletionPasswordForm}
       <button className="btn btn-secondary" type="button" onClick={() => void handleLogout()}>Log Out</button>
     </div>;
@@ -705,24 +725,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   <LogOut size={15} /> Log Out
                 </button>
 
-                <button
-                  onClick={openAccountDeletion}
-                  disabled={isDeletingAccount}
-                  className="btn btn-secondary"
-                  style={{
-                    width: '100%',
-                    color: 'var(--status-alert)',
-                    borderColor: 'var(--status-alert)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <Trash2 size={15} /> Delete Account
-                </button>
-                {accountDeletionError && <p role="alert">{accountDeletionError}</p>}
-                {deletionPasswordForm}
+                <div className="account-deletion-section">
+                  <button
+                    onClick={openAccountDeletion}
+                    disabled={isDeletingAccount}
+                    className="btn btn-secondary account-deletion-trigger"
+                    type="button"
+                  >
+                    <Trash2 size={15} /> Delete Account
+                  </button>
+                  {deletionPasswordForm}
+                </div>
               </div>
             </div>
 
