@@ -43,6 +43,8 @@ const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 describe('PatientShell persisted profile writes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.reauthenticate.mockReset();
+    state.prepareDeletion.mockReset();
     state.getSessions.mockResolvedValue([]);
     state.auth.currentUser = null;
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -72,6 +74,49 @@ describe('PatientShell persisted profile writes', () => {
       expect(oldUser.delete).not.toHaveBeenCalled();
     } finally {
       renderer?.unmount();
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    }
+  });
+
+  it('keeps deletion confirmation masked and disabled while pending, then shows reauthentication errors', async () => {
+    const originalWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { ...originalWindow, confirm: () => true } });
+    const user = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
+    state.auth.currentUser = user;
+    let rejectReauth!: (reason: Error) => void;
+    state.reauthenticate.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { rejectReauth = reject; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    try {
+      act(() => renderer.root.findAllByType('button').find((button) => button.findAllByType('span').some((span) => span.children.join('') === 'Profile'))!.props.onClick());
+      act(() => renderer.root.findAllByType('button').find((button) => button.children.some((child) => typeof child === 'string' && child.includes('Delete Account')))!.props.onClick());
+      const password = () => renderer.root.findByProps({ id: 'account-deletion-password' });
+      const submit = () => renderer.root.findByProps({ className: 'btn account-deletion-submit' });
+      expect(password().props.type).toBe('password');
+      expect(password().props.autoComplete).toBe('current-password');
+      expect(password().props.className).toBe('account-deletion-password');
+      expect(submit().props.disabled).toBe(true);
+      act(() => password().props.onChange({ target: { value: 'secret' } }));
+      expect(submit().props.disabled).toBe(false);
+
+      const form = () => renderer.root.findByProps({ className: 'account-deletion-confirmation' });
+      await act(async () => { form().props.onSubmit({ preventDefault: vi.fn() }); await Promise.resolve(); });
+      expect(form().props['aria-busy']).toBe(true);
+      expect(password().props.disabled).toBe(true);
+      expect(submit().children.join('')).toBe('Finishing…');
+      expect(submit().props.disabled).toBe(true);
+
+      await act(async () => { rejectReauth(new Error('Incorrect password')); await Promise.resolve(); });
+      expect(form().props['aria-busy']).toBe(false);
+      expect(password().props.value).toBe('');
+      expect(password().props.disabled).toBe(false);
+      expect(password().props['aria-invalid']).toBe(true);
+      expect(password().props['aria-describedby']).toBe('account-deletion-error');
+      expect(renderer.root.findByProps({ id: 'account-deletion-error' }).children.join('')).toBe('Incorrect password');
+      expect(submit().props.disabled).toBe(true);
+      expect(state.prepareDeletion).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => { renderer.unmount(); });
       Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
     }
   });
