@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareMessagesAscending, formatMessageTime, mapLegacyMessageThread, mapMessageDocument, mapThreadDocument, relationshipKey, type MessageRelationship, type ProductionMessage } from '../messageMappers';
+import { compareMessagesAscending, formatMessageTime, mapLegacyMessageThread, mapMessageDocument, mapThreadDocument, messageUnreadStatus, relationshipKey, type MessageRelationship, type ProductionMessage, type ProductionMessageThread } from '../messageMappers';
 
 const relationship: MessageRelationship = { patientId: 'patient-1', clinicianId: 'clinician-1', key: relationshipKey('patient-1', 'clinician-1') };
 const snapshot = (id: string, data: Record<string, unknown>) => ({ id, data: () => data }) as never;
@@ -23,5 +23,16 @@ describe('message mappers', () => {
   it('orders equal timestamps by stable id', () => {
     const base: Omit<ProductionMessage, 'id'> = { relationshipKey: relationship.key, patientId: 'patient-1', clinicianId: 'clinician-1', senderId: 'patient-1', senderRole: 'patient', text: 'Text', createdAt: new Date('2026-09-19T12:00:00Z'), source: 'canonical', readOnly: false };
     expect([{ ...base, id: 'b' }, { ...base, id: 'a' }].sort(compareMessagesAscending).map(({ id }) => id)).toEqual(['a', 'b']);
+  });
+  it('shows unread only for the latest incoming message until that exact message is read', () => {
+    const thread: ProductionMessageThread = {
+      id: 'clinician-1', relationshipKey: relationship.key, patientId: 'patient-1', clinicianId: 'clinician-1',
+      lastMessageText: 'Hello', lastMessageId: 'message-2', lastSenderId: 'clinician-1',
+      lastMessageAt: null, createdAt: null, updatedAt: null,
+    };
+    expect(messageUnreadStatus(thread, 'patient-1', 'message-1', relationship.key)).toMatchObject({ unread: true, latestIncomingMessageId: 'message-2' });
+    expect(messageUnreadStatus(thread, 'patient-1', 'message-2', relationship.key).unread).toBe(false);
+    expect(messageUnreadStatus(thread, 'clinician-1', null, relationship.key).unread).toBe(false);
+    expect(messageUnreadStatus(null, 'patient-1', null, relationship.key).unread).toBe(false);
   });
 });

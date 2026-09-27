@@ -9,20 +9,25 @@ complete profile. The probe requires the approved patient to be in the
 clinician's roster and to have a clinic ID.
 
 Before WB-53, the probe covered the patient's message summary and QEEG list,
-plus the clinician's user role and practitioner document.
+plus the clinician's user role and practitioner document. The later
+`fill-in-mocked-data` checkpoint added a read-receipt probe for each role;
+the merged probe retains both.
 
 It now also covers:
 
 - Patient user and client profile (including the embedded protocol assignment),
   clinic branding, sessions used by Home and Progress, ordered message history,
-  legacy message history, and canonical and explicit-null legacy appointments.
+  own message read receipt, legacy message history, and canonical and
+  explicit-null legacy appointments.
 - Clinician clinic settings, canonical and explicit-null legacy roster queries,
   invitation list, direct get of an existing invitation if present, linked
-  patient profile and QEEG records, all roster patients' sessions for Reports,
+  patient profile and QEEG records, direct profiles of all roster patients,
+  all roster patients' sessions for Reports,
   all roster patients' canonical and explicit-null legacy appointments, and
-  the approved pair's message summary and ordered history. The legacy message
-  document is read as the clinician when the patient probe confirms that the
-  document belongs to the current clinician.
+  every roster patient's message summary and the clinician's read receipt,
+  plus the approved pair's ordered history. The legacy message document is
+  read as the clinician when the patient probe confirms that the document
+  belongs to the current clinician.
 
 These current reads remain outside the read-only probe:
 

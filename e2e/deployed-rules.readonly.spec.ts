@@ -37,7 +37,7 @@ test('deployed Firestore rules grant the reads this branch relies on', async ({ 
 
     expect(Object.keys(outcomes.patient).sort()).toEqual([
         'ownUserRole', 'ownClientProfileAndAssignment', 'linkedClinicBrand',
-        'ownSessionsAndProgress', 'ownBrainMaps', 'ownMessageThread',
+        'ownSessionsAndProgress', 'ownBrainMaps', 'ownMessageThread', 'ownMessageReadReceipt',
         'ownMessageHistory', 'ownLegacyMessageHistory', 'ownAppointments',
         'ownLegacyAppointments',
     ].sort());
@@ -45,9 +45,10 @@ test('deployed Firestore rules grant the reads this branch relies on', async ({ 
         'ownUserRole', 'ownPractitionerRecord', 'ownClinicSettings',
         'canonicalRoster', 'legacyRoster', 'patientInvitations',
         ...(clinicianProbe.hasExistingInvitation ? ['existingInvitation'] : []),
-        'linkedPatientProfileAndAssignment', 'rosterSessionsAndReports',
-        'rosterAppointments', 'rosterLegacyAppointments', 'linkedPatientBrainMaps',
-        'linkedPatientMessageThread', 'linkedPatientMessageHistory',
+        'linkedPatientProfileAndAssignment', 'rosterPatientProfiles', 'rosterSessionsAndReports',
+        'rosterAppointments', 'rosterLegacyAppointments', 'rosterMessageThreads',
+        'rosterMessageReadReceipts', 'linkedPatientBrainMaps',
+        'linkedPatientMessageThread', 'ownMessageReadReceipt', 'linkedPatientMessageHistory',
         ...(patientProbe.hasReadableLegacyMessageHistory ? ['linkedPatientLegacyMessageHistory'] : []),
     ].sort());
     for (const [role, reads] of Object.entries(outcomes)) {

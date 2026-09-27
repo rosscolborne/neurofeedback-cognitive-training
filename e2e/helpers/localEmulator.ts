@@ -51,5 +51,12 @@ export async function persistedMessages(patientId: string, clinicianId: string) 
   const thread = `messageThreads/${patientId}/relationships/${clinicianId}`;
   const summary = await adminDb.doc(thread).get();
   const messages = await adminDb.collection(`${thread}/messages`).get();
-  return { summary: summary.data(), messages: messages.docs.map((entry) => entry.data()) };
+  const [patientRead, clinicianRead] = await Promise.all([
+    adminDb.doc(`${thread}/reads/${patientId}`).get(),
+    adminDb.doc(`${thread}/reads/${clinicianId}`).get(),
+  ]);
+  return {
+    summary: summary.data(), messages: messages.docs.map((entry) => entry.data()),
+    patientRead: patientRead.data(), clinicianRead: clinicianRead.data(),
+  };
 }

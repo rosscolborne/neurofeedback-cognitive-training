@@ -1,18 +1,20 @@
 import React, { useEffect, useRef } from 'react';
-import { RefreshCw, Send } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { MessageBubble } from '../clinician/MessagingView';
 import { messageRepository, type MessageRepository } from '../../services/messageRepository';
 import { getMessageSendViewState } from '../messaging/messageUiState';
 import { useMessageConversation } from '../messaging/useMessageConversation';
+import { MessageComposer } from '../messaging/MessageComposer';
+import { useMarkVisibleMessageRead } from '../messaging/useMessageUnread';
 
-interface PatientMessagingViewProps { patientId: string; clinicianName?: string; repository?: MessageRepository; }
+interface PatientMessagingViewProps { patientId: string; clinicianName?: string; repository?: MessageRepository; unreadMessageId?: string | null; notificationError?: string | null; }
 
-export const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ patientId, clinicianName = 'Your clinician', repository = messageRepository }) => {
+export const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ patientId, clinicianName = 'Your clinician', repository = messageRepository, unreadMessageId, notificationError }) => {
   const conversation = useMessageConversation(patientId, repository);
   const endRef = useRef<HTMLDivElement | null>(null);
   const sendView = getMessageSendViewState(conversation.draft, conversation.isSending, conversation.failedAttempt, conversation.sendError);
+  const readError = useMarkVisibleMessageRead(conversation.relationship, conversation.messages, conversation.loadState, unreadMessageId, repository);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation.messages]);
-  const submit = (event: React.FormEvent) => { event.preventDefault(); void conversation.send(); };
 
   return <section aria-label="Messages" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 150px)' }}>
     <header style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-default)' }}><h1 style={{ margin: 0 }}>Messages</h1><div>{clinicianName}</div></header>
@@ -23,7 +25,8 @@ export const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ pati
       {conversation.loadState === 'ready' && conversation.messages.length === 0 && <div style={{ margin: 'auto', textAlign: 'center' }}>No messages yet. You can start a conversation with your clinician here.</div>}
       {conversation.messages.map((message) => <MessageBubble key={`${message.source}:${message.id}`} message={message} ownRole="patient" />)}<div ref={endRef} />
     </div>
+    {(notificationError || readError) && <div role="alert" style={{ padding: 8, color: 'var(--status-alert)' }}>Message notifications are unavailable: {notificationError || readError}</div>}
     {sendView.statusText && !conversation.isSending && <div role="alert" style={{ padding: 8, color: 'var(--status-alert)' }}>{sendView.statusText}</div>}
-    <form onSubmit={submit} style={{ padding: 12, display: 'flex', gap: 8 }}><label className="sr-only" htmlFor="patient-message-input">Message your clinician</label><input id="patient-message-input" value={conversation.draft} maxLength={4000} disabled={conversation.isSending || conversation.loadState !== 'ready'} onChange={(event) => conversation.setDraft(event.target.value)} style={{ flex: 1 }} />{sendView.showRetry ? <button type="button" className="btn btn-primary" onClick={() => void conversation.retry()}><RefreshCw size={16} /> Retry</button> : <button type="submit" className="btn btn-primary" disabled={!sendView.canSend || conversation.loadState !== 'ready'}><Send size={16} /> {conversation.isSending ? 'Sending…' : 'Send'}</button>}</form>
+    <MessageComposer inputId="patient-message-input" label="Message your clinician" draft={conversation.draft} isSending={conversation.isSending} isReady={conversation.loadState === 'ready'} sendView={sendView} buttonClassName="btn btn-primary" onDraftChange={conversation.setDraft} onSend={conversation.send} onRetry={conversation.retry} />
   </section>;
 };

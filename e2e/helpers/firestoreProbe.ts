@@ -24,6 +24,10 @@ const messageHistory = (patientId: string, clinicianId: string) => getDocs(query
     collection(db, 'messageThreads', patientId, 'relationships', clinicianId, 'messages'),
     orderBy('createdAt', 'desc'), orderBy(documentId(), 'desc'), limit(50),
 ));
+const messageThread = (patientId: string, clinicianId: string) =>
+    getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId));
+const messageReadReceipt = (patientId: string, clinicianId: string, readerId: string) =>
+    getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId, 'reads', readerId));
 const sessions = (patientId: string) => getDocs(query(collection(db, 'sessions'), where('patientId', '==', patientId)));
 const canonicalAppointmentsForPatient = (patientId: string) => getDocs(query(collection(db, 'appointments'), where('patientId', '==', patientId)));
 const legacyAppointmentsForPatient = (patientId: string) => getDocs(query(collection(db, 'appointments'), where('clientId', '==', patientId), where('patientId', '==', null)));
@@ -73,7 +77,8 @@ export async function probePatientBranchRuleReads(clinicianId: string): Promise<
     reads.linkedClinicBrand = await outcome(() => getDoc(doc(db, 'clinics', linkedClinicId)));
     reads.ownSessionsAndProgress = await outcome(() => sessions(patientId));
     reads.ownBrainMaps = await outcome(() => getDocs(collection(db, 'clients', patientId, 'brainMaps')));
-    reads.ownMessageThread = await outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId)));
+    reads.ownMessageThread = await outcome(() => messageThread(patientId, clinicianId));
+    reads.ownMessageReadReceipt = await outcome(() => messageReadReceipt(patientId, clinicianId, patientId));
     reads.ownMessageHistory = await outcome(() => messageHistory(patientId, clinicianId));
     let hasReadableLegacyMessageHistory = false;
     reads.ownLegacyMessageHistory = await outcome(async () => {
@@ -132,11 +137,15 @@ export async function probeClinicianBranchRuleReads(patientId: string, hasReadab
 
     // Reports and the calendar enumerate every current roster member.
     const ids = [...rosterIds];
+    reads.rosterPatientProfiles = await outcome(() => Promise.all(ids.map((id) => getDoc(doc(db, 'clients', id)))));
     reads.rosterSessionsAndReports = await outcome(() => Promise.all(ids.map(sessions)));
     reads.rosterAppointments = await outcome(() => Promise.all(ids.map((id) => canonicalAppointmentsForClinician(clinicianId, id))));
     reads.rosterLegacyAppointments = await outcome(() => Promise.all(ids.map((id) => legacyAppointmentsForClinician(clinicianId, id))));
+    reads.rosterMessageThreads = await outcome(() => Promise.all(ids.map((id) => messageThread(id, clinicianId))));
+    reads.rosterMessageReadReceipts = await outcome(() => Promise.all(ids.map((id) => messageReadReceipt(id, clinicianId, clinicianId))));
     reads.linkedPatientBrainMaps = await outcome(() => getDocs(collection(db, 'clients', patientId, 'brainMaps')));
-    reads.linkedPatientMessageThread = await outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId)));
+    reads.linkedPatientMessageThread = await outcome(() => messageThread(patientId, clinicianId));
+    reads.ownMessageReadReceipt = await outcome(() => messageReadReceipt(patientId, clinicianId, clinicianId));
     reads.linkedPatientMessageHistory = await outcome(() => messageHistory(patientId, clinicianId));
     if (hasReadableLegacyMessageHistory) reads.linkedPatientLegacyMessageHistory = await outcome(() => getDoc(doc(db, 'messages', patientId)));
     return { reads, hasReadableLegacyMessageHistory, hasExistingInvitation: Boolean(existingInvitationId) };

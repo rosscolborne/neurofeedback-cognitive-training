@@ -10,7 +10,7 @@ test('linked patient and clinician exchange persisted messages while an unrelate
   const clinicianText = `Clinician reply ${randomUUID()}`;
   const pageErrors: string[] = [];
 
-  const patientContext = await browser.newContext();
+  const patientContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const clinicianContext = await browser.newContext();
   const unrelatedContext = await browser.newContext();
   permissionErrorGuard.expectDenialsIn(unrelatedContext);
@@ -24,33 +24,55 @@ test('linked patient and clinician exchange persisted messages while an unrelate
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Messages', exact: true }).click();
     await expect(patient.getByRole('heading', { name: 'Messages', exact: true })).toBeVisible();
-    await expect(patient.getByLabel('Message your clinician')).toBeEnabled();
+    await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    const patientComposer = patient.getByLabel('Message your clinician');
+    await expect(patientComposer).toBeEnabled();
+    await patientComposer.fill('A longer draft that wraps across multiple lines on a phone screen. '.repeat(4));
+    const composerBox = await patientComposer.boundingBox();
+    const navigationBox = await patient.locator('nav').last().boundingBox();
+    expect(composerBox && navigationBox).toBeTruthy();
+    expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(navigationBox!.y);
 
     await loginThroughUi(clinician, linked.clinician);
     await arriveAtClinicianDashboard(clinician);
-    await clinician.getByRole('button', { name: 'Messages', exact: true }).first().click();
-    await expect(clinician.getByRole('heading', { name: 'Patient Messages' })).toBeVisible();
-    await clinician.getByRole('button', { name: new RegExp(`${linked.name}\\s+Open conversation`) }).click();
-    await expect(clinician.getByLabel(`Message ${linked.name}`)).toBeEnabled();
-
-    await patient.getByLabel('Message your clinician').fill(patientText);
+    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    await patientComposer.fill(patientText);
     await patient.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(patient.getByText(patientText, { exact: true })).toBeVisible();
+    await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    await expect(clinician.getByRole('button', { name: 'Messages, unread message' }).first()).toBeVisible();
+    await clinician.getByRole('button', { name: 'Messages, unread message' }).first().click();
+    await expect(clinician.getByRole('heading', { name: 'Patient Messages' })).toBeVisible();
+    const patientRow = clinician.getByRole('button', { name: new RegExp(`${linked.name} Open conversation`) });
+    await expect(patientRow).toContainText('Unread');
+    await patientRow.click();
+    await expect(clinician.getByLabel(`Message ${linked.name}`)).toBeEnabled();
     await expect(clinician.getByText(patientText, { exact: true })).toBeVisible();
+    await expect(patientRow).not.toContainText('Unread');
+    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
 
+    await patient.getByRole('button', { name: 'Home', exact: true }).click();
     await clinician.getByLabel(`Message ${linked.name}`).fill(clinicianText);
     await clinician.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(clinician.getByText(clinicianText, { exact: true })).toBeVisible();
+    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    await expect(patientRow).not.toContainText('Unread');
+    await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toBeVisible();
+    await patient.getByRole('button', { name: 'Messages, unread message' }).click();
     await expect(patient.getByText(clinicianText, { exact: true })).toBeVisible();
+    await expect(patient.getByRole('button', { name: 'Messages', exact: true })).toBeVisible();
+    await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
 
     await patient.reload();
     await arriveAtPatientDashboard(patient);
+    await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
     await patient.getByRole('button', { name: 'Messages', exact: true }).click();
     await expect(patient.getByText(patientText, { exact: true })).toBeVisible();
     await expect(patient.getByText(clinicianText, { exact: true })).toBeVisible();
 
     await clinician.reload();
     await arriveAtClinicianDashboard(clinician);
+    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
     await clinician.getByRole('button', { name: 'Messages', exact: true }).first().click();
     await clinician.getByRole('button', { name: new RegExp(`${linked.name}\\s+Open conversation`) }).click();
     await expect(clinician.getByText(patientText, { exact: true })).toBeVisible();
@@ -58,6 +80,8 @@ test('linked patient and clinician exchange persisted messages while an unrelate
 
     const stored = await persistedMessages(linked.patient.uid, linked.clinician.uid);
     expect(stored.summary?.lastMessageText).toBe(clinicianText);
+    expect(stored.clinicianRead?.lastReadMessageId).toBe(stored.messages.find((message) => message.text === patientText)?.id);
+    expect(stored.patientRead?.lastReadMessageId).toBe(stored.messages.find((message) => message.text === clinicianText)?.id);
     expect(stored.messages.map((message) => [message.text, message.senderRole])).toEqual(expect.arrayContaining([
       [patientText, 'patient'], [clinicianText, 'clinician'],
     ]));
@@ -72,8 +96,8 @@ test('linked patient and clinician exchange persisted messages while an unrelate
       const probes = await import('/e2e/helpers/firestoreProbe.ts');
       return probes.probeClinicianBranchRuleReads(patientId, hasReadableLegacyMessageHistory);
     }, { patientId: linked.patient.uid, hasReadableLegacyMessageHistory: patientProbe.hasReadableLegacyMessageHistory });
-    expect(Object.keys(patientProbe.reads)).toHaveLength(10);
-    expect(Object.keys(clinicianProbe.reads)).toHaveLength(13);
+    expect(Object.keys(patientProbe.reads)).toHaveLength(11);
+    expect(Object.keys(clinicianProbe.reads)).toHaveLength(17);
     expect(patientProbe.hasReadableLegacyMessageHistory).toBe(false);
     expect(clinicianProbe.hasExistingInvitation).toBe(false);
     for (const reads of [patientProbe.reads, clinicianProbe.reads]) {
