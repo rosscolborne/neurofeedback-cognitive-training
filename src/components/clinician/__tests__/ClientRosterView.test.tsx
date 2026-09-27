@@ -180,6 +180,7 @@ describe('ClientRosterView blank-profile editing', () => {
     expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
       assignedProtocol: 'alpha-enhancement',
       customProtocolConfig: undefined,
+      allowedExperiences: getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences,
     }));
     renderer.unmount();
   });

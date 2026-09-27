@@ -17,6 +17,7 @@ import {
   QEEGBrainMap,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
+import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 import { auth, db } from './firebase';
 import {
@@ -1199,6 +1200,10 @@ class StorageEngine {
         if (currentClinicianId && currentClinicianId !== invitation.clinicianId) {
           throw new Error('Disconnect from your current clinician before accepting another invitation');
         }
+        const assignedTemplate = getClinicalProtocolTemplate(invitation.assignedProtocol);
+        if (!assignedTemplate) {
+          throw new Error('This invitation has no supported protocol. Ask your clinician for a new invitation');
+        }
         const linkedClient: ClientProfile = {
           ...current,
           id: patient.uid,
@@ -1210,14 +1215,17 @@ class StorageEngine {
           acceptedInvitationId: invitation.id,
           condition: invitation.condition,
           assignedProtocol: invitation.assignedProtocol,
-          allowedExperiences: Array.isArray(current.allowedExperiences)
-            ? current.allowedExperiences : [...DEFAULT_ALLOWED_EXPERIENCES],
+          customProtocolConfig: undefined,
+          allowedExperiences: [...assignedTemplate.recommendedExperiences],
           prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
           notes: invitation.notes ?? current.notes,
         };
         const timestamp = serverTimestamp();
 
-        transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
+        transaction.set(clientRef, {
+          ...removeUndefined({ ...linkedClient, updatedAt: timestamp }),
+          ...(clientSnapshot.exists() ? { customProtocolConfig: deleteField() } : {}),
+        }, { merge: true });
         transaction.set(
           invitationRef,
           {

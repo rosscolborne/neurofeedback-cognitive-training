@@ -1,6 +1,59 @@
+import type { Page } from '@playwright/test';
+import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import { findPendingLifecycleInvitation, readLifecycleRecords, readPendingInvitationState, seedFutureLifecycleAppointment, seedLifecycleHistory, seedLinkedPatient, seedPendingLifecycleInvitation } from './helpers/localEmulator';
+import { findPendingLifecycleInvitation, readLifecycleHistoryState, readLifecycleRecords, readPendingInvitationState, seedFutureLifecycleAppointment, seedLifecycleHistory, seedLinkedPatient, seedPendingLifecycleInvitation } from './helpers/localEmulator';
+
+const allExperienceNames = [
+  'Skyline Drift', 'Tidal Garden', 'Breath Weave', 'Signal Sort', 'Rhythm Lock',
+  'Media Mode', 'Soundscape Mode', 'Mandala Breathing', 'Generative Mandala',
+  'Generative XR', 'Generative Music', 'Contemplative Reading', 'NeuroGambit',
+];
+const alphaNames = [
+  'Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing',
+  'Generative Mandala', 'Generative XR', 'Generative Music', 'Contemplative Reading',
+];
+const alphaIds = [
+  'immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden',
+  'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala',
+];
+const thetaNames = [
+  'Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode',
+  'Generative Mandala', 'Generative XR', 'Generative Music',
+  'Contemplative Reading', 'NeuroGambit',
+];
+const thetaIds = [
+  'immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift',
+  'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit',
+];
+
+async function expectPatientCatalogue(page: Page, names: string[]) {
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  for (const name of allExperienceNames) {
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(names.includes(name) ? 1 : 0);
+  }
+  await page.getByRole('button', { name: 'Train', exact: true }).click();
+  const cards = page.locator('main .card-patient');
+  await expect(cards).toHaveCount(names.length);
+  for (const name of names) await expect(cards.getByText(name, { exact: true })).toHaveCount(1);
+}
+
+async function readCurrentPatientAssignment(page: Page) {
+  return page.evaluate(async () => {
+    const { auth } = await import('/src/services/firebase.ts');
+    const { storageEngine } = await import('/src/services/storageEngine.ts');
+    if (!auth.currentUser) throw new Error('Expected a signed-in patient');
+    const profile = await storageEngine.getClient(auth.currentUser.uid);
+    if (!profile) throw new Error('Expected a persisted patient profile');
+    return {
+      assignedProtocol: profile.assignedProtocol,
+      allowedExperiences: profile.allowedExperiences,
+      customProtocolConfig: profile.customProtocolConfig,
+      completedSessionsCount: profile.completedSessionsCount,
+      tidalGardenState: profile.tidalGardenState,
+    };
+  });
+}
 
 for (const invitationMode of ['existing', 'fresh'] as const) {
 test(`delete linked patient, re-register same email, and accept ${invitationMode} invitation with one active roster entry`, async ({ browser, permissionErrorGuard }) => {
@@ -11,7 +64,6 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
   const clinicianContext = await browser.newContext();
   const oldContext = await browser.newContext();
   const newContext = await browser.newContext();
-  permissionErrorGuard.expectDenialsIn(newContext);
   try {
     const clinician = await clinicianContext.newPage();
     const oldPatient = await oldContext.newPage();
@@ -45,7 +97,7 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
       await clinician.getByPlaceholder('e.g. Alex Morgan').fill(fixture.name);
       await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
       await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
-      await clinician.locator('form select').nth(1).selectOption('theta-beta-ratio');
+      await clinician.locator('form select').nth(1).selectOption('alpha-enhancement');
       await clinician.getByPlaceholder('Unavailable').fill('3');
       await clinician.getByRole('button', { name: 'Create Invitation' }).click();
       await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
@@ -57,6 +109,15 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     await patient.getByRole('button', { name: 'Accept Invitation' }).click();
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
     await expect(rosterRow).toHaveCount(1);
+    const expectedIds = invitationMode === 'existing' ? thetaIds : alphaIds;
+    const expectedNames = invitationMode === 'existing' ? thetaNames : alphaNames;
+    const assigned = await readCurrentPatientAssignment(patient);
+    expect(assigned.assignedProtocol).toBe(invitationMode === 'existing' ? 'theta-beta-ratio' : 'alpha-enhancement');
+    expect(assigned.allowedExperiences).toEqual(expectedIds);
+    await expectPatientCatalogue(patient, expectedNames);
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
+    await expectPatientCatalogue(patient, expectedNames);
 
     const stored = await readLifecycleRecords(fixture.patient.uid, newUid, fixture.clinician.uid, code, fixture.patient.email);
     expect(stored.oldAuthExists).toBe(false);
@@ -64,9 +125,11 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     expect(stored.oldClient?.clinicianId).toBeNull();
     expect(stored.oldClient?.clinicId).toBeNull();
     expect(stored.newClient?.clinicianId).toBe(fixture.clinician.uid);
+    expect(stored.newClient?.allowedExperiences).toEqual(expectedIds);
     expect(stored.invitation?.patientId).toBe(newUid);
     expect(stored.claimExists).toBe(false);
     expect(stored.appointmentStatuses).toEqual(['cancelled']);
+    permissionErrorGuard.expectDenialsIn(newContext);
     const oldReads = await patient.evaluate(async ({ oldUid, clinicianUid }) => {
       const { probeDeletedPatientHistory } = await import('/e2e/helpers/firestoreProbe.ts');
       return probeDeletedPatientHistory(oldUid, clinicianUid);
@@ -77,6 +140,72 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
   }
 });
 }
+
+test('unlink preserves the training list and Garden; a new invitation replaces the protocol and list together', async ({ browser }) => {
+  const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
+  const staleCustomProtocol = { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Old custom reward' };
+  const fixture = await seedLinkedPatient({
+    assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['tidal-garden'],
+    customProtocolConfig: staleCustomProtocol, tidalGardenState: garden, completedSessionsCount: 4,
+  });
+  await seedLifecycleHistory(fixture);
+  const clinicianContext = await browser.newContext();
+  const patientContext = await browser.newContext();
+  try {
+    const clinician = await clinicianContext.newPage();
+    const patient = await patientContext.newPage();
+    await loginThroughUi(clinician, fixture.clinician);
+    await arriveAtClinicianDashboard(clinician);
+    await loginThroughUi(patient, fixture.patient);
+    await arriveAtPatientDashboard(patient);
+    await expectPatientCatalogue(patient, ['Tidal Garden']);
+
+    const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
+    clinician.once('dialog', (dialog) => { void dialog.accept(); });
+    await rosterRow.getByTitle('Remove Patient').click();
+    await expect(rosterRow).toHaveCount(0);
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
+    await expectPatientCatalogue(patient, ['Tidal Garden']);
+    expect(await readCurrentPatientAssignment(patient)).toMatchObject({
+      assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['tidal-garden'],
+      customProtocolConfig: staleCustomProtocol, completedSessionsCount: 4, tidalGardenState: garden,
+    });
+    expect(await readLifecycleHistoryState(fixture.patient.uid, fixture.clinician.uid)).toEqual({
+      sessionPatientId: fixture.patient.uid, threadPatientId: fixture.patient.uid,
+    });
+
+    await clinician.getByRole('button', { name: 'Invite Patient' }).click();
+    await clinician.getByPlaceholder('e.g. Alex Morgan').fill(fixture.name);
+    await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
+    await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
+    await clinician.locator('form select').nth(1).selectOption('alpha-enhancement');
+    await clinician.getByPlaceholder('Unavailable').fill('3');
+    await clinician.getByRole('button', { name: 'Create Invitation' }).click();
+    await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
+    const code = await findPendingLifecycleInvitation(fixture.clinician.uid, fixture.patient.email);
+    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
+    await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
+    await patient.getByLabel('Invitation code').fill(code);
+    await patient.getByRole('button', { name: 'Accept Invitation' }).click();
+    await expect(patient.getByText('Connected to your clinician')).toBeVisible();
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
+    await expectPatientCatalogue(patient, alphaNames);
+    const relinked = await readCurrentPatientAssignment(patient);
+    expect(relinked).toMatchObject({
+      assignedProtocol: 'alpha-enhancement', allowedExperiences: alphaIds,
+      completedSessionsCount: 4, tidalGardenState: garden,
+    });
+    expect(relinked.customProtocolConfig).toBeUndefined();
+    expect(await readLifecycleHistoryState(fixture.patient.uid, fixture.clinician.uid)).toEqual({
+      sessionPatientId: fixture.patient.uid, threadPatientId: fixture.patient.uid,
+    });
+    await expect(rosterRow).toHaveCount(1);
+  } finally {
+    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+  }
+});
 
 test('active linked patient cannot be reinvited until removed from the clinician roster', async ({ browser }) => {
   const fixture = await seedLinkedPatient();

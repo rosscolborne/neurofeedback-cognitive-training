@@ -135,6 +135,17 @@ export async function seedLifecycleHistory(fixture: LocalPatientFixture): Promis
   ]);
 }
 
+export async function readLifecycleHistoryState(patientUid: string, clinicianUid: string) {
+  const [session, thread] = await Promise.all([
+    adminDb.doc(`sessions/lifecycle-${patientUid}`).get(),
+    adminDb.doc(`messageThreads/${patientUid}/relationships/${clinicianUid}`).get(),
+  ]);
+  return {
+    sessionPatientId: session.data()?.patientId as string | undefined,
+    threadPatientId: thread.data()?.patientId as string | undefined,
+  };
+}
+
 export async function readLifecycleRecords(oldUid: string, newUid: string, clinicianUid: string, code: string, email: string) {
   const [oldClient, newClient, invitation, claim, oldAuth, appointments] = await Promise.all([
     adminDb.doc(`clients/${oldUid}`).get(), adminDb.doc(`clients/${newUid}`).get(),

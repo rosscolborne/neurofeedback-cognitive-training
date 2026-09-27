@@ -1280,7 +1280,7 @@ describe('patient invitation linking', () => {
     expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
   });
 
-  it('creates an invited client with an explicit default assignment when the supplied legacy fallback omits it', async () => {
+  it('applies the invited protocol and its exact experience set to a fresh patient', async () => {
     state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
     const invitation = { clinicianId: 'clinician-1', clinicId: 'clinic-1', patientEmail: 'patient@example.test',
       patientName: 'Patient One', assignedProtocol: 'alpha-enhancement', status: 'pending',
@@ -1299,8 +1299,51 @@ describe('patient invitation linking', () => {
     delete fallback.allowedExperiences;
 
     const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', fallback as ClientProfile);
-    expect(new Set(linked.allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
+    const expected = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
+    expect(linked.assignedProtocol).toBe('alpha-enhancement');
+    expect(linked.allowedExperiences).toEqual(expected);
+    expect(linked.allowedExperiences).not.toContain('neuro-gambit');
     expect(writes[0].allowedExperiences).toEqual(linked.allowedExperiences);
+  });
+
+  it('replaces a stale assignment on relink while preserving patient-owned progress', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+    const previous = {
+      ...createBlankProfile('patient-1', 'patient@example.test'),
+      assignedProtocol: 'theta-beta-ratio' as const,
+      allowedExperiences: ['neuro-gambit'] as ClientProfile['allowedExperiences'],
+      customProtocolConfig: getClinicalProtocolTemplate('theta-beta-ratio'),
+      clinicianId: undefined,
+      clinicId: undefined,
+      acceptedInvitationId: undefined,
+      completedSessionsCount: 7,
+      badges: ['garden-keeper'],
+      tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
+    };
+    const writes: Array<Record<string, unknown>> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'ABCD-EFGH-JKLM', exists: () => true,
+            data: () => ({ clinicianId: 'clinician-1', clinicId: 'clinic-1', patientEmail: previous.email,
+              patientName: previous.name, assignedProtocol: 'alpha-enhancement', status: 'pending',
+              expiresAt: Date.now() + 86_400_000 }) })
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => previous }),
+        set: vi.fn((_ref, payload) => writes.push(payload)),
+        delete: vi.fn(),
+      })
+    );
+
+    const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', previous);
+    const expected = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
+    expect(linked).toMatchObject({
+      assignedProtocol: 'alpha-enhancement', allowedExperiences: expected,
+      completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: previous.tidalGardenState,
+    });
+    expect(linked.allowedExperiences).not.toContain('neuro-gambit');
+    expect(linked.customProtocolConfig).toBeUndefined();
+    expect(writes[0]).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: expected,
+      customProtocolConfig: { __deleteField: true }, tidalGardenState: previous.tidalGardenState });
   });
 
   it('atomically cancels an owned invitation and releases its uniqueness claim', async () => {

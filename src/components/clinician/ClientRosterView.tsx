@@ -213,15 +213,22 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setFormError(null);
     try {
       if (editingClient && onUpdateClient) {
+        const protocolChanged = formProtocol !== editingClient.assignedProtocol;
+        const assignedTemplate = protocolChanged
+          ? getClinicalProtocolTemplate(formProtocol ?? 'theta-beta-ratio')
+          : undefined;
+        if (protocolChanged && !assignedTemplate) throw new Error('The selected clinical protocol is unsupported.');
         await onUpdateClient({
           ...editingClient,
           name: formName,
           email: formEmail || editingClient.email,
           condition: formCondition,
           assignedProtocol: formProtocol,
-          customProtocolConfig: formProtocol === editingClient.assignedProtocol
+          customProtocolConfig: !protocolChanged
             ? editingClient.customProtocolConfig
             : undefined,
+          allowedExperiences: assignedTemplate
+            ? [...assignedTemplate.recommendedExperiences] : editingClient.allowedExperiences,
           status: formStatus,
           prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
