@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ClientProfile, EEGDataPoint, ExperienceType, SessionPhase, SessionRecord } from '../../types';
+import { ClientProfile, EEGDataPoint, ExperienceType, IndividualBaselineModel, SessionPhase, SessionRecord } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import {
   AdaptiveDifficultyEngine,
@@ -126,6 +126,7 @@ const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
 const HARDWARE_SOURCE_MAX_AGE_MS = 2_000;
 interface SessionRunnerProps {
   client: ClientProfile;
+  onBaselinePersisted?: (model: IndividualBaselineModel) => void;
   selectedExperience: ExperienceType;
   onComplete: (summary: SessionRecord) => Promise<void>;
   onCancel: () => void;
@@ -143,6 +144,7 @@ export const resolveSessionCareProvenance = (client: ClientProfile): Pick<Sessio
 
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
+  onBaselinePersisted,
   selectedExperience,
   onComplete,
   onCancel,
@@ -939,7 +941,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <NarrativeTherapyMode eegData={eegData} />
           )}
           {selectedExperience === 'neuro-gambit' && (
-            <NeuroGambitExperience eegData={eegData} isPaused={isPaused} />
+            <NeuroGambitExperience eegData={eegData} isPaused={isPaused} isDemoSession={isDemoSession} patientId={client.id} savedBaselineModel={client.individualBaselineModel} onBaselinePersisted={onBaselinePersisted ?? (() => {})} />
           )}
         </div>
 

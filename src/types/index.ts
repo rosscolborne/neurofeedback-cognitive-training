@@ -155,8 +155,10 @@ export interface EEGDataPoint {
 }
 
 export interface IndividualBaselineModel {
-  alphaPeakHz: number;
-  oneOverFSlope: number;
+  /** Present only when this calibration measured a peak alpha frequency. */
+  alphaPeakHz?: number;
+  /** Present only when this calibration measured a spectral slope. */
+  oneOverFSlope?: number;
   lastCalibratedAt: string;
   thetaMean?: number;
   thetaStd?: number;

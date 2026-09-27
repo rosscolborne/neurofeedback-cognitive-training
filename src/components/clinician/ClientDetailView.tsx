@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClientProfile, ClinicBrandConfig, ProtocolTemplate, QEEGBrainMap, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
+import { getCalibrationDisplayState } from '../../services/dataMappers';
 import { getProtocolTypeForTemplate, resolvePatientProtocol, STANDARD_EEG_BANDS_HZ } from '../../services/protocols';
 import { getClinicalProtocolTemplate, getProtocolAssignmentAlias } from '../../services/clinicalProtocolTemplates';
 import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
@@ -149,6 +150,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const psdAxisMaximum = Math.ceil(psdMaximum / 10) * 10 || 1;
   const psdAxisValues = [0, 0.25, 0.5, 0.75, 1].map((fraction) => psdAxisMaximum * fraction);
   const learningScores = deriveLearningScorePoints(sessions);
+  const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
+  const imprintLabel = imprintState.status === 'valid' ? 'Current'
+    : imprintState.status === 'expired' ? 'Expired'
+      : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
   const learningScoreContentState = getLearningScoreContentState(sessionContentState, learningScores.points.length);
 
   return (
@@ -208,6 +213,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
               {client.condition || 'Condition unavailable'} • Protocol: <strong>{evidenceProtocolName}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Neural Imprint: <strong>{imprintLabel}</strong>
+              {imprintState.calibratedAt != null && <> • Calibrated <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString()}</time></>}
             </div>
           </div>
         </div>
