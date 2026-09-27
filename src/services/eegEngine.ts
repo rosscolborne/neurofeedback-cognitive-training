@@ -791,6 +791,9 @@ export class EEGEngine {
         throw new Error('Headset connection changed before hosted BrainFlow analysis started.');
       }
       this.fitSessionId = fitSessionId;
+      // Each hosted analysis request carries the current protocol and reward
+      // rule, so a newly attached session is ready. Disconnecting cleared this.
+      this.brainflowProtocolReady = true;
     } finally {
       if (connectionGeneration === this.bluetoothConnectionGeneration) {
         this.isStartingFitSession = false;

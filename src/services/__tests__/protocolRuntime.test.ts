@@ -597,6 +597,69 @@ describe('protocol runtime assignment', () => {
     expect(samples(tbrEasier, false).log).toMatchObject({ direction: 'eased', previousThreshold: 1.85, newThreshold: 1.9 });
   });
 
+  it('resumes hosted Bluetooth BrainFlow feedback and verified coverage after a disconnect and reconnect', async () => {
+    const configured = vi.spyOn(brainflowService, 'hasConfiguredService').mockReturnValue(true);
+    const start = vi.spyOn(brainflowService, 'startFitSession')
+      .mockResolvedValueOnce('fit-before-disconnect')
+      .mockResolvedValueOnce('fit-after-reconnect');
+    const stop = vi.spyOn(brainflowService, 'stopFitSession').mockResolvedValue();
+    const analyze = vi.spyOn(brainflowService, 'analyzeFitWindow').mockResolvedValue({
+      features: { bandPowers: { absolute: bands, ratios: {} }, primaryMetricValue: 12, inZone: true, zoneScore: 1 },
+    } as Awaited<ReturnType<typeof brainflowService.analyzeFitWindow>>);
+    try {
+      const resolution = resolveProtocolRuntime(client('beta-downtraining'));
+      if (!resolution.ok) throw new Error(resolution.error);
+      const engine = new EEGEngine();
+      engine.configureProtocol(resolution.config);
+      const internal = engine as unknown as {
+        rawBuffers: Record<'tp9' | 'af7' | 'af8' | 'tp10', number[]>;
+        sourceFrameSequence: number;
+        lastSourceFrameAtMs: number;
+        startHostedBluetoothAnalysis: () => Promise<void>;
+        dispatchServerAnalysis: (now: number) => Promise<void>;
+        generateSample: (dt: number) => EEGDataPoint;
+      };
+      const wave = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 17 * index / 256));
+      // Mirrors the SessionRunner tick: a fresh headset frame, one hosted
+      // analysis window, then the published sample the runner reads.
+      const hostedTick = async () => {
+        internal.rawBuffers = { tp9: [...wave], af7: [...wave], af8: [...wave], tp10: [...wave] };
+        internal.sourceFrameSequence++;
+        internal.lastSourceFrameAtMs = Date.now();
+        await internal.dispatchServerAnalysis(Date.now());
+        return internal.generateSample(.1);
+      };
+
+      engine.isHardwareConnected = true;
+      await internal.startHostedBluetoothAnalysis();
+      expect(await hostedTick()).toMatchObject({ inZoneAvailable: true, inZone: true, activeRewardMetric: { value: 12, source: 'brainflow' } });
+
+      engine.disconnectHardware();
+      expect(stop).toHaveBeenCalledWith('fit-before-disconnect');
+
+      // The browser transport reconnects, then the hosted session restarts.
+      engine.isHardwareConnected = true;
+      await internal.startHostedBluetoothAnalysis();
+      expect(start).toHaveBeenCalledTimes(2);
+
+      let verifiedSeconds = 0;
+      const elapsedSeconds = 10;
+      for (let second = 0; second < elapsedSeconds; second++) {
+        const sample = await hostedTick();
+        expect(sample).toMatchObject({ inZoneAvailable: true, inZone: true, activeRewardMetric: { value: 12, source: 'brainflow' } });
+        expect(engine.getBandPowerProvenance()).toEqual(brainflowProvenance);
+        if (sample.inZoneAvailable) verifiedSeconds++;
+      }
+      expect(analyze).toHaveBeenLastCalledWith('fit-after-reconnect', expect.any(Array), 256, 'beta-downtraining', 14, undefined);
+      expect(assessSessionCompletionReadiness({
+        isDemo: false, elapsedSeconds, verifiedSeconds, verifiedBandSamples: verifiedSeconds,
+        hardwareConnected: engine.isHardwareConnected, sourceFresh: true,
+      })).toEqual({ ok: true });
+    } finally {
+      configured.mockRestore(); start.mockRestore(); stop.mockRestore(); analyze.mockRestore();
+    }
+  });
+
   it('records provenance only when every sample is complete, real, and consistent', () => {
     const valid = createVerifiedBandAccumulator();
     accumulateVerifiedBands(valid, bands, available, brainflowProvenance);
