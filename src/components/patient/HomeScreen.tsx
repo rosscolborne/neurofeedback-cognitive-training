@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { resolvePatientProtocol } from '../../services/protocols';
@@ -6,7 +6,8 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { Play, ChevronRight, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, BookOpen, Flower2, Crown } from 'lucide-react';
+import { Play, ChevronRight, BookOpen } from 'lucide-react';
+import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import {
   buildPatientProgressDisplayModel,
 } from './patientMetrics';
@@ -18,22 +19,6 @@ interface HomeScreenProps {
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
-
-const EXPERIENCES_META: Record<ExperienceType, { name: string; icon: React.FC<{ size?: number }>; desc: string; tag: string }> = {
-  'skyline-drift': { name: 'Skyline Drift', icon: Mountain, desc: 'Sustained focus glider flight over procedural alpine biomes', tag: 'Focus' },
-  'tidal-garden': { name: 'Tidal Garden', icon: Waves, desc: 'Zero-failure persistent marine garden powered by Alpha calm', tag: 'Calm' },
-  'breath-weave': { name: 'Breath Weave', icon: Wind, desc: 'Harmonic loom tapestry synchronized with box/4-7-8 breathing', tag: 'Breathing' },
-  'signal-sort': { name: 'Signal Sort', icon: Target, desc: 'SMR stillness gate & cognitive interference filter task', tag: 'Stillness' },
-  'rhythm-lock': { name: 'Rhythm Lock', icon: Music, desc: 'Generative polyrhythmic music visualizer with layered synth feedback', tag: 'Focus' },
-  'media-mode': { name: 'Media Mode', icon: Tv, desc: 'Watch streaming video with real-time neuro-luminosity modulation', tag: 'Universal' },
-  'soundscape-mode': { name: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural & nature soundscapes for eyes-closed training', tag: 'Audio' },
-  'mandala': { name: 'Mandala Breathing', icon: CircleDot, desc: 'Calm concentric breathing mandala with live µV telemetry', tag: 'Calm' },
-  'eeg-mandala': { name: 'Generative Mandella', icon: Flower2, desc: 'An ornamental mandala that records neurofeedback quality as it grows', tag: 'Visual' },
-  'immersive-3d': { name: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', tag: 'VR' },
-  'generative-music': { name: 'Generative Music', icon: Music, desc: 'Brain-state-driven melody, synthesis & rhythm — your EEG creates the music', tag: 'Music' },
-  'narrative-story': { name: 'Contemplative Reading', icon: BookOpen, desc: 'Calm mindfulness reflections guided by neurofeedback therapy', tag: 'Reading' },
-  'neuro-gambit': { name: 'NeuroGambit', icon: Crown, desc: 'Tactical chess calculation, impulse gating & post-blunder tilt reset', tag: 'Chess' },
-};
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -47,7 +32,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onStartSession,
   onNavigateTab,
 }) => {
-  const [selectedExp, setSelectedExp] = useState<ExperienceType>(client.allowedExperiences[0] || 'skyline-drift');
+  const assignmentKey = client.allowedExperiences.join('|');
+  const [selection, setSelection] = useState<{ assignmentKey: string; experience: ExperienceType }>({
+    assignmentKey,
+    experience: client.allowedExperiences.length > 0
+      ? getAssignedExperienceIds(client.allowedExperiences)[0] || 'skyline-drift'
+      : 'skyline-drift',
+  });
   const [showScrollHint, setShowScrollHint] = useState(true);
   const [sessionState, setSessionState] = useState<{
     clientId: string;
@@ -81,7 +72,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     chartHeight: 40,
   }), [sessionStatus, sessions, nowMs]);
 
-  const ActiveIcon = EXPERIENCES_META[selectedExp].icon;
+  const allowedIds = getAssignedExperienceIds(client.allowedExperiences);
+  const effectiveSelectedExp = selection.assignmentKey === assignmentKey && allowedIds.includes(selection.experience)
+    ? selection.experience : allowedIds[0];
+  const activeExperience = effectiveSelectedExp ? EXPERIENCE_CATALOGUE[effectiveSelectedExp] : undefined;
+  const ActiveIcon = activeExperience?.icon;
+  const latestAllowed = useRef(client.allowedExperiences);
+  useLayoutEffect(() => { latestAllowed.current = client.allowedExperiences; }, [client.allowedExperiences]);
   const resolvedProtocol = resolvePatientProtocol(client);
   const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
   const protocolAlias = client.customProtocolConfig
@@ -131,7 +128,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               Training Session
             </div>
             <div className="font-display" style={{ fontSize: '22px', color: 'var(--text-primary)', marginTop: '2px' }}>
-              {EXPERIENCES_META[selectedExp].name}
+              {activeExperience?.name ?? 'No assigned experience'}
             </div>
           </div>
           <div
@@ -146,12 +143,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               justifyContent: 'center',
             }}
           >
-            <ActiveIcon size={22} />
+            {ActiveIcon && <ActiveIcon size={22} />}
           </div>
         </div>
 
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-          {EXPERIENCES_META[selectedExp].desc}
+          {activeExperience?.description ?? 'Your training plan has no available experiences.'}
         </p>
 
         {/* Experience Selector Pills — scrollable with fade hint */}
@@ -169,25 +166,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               scrollbarWidth: 'none',
             }}
           >
-            {[...client.allowedExperiences]
-              .sort((a, b) => (a === 'neuro-gambit' ? -1 : b === 'neuro-gambit' ? 1 : 0))
+            {(client.allowedExperiences.length > 0 ? allowedIds : [])
               .map(exp => {
-              const Icon = EXPERIENCES_META[exp].icon;
+              const Icon = EXPERIENCE_CATALOGUE[exp].icon;
               return (
                 <button
                   key={exp}
                   onClick={(e) => {
-                    setSelectedExp(exp);
+                    if (!canStartAssignedExperience(latestAllowed.current, exp)) return;
+                    setSelection({ assignmentKey, experience: exp });
                     (e.currentTarget as HTMLButtonElement).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                   }}
                   style={{
-                    background: selectedExp === exp ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
-                    border: selectedExp === exp ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
+                    background: effectiveSelectedExp === exp ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
+                    border: effectiveSelectedExp === exp ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
                     borderRadius: 'var(--radius-sm)',
                     padding: '6px 12px',
                     fontSize: '12px',
                     fontWeight: 600,
-                    color: selectedExp === exp ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                    color: effectiveSelectedExp === exp ? 'var(--brand-primary)' : 'var(--text-secondary)',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                     display: 'flex',
@@ -197,7 +194,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     flexShrink: 0,
                   }}
                 >
-                  <Icon size={14} /> {EXPERIENCES_META[exp].name}
+                  <Icon size={14} /> {EXPERIENCE_CATALOGUE[exp].name}
                 </button>
               );
             })}
@@ -225,7 +222,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <button
-          onClick={() => onStartSession(selectedExp)}
+          onClick={() => {
+            if (effectiveSelectedExp && canStartAssignedExperience(latestAllowed.current, effectiveSelectedExp)) onStartSession(effectiveSelectedExp);
+          }}
+          disabled={!effectiveSelectedExp}
           className="btn btn-primary"
           style={{ width: '100%', padding: '16px', fontSize: '16px' }}
         >

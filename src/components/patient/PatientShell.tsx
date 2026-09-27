@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
@@ -17,7 +17,8 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays } from 'lucide-react';
+import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { resolvePatientProtocol } from '../../services/protocols';
@@ -57,7 +58,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
   const [gardenOpeningOwnerId, setGardenOpeningOwnerId] = useState<string | null>(null);
   const [gardenOpeningError, setGardenOpeningError] = useState<string | null>(null);
+  const gardenRequestSequence = useRef(0);
   const currentClientId = useRef(client.id);
+  const currentClient = useRef(client);
+  const currentAllowedExperiences = useRef(client.allowedExperiences);
+  useLayoutEffect(() => { currentClient.current = client; }, [client]);
+  useLayoutEffect(() => { currentAllowedExperiences.current = client.allowedExperiences; }, [client.allowedExperiences]);
   useEffect(() => {
     currentClientId.current = client.id;
   }, [client.id]);
@@ -126,6 +132,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
+    if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
     if (exp !== 'tidal-garden' || client.tidalGardenState) {
       setSessionClient(null);
       setSessionOwnerId(client.id);
@@ -135,17 +142,38 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setGardenOpeningOwnerId(client.id);
     setGardenOpening('pending');
     setGardenOpeningError(null);
+    const requestSequence = ++gardenRequestSequence.current;
     return (async () => {
       try {
         const ensured = await storageEngine.ensureTidalGardenState(client.id);
-        if (currentClientId.current !== client.id) return;
-        onClientPersistedElsewhere(ensured);
-        setSessionClient(ensured);
-        setSessionOwnerId(client.id);
+        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
+        const latestClient = currentClient.current;
+        if (!canStartAssignedExperience(latestClient.allowedExperiences, exp)) {
+          setGardenOpening('idle');
+          return;
+        }
+        const assignmentChangedSinceRequest = latestClient.allowedExperiences.length !== client.allowedExperiences.length
+          || latestClient.allowedExperiences.some((id, index) => id !== client.allowedExperiences[index]);
+        const resolvedClient = latestClient === client
+          ? ensured
+          : {
+            ...latestClient,
+            allowedExperiences: assignmentChangedSinceRequest
+              ? latestClient.allowedExperiences : ensured.allowedExperiences,
+            tidalGardenState: latestClient.tidalGardenState ?? ensured.tidalGardenState,
+          };
+        onClientPersistedElsewhere(resolvedClient);
         setGardenOpening('idle');
+        if (!canStartAssignedExperience(ensured.allowedExperiences, exp)) return;
+        setSessionClient(resolvedClient);
+        setSessionOwnerId(client.id);
         setActiveSessionExp(exp);
       } catch (error) {
-        if (currentClientId.current !== client.id) return;
+        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
+        if (!canStartAssignedExperience(currentClient.current.allowedExperiences, exp)) {
+          setGardenOpening('idle');
+          return;
+        }
         setGardenOpeningError(error instanceof Error ? error.message : 'Tidal Garden could not be opened.');
         setGardenOpening('error');
       }
@@ -348,26 +376,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
-              {[
-                { id: 'neuro-gambit', title: 'NeuroGambit', icon: Crown, desc: 'Chess tactical calculation, impulse gating & tilt reset', badge: 'NEW • Chess', gradient: 'linear-gradient(135deg, rgba(232, 150, 122, 0.25), rgba(92, 140, 70, 0.25))', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
-                { id: 'immersive-3d', title: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', badge: 'VR', gradient: 'linear-gradient(135deg, #7B68AE22, #E8967A22)', researchUrl: 'https://doi.org/10.3389/fnhum.2019.00210' },
-                { id: 'generative-music', title: 'Generative Music', icon: Music, desc: 'Brain-generated melody, synth & rhythm', badge: 'Music', gradient: 'linear-gradient(135deg, #4A90D922, #5C8C4622)', researchUrl: 'https://doi.org/10.1016/s0031-9384(97)00436-8' },
-                { id: 'narrative-story', title: 'Graphic Novel', icon: BookOpen, desc: 'Biometric driven narrative therapy', badge: 'Narrative', gradient: 'linear-gradient(135deg, #E8967A22, #C4A35A22)', researchUrl: 'https://doi.org/10.1145/1978942.1978958' },
-                { id: 'skyline-drift', title: 'Skyline Drift', icon: Mountain, desc: 'Focus-driven glider flight across procedural landscapes', badge: 'Focus', gradient: 'linear-gradient(135deg, #E8967A22, #E4B87C22)', researchUrl: 'https://doi.org/10.1109/TNSRE.2016.2626989' },
-                { id: 'tidal-garden', title: 'Tidal Garden', icon: Waves, desc: 'Grow a marine garden powered by Alpha calm waves', badge: 'Calm', gradient: 'linear-gradient(135deg, #7B68AE22, #4A90D922)', researchUrl: 'https://doi.org/10.1007/s10484-013-9216-0' },
-                { id: 'breath-weave', title: 'Breath Weave', icon: Wind, desc: 'Harmonic tapestry woven with guided breathing', badge: 'Breathing', gradient: 'linear-gradient(135deg, #5C8C4622, #C4A35A22)', researchUrl: 'https://doi.org/10.1007/s10484-015-9276-4' },
-                { id: 'signal-sort', title: 'Signal Sort', icon: Target, desc: 'Stillness gating for motor control and focus', badge: 'SMR', gradient: 'linear-gradient(135deg, #C4A35A22, #E8967A22)', researchUrl: 'https://doi.org/10.1007/s10484-015-9304-4' },
-                { id: 'rhythm-lock', title: 'Rhythm Lock', icon: Music, desc: 'Polyrhythmic ambient synthesizer with real-time feedback', badge: 'Attention', gradient: 'linear-gradient(135deg, #4A90D922, #7B68AE22)', researchUrl: 'https://doi.org/10.3389/fnhum.2020.00310' },
-                { id: 'media-mode', title: 'Media Mode', icon: Tv, desc: 'Watch videos with neuro-luminosity modulation', badge: 'Streaming', gradient: 'linear-gradient(135deg, #E4B87C22, #C4A35A22)', researchUrl: 'https://doi.org/10.1007/s10484-016-9324-4' },
-                { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural soundscapes for eyes-closed training', badge: 'Audio', gradient: 'linear-gradient(135deg, #5C8C4622, #7B68AE22)', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
-                { id: 'mandala', title: 'Mandala Breathing', icon: CircleDot, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
-                { id: 'eeg-mandala', title: 'Generative Mandella', icon: Flower2, desc: 'A growing ornamental record of your neurofeedback session', badge: 'Visual', gradient: 'linear-gradient(135deg, #8B9D8333, #C66B3D33)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
-              ].map(exp => {
+              {getAssignedExperienceIds(client.allowedExperiences).map(id => {
+                const exp = EXPERIENCE_CATALOGUE[id];
                 const Icon = exp.icon;
                 return (
                   <div
                     key={exp.id}
-                    onClick={() => handleStartSession(exp.id as any)}
+                    onClick={() => handleStartSession(exp.id)}
                     className="card-patient"
                     style={{
                       cursor: 'pointer',
@@ -400,14 +415,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                       <Icon size={24} />
                     </div>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                      {exp.title}
+                      {exp.name}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-                      {exp.desc}
+                      {exp.description}
                     </div>
-                    {(exp as any).researchUrl && (
+                    {exp.researchUrl && (
                       <a 
-                        href={(exp as any).researchUrl}
+                        href={exp.researchUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
