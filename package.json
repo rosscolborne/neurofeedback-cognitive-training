@@ -16,6 +16,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:brainflow:integration": "node scripts/run-brainflow-integration-tests.mjs",
     "test:python": "uv run --extra test pytest",
     "test:rules:typecheck": "tsc -p tsconfig.rules.json",
     "test:rules": "firebase emulators:exec --only firestore --project demo-neurasticity-rules \"vitest run --config vitest.rules.config.ts\"",
