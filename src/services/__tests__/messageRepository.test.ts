@@ -10,6 +10,8 @@ vi.mock('firebase/firestore', () => ({
   collectionGroup: (_db: unknown, name: string) => ({ type: 'collectionGroup', path: name }),
   doc: (parent: { type?: string; path?: string }, ...segments: string[]) => parent.type === 'collection'
     ? { type: 'doc', path: parent.path, id: segments[0] || `generated-${++state.generated}` }
+    : parent.type === 'doc'
+      ? { type: 'doc', path: `${parent.path}/${(parent as { id: string }).id}/${segments.slice(0, -1).join('/')}`, id: segments.at(-1) }
     : { type: 'doc', path: segments.slice(0, -1).join('/'), id: segments.at(-1) },
   documentId: () => '__name__', where: (field: string, op: string, value: unknown) => ({ field, op, value }),
   orderBy: (field: string, direction: string) => ({ orderBy: field, direction }), startAfter: (...values: unknown[]) => ({ startAfter: values }),
@@ -147,5 +149,43 @@ describe('relationship-scoped message repository', () => {
     dispose(); expect(liveUnsubscribe).toHaveBeenCalled();
     next?.({ metadata: { hasPendingWrites: false }, docs: [] }); error?.(new Error('late'));
     expect(callback).not.toHaveBeenCalled(); expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('tracks the latest incoming message against the current reader marker', async () => {
+    state.auth.currentUser = { uid: 'patient-1' };
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1'));
+    const listeners: Array<(snapshot: any) => void> = [];
+    const unsubscribers = [vi.fn(), vi.fn()];
+    firestore.onSnapshot.mockImplementationOnce((...args: unknown[]) => { listeners.push(args[1] as (snapshot: any) => void); return unsubscribers[0]; });
+    firestore.onSnapshot.mockImplementationOnce((...args: unknown[]) => { listeners.push(args[1] as (snapshot: any) => void); return unsubscribers[1]; });
+    const callback = vi.fn();
+    const dispose = messageRepository.subscribeToUnread('patient-1', callback, vi.fn());
+    await vi.waitFor(() => expect(listeners).toHaveLength(2));
+    listeners[0]({ id: 'clinician-1', metadata: { hasPendingWrites: false }, exists: () => true, data: () => ({ patientId: 'patient-1', clinicianId: 'clinician-1', participantIds: ['patient-1', 'clinician-1'], lastMessageId: 'incoming-1', lastSenderId: 'clinician-1' }) });
+    listeners[1]({ metadata: { hasPendingWrites: false }, data: () => undefined });
+    expect(callback).toHaveBeenLastCalledWith({ relationshipKey: 'patient-1/clinician-1', latestIncomingMessageId: 'incoming-1', unread: true });
+    listeners[1]({ metadata: { hasPendingWrites: false }, data: () => ({ lastReadMessageId: 'incoming-1' }) });
+    expect(callback).toHaveBeenLastCalledWith({ relationshipKey: 'patient-1/clinician-1', latestIncomingMessageId: 'incoming-1', unread: false });
+    dispose();
+    expect(unsubscribers[0]).toHaveBeenCalled(); expect(unsubscribers[1]).toHaveBeenCalled();
+  });
+
+  it('marks only the current incoming summary message as read', async () => {
+    state.auth.currentUser = { uid: 'patient-1' };
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1'));
+    const summary = { id: 'clinician-1', exists: () => true, data: () => ({ patientId: 'patient-1', clinicianId: 'clinician-1', participantIds: ['patient-1', 'clinician-1'], lastMessageId: 'incoming-1', lastSenderId: 'clinician-1' }) };
+    const get = vi.fn().mockResolvedValueOnce(summary).mockResolvedValueOnce(missing());
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({ get, set }));
+    await messageRepository.markThreadRead(rel(), 'incoming-1');
+    expect(set).toHaveBeenCalledOnce();
+    expect(set.mock.calls[0][0]).toMatchObject({ path: 'messageThreads/patient-1/relationships/clinician-1/reads', id: 'patient-1' });
+    expect(set.mock.calls[0][1]).toMatchObject({ lastReadMessageId: 'incoming-1', readerId: 'patient-1', updatedAt: { server: true } });
+
+    firestore.getDoc.mockResolvedValueOnce(client('clinician-1'));
+    const skip = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({ get: vi.fn().mockResolvedValueOnce(summary), set: skip }));
+    await messageRepository.markThreadRead(rel(), 'stale-message');
+    expect(skip).not.toHaveBeenCalled();
   });
 });

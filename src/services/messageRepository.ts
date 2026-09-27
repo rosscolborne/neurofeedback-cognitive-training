@@ -6,7 +6,7 @@ import {
 import { auth, db } from './firebase';
 import {
   compareMessagesAscending, mapLegacyMessageThread, mapMessageDocument, mapThreadDocument,
-  relationshipKey, type MessageRelationship, type MessageSenderRole,
+  messageUnreadStatus, relationshipKey, type MessageRelationship, type MessageSenderRole, type MessageUnreadStatus,
   type ProductionMessage, type ProductionMessageThread,
 } from './messageMappers';
 import { isClinicianDemoWorkspace } from './clinicianDemoBoundary';
@@ -21,6 +21,8 @@ export interface MessageRepository {
   listMessages(relationship: MessageRelationship, pageSize?: number, cursor?: MessagePageCursor): Promise<MessagePage>;
   listLegacyMessages(relationship: MessageRelationship): Promise<ProductionMessage[]>;
   subscribeToMessages(relationship: MessageRelationship, callback: (messages: ProductionMessage[]) => void, onError: (error: Error) => void, pageSize?: number): Unsubscribe;
+  subscribeToUnread(patientId: string, callback: (status: MessageUnreadStatus) => void, onError: (error: Error) => void): Unsubscribe;
+  markThreadRead(relationship: MessageRelationship, messageId: string): Promise<void>;
   prepareMessage(relationship: MessageRelationship, text: string): PreparedMessage;
   sendPreparedMessage(message: PreparedMessage): Promise<ProductionMessage>;
 }
@@ -59,6 +61,7 @@ async function resolveAuthorizedRelationship(patientId: string, expectedClinicia
 
 const relationshipRef = (value: MessageRelationship) => doc(db, 'messageThreads', value.patientId, 'relationships', value.clinicianId);
 const messagesRef = (value: MessageRelationship) => collection(db, 'messageThreads', value.patientId, 'relationships', value.clinicianId, 'messages');
+const readReceiptRef = (value: MessageRelationship, readerId: string) => doc(relationshipRef(value), 'reads', readerId);
 const mapMessages = (documents: Array<QueryDocumentSnapshot<DocumentData>>, value: MessageRelationship) => documents.map((snapshot) => mapMessageDocument(snapshot, value)).filter((message): message is ProductionMessage => message !== null).sort(compareMessagesAscending);
 const boundedPageSize = (value: number) => Math.max(1, Math.min(MAX_PAGE_SIZE, Math.floor(Number.isFinite(value) ? value : DEFAULT_PAGE_SIZE)));
 const isPermissionDenied = (error: unknown) => {
@@ -111,6 +114,54 @@ export const messageRepository: MessageRepository = {
       if (disposed) live(); else unsubscribe = live;
     }).catch((error) => { if (!disposed) onError(asError(error)); });
     return () => { disposed = true; unsubscribe(); };
+  },
+  subscribeToUnread(patientId, callback, onError) {
+    let disposed = false; let failed = false;
+    const unsubscribers: Unsubscribe[] = [];
+    void resolveAuthorizedRelationship(patientId).then((active) => {
+      if (disposed) return;
+      let threadReady = false; let receiptReady = false;
+      let thread: ProductionMessageThread | null = null; let lastReadMessageId: string | null = null;
+      const fail = (error: unknown) => {
+        if (disposed || failed) return;
+        failed = true; unsubscribers.forEach((unsubscribe) => unsubscribe()); onError(asError(error));
+      };
+      const publish = () => {
+        if (!disposed && !failed && threadReady && receiptReady) callback(messageUnreadStatus(thread, active.senderId, lastReadMessageId, active.key));
+      };
+      unsubscribers.push(onSnapshot(relationshipRef(active), (snapshot) => {
+        if (disposed || failed || snapshot.metadata.hasPendingWrites) return;
+        thread = snapshot.exists() ? mapThreadDocument(snapshot) : null;
+        if (snapshot.exists() && !thread) { fail(new Error('Message summary is malformed.')); return; }
+        threadReady = true; publish();
+      }, fail));
+      unsubscribers.push(onSnapshot(readReceiptRef(active, active.senderId), (snapshot) => {
+        if (disposed || failed || snapshot.metadata.hasPendingWrites) return;
+        const value = snapshot.data()?.lastReadMessageId;
+        lastReadMessageId = typeof value === 'string' ? value : null;
+        receiptReady = true; publish();
+      }, fail));
+    }).catch((error) => { if (!disposed) onError(asError(error)); });
+    return () => { disposed = true; unsubscribers.forEach((unsubscribe) => unsubscribe()); };
+  },
+  async markThreadRead(relationship, messageId) {
+    const active = await resolveAuthorizedRelationship(relationship.patientId, relationship.clinicianId);
+    if (relationship.key !== active.key) throw new Error('This conversation identity is invalid.');
+    if (!messageId) return;
+    const summaryReference = relationshipRef(active);
+    const receiptReference = readReceiptRef(active, active.senderId);
+    await runTransaction(db, async (transaction) => {
+      const summary = await transaction.get(summaryReference);
+      if (!summary.exists()) return;
+      const thread = mapThreadDocument(summary);
+      if (!thread || thread.lastMessageId !== messageId || thread.lastSenderId === active.senderId) return;
+      const receipt = await transaction.get(receiptReference);
+      if (receipt.data()?.lastReadMessageId === messageId) return;
+      transaction.set(receiptReference, {
+        patientId: active.patientId, clinicianId: active.clinicianId, readerId: active.senderId,
+        lastReadMessageId: messageId, updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+    });
   },
   prepareMessage(relationship, text) {
     currentUserId(); if (relationship.key !== relationshipKey(relationship.patientId, relationship.clinicianId)) throw new Error('This conversation identity is invalid.');

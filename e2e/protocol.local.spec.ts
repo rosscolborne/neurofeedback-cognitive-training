@@ -114,6 +114,64 @@ test('switching a custom ratio to default Beta clears the prior rule across relo
 
 function pageReward(page: Page, label: RegExp | string) { return telemetryCell(page, label); }
 
+test('default Beta feedback agrees with the live reward value and in-zone trend', async ({ browser }) => {
+  const fixture = await seedPatient({ assignedProtocol: 'beta-downtraining' });
+  const clinicianPage = await browser.newPage();
+  await clinicianDetail(clinicianPage, fixture);
+  await openBuilder(clinicianPage);
+  await expect(clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' })).not.toBeChecked();
+  await clinicianPage.close();
+
+  const page = await browser.newPage();
+  const dialog = await patientDetails(page, fixture);
+  await expect(detailValue(dialog, 'Protocol')).toContainText('Beta De-arousal Downtraining');
+  await expect(detailValue(dialog, 'Min Frequency')).toContainText('13 Hz');
+  await expect(detailValue(dialog, 'Max Frequency')).toContainText('30 Hz');
+  await expect(detailValue(dialog, 'Reward when')).toContainText('Below 14 µV');
+  await returnHome(page);
+  await startPatientTrainingInDemoMode(page);
+
+  const controls = page.getByRole('region', { name: 'Demo state controls' });
+  const tile = pageReward(page, /BETA \(13–30 Hz\)/);
+  const displayedUv = (snapshot: string) => {
+    const value = snapshot.match(/(\d+(?:\.\d+)?)\s*µV/);
+    expect(value, `Expected a µV reading in the reward tile: ${snapshot}`).not.toBeNull();
+    return Number(value![1]);
+  };
+  const waitForSnapshot = async (onClearSide: (value: number) => boolean) => {
+    let snapshot = '';
+    await expect.poll(async () => {
+      snapshot = await tile.innerText();
+      const value = snapshot.match(/(\d+(?:\.\d+)?)\s*µV/);
+      return Boolean(value && onClearSide(Number(value[1])) && /(?:In|Out of) zone now/.test(snapshot));
+    }, { timeout: 15_000 }).toBe(true);
+    return snapshot;
+  };
+
+  // Demo emits at 10 Hz; adaptation needs 900 training samples (~90s).
+  // Two 10-second state windows stay before that first threshold change.
+  await controls.getByRole('button', { name: 'Focus' }).click();
+  const focusSnapshot = await waitForSnapshot((value) => value > 15);
+  expect(focusSnapshot).toMatch(/BETA \(13–30 Hz\)/i);
+  expect(displayedUv(focusSnapshot)).toBeGreaterThan(15);
+  expect(focusSnapshot).toContain('Out of zone now');
+  await page.waitForTimeout(10_500);
+  const focusTrend = await inZoneTrend(page);
+  expect(focusTrend).not.toBeNull();
+  expect(focusTrend!).toBeLessThan(70);
+
+  await controls.getByRole('button', { name: 'Drift' }).click();
+  const driftSnapshot = await waitForSnapshot((value) => value < 11);
+  expect(driftSnapshot).toMatch(/BETA \(13–30 Hz\)/i);
+  expect(displayedUv(driftSnapshot)).toBeLessThan(11);
+  expect(driftSnapshot).toContain('In zone now');
+  await page.waitForTimeout(10_500);
+  const driftTrend = await inZoneTrend(page);
+  expect(driftTrend).not.toBeNull();
+  expect(driftTrend!).toBeGreaterThan(focusTrend! + 20);
+  await page.close();
+});
+
 test('custom single-band and ratio rules survive reload and drive the visible reward tile', async ({ browser }) => {
   const fixture = await seedPatient({ assignedProtocol: 'beta-downtraining' });
   const clinicianPage = await browser.newPage();
