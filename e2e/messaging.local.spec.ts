@@ -62,6 +62,24 @@ test('linked patient and clinician exchange persisted messages while an unrelate
       [patientText, 'patient'], [clinicianText, 'clinician'],
     ]));
 
+    // Exercise the deployed-rules read probe against this existing local pair.
+    // The probe itself creates no documents or identities.
+    const patientProbe = await patient.evaluate(async (clinicianId) => {
+      const probes = await import('/e2e/helpers/firestoreProbe.ts');
+      return probes.probePatientBranchRuleReads(clinicianId);
+    }, linked.clinician.uid);
+    const clinicianProbe = await clinician.evaluate(async ({ patientId, hasReadableLegacyMessageHistory }) => {
+      const probes = await import('/e2e/helpers/firestoreProbe.ts');
+      return probes.probeClinicianBranchRuleReads(patientId, hasReadableLegacyMessageHistory);
+    }, { patientId: linked.patient.uid, hasReadableLegacyMessageHistory: patientProbe.hasReadableLegacyMessageHistory });
+    expect(Object.keys(patientProbe.reads)).toHaveLength(10);
+    expect(Object.keys(clinicianProbe.reads)).toHaveLength(13);
+    expect(patientProbe.hasReadableLegacyMessageHistory).toBe(false);
+    expect(clinicianProbe.hasExistingInvitation).toBe(false);
+    for (const reads of [patientProbe.reads, clinicianProbe.reads]) {
+      expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map((name) => [name, 'allowed'])));
+    }
+
     const outsider = await unrelatedContext.newPage();
     await loginThroughUi(outsider, unrelated.patient);
     await arriveAtPatientDashboard(outsider);
