@@ -277,7 +277,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     setIsSavingSession(true);
 
     const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
-    const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
+    const timeInZonePercent = inZoneMeasuredSeconds > 0
+      ? Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100)) : 0;
     const bandSummary = summarizeVerifiedBands(bandAccumulatorRef.current);
     const careProvenance = resolveSessionCareProvenance(client);
 
@@ -896,7 +897,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <TidalGardenCanvas 
               eegData={eegData} 
               stage={client.tidalGardenState.stage} 
-              growthPoints={client.tidalGardenState.growthPoints + Math.floor(inZoneSeconds * 10)} 
+              growthPoints={client.tidalGardenState.growthPoints + Math.round((inZonePercent ?? 0) * 1.5)}
               inZonePercent={inZonePercent ?? undefined}
               isPaused={isPaused} 
             />

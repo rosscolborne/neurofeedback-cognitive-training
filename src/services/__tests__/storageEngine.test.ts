@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IndividualBaselineModel, SessionRecord } from '../../types';
+import type { ClientProfile, IndividualBaselineModel, SessionRecord } from '../../types';
 
 const state = vi.hoisted(() => ({
   auth: { currentUser: null as null | { uid: string; email?: string } },
@@ -610,7 +610,7 @@ describe('production and sample workspace separation', () => {
     expect(saved).not.toHaveProperty('assignedProtocol');
     expect(saved).not.toHaveProperty('prescribedSessionsPerWeek');
     expect(saved).not.toHaveProperty('brainCapacityScore');
-    expect(saved).not.toHaveProperty('tidalGardenState');
+    expect(saved.tidalGardenState).toEqual({ stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' });
     expect(saved).not.toHaveProperty('skylineBiomesUnlocked');
   });
 
@@ -813,6 +813,8 @@ describe('authenticated simulator session persistence', () => {
     );
     const session = {
       ...sessionDocument('simulated-session', 'patient-1').data(),
+      experience: 'tidal-garden' as const,
+      timeInZonePercent: 80,
       isDemo: true,
       clinicianId: undefined,
       clinicId: 'self-guided',
@@ -825,6 +827,10 @@ describe('authenticated simulator session persistence', () => {
     expect(writes[0]?.ref).toEqual({ type: 'doc', path: 'sessions', id: 'simulated-session' });
     expect(writes[0]?.payload).toMatchObject({ isDemo: true, patientId: 'patient-1' });
     expect(writes[1]?.payload).toMatchObject({ recentCompletedSessionIds: ['simulated-session'] });
+    expect(writes[1]?.payload).toMatchObject({ tidalGardenState: { stage: 1, growthPoints: 120, plantsUnlocked: [], lastWatered: '' } });
+
+    firestore.getDoc.mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => writes[1].payload });
+    expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(120);
 
     firestore.getDocs.mockResolvedValueOnce({
       docs: [{ id: session.id, data: () => writes[0].payload }],
@@ -859,6 +865,55 @@ describe('authenticated simulator session persistence', () => {
 
     await expect(storageEngine.createSession(session)).resolves.toMatchObject({ created: false });
     expect(transactionSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('Tidal Garden initialization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'patient-1' };
+  });
+
+  it('starts a blank real profile at stage one', () => {
+    expect(createBlankProfile('patient-1', 'patient@example.com').tidalGardenState).toEqual({
+      stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '',
+    });
+  });
+
+  it('initializes only the missing field in one transaction and leaves existing growth alone', async () => {
+    const stored = { ...createBlankProfile('patient-1', 'patient@example.com'), tidalGardenState: undefined as ClientProfile['tidalGardenState'], notes: 'concurrent note' };
+    const transactionSet = vi.fn((_ref, payload) => Object.assign(stored, payload));
+    firestore.runTransaction.mockImplementation(async (_db, callback) => callback({
+      get: vi.fn(async () => ({ id: 'patient-1', exists: () => true, data: () => ({ ...stored }) })),
+      update: transactionSet,
+    }));
+    const first = await storageEngine.ensureTidalGardenState('patient-1');
+    expect(first.tidalGardenState?.stage).toBe(1);
+    expect(transactionSet).toHaveBeenCalledWith(expect.anything(), { tidalGardenState: first.tidalGardenState });
+    stored.tidalGardenState = { stage: 3, growthPoints: 501, plantsUnlocked: ['existing'], lastWatered: 'date' };
+    const second = await storageEngine.ensureTidalGardenState('patient-1');
+    expect(second.tidalGardenState).toEqual(stored.tidalGardenState);
+    expect(transactionSet).toHaveBeenCalledOnce();
+    expect(stored.notes).toBe('concurrent note');
+  });
+
+  it('fails explicitly for a missing profile or transaction denial', async () => {
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({
+      get: vi.fn().mockResolvedValue({ id: 'patient-1', exists: () => false }), update: vi.fn(),
+    }));
+    await expect(storageEngine.ensureTidalGardenState('patient-1')).rejects.toThrow('profile is unavailable');
+    firestore.runTransaction.mockRejectedValueOnce(new Error('permission-denied'));
+    await expect(storageEngine.ensureTidalGardenState('patient-1')).rejects.toThrow('permission-denied');
+  });
+
+  it('keeps sample initialization entirely in memory', async () => {
+    activateClinicianDemoWorkspace();
+    const sample = INITIAL_DEMO_CLIENTS[0];
+    const first = await storageEngine.ensureTidalGardenState(sample.id);
+    expect(first.tidalGardenState).toEqual(sample.tidalGardenState);
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(firestore.getDoc).not.toHaveBeenCalled();
   });
 });
 

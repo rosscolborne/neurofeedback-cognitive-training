@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
@@ -52,6 +52,15 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
+  const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
+  const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
+  const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
+  const [gardenOpeningOwnerId, setGardenOpeningOwnerId] = useState<string | null>(null);
+  const [gardenOpeningError, setGardenOpeningError] = useState<string | null>(null);
+  const currentClientId = useRef(client.id);
+  useEffect(() => {
+    currentClientId.current = client.id;
+  }, [client.id]);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
@@ -116,8 +125,31 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     }
   };
 
-  const handleStartSession = (exp: ExperienceType) => {
-    setActiveSessionExp(exp);
+  const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
+    if (exp !== 'tidal-garden' || client.tidalGardenState) {
+      setSessionClient(null);
+      setSessionOwnerId(client.id);
+      setActiveSessionExp(exp);
+      return;
+    }
+    setGardenOpeningOwnerId(client.id);
+    setGardenOpening('pending');
+    setGardenOpeningError(null);
+    return (async () => {
+      try {
+        const ensured = await storageEngine.ensureTidalGardenState(client.id);
+        if (currentClientId.current !== client.id) return;
+        onClientPersistedElsewhere(ensured);
+        setSessionClient(ensured);
+        setSessionOwnerId(client.id);
+        setGardenOpening('idle');
+        setActiveSessionExp(exp);
+      } catch (error) {
+        if (currentClientId.current !== client.id) return;
+        setGardenOpeningError(error instanceof Error ? error.message : 'Tidal Garden could not be opened.');
+        setGardenOpening('error');
+      }
+    })();
   };
 
   const handleSessionComplete = async (session: SessionRecord) => {
@@ -192,19 +224,29 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     exportPatientSessionCsv(allSessions, setExportStatus);
   };
 
-  if (activeSessionExp) {
+  if (activeSessionExp && sessionOwnerId === client.id) {
     return (
       <SessionRunner
-        client={client}
+        client={sessionClient?.id === client.id ? sessionClient : client}
         onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
-        onCancel={() => setActiveSessionExp(null)}
+        onCancel={() => { setActiveSessionExp(null); setSessionClient(null); }}
       />
     );
   }
 
-  if (completedSession) {
+  if (gardenOpening !== 'idle' && gardenOpeningOwnerId === client.id) {
+    return <div style={{ padding: '24px' }}>
+      {gardenOpening === 'pending' ? <p>Opening Tidal Garden…</p> : <>
+        <p role="alert">{gardenOpeningError}</p>
+        <button className="btn btn-primary" onClick={() => void handleStartSession('tidal-garden')}>Retry</button>
+        <button className="btn btn-ghost" onClick={() => setGardenOpening('idle')}>Back</button>
+      </>}
+    </div>;
+  }
+
+  if (completedSession && completedSession.patientId === client.id) {
     return (
       <PostSessionSummary
         session={completedSession}

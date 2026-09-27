@@ -113,6 +113,16 @@ describe('patient metrics', () => {
     expect(earned.has('skyline-explorer')).toBe(false);
   });
 
+  it('earns Garden Keeper only from a persisted stage of at least three', () => {
+    expect(getEarnedBadgeIds([], 'UTC', 2).has('garden-keeper')).toBe(false);
+    expect(getEarnedBadgeIds([], 'UTC', 3).has('garden-keeper')).toBe(true);
+    expect(getEarnedBadgeIds([], 'UTC').has('garden-keeper')).toBe(false);
+    const options = { period: 'all' as const, nowMs: Date.now(), chartWidth: 300, chartHeight: 40, gardenStage: 3 };
+    expect(buildPatientProgressDisplayModel('loading', [], options).earnedBadgeIds).toBeNull();
+    expect(buildPatientProgressDisplayModel('error', [], options).earnedBadgeIds).toBeNull();
+    expect(buildPatientProgressDisplayModel('ready', [], options).earnedBadgeIds?.has('garden-keeper')).toBe(true);
+  });
+
   it('withholds all evidence conclusions while loading', () => {
     const model = buildPatientProgressDisplayModel('loading', [], {
       period: 'week', nowMs: Date.parse('2026-09-19T12:00:00Z'), timeZone: 'UTC',

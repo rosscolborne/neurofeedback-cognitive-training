@@ -45,6 +45,7 @@ export interface PatientProgressDisplayOptions {
   timeZone?: string;
   chartWidth: number;
   chartHeight: number;
+  gardenStage?: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -184,7 +185,7 @@ export function buildPatientProgressDisplayModel(
       options.chartHeight,
       options.timeZone,
     ),
-    earnedBadgeIds: getEarnedBadgeIds(validSessions, options.timeZone),
+    earnedBadgeIds: getEarnedBadgeIds(validSessions, options.timeZone, options.gardenStage),
   };
 }
 
@@ -293,14 +294,14 @@ function hasSevenDayRun(sessions: SessionRecord[], timeZone?: string): boolean {
 }
 
 /** Badge definitions are static content; awards are recomputed from qualifying sessions. */
-export function getEarnedBadgeIds(sessions: SessionRecord[], timeZone?: string): Set<string> {
+export function getEarnedBadgeIds(sessions: SessionRecord[], timeZone?: string, gardenStage?: number): Set<string> {
   const earned = new Set<string>();
   if (sessions.some(session => getSessionTimestamp(session) != null)) earned.add('first-light');
   if (hasSevenDayRun(sessions, timeZone)) earned.add('steady-state');
   if (sessions.some(session => session.protocol === 'theta-beta-ratio' && (getTimeInZonePercent(session) ?? -1) >= 80)) {
     earned.add('deep-focus');
   }
-  // Sessions do not persist alpha-dominance duration, garden stage evidence, or
-  // visited skyline biomes. Their corresponding badges therefore remain locked.
+  if (typeof gardenStage === 'number' && Number.isFinite(gardenStage) && gardenStage >= 3) earned.add('garden-keeper');
+  // Alpha-dominance duration and visited skyline biomes are not persisted.
   return earned;
 }
