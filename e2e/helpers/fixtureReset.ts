@@ -118,13 +118,24 @@ async function resetDocumentPaths(database: Firestore): Promise<DocumentReferenc
             const relationship = await reference.get();
             if (relationship.exists) assertFixtureReference(reference.path, relationship.data()!);
             for (const collection of await reference.listCollections()) {
-                if (collection.id !== 'messages') throw new Error(`Refusing to reset unexpected nested collection ${collection.path}.`);
+                if (!['messages', 'reads'].includes(collection.id)) {
+                    throw new Error(`Refusing to reset unexpected nested collection ${collection.path}.`);
+                }
             }
             const messages = await reference.collection('messages').get();
             for (const message of messages.docs) {
                 assertFixtureReference(message.ref.path, message.data());
                 if (![identity.uid, clinician.uid].includes(message.get('senderId'))) {
                     throw new Error(`Refusing to reset ${message.ref.path}: sender is not in the fixture pair.`);
+                }
+            }
+            const receipts = await reference.collection('reads').get();
+            const allowedReaders = new Set<string>([identity.uid, clinician.uid]);
+            for (const receipt of receipts.docs) {
+                assertFixtureReference(receipt.ref.path, receipt.data());
+                if (!allowedReaders.has(receipt.id) || receipt.get('readerId') !== receipt.id ||
+                    receipt.get('patientId') !== identity.uid || receipt.get('clinicianId') !== clinician.uid) {
+                    throw new Error(`Refusing to reset ${receipt.ref.path}: receipt does not belong to the fixture pair.`);
                 }
             }
         }

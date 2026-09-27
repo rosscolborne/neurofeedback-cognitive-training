@@ -13,7 +13,7 @@ import { cleanupRecordedE2ERun } from './helpers/dataLifecycle';
  * reviewing the retained items; they stay untouched, their pre-run values are
  * saved under e2e/.cleanup-reports/, and the lease is released.
  */
-test('review or clean a recorded stateful E2E run', async ({}, testInfo) => {
+test('review or clean a recorded stateful E2E run', async (_, testInfo) => {
     const runId = process.env.E2E_CLEANUP_RUN_ID?.trim();
     test.skip(!runId, 'Set E2E_CLEANUP_RUN_ID to the run named by the blocking lease or cleanup report.');
     await cleanupRecordedE2ERun(runId!, testInfo);

@@ -38,6 +38,8 @@ test('repeated reset recreates the known pair and outsider without duplicates or
     await db.doc(`messageThreads/${patient.uid}/relationships/${clinician.uid}/messages/one`).set({
         patientId: patient.uid, clinicianId: clinician.uid, senderId: patient.uid, text: 'test',
     });
+    const receiptPath = `messageThreads/${patient.uid}/relationships/${clinician.uid}/reads/${clinician.uid}`;
+    await db.doc(receiptPath).set({ patientId: patient.uid, clinicianId: clinician.uid, readerId: clinician.uid, lastReadMessageId: 'one' });
     await resetE2EFixtures(auth, db, passwords);
     await resetE2EFixtures(auth, db, passwords);
 
@@ -76,6 +78,16 @@ test('repeated reset recreates the known pair and outsider without duplicates or
     expect((await db.doc('sessions/e2e-run-1').get()).exists).toBe(false);
     expect((await db.doc('appointments/e2e-legacy').get()).exists).toBe(false);
     expect((await db.doc(`messageThreads/${patient.uid}/relationships/${clinician.uid}/messages/one`).get()).exists).toBe(false);
+    expect((await db.doc(receiptPath).get()).exists).toBe(false);
+});
+
+test('a thread receipt for an unrelated reader blocks reset', async () => {
+    const { patient, clinician } = fixtureIdentities;
+    const receiptPath = `messageThreads/${patient.uid}/relationships/${clinician.uid}/reads/unrelated`;
+    await db.doc(receiptPath).set({ patientId: patient.uid, clinicianId: clinician.uid, readerId: 'unrelated' });
+    await expect(resetE2EFixtures(auth, db, passwords)).rejects.toThrow('receipt does not belong to the fixture pair');
+    expect((await db.doc(`clients/${patient.uid}`).get()).exists).toBe(true);
+    await db.doc(receiptPath).delete();
 });
 
 test('unrelated linked data blocks reset before fixture mutation', async () => {

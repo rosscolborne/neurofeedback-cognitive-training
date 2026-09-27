@@ -37,6 +37,8 @@ The custom role permissions are the minimum expected for the current Admin SDK c
 
 Fixed identities are in `e2e/helpers/fixtureModel.ts`: `wb44-e2e-patient`, `wb44-e2e-clinician`, and `wb44-e2e-outsider` with corresponding `@example.com` emails. The patient is linked to the clinician's single-member clinic; the outsider has no clinician or clinic. The existing isolation suite creates additional random accounts in its registered disposable namespace and cleans them through its lease. Auth UIDs are reused, passwords are rotated on every reset, and Firestore fixture data is recreated. Current rules use `users/{uid}.role` for clinician authorization; if WB-18/WB-19 introduce a separate grant, update this seeder before running those tests.
 
+Reset also removes the fixture pair's message documents and read receipts. It refuses a receipt naming a reader outside that pair, so new messaging activity cannot cause the reset to delete another account's data.
+
 The script refuses a different project or service account, a key-file path, non-human ADC, emulator variables, an active/parked stateful lease, a fixture reset lock, an unmarked fixed profile, or any discovered relationship to an unrelated user. It checks the browser Firebase project before the first reset. It does not change unrelated development accounts. A partial reset can be rerun; fixed IDs and email ownership checks prevent duplicates.
 
 ## Recovery and revocation
