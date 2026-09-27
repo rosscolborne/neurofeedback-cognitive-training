@@ -338,14 +338,9 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
       };
 
       if (user) {
-        const client = await storageEngine.getCurrentClient(user);
+        const client = await storageEngine.getExistingCurrentClient(user);
         if (client) {
-          const updated = {
-            ...client,
-            individualBaselineModel: baselineModel,
-            status: 'active' as const,
-          };
-          await storageEngine.saveClient(updated);
+          await storageEngine.saveIndividualBaselineModel(client.id, baselineModel);
         } else throw new Error('Your patient profile is unavailable.');
       } else {
         throw new Error('Sign in before saving this calibration.');
