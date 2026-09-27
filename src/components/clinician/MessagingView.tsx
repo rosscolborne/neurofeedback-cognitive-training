@@ -28,7 +28,10 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const endRef = useRef<HTMLDivElement | null>(null);
-  const participantIds = useMemo(() => new Set(participants.map((item) => item.patientId)), [participants]);
+  // Keyed by content: callers rebuild the participants array on every render,
+  // which would otherwise re-run the selection sync below and undo a choice.
+  const participantIdsKey = JSON.stringify(participants.map((item) => item.patientId));
+  const participantIds = useMemo(() => new Set<string>(JSON.parse(participantIdsKey)), [participantIdsKey]);
   const currentActivePatientId = activePatientId && participantIds.has(activePatientId) ? activePatientId : null;
   const conversation = useMessageConversation(currentActivePatientId, repository);
   const sendView = getMessageSendViewState(conversation.draft, conversation.isSending, conversation.failedAttempt, conversation.sendError);
