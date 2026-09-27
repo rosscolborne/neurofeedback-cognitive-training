@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bluetooth, CheckCircle2, ChevronRight, Eye, Sparkles, Brain, AlertCircle, RefreshCw, Zap, Compass } from 'lucide-react';
 import { eegEngine } from '../../services/eegEngine';
@@ -19,7 +19,15 @@ interface HardwareSetupProps {
 
 export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pair' }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role, isDemoWorkspace } = useAuth();
+  const identity = `${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
+  const identityRef = useRef(identity);
+  useLayoutEffect(() => { identityRef.current = identity; }, [identity]);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const [step, setStep] = useState<StudioStep>(initialStep);
   const [connecting, setConnecting] = useState(false);
@@ -285,6 +293,8 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
 
   // Save Baseline to Profile & Continue
   const handleSaveNeuralImprint = async () => {
+    const requestIdentity = identity;
+    const isCurrent = () => mountedRef.current && identityRef.current === requestIdentity;
     setSavingBaseline(true);
     setBaselineSaveError(null);
     try {
@@ -339,6 +349,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
 
       if (user) {
         const client = await storageEngine.getExistingCurrentClient(user);
+        if (!isCurrent()) return;
         if (client) {
           await storageEngine.saveIndividualBaselineModel(client.id, baselineModel);
         } else throw new Error('Your patient profile is unavailable.');
@@ -346,13 +357,15 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
         throw new Error('Sign in before saving this calibration.');
       }
 
+      if (!isCurrent()) return;
       eegEngine.individualBaselineModel = baselineModel;
       navigate('/');
     } catch (err) {
+      if (!isCurrent()) return;
       console.warn('Error saving baseline model:', err);
       setBaselineSaveError(err instanceof Error ? err.message : 'The calibration could not be saved. Try again.');
     } finally {
-      setSavingBaseline(false);
+      if (isCurrent()) setSavingBaseline(false);
     }
   };
 

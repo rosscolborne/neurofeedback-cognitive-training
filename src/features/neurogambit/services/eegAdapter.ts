@@ -1,4 +1,5 @@
 import { EEGDataPoint } from '../../../types';
+import { getReusableBaselineModel } from '../../../services/dataMappers';
 import { BrainStateEvent, NeuroGambitBaseline } from '../types';
 
 export function createDefaultBaseline(): NeuroGambitBaseline {
@@ -11,6 +12,23 @@ export function createDefaultBaseline(): NeuroGambitBaseline {
     alphaStd: 1.0,
     calibratedAt: Date.now(),
     isReady: false,
+  };
+}
+
+export function getNeuroGambitBaseline(model: unknown): NeuroGambitBaseline | null {
+  const saved = getReusableBaselineModel(model);
+  if (!saved || !Number.isFinite(saved.thetaMean) || !Number.isFinite(saved.betaMean)
+    || (saved.thetaStd != null && !Number.isFinite(saved.thetaStd))
+    || (saved.betaStd != null && !Number.isFinite(saved.betaStd))) return null;
+  return {
+    thetaMean: saved.thetaMean!,
+    thetaStd: saved.thetaStd ?? 1.0,
+    highBetaMean: saved.betaMean!,
+    highBetaStd: saved.betaStd ?? 1.0,
+    alphaMean: Number.isFinite(saved.alphaMean) ? saved.alphaMean! : 7.0,
+    alphaStd: Number.isFinite(saved.alphaStd) ? saved.alphaStd! : 1.0,
+    calibratedAt: Date.parse(saved.lastCalibratedAt),
+    isReady: true,
   };
 }
 

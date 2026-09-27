@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } from './types';
 import { storageEngine } from './services/storageEngine';
+import { eegEngine } from './services/eegEngine';
+import { getReusableBaselineModel } from './services/dataMappers';
 import { applyBrandToDOM, BRAND_PRESETS } from './services/brandEngine';
 import { clinicSettingsRepository } from './services/clinicSettingsRepository';
 import type { ClinicSettingsSnapshot } from './services/clinicSettingsRepository';
@@ -35,6 +37,7 @@ function InvitationEntryRedirect() {
 
 export function App() {
   const { user, role, loading, logout, isDemoWorkspace } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
   const storedInvitationCode = typeof window === 'undefined'
@@ -59,7 +62,9 @@ export function App() {
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
   const accountIdentityRef = useRef(accountIdentity);
   accountIdentityRef.current = accountIdentity;
-  const hasCurrentData = dataIdentity === accountIdentity;
+  const profileRoutePhase = location.pathname === '/hardware-setup' ? 'hardware-setup' : 'app';
+  const profileDataIdentity = `${accountIdentity}:${profileRoutePhase}`;
+  const hasCurrentData = dataIdentity === profileDataIdentity;
   const visibleClients = hasCurrentData ? clients : [];
   const visibleCurrentClient = hasCurrentData ? currentClient : null;
   const visibleInvitations = hasCurrentData ? patientInvitations : [];
@@ -78,8 +83,10 @@ export function App() {
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
-    const isCurrent = () => loadGeneration.current === generation;
-    setDataIdentity(accountIdentity);
+    let active = true;
+    const isCurrent = () => active && loadGeneration.current === generation && accountIdentityRef.current === accountIdentity;
+    eegEngine.individualBaselineModel = null;
+    setDataIdentity(profileDataIdentity);
     setClients([]);
     setCurrentClient(null);
     setPatientProfileError(null);
@@ -92,7 +99,13 @@ export function App() {
 
     if (role === 'patient') {
       void storageEngine.getCurrentClient(user)
-        .then((client) => { if (isCurrent()) setCurrentClient(client); })
+        .then((client) => {
+          if (!isCurrent()) return;
+          if (profileRoutePhase !== 'hardware-setup') {
+            eegEngine.individualBaselineModel = getReusableBaselineModel(client?.individualBaselineModel);
+          }
+          setCurrentClient(client);
+        })
         .catch((error) => {
           if (!isCurrent()) return;
           console.warn('Error loading patient profile:', error);
@@ -114,7 +127,11 @@ export function App() {
           setClinicianInvitationsError(error instanceof Error ? error.message : 'Pending invitations could not be loaded.');
         });
     }
-  }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, role, user]);
+    return () => {
+      active = false;
+      eegEngine.individualBaselineModel = null;
+    };
+  }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
 
   useEffect(() => {
     const generation = ++brandGeneration.current;
@@ -171,6 +188,11 @@ export function App() {
     if (accountIdentityRef.current !== accountIdentity) return;
     if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
     setClients((current) => current.map((client) => client.id === updated.id ? updated : client));
+  };
+
+  const handleBaselinePersisted = (patientId: string, model: ClientProfile['individualBaselineModel']) => {
+    if (accountIdentityRef.current !== accountIdentity || !model) return;
+    setCurrentClient((current) => current?.id === patientId ? { ...current, individualBaselineModel: model } : current);
   };
 
   const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
@@ -262,6 +284,8 @@ export function App() {
           onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}
+          onBaselinePersisted={handleBaselinePersisted}
+          onRecalibrate={() => navigate('/hardware-setup')}
           onOpenRebrand={() => setShowRebrandModal(true)}
         />
       );
@@ -308,7 +332,7 @@ export function App() {
           <>
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/role-selection" element={<RoleSelection />} />
-            <Route path="/hardware-setup" element={<HardwareSetup />} />
+            <Route path="/hardware-setup" element={<HardwareSetup key={accountIdentity} />} />
             
             <Route path="/" element={renderPrimaryApp()} />
             <Route path="/connect/:invitationCode" element={renderPrimaryApp()} />

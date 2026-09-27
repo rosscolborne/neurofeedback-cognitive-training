@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
-import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
+import { ClientProfile, ClinicBrandConfig, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
+import { getCalibrationDisplayState } from '../../services/dataMappers';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
 import { OnboardingFlow } from './OnboardingFlow';
@@ -32,6 +33,8 @@ interface PatientShellProps {
   onUpdateClient: (updated: ClientProfile) => Promise<void>;
   /** Update local UI for data already persisted by an atomic repository operation. */
   onClientPersistedElsewhere: (updated: ClientProfile) => void;
+  onBaselinePersisted?: (patientId: string, model: IndividualBaselineModel) => void;
+  onRecalibrate?: () => void;
   onOpenRebrand: () => void;
   initialInvitationCode?: string;
   onInvitationAccepted?: () => void;
@@ -42,6 +45,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   client,
   onUpdateClient,
   onClientPersistedElsewhere,
+  onBaselinePersisted,
+  onRecalibrate,
   initialInvitationCode,
   onInvitationAccepted,
 }) => {
@@ -64,6 +69,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const protocolAlias = client.customProtocolConfig
     ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
+  const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
+  const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString();
+  const imprintLabel = imprintState.status === 'valid' ? 'Current'
+    : imprintState.status === 'expired' ? 'Expired'
+      : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
+  const measuredAlphaPeakHz = client.individualBaselineModel?.algorithmVersion === 'neurogambit-15s-v1'
+    ? undefined : client.individualBaselineModel?.alphaPeakHz;
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
   const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
   const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
@@ -184,6 +196,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     return (
       <SessionRunner
         client={client}
+        onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
         onCancel={() => setActiveSessionExp(null)}
@@ -400,6 +413,15 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
+            <section className="card-patient" aria-label="Neural Imprint" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h2 style={{ fontSize: '17px', margin: 0 }}>Neural Imprint</h2>
+              <div><strong>Status:</strong> {imprintLabel}</div>
+              {imprintDate && <div><strong>Calibrated:</strong> <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time></div>}
+              {imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
+                && <div><strong>Alpha peak:</strong> {measuredAlphaPeakHz.toFixed(1)} Hz</div>}
+              {imprintState.expiresAt != null && <div><strong>Expires:</strong> <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString()}</time></div>}
+              <button type="button" className="btn btn-secondary" onClick={onRecalibrate}>Recalibrate</button>
+            </section>
             {/* Profile Info Card */}
             <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>

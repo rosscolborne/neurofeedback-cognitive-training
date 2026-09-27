@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientProfile, ClinicBrandConfig } from '../../../types';
 
@@ -161,5 +161,37 @@ describe('PatientShell persisted profile writes', () => {
     } finally {
       Object.defineProperty(globalThis, 'alert', { configurable: true, value: originalAlert });
     }
+  });
+
+  it('shows only saved Neural Imprint values and routes recalibration without a profile write', async () => {
+    const onRecalibrate = vi.fn();
+    const onUpdateClient = vi.fn();
+    const model = { alphaPeakHz: 9.8, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z' };
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<PatientShell brand={brand} client={{ ...client, individualBaselineModel: model }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} onRecalibrate={onRecalibrate} />);
+    });
+    act(() => renderer.root.findAllByType('button').find((button) =>
+      button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
+    )!.props.onClick());
+    const textContent = (node: ReactTestInstance | string): string =>
+      typeof node === 'string' ? node : node.children.map(textContent).join('');
+    const summary = () => textContent(renderer.root.findByProps({ 'aria-label': 'Neural Imprint' }));
+    expect(summary()).toContain('Current');
+    expect(summary()).toContain('9.8 Hz');
+    expect(summary()).not.toContain('Reactivity');
+    expect(summary()).not.toContain('Purity');
+    act(() => renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Recalibrate')!.props.onClick());
+    expect(onRecalibrate).toHaveBeenCalledTimes(1);
+    expect(onUpdateClient).not.toHaveBeenCalled();
+
+    await act(async () => { renderer.update(<PatientShell brand={brand} client={{ ...client, individualBaselineModel: { ...model, algorithmVersion: 'neurogambit-15s-v1', thetaMean: 2, betaMean: 4, alphaMean: 6 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    expect(summary()).toContain('Current');
+    expect(summary()).not.toContain('9.8 Hz');
+    await act(async () => { renderer.update(<PatientShell brand={brand} client={{ ...client, individualBaselineModel: { ...model, expiresAt: 0 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    expect(summary()).toContain('Expired');
+    await act(async () => { renderer.update(<PatientShell brand={brand} client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    expect(summary()).toContain('Not calibrated');
+    renderer.unmount();
   });
 });

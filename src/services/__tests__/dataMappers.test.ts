@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../types';
 import {
   applySessionCompletionToClient,
+  getCalibrationDisplayState,
+  getReusableBaselineModel,
   getPatientClinicianId,
   isPatientInvitationExpired,
   readClientProfile,
@@ -59,6 +61,30 @@ const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord =
 });
 
 describe('production data migration readers', () => {
+  it('restores only finite, unexpired calibrations across legacy timestamp shapes', () => {
+    const now = Date.parse('2026-09-27T12:00:00Z');
+    const model = { alphaPeakHz: 10.2, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z', thetaMean: 2, betaMean: 4 };
+    expect(getReusableBaselineModel(model, now)).toBe(model);
+    for (const expiresAt of [now + 1, new Date(now + 1).toISOString(), { seconds: (now + 1000) / 1000 }, { toDate: () => new Date(now + 1) }]) {
+      expect(getReusableBaselineModel({ ...model, status: 'valid', expiresAt }, now)).toMatchObject(model);
+    }
+    for (const expiresAt of [now, now - 1, 'bad-date']) {
+      expect(getReusableBaselineModel({ ...model, status: 'valid', expiresAt }, now)).toBeNull();
+    }
+    for (const status of ['invalid', 'collecting', 'expired', 'unknown']) {
+      expect(getReusableBaselineModel({ ...model, status }, now)).toBeNull();
+    }
+    expect(getReusableBaselineModel({ ...model, alphaPeakHz: Infinity }, now)).toBeNull();
+    expect(getReusableBaselineModel({ ...model, oneOverFSlope: NaN }, now)).toBeNull();
+    expect(getReusableBaselineModel({ ...model, lastCalibratedAt: 'bad-date' }, now)).toBeNull();
+    const gambit = { algorithmVersion: 'neurogambit-15s-v1', lastCalibratedAt: model.lastCalibratedAt, thetaMean: 0, betaMean: 4, alphaMean: 6 };
+    expect(getReusableBaselineModel(gambit, now)).toBe(gambit);
+    expect(getCalibrationDisplayState(gambit, now).status).toBe('valid');
+    expect(getReusableBaselineModel({ ...gambit, thetaMean: NaN }, now)).toBeNull();
+    expect(getReusableBaselineModel({ ...gambit, algorithmVersion: 'unknown' }, now)).toBeNull();
+    expect(getCalibrationDisplayState(undefined, now)).toMatchObject({ status: 'not-calibrated', calibratedAt: null });
+    expect(getCalibrationDisplayState({ ...model, expiresAt: now }, now)).toMatchObject({ status: 'expired', calibratedAt: Date.parse(model.lastCalibratedAt) });
+  });
   it('removes ratio residue from merged default and single-band assignments on read', () => {
     const ratioReward = DEFAULT_RATIO_REWARDS['theta-beta-ratio']!;
     for (const protocol of ['smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
