@@ -37,6 +37,7 @@ interface PatientShellProps {
   onRecalibrate?: () => void;
   onOpenRebrand: () => void;
   initialInvitationCode?: string;
+  invitationRouteCode?: string;
   onInvitationAccepted?: () => void;
 }
 
@@ -48,6 +49,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onBaselinePersisted,
   onRecalibrate,
   initialInvitationCode,
+  invitationRouteCode,
   onInvitationAccepted,
 }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
@@ -72,6 +74,18 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
   const [showClinicianLink, setShowClinicianLink] = useState(!!initialInvitationCode);
   const [invitationCode, setInvitationCode] = useState(initialInvitationCode || '');
+  useEffect(() => {
+    if (!initialInvitationCode) return;
+    setInvitationCode(initialInvitationCode);
+    setShowClinicianLink(true);
+    setActiveTab('home');
+  }, [initialInvitationCode]);
+  useEffect(() => {
+    if (!invitationRouteCode) return;
+    setInvitationCode(invitationRouteCode);
+    setShowClinicianLink(true);
+    setActiveTab('home');
+  }, [invitationRouteCode]);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);

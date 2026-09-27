@@ -31,7 +31,7 @@ interface ClientRosterViewProps {
   onMessageClient?: (clientId: string) => void;
 }
 
-const invitationUrl = (id: string) => `${window.location.origin}/connect/${id}`;
+const invitationUrl = (id: string) => `${window.location.origin}/#/connect/${id}`;
 const currentTime = () => Date.now();
 
 const invitationMillis = (value: PatientInvitation['expiresAt']): number | null => {

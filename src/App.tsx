@@ -281,6 +281,18 @@ export function App() {
 
   const renderPrimaryApp = () => {
     if (!role) return <Navigate to="/role-selection" replace />;
+    if (role === 'clinician' && invitationCode) {
+      return (
+        <main style={{ minHeight: '100dvh', display: 'grid', placeContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
+          <h1>Patient invitation</h1>
+          <p>This invitation is for a patient account. Sign in with the invited patient email address to accept it.</p>
+          <button type="button" className="btn btn-primary" onClick={() => {
+            window.sessionStorage.removeItem('waveable_pending_invitation');
+            navigate('/');
+          }}>Return to clinician dashboard</button>
+        </main>
+      );
+    }
     if (role === 'patient') {
       if (!visibleCurrentClient) {
         if (patientProfileError) {
@@ -305,6 +317,7 @@ export function App() {
           brand={visibleBrand}
           client={visibleCurrentClient}
           initialInvitationCode={invitationCode}
+          invitationRouteCode={routeInvitationCode}
           onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}

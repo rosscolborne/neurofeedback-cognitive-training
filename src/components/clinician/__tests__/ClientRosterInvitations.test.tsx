@@ -56,7 +56,7 @@ describe('ClientRosterView invitations', () => {
     await act(async () => { renderer.update(<ClientRosterView clients={[]} invitations={[created]} onSelectClient={vi.fn()} onAddClient={onAddClient} onCancelInvitation={onCancelInvitation} />); });
     await act(async () => { await button('Copy link')!.props.onClick(); });
     expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(navigator.clipboard.writeText).mock.calls.map(([url]) => url)).toEqual(['https://example.test/connect/invite-1', 'https://example.test/connect/invite-1']);
+    expect(vi.mocked(navigator.clipboard.writeText).mock.calls.map(([url]) => url)).toEqual(['https://example.test/#/connect/invite-1', 'https://example.test/#/connect/invite-1']);
     expect(text()).toContain('Link copied');
   });
 
