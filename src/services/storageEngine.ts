@@ -1,5 +1,6 @@
 import {
   ClientProfile,
+  IndividualBaselineModel,
   ClinicProfile,
   ClinicBrandConfig,
   DeviceAssignment,
@@ -29,6 +30,7 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  updateDoc,
   Timestamp,
   where,
   writeBatch,
@@ -1151,6 +1153,18 @@ class StorageEngine {
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
   }
 
+  public async saveIndividualBaselineModel(patientId: string, baselineModel: IndividualBaselineModel): Promise<void> {
+    if (this.isDemoWorkspace()) {
+      const index = this.demoClients.findIndex((client) => client.id === patientId);
+      if (index < 0) throw new Error('Your patient profile is unavailable.');
+      this.demoClients[index] = { ...this.demoClients[index], individualBaselineModel: baselineModel };
+      return;
+    }
+
+    if (!auth.currentUser) throw new Error('Sign in to save a patient record');
+    await updateDoc(doc(db, 'clients', patientId), { individualBaselineModel: baselineModel });
+  }
+
   public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {
     const demoClient = this.demoClients.find((client) => client.id === patientId);
     if (this.isDemoWorkspace()) {
@@ -1283,6 +1297,15 @@ class StorageEngine {
     }
 
     return null;
+  }
+
+  /** Read an existing patient for calibration without creating or enriching its profile. */
+  public async getExistingCurrentClient(user?: { uid: string } | null): Promise<ClientProfile | null> {
+    if (this.isDemoWorkspace()) return this.demoClients[0] ?? null;
+    if (!user?.uid) return null;
+
+    const snapshot = await getDoc(doc(db, 'clients', user.uid));
+    return snapshot.exists() ? readClientProfile(snapshot.data(), snapshot.id) : null;
   }
 
   public setCurrentClientId(id: string) {
