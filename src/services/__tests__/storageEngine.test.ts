@@ -51,6 +51,7 @@ import { BRAND_PRESETS } from '../brandEngine';
 import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
 import { DEFAULT_RATIO_REWARDS } from '../protocols';
 import { resolveProtocolRuntime } from '../adaptiveEngine';
+import { EXPERIENCE_IDS } from '../experienceIds';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
@@ -605,6 +606,7 @@ describe('production and sample workspace separation', () => {
       expect.objectContaining({ id: user.uid, patientId: user.uid }),
     );
     const saved = firestore.setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(new Set(saved.allowedExperiences as string[])).toEqual(new Set(EXPERIENCE_IDS));
     expect(saved).not.toHaveProperty('avatarUrl');
     expect(saved).not.toHaveProperty('condition');
     expect(saved).not.toHaveProperty('assignedProtocol');
@@ -656,6 +658,31 @@ describe('production and sample workspace separation', () => {
     expect(reloaded?.condition).toBeUndefined();
   });
 
+  it('includes a full assignment when a merge save creates from a legacy profile, but preserves an explicit empty list', async () => {
+    const legacy = createBlankProfile('patient-1', 'patient@example.test') as Partial<ClientProfile>;
+    delete legacy.allowedExperiences;
+    await storageEngine.saveClient(legacy as ClientProfile);
+    expect((firestore.setDoc.mock.calls[0][1] as ClientProfile).allowedExperiences).toEqual(createBlankProfile('patient-1', 'patient@example.test').allowedExperiences);
+
+    await storageEngine.saveClient({ ...createBlankProfile('patient-2', 'other@example.test'), allowedExperiences: [] });
+    expect((firestore.setDoc.mock.calls[1][1] as ClientProfile).allowedExperiences).toEqual([]);
+  });
+
+  it('saves and reloads a template assignment that excludes NeuroGambit', async () => {
+    const template = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const patient = { ...createBlankProfile('patient-1', 'patient@example.test'),
+      allowedExperiences: [...template.recommendedExperiences] };
+    let persisted!: ClientProfile;
+    firestore.setDoc.mockImplementationOnce(async (_ref: unknown, payload: ClientProfile) => { persisted = payload; });
+    await storageEngine.saveClient(patient);
+    expect(persisted.allowedExperiences).toEqual(template.recommendedExperiences);
+    expect(persisted.allowedExperiences).not.toContain('neuro-gambit');
+    firestore.getDoc.mockResolvedValueOnce({ id: patient.id, exists: () => true, data: () => persisted });
+    const reloaded = await storageEngine.getClient(patient.id);
+    expect(reloaded?.allowedExperiences).toEqual(template.recommendedExperiences);
+    expect(reloaded?.allowedExperiences).not.toContain('neuro-gambit');
+  });
+
   it('deletes a stale custom template when switching protocol and reloads the selected assignment', async () => {
     const switched = {
       ...INITIAL_DEMO_CLIENTS[0],
@@ -697,7 +724,7 @@ describe('production and sample workspace separation', () => {
       exists: () => true,
       data: () => ({ ...createBlankProfile(user.uid, user.email), name: '' }),
     });
-    firestore.setDoc.mockRejectedValueOnce(new Error('profile enrichment unavailable'));
+    firestore.updateDoc.mockRejectedValueOnce(new Error('profile enrichment unavailable'));
     await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile enrichment unavailable');
   });
 
@@ -710,11 +737,21 @@ describe('production and sample workspace separation', () => {
     });
 
     await expect(storageEngine.getCurrentClient(user)).resolves.toMatchObject({ name: 'Patient One' });
-    expect(firestore.setDoc).toHaveBeenCalledWith(
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
       { type: 'doc', path: 'clients', id: user.uid },
       { name: 'Patient One' },
-      { merge: true },
     );
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not recreate a profile deleted while its blank name is being repaired', async () => {
+    const user = { uid: 'patient-1', email: 'patient@example.test', displayName: 'Patient One' };
+    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => true,
+      data: () => ({ id: user.uid, email: user.email, name: '', status: 'active', allowedExperiences: [] }) });
+    firestore.updateDoc.mockRejectedValueOnce(new Error('profile no longer exists'));
+
+    await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile no longer exists');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
   });
 
   it('blocks sample resets from a production account', () => {
@@ -1063,6 +1100,29 @@ describe('patient invitation linking', () => {
     expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1', clinicId: 'clinic-1' }) });
     expect(writes[1]).toMatchObject({ ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' }, payload: expect.objectContaining({ status: 'accepted', patientId: 'patient-1' }) });
     expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
+  });
+
+  it('creates an invited client with an explicit default assignment when the supplied legacy fallback omits it', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+    const invitation = { clinicianId: 'clinician-1', clinicId: 'clinic-1', patientEmail: 'patient@example.test',
+      patientName: 'Patient One', assignedProtocol: 'alpha-enhancement', status: 'pending',
+      expiresAt: Date.now() + 86_400_000 };
+    const writes: Array<Record<string, unknown>> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'ABCD-EFGH-JKLM', exists: () => true, data: () => invitation })
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => false }),
+        set: vi.fn((_ref, payload) => writes.push(payload)),
+        delete: vi.fn(),
+      })
+    );
+    const fallback = createBlankProfile('patient-1', 'patient@example.test') as Partial<ClientProfile>;
+    delete fallback.allowedExperiences;
+
+    const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', fallback as ClientProfile);
+    expect(new Set(linked.allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
+    expect(writes[0].allowedExperiences).toEqual(linked.allowedExperiences);
   });
 
   it('atomically cancels an owned invitation and releases its uniqueness claim', async () => {

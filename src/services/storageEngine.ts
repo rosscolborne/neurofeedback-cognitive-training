@@ -17,6 +17,7 @@ import {
   QEEGBrainMap,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
+import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 import { auth, db } from './firebase';
 import {
   collection,
@@ -229,21 +230,7 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     name: cleanName,
     email: email,
     status: 'active',
-    allowedExperiences: [
-      'immersive-3d',
-      'generative-music',
-      'narrative-story',
-      'skyline-drift',
-      'tidal-garden',
-      'breath-weave',
-      'signal-sort',
-      'rhythm-lock',
-      'media-mode',
-      'soundscape-mode',
-      'mandala',
-      'eeg-mandala',
-      'neuro-gambit'
-    ],
+    allowedExperiences: [...DEFAULT_ALLOWED_EXPERIENCES],
     completedSessionsCount: 0,
     currentStreak: 0,
     brainMaps: [],
@@ -1100,6 +1087,8 @@ class StorageEngine {
           acceptedInvitationId: invitation.id,
           condition: invitation.condition,
           assignedProtocol: invitation.assignedProtocol,
+          allowedExperiences: Array.isArray(current.allowedExperiences)
+            ? current.allowedExperiences : [...DEFAULT_ALLOWED_EXPERIENCES],
           prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
           notes: invitation.notes ?? current.notes,
         };
@@ -1143,6 +1132,10 @@ class StorageEngine {
     if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
     const payload = removeUndefined(client) as unknown as Record<string, unknown>;
+    // saveClient can also create via setDoc(..., { merge: true }). Never create
+    // a current profile without an explicit experience assignment field.
+    payload.allowedExperiences = Array.isArray(client.allowedExperiences)
+      ? client.allowedExperiences : [...DEFAULT_ALLOWED_EXPERIENCES];
     for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
       if (client[field] === undefined) payload[field] = deleteField();
     }
@@ -1283,7 +1276,9 @@ class StorageEngine {
             .trim()
             .replace(/[._]/g, ' ')
             .replace(/\b\w/g, (c) => c.toUpperCase());
-          await setDoc(clientRef, { name }, { merge: true });
+          // An existing profile may be deleted after the read. Do not let a
+          // display-name repair recreate a partial clients/{uid} document.
+          await updateDoc(clientRef, { name });
           existing.name = name;
         }
         return existing;
