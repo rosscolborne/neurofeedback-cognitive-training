@@ -582,10 +582,15 @@ html, body {
   border-top: 1px solid var(--border-subtle);
 }
 
+.account-deletion-trigger,
+.account-deletion-confirmation {
+  --account-deletion-red: #A94444;
+}
+
 .account-deletion-trigger {
   width: 100%;
-  color: var(--status-alert);
-  border-color: var(--status-alert);
+  color: var(--account-deletion-red);
+  border-color: var(--account-deletion-red);
 }
 
 .account-deletion-trigger:hover {
@@ -604,14 +609,14 @@ html, body {
   min-width: 0;
   margin-top: 12px;
   padding-top: 16px;
-  border-top: 1px solid var(--status-alert);
+  border-top: 1px solid var(--account-deletion-red);
   text-align: left;
 }
 
 .account-deletion-recovery .account-deletion-confirmation {
   max-width: 420px;
   padding: 16px;
-  border: 1px solid var(--status-alert);
+  border: 1px solid var(--account-deletion-red);
   border-radius: var(--radius-md);
   background: var(--status-alert-bg);
 }
@@ -637,8 +642,22 @@ html, body {
   font-size: 13px;
 }
 
+.account-deletion-password:focus-visible {
+  outline: 2px solid var(--account-deletion-red);
+  outline-offset: 2px;
+}
+
+.account-deletion-password[aria-invalid='true'] {
+  border-color: var(--account-deletion-red);
+}
+
+.account-deletion-password:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .account-deletion-error {
-  color: var(--status-alert);
+  color: var(--account-deletion-red);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -649,7 +668,7 @@ html, body {
   margin-top: 4px;
   padding: 10px 16px;
   border-radius: var(--radius-xl);
-  background-color: var(--status-alert);
+  background-color: var(--account-deletion-red);
   color: var(--text-on-primary);
   font-size: 13px;
 }
