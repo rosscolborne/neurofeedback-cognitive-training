@@ -6,14 +6,13 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import {
     FieldValue,
-    getFirestore,
     Timestamp,
     type DocumentData,
     type DocumentSnapshot,
-    type Firestore,
+    Firestore,
 } from 'firebase-admin/firestore';
 import type { AuthenticatedE2EIdentity } from './auth';
-import { impersonatedE2ECredential, requireE2EAdminConfiguration } from './adminCredential';
+import { impersonatedE2ECredentials, requireE2EAdminConfiguration } from './adminCredential';
 import { fixtureIdentities } from './fixtureModel';
 import {
     canonicalClinicianId,
@@ -117,16 +116,29 @@ function expectedIdentity(role: 'patient' | 'clinician') {
     return { uid, email };
 }
 
+let adminDatabasePromise: Promise<Firestore> | undefined;
+
 async function adminDatabase(): Promise<Firestore> {
     const { projectId } = requireAdminConfiguration();
-    const existing = getApps().find((app) => app.name === 'neurasticity-e2e');
-    if (existing) return getFirestore(existing);
-
-    const credential = await impersonatedE2ECredential();
-    const app = initializeApp({ credential, projectId }, 'neurasticity-e2e');
-    const database = getFirestore(app);
-    database.settings({ ignoreUndefinedProperties: true });
-    return database;
+    adminDatabasePromise ??= (async () => {
+        const { adminCredential, firestoreAuth } = await impersonatedE2ECredentials();
+        // firebase-admin's getFirestore() only accepts its built-in certificate
+        // or ADC credential classes. Its custom Credential works for Auth, but
+        // getFirestore() rejects it. Inject the same impersonated GoogleAuth
+        // directly into the Firestore client instead of letting it find human ADC.
+        const database = new Firestore({
+            projectId, databaseId: '(default)', auth: firestoreAuth,
+            ignoreUndefinedProperties: true,
+        });
+        initializeApp({ credential: adminCredential, projectId }, 'neurasticity-e2e');
+        return database;
+    })();
+    try {
+        return await adminDatabasePromise;
+    } catch (error) {
+        adminDatabasePromise = undefined;
+        throw error;
+    }
 }
 
 export async function adminServices() {

@@ -29,8 +29,8 @@ export function requireE2EAdminConfiguration(env: NodeJS.ProcessEnv = process.en
     return E2E_PROJECT_ID;
 }
 
-/** No token is written to disk. The library refreshes the 10-minute token in memory. */
-export async function impersonatedE2ECredential(): Promise<Credential> {
+/** Both SDKs share one impersonated client; neither resolves ADC independently. */
+export async function impersonatedE2ECredentials(): Promise<{ adminCredential: Credential; firestoreAuth: GoogleAuth<Impersonated> }> {
     requireE2EAdminConfiguration();
     let source;
     try {
@@ -49,18 +49,22 @@ export async function impersonatedE2ECredential(): Promise<Credential> {
         targetScopes: ['https://www.googleapis.com/auth/cloud-platform'],
         lifetime: TOKEN_LIFETIME_SECONDS,
     });
-    // Fail before any fixture or lease write if ADC or Token Creator is missing.
+    // Fail before any fixture or lease write if ADC or getAccessToken is missing.
     try {
         if (!(await target.getAccessToken()).token) throw new Error('No impersonated token was returned.');
     } catch {
-        throw new Error(`Could not impersonate ${E2E_SERVICE_ACCOUNT}. Check human ADC login, IAM Credentials API, and Token Creator on this service account.`);
+        throw new Error(`Could not impersonate ${E2E_SERVICE_ACCOUNT}. Check human ADC login, IAM Credentials API, and the getAccessToken grant on this service account.`);
     }
-    return {
+    const adminCredential: Credential = {
         async getAccessToken() {
             const { token } = await target.getAccessToken();
             if (!token) throw new Error('E2E impersonation returned no access token.');
             const remaining = Math.floor(((target.credentials.expiry_date ?? 0) - Date.now()) / 1000);
             return { access_token: token, expires_in: Math.max(1, remaining) };
         },
+    };
+    return {
+        adminCredential,
+        firestoreAuth: new GoogleAuth({ authClient: target, projectId: E2E_PROJECT_ID }),
     };
 }
