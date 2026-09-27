@@ -189,6 +189,18 @@ export function removeUndefined<T>(value: T): T {
   ) as T;
 }
 
+/** Whole Garden XP earned from verified time against the prescribed runtime. */
+export function getTidalGardenSessionXp(
+  inZoneSeconds: number,
+  configuredDurationSeconds: number,
+  elapsedSeconds: number,
+): number {
+  if (!Number.isFinite(inZoneSeconds) || !Number.isFinite(configuredDurationSeconds)
+    || !Number.isFinite(elapsedSeconds) || configuredDurationSeconds <= 0) return 0;
+  const rewardableSeconds = Math.max(0, Math.min(inZoneSeconds, configuredDurationSeconds, elapsedSeconds));
+  return Math.floor(150 * (rewardableSeconds / configuredDurationSeconds));
+}
+
 /** Legacy aggregate behavior, made pure so it can be applied atomically and tested. */
 export function applySessionCompletionToClient(
   current: ClientProfile,
@@ -228,9 +240,13 @@ export function applySessionCompletionToClient(
   ) addBadge('still-waters');
 
   if (client.tidalGardenState && (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement')) {
-    const measuredPercent = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent)
-      ? Math.max(0, Math.min(100, session.timeInZonePercent)) : 0;
-    client.tidalGardenState.growthPoints += Math.round(measuredPercent * 1.5);
+    const earnedXp = session.inZoneSeconds !== undefined && session.configuredDurationSeconds !== undefined
+      ? getTidalGardenSessionXp(session.inZoneSeconds, session.configuredDurationSeconds, session.durationSeconds)
+      : session.inZoneSeconds === undefined && session.configuredDurationSeconds === undefined
+        ? Math.round((typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent)
+          ? Math.max(0, Math.min(100, session.timeInZonePercent)) : 0) * 1.5)
+        : 0;
+    client.tidalGardenState.growthPoints += earnedXp;
     if (client.tidalGardenState.growthPoints > 300 && client.tidalGardenState.stage < 2) {
       client.tidalGardenState.stage = 2;
     }

@@ -223,6 +223,84 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { nextRunner.unmount(); });
   });
 
+  it('includes the final Demo clock tick in the saved verified time and reaches 150 XP', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+    const onComplete = vi.fn(async (_session: SessionRecord) => undefined);
+    const profile = { ...client, customProtocolConfig: {
+      ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
+    } };
+    let runner!: ReactTestRenderer;
+    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
+    await act(async () => {
+      stream.callback?.({
+        timestamp: Date.now(), rawSignal: 0,
+        bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
+        bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
+        bandRatios: {}, thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
+        coherence: null, coherenceAvailable: false, inZone: true, inZoneAvailable: true, zoneScore: 1,
+        signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+        artifacts: { blink: false, clench: false },
+      });
+      vi.advanceTimersByTime(59_000);
+    });
+    const garden = runner.root.find((node) => (node.type as unknown) === 'experience-view');
+    expect(garden.props.growthPoints).toBe(147);
+    expect(onComplete).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect(onComplete.mock.calls[0][0]).toMatchObject({
+      durationSeconds: 60, configuredDurationSeconds: 60, inZoneSeconds: 60, timeInZonePercent: 100, isDemo: true,
+    });
+    await act(async () => { runner.unmount(); });
+  });
+
+  it('shows retry after automatic hardware completion even if the headset disconnects', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+    engine.isHardwareConnected = true;
+    engine.getBandPowerProvenance.mockReturnValue({ algorithm: 'welch-psd', version: 'test', source: 'brainflow' });
+    const attempts: SessionRecord[] = [];
+    const onComplete = vi.fn(async (session: SessionRecord) => {
+      attempts.push(session);
+      if (attempts.length === 1) throw new Error('ambiguous response');
+    });
+    const profile = { ...client, customProtocolConfig: {
+      ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
+    } };
+    let runner!: ReactTestRenderer;
+    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
+    await act(async () => { button(runner, 'Begin Training').props.onClick(); });
+    for (let second = 0; second < 60; second++) {
+      await act(async () => {
+        stream.sourceState = { sequence: second + 1, lastFrameAtMs: Date.now() };
+        stream.callback?.({
+          timestamp: Date.now(), rawSignal: 1,
+          bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
+          bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
+          bandRatios: {}, thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
+          coherence: 40, coherenceAvailable: true, inZone: true, inZoneAvailable: true, zoneScore: 1,
+          signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+          artifacts: { blink: false, clench: false }, trainingMetric: { score: 70, baselineReady: true },
+        });
+        vi.advanceTimersByTime(1_000);
+      });
+    }
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect(button(runner, 'Yes, Save Progress').props.disabled).toBe(false);
+    expect(text(runner)).toContain("We couldn't confirm this session was saved");
+    engine.isHardwareConnected = false;
+    await act(async () => { runner.update(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
+    expect(button(runner, 'Yes, Save Progress').props.disabled).toBe(false);
+    expect(text(runner)).not.toContain('Connect Muse Headband');
+    await act(async () => { await button(runner, 'Yes, Save Progress').props.onClick(); });
+    expect(attempts[1]).toBe(attempts[0]);
+    expect(attempts[1]).toMatchObject({ durationSeconds: 60, inZoneSeconds: 60, configuredDurationSeconds: 60 });
+    await act(async () => { runner.unmount(); });
+  });
+
   it('refuses to save a hardware session without verified EEG coverage', async () => {
     engine.isHardwareConnected = true;
     const legacyLinkedClient = {
@@ -244,6 +322,8 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
     expect(onComplete).not.toHaveBeenCalled();
     expect(text(renderer)).toContain('Live EEG data has stopped');
+    expect(button(renderer, 'Continue Training').props.disabled).toBe(false);
+    expect(() => button(renderer, 'Return to Dashboard')).toThrow();
     await act(async () => { renderer.unmount(); });
   });
 
@@ -308,24 +388,49 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('reuses one cryptographic completion ID when a Demo save response must be retried', async () => {
-    const attemptedIds: string[] = [];
+  it('freezes Demo time and XP and retries the identical session after an ambiguous save response', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+    const attempts: SessionRecord[] = [];
     const onComplete = vi.fn(async (session: SessionRecord) => {
-      attemptedIds.push(session.id);
-      if (attemptedIds.length === 1) throw new Error('ambiguous response');
+      attempts.push(session);
+      if (attempts.length === 1) throw new Error('ambiguous response');
     });
+    const profile = { ...client, customProtocolConfig: {
+      ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
+    } };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     await act(async () => { button(renderer, 'Try Demo Mode').props.onClick(); });
+    await act(async () => {
+      stream.callback?.({
+        timestamp: Date.now(), rawSignal: 0,
+        bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
+        bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
+        bandRatios: {}, thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
+        coherence: null, coherenceAvailable: false, inZone: true, inZoneAvailable: true, zoneScore: 1,
+        signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+        artifacts: { blink: false, clench: false },
+      });
+      vi.advanceTimersByTime(30_000);
+    });
+    const garden = renderer.root.find((node) => (node.type as unknown) === 'experience-view');
+    expect(garden.props.growthPoints).toBe(75);
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
     await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
-    expect(text(renderer)).toContain("We couldn't save this session");
+    expect(text(renderer)).toContain("We couldn't confirm this session was saved");
+    expect(text(renderer)).toContain('Retry with the same session');
+    expect(() => button(renderer, 'Continue Training')).toThrow();
+    expect(button(renderer, 'Return to Dashboard').props.disabled).toBe(false);
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(garden.props.growthPoints).toBe(75);
     await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
     expect(onComplete).toHaveBeenCalledTimes(2);
-    expect(attemptedIds[0]).toMatch(/^sess-[0-9a-f-]{36}$/i);
-    expect(attemptedIds[1]).toBe(attemptedIds[0]);
+    expect(attempts[0].id).toMatch(/^sess-[0-9a-f-]{36}$/i);
+    expect(attempts[1]).toBe(attempts[0]);
+    expect(attempts[1]).toMatchObject({ durationSeconds: 30, inZoneSeconds: 30, configuredDurationSeconds: 60 });
     await act(async () => { renderer.unmount(); });
   });
 

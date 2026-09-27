@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../types';
 import {
   applySessionCompletionToClient,
+  getTidalGardenSessionXp,
   getCalibrationDisplayState,
   getReusableBaselineModel,
   getPatientClinicianId,
@@ -221,6 +222,50 @@ describe('production data migration readers', () => {
 });
 
 describe('session aggregate migration behavior', () => {
+  it('normalizes verified Garden time to each configured duration and caps it at elapsed time', () => {
+    for (const duration of [60, 600, 1_500, 10_800]) {
+      expect(getTidalGardenSessionXp(duration, duration, duration)).toBe(150);
+      expect(getTidalGardenSessionXp(duration / 2, duration, duration)).toBe(75);
+      expect(getTidalGardenSessionXp(duration, duration, duration / 2)).toBe(75);
+      expect(getTidalGardenSessionXp(duration + 100, duration, duration + 100)).toBe(150);
+    }
+    expect(getTidalGardenSessionXp(5, 600, 5)).toBe(1);
+    expect(getTidalGardenSessionXp(4, 600, 20)).toBe(1); // Out-of-zone time does not subtract XP.
+    for (const invalid of [Number.NaN, Infinity, -1]) {
+      expect(getTidalGardenSessionXp(invalid, 600, 600)).toBe(0);
+    }
+    expect(getTidalGardenSessionXp(600, 0, 600)).toBe(0);
+  });
+
+  it('awards normalized XP from new session evidence, including Demo, while retaining legacy records', () => {
+    const current = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement',
+      durationSeconds: 300, configuredDurationSeconds: 600, inZoneSeconds: 240, timeInZonePercent: 100 });
+    expect(applySessionCompletionToClient(clientFixture(), current).tidalGardenState?.growthPoints).toBe(60);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, isDemo: true }).tidalGardenState?.growthPoints).toBe(60);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: 0 }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: 9999 }).tidalGardenState?.growthPoints).toBe(75);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: Number.NaN }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, configuredDurationSeconds: 0 }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: undefined,
+      configuredDurationSeconds: undefined, timeInZonePercent: 80 }).tidalGardenState?.growthPoints).toBe(120);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: undefined }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, configuredDurationSeconds: undefined }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: null as unknown as number,
+      configuredDurationSeconds: undefined }).tidalGardenState?.growthPoints).toBe(0);
+  });
+
+  it('keeps strict Garden stage thresholds with at most 150 XP per perfect session', () => {
+    const perfect = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement',
+      durationSeconds: 600, configuredDurationSeconds: 600, inZoneSeconds: 600 });
+    let profile = clientFixture();
+    for (const [sessionCount, points, stage] of [
+      [1, 150, 1], [2, 300, 1], [3, 450, 2], [4, 600, 3], [5, 750, 3], [6, 900, 4],
+    ] as const) {
+      profile = applySessionCompletionToClient(profile, { ...perfect, id: `perfect-${sessionCount}` });
+      expect(profile.tidalGardenState).toMatchObject({ growthPoints: points, stage });
+    }
+  });
+
   it('grows only from finite completed measurements and crosses the existing strict stage thresholds', () => {
     const gardenSession = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement', timeInZonePercent: 1 });
     for (const [points, expectedStage, expectedBadge] of [

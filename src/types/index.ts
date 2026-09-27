@@ -369,6 +369,10 @@ export interface SessionRecord {
   experience: ExperienceType;
   durationSeconds: number;
   timeInZonePercent: number;
+  /** Successful measured seconds; optional on sessions saved before time-based Garden XP. */
+  inZoneSeconds?: number;
+  /** Prescribed runtime used to normalize Garden XP, including early completions. */
+  configuredDurationSeconds?: number;
   /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
   averageCoherence: number | null;
   peakFocusScore?: number;
