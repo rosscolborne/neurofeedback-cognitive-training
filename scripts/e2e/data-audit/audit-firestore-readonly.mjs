@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * READ-ONLY audit of legacy Firestore/Auth data before deploying hardened rules.
+ * READ-ONLY audit of existing Firestore/Auth data when reviewing a development
+ * project's data after repository integration or before a reset/migration decision.
  *
- * Run from the app worktree (so firebase-admin resolves from its node_modules):
+ * Run from the current repository checkout (so firebase-admin resolves from its node_modules):
  *
- *   cd /path/to/neurasticity-mockdata-e2e
+ *   cd /path/to/neurasticity
  *   AUDIT_READ_ONLY=true AUDIT_PROJECT_ID=brainwell-327dc \
- *     node /path/to/audit-firestore-readonly.mjs > audit-report.json
+ *     AUDIT_CONFIRM_PROJECT=brainwell-327dc \
+ *     node scripts/e2e/data-audit/audit-firestore-readonly.mjs \
+ *       > /path/to/private/audit-report.json
  *
  * Credentials: Application Default Credentials only (the script never reads a
  * key file itself). Least privilege: roles/datastore.viewer +

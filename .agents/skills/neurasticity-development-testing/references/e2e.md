@@ -11,8 +11,7 @@ Playwright uses the system Google Chrome at `/usr/bin/google-chrome`, keeps vide
 
 ## Projects and authentication
 
-Read-only projects (no Admin credential, no writes beyond what logging in and
-browsing do):
+Standalone Playwright and harness entry points:
 
 ```bash
 npm run test:e2e             # public + patient + clinician
@@ -22,8 +21,18 @@ npm run test:e2e:clinician   # e2e/clinician.readonly.spec.ts
 npm run test:e2e:rules       # probes whether deployed Firestore rules match firestore.rules
 npm run test:e2e:harness     # offline unit tests for cleanup planning
 npm run test:e2e:guard       # browser checks for the permission-denied guard
-npm run test:e2e:preflight   # read-only Admin check of config, identities, leases, fixture
+npm run test:e2e:preflight   # Playwright Admin check; reads an already-provisioned fixture
 ```
+
+`npm run test:e2e:credentials:preflight` is a separate privileged command. It
+impersonates the pinned E2E service account and performs one Firestore read and
+one Auth lookup without a browser or fixture reset. A missing patient fixture is
+acceptable. The live read-only credential preflight succeeded on 2026-09-26;
+the patient fixture was not provisioned. `npm run test:e2e:preflight` is the
+standalone Playwright Admin project and does not reset fixtures by itself, but
+it needs the fixture to exist. `npm run test:e2e:session -- preflight` resets
+fixtures before and after that Playwright check. Fixture reset and stateful
+runs have not yet been validated against the shared project.
 
 Auth setup reads credentials from the current process and saves storage states in a private OS temporary directory. Playwright removes it at the end of a standalone run; the session command uses its own temporary directory and removes that at the end. Auth setup runs as a dependency of each authenticated project, so storage states do not need to survive between commands. Never commit, print, attach, or inspect credentials or storage-state contents. Auth setup has trace and screenshot capture disabled.
 
@@ -43,7 +52,7 @@ npm run test:e2e:stateful:isolation   # disposable accounts + cross-tenant denia
 npm run test:e2e:cleanup              # operator review of an unfinished run
 ```
 
-Use `npm run test:e2e:session -- patient|clinician|isolation|preflight|reset` after a human `gcloud auth application-default login`. The command resets fixed test identities, mints ten-minute impersonated tokens for `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com` in memory, runs auth setup and preflight, runs the selected suite, and resets again. It pins the development project and refuses key files and non-human ADC. The browser project, Admin project, browser identities, and Admin Auth records must agree. See [WB-44 credential and fixture setup](../../../../docs/e2e-credentials.md) for the one-time IAM steps and recovery. Do not use the test accounts manually during a run.
+Use `npm run test:e2e:session -- patient|clinician|isolation|preflight|reset` after a human `gcloud auth application-default login` and approval to reset the shared fixtures. The command resets fixed test identities, mints ten-minute impersonated tokens for `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com` in memory, runs auth setup and preflight, runs the selected suite, and resets again. It pins the development project and refuses key files and non-human ADC. The browser project, Admin project, browser identities, and Admin Auth records must agree. See [WB-44 credential and fixture setup](../../../../docs/e2e-credentials.md) for IAM status and recovery. Do not use the test accounts manually during a run.
 
 `E2E_CLEANUP_MODE` is required. `.env.e2e` may set it only to `plan`; the
 config refuses `execute`, `E2E_RUN_STATEFUL`, `E2E_CLEANUP_RUN_ID`,

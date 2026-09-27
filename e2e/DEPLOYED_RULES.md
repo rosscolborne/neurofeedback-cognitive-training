@@ -8,12 +8,7 @@ backfill a missing patient name, so the dedicated account should retain its
 complete profile. The probe requires the approved patient to be in the
 clinician's roster and to have a clinic ID.
 
-Before WB-53, the probe covered the patient's message summary and QEEG list,
-plus the clinician's user role and practitioner document. The later
-`fill-in-mocked-data` checkpoint added a read-receipt probe for each role;
-the merged probe retains both.
-
-It now also covers:
+WB-53 expanded the probe across the current dashboard reads, including:
 
 - Patient user and client profile (including the embedded protocol assignment),
   clinic branding, sessions used by Home and Progress, ordered message history,
@@ -56,3 +51,11 @@ run confirms the probe's query shapes against repository rules; only a run
 with development-project credentials can verify the deployed rules. The local
 pair has no invitation or legacy message document, so those conditional
 direct-get branches need an existing live fixture to run.
+
+As of 2026-09-26, the impersonated WB-44 credential preflight has succeeded
+with read-only Firestore and Auth checks, but the patient fixture was not
+provisioned. That preflight does not exercise this browser probe or establish
+that deployed rules match the repository. Provision the linked patient and
+clinician fixture through an approved session workflow before the live probe;
+fixture reset and stateful runs have not yet been validated against the shared
+project.

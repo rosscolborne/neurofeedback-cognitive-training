@@ -1,10 +1,18 @@
 # WB-44 E2E credentials and fixtures
 
-This workflow is for the disposable development Firebase project `brainwell-327dc`. It does not create cloud resources by itself. An IAM administrator must review and perform the one-time bootstrap below before the first shared-project run. Do not run fixture reset against that project until this implementation and the proposed IAM bindings are approved.
+This workflow is for the disposable development Firebase project `brainwell-327dc`. It does not create cloud resources by itself. The keyless service-account bootstrap has supported a successful live read-only preflight. Fixture reset and stateful runs against the shared project remain unproven; review and approve those operations before running them.
 
-## One-time IAM bootstrap (awaiting approval)
+## IAM bootstrap reference and current status
 
-Resource: `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com`. Create it in `brainwell-327dc`, with **no user-managed keys**. Grant the service account only two project custom roles:
+On 2026-09-26, `npm run test:e2e:credentials:preflight` succeeded with impersonated credentials:
+
+```text
+[e2e-credentials] Read-only Firestore and Auth checks succeeded as waveable-e2e@brainwell-327dc.iam.gserviceaccount.com in brainwell-327dc; patient fixture not provisioned.
+```
+
+This confirms the pinned service account can perform the preflight's Firestore and Auth reads. It does not establish that fixture provisioning, password rotation, cleanup, or other write permissions work. The patient fixture was absent, so authenticated browser suites and the deployed-rules probe still need provisioned identities. Do not rerun the bootstrap commands blindly; inspect the existing IAM configuration before making any changes.
+
+Resource: `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com`. The bootstrap design uses **no user-managed keys** and only two project custom roles. Verify the existing bindings against this reference before changing them:
 
 | Role | Exact permissions | Use |
 | --- | --- | --- |
@@ -13,7 +21,7 @@ Resource: `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com`. Create it in `
 
 Grant each approved human `roles/iam.serviceAccountTokenCreator` **on this service account only**. Its relevant permission is `iam.serviceAccounts.getAccessToken`; the predefined role also contains signing permissions, so a custom service-account-level role containing only `getAccessToken` is preferable if the IAM administrator can create one. Do not bind Token Creator at project scope. Enable `iamcredentials.googleapis.com` for the development project. The service account receives no role in any production project. [Google's IAM Credentials API](https://docs.cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken) documents the required impersonation permission; [Identity Platform's method table](https://docs.cloud.google.com/identity-platform/docs/access-control) and [Firestore IAM](https://docs.cloud.google.com/firestore/docs/security/iam) document the data permissions. [Firestore database IAM conditions](https://docs.cloud.google.com/firestore/native/docs/manage-databases#configure_per-database_access_permissions) document the database restriction.
 
-Proposed administrator commands (replace `HUMAN_EMAIL`, then review the IAM policy after each binding):
+Administrator bootstrap reference (replace `HUMAN_EMAIL` and review the existing IAM policy before any change):
 
 ```bash
 gcloud services enable iamcredentials.googleapis.com --project=brainwell-327dc
@@ -25,7 +33,7 @@ gcloud projects add-iam-policy-binding brainwell-327dc --member=serviceAccount:w
 gcloud iam service-accounts add-iam-policy-binding waveable-e2e@brainwell-327dc.iam.gserviceaccount.com --project=brainwell-327dc --member=user:HUMAN_EMAIL --role=roles/iam.serviceAccountTokenCreator
 ```
 
-The custom role permissions are the minimum expected for the current Admin SDK calls; the first approved cloud preflight must confirm them. If the Firebase Admin SDK needs an additional permission, amend the role only after identifying the failed API call. Do not substitute Owner, Editor, Firebase Admin, or a service-agent role. The Firestore IAM condition limits access to the default database, but it does not limit document paths inside that database; the fixed namespace and reset guards prevent accidental writes to unrelated accounts, while IAM alone cannot enforce that path allow-list.
+The custom role permissions are the minimum expected for the current Admin SDK calls; the read-only preflight checked only their read paths. If a later approved fixture run needs an additional permission, amend the role only after identifying the failed API call. Do not substitute Owner, Editor, Firebase Admin, or a service-agent role. The Firestore IAM condition limits access to the default database, but it does not limit document paths inside that database; the fixed namespace and reset guards prevent accidental writes to unrelated accounts, while IAM alone cannot enforce that path allow-list.
 
 ## Per-session workflow
 
@@ -50,7 +58,7 @@ If a stateful run parks its lease, run `npm run test:e2e:recover -- <run-id> pla
 
 If the reset process crashes and leaves its own lock, run `npm run test:e2e:unlock -- inspect`. Confirm the original process is no longer running. Once the lock is at least ten minutes old, run `npm run test:e2e:unlock -- release <reviewed-reset-run-id>`, then rerun reset. A reset lock never expires automatically, so a slow active reset cannot be overtaken by another run.
 
-To revoke access immediately, disable the service account, then remove the human Token Creator and project role bindings. Example commands for the proposed bootstrap:
+To revoke access immediately, disable the service account, then remove the human Token Creator and project role bindings. Example commands for the bootstrap configuration:
 
 ```bash
 gcloud iam service-accounts disable waveable-e2e@brainwell-327dc.iam.gserviceaccount.com --project=brainwell-327dc

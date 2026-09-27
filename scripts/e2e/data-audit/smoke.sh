@@ -1,7 +1,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Run inside: npx firebase emulators:exec --only firestore,auth --project demo-track-d "bash <this file>"
-cd "$HERE/../../../../.."
+cd "$HERE/../../.."
 node "$HERE"/seed-emulator.mjs || exit 1
 echo "--- refusal: no flag"; AUDIT_PROJECT_ID=demo-track-d node "$HERE"/audit-firestore-readonly.mjs; echo "exit=$?"
 echo "--- refusal: prod id on emulator"; AUDIT_READ_ONLY=true AUDIT_PROJECT_ID=brainwell-327dc node "$HERE"/audit-firestore-readonly.mjs; echo "exit=$?"
