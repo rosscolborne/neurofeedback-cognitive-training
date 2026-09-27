@@ -160,7 +160,7 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             const freshPatientId = await signUpThroughUi(patientPage, patientIdentity, 'patient');
             const freshPatient = { uid: freshPatientId, email: patientIdentity.email };
             await recordDisposableE2EAccount(freshPatient, disposableRun);
-            await expectDisposableRolePersisted(disposableRun, freshPatient, 'patient');
+            await expectDisposableRolePersisted(disposableRun, freshPatient, 'patient', patientPage);
 
             await expect(patientPage.getByText('Assignment required', { exact: true })).toBeVisible();
             await expect(patientPage.getByRole('button', { name: 'Protocol assignment required', exact: true })).toBeDisabled();
@@ -190,7 +190,7 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             const freshClinicianId = await signUpThroughUi(clinicianPage, clinicianIdentity, 'clinician');
             const freshClinician = { uid: freshClinicianId, email: clinicianIdentity.email };
             await recordDisposableE2EAccount(freshClinician, disposableRun);
-            await expectDisposableRolePersisted(disposableRun, freshClinician, 'clinician');
+            await expectDisposableRolePersisted(disposableRun, freshClinician, 'clinician', clinicianPage);
             await expect(clinicianPage.getByRole('heading', { name: 'Patient Roster', exact: true })).toBeVisible();
             await expect(clinicianPage.getByText('0 Total Patients • 0 Active Training', { exact: true })).toBeVisible();
             await expect(clinicianPage.getByText('No patients match the selected filter.', { exact: true })).toBeVisible();

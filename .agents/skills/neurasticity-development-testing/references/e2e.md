@@ -122,9 +122,14 @@ capture remains disabled.
 - `arriveAtClinicianDashboard`;
 - `identityFromStorageState`, which reads a saved role's Firebase identity.
 
-`e2e/helpers/persistenceAssertions.ts` confirms through Admin reads that data
-the UI reports as saved actually reached Firestore. `e2e/helpers/cleanupPlan.ts`
-holds the pure attribution rules covered by `npm run test:e2e:harness`.
+`e2e/helpers/persistenceAssertions.ts` confirms through the signed-in patient or
+clinician page that data the UI reports as saved reached Firestore. Its REST
+reader uses the page's Firebase ID token, so the same Firestore rules authorize
+the assertion and server create times remain available for run attribution.
+The token stays inside the page. `e2e/helpers/cleanupPlan.ts` holds the pure
+attribution rules covered by `npm run test:e2e:harness`. The local protocol E2E
+suite includes `persistence.local.spec.ts`, which checks allowed and denied
+reads against the emulators.
 
 Authenticated specs should normally rely on the `patient` or `clinician` project state and use the dashboard/training helpers rather than handling credentials. Do not use the demo clinician shortcut as a substitute for the dedicated clinician E2E identity.
 

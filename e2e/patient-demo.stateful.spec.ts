@@ -45,7 +45,7 @@ test.describe('patient Demo persistence (stateful)', () => {
         await page.getByRole('button', { name: /Focused/ }).click();
         await page.getByRole('button', { name: 'Save Notes', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Saved ✓', exact: true })).toBeVisible({ timeout: 15_000 });
-        await expectDemoSessionPersisted(run);
+        await expectDemoSessionPersisted(run, page);
         await page.getByRole('button', { name: /View Progress/ }).click();
 
         await expect(page.getByText(trackingCopy(beforeCount + 1), { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -82,6 +82,6 @@ test.describe('patient Demo persistence (stateful)', () => {
         await arriveAtPatientDashboard(page);
         expect(await openAllTimeProgress(page)).toBe(reloadedCount);
         // The non-Demo attempt must not have persisted anything further.
-        await expectDemoSessionPersisted(run);
+        await expectDemoSessionPersisted(run, page);
     });
 });
