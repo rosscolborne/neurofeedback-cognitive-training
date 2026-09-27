@@ -21,6 +21,7 @@ const firestore = vi.hoisted(() => ({
   writeBatch: vi.fn(() => batchOperations),
   getDoc: vi.fn(),
   getDocs: vi.fn(),
+  getDocsFromServer: vi.fn().mockResolvedValue({ docs: [] }),
   setDoc: vi.fn(),
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
@@ -1055,9 +1056,86 @@ describe('Tidal Garden initialization', () => {
 });
 
 describe('patient invitation linking', () => {
+  const inviteInput = {
+    clinicId: 'clinic-1', clinicianName: 'Dr. Example', patientName: 'Patient One',
+    patientEmail: ' Patient@Example.com ', condition: 'Peak Performance' as const,
+    assignedProtocol: 'theta-beta-ratio' as const, prescribedSessionsPerWeek: 3,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    firestore.getDocsFromServer.mockReset().mockResolvedValue({ docs: [] });
     state.auth.currentUser = { uid: 'clinician-1', email: 'clinician@example.com' };
+  });
+
+  it.each([
+    ['same clinician', { clinicianId: 'clinician-1', clinicId: 'clinic-1' }, 0],
+    ['same clinic colleague', { clinicianId: 'clinician-2', clinicId: 'clinic-1' }, 0],
+    ['same clinician without clinic', { clinicianId: 'clinician-1', clinicId: null }, 1],
+    ['legacy owner without clinic', { clinicianId: null, linkedClinicianCode: 'clinician-1', clinicId: null }, 2],
+  ])('blocks a new invitation for a patient linked to %s', async (_label, link, queryIndex) => {
+    const patient = { email: 'PATIENT@example.com', ...link };
+    const entry = { id: 'patient-1', data: () => patient };
+    firestore.getDocsFromServer.mockImplementation((query: { constraints: Array<{ field: string }> }) =>
+      Promise.resolve({ docs: query.constraints[0]?.field === ['clinicId', 'clinicianId', 'linkedClinicianCode'][queryIndex] ? [entry] : [] })
+    );
+    const get = vi.fn(async (ref: { path: string; id: string }) => {
+      if (ref.path === 'clients' && ref.id === 'patient-1') {
+        return { id: 'patient-1', exists: (): boolean => true, data: () => patient };
+      }
+      if (ref.path === 'patientInvitationClaims/clinician-1/emails' && ref.id === 'patient@example.com') {
+        return { exists: (): boolean => false };
+      }
+      throw new Error(`Unexpected transaction read: ${ref.path}/${ref.id}`);
+    });
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).rejects.toThrow('already connected');
+    expect(get).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(firestore.getDocsFromServer).toHaveBeenCalledTimes(3);
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('allows a formerly linked patient after unlinking', async () => {
+    const get = vi.fn().mockResolvedValue({ exists: () => false });
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).resolves.toMatchObject({ status: 'pending' });
+    expect(set).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the transaction reread when a server result has since become unlinked', async () => {
+    const entry = { id: 'patient-1', data: () => ({
+      email: 'patient@example.com', clinicId: 'clinic-1', clinicianId: 'clinician-1',
+    }) };
+    firestore.getDocsFromServer.mockResolvedValueOnce({ docs: [entry] });
+    const get = vi.fn(async (ref: { path: string; id: string }) => {
+      if (ref.path === 'clients' && ref.id === 'patient-1') {
+        return { id: 'patient-1', exists: (): boolean => true, data: () => ({
+          email: 'patient@example.com', clinicId: 'clinic-1', clinicianId: null,
+        }) };
+      }
+      if (ref.path === 'patientInvitationClaims/clinician-1/emails' && ref.id === 'patient@example.com') {
+        return { exists: (): boolean => false };
+      }
+      throw new Error(`Unexpected transaction read: ${ref.path}/${ref.id}`);
+    });
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).resolves.toMatchObject({ status: 'pending' });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(set).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed if the server relationship query fails', async () => {
+    firestore.getDocsFromServer.mockRejectedValueOnce(new Error('relationship query offline'));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).rejects.toThrow('relationship query offline');
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
   });
 
   it('creates a pending invitation for the entered patient email instead of a fake client', async () => {
@@ -1127,7 +1205,7 @@ describe('patient invitation linking', () => {
       callback({
         get: vi.fn().mockResolvedValueOnce({
           exists: () => true,
-          data: () => ({ invitationId: 'EXPIRED-CODE', expiresAt: Date.now() - 1 }),
+          data: () => ({ invitationId: 'EXPIRED-CODE', expiresAt: Date.now() - 60_000 }),
         }),
         set: vi.fn((...args) => writes.push(args)),
       })

@@ -26,6 +26,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   onSnapshot,
   query,
   runTransaction,
@@ -901,6 +902,26 @@ class StorageEngine {
       throw new Error('Weekly sessions must be a positive whole number');
     }
 
+    // Query the relationships this clinician may read. Use the server so an
+    // offline cache cannot miss a newly linked patient. The owner queries
+    // cover older profiles that have no clinic assignment. Email comparison is
+    // local because legacy profiles may contain mixed-case addresses.
+    const [clinicPatients, clinicianPatients, legacyPatients] = await Promise.all([
+      getDocsFromServer(query(collection(db, 'clients'), where('clinicId', '==', clinicId))),
+      getDocsFromServer(query(collection(db, 'clients'), where('clinicianId', '==', clinician.uid))),
+      getDocsFromServer(query(
+        collection(db, 'clients'),
+        where('linkedClinicianCode', '==', clinician.uid),
+        where('clinicianId', '==', null),
+      )),
+    ]);
+    const matchingPatientIds = new Set(
+      [clinicPatients, clinicianPatients, legacyPatients]
+        .flatMap((snapshot) => snapshot.docs)
+        .filter((entry) => normalizeEmail(readClientProfile(entry.data(), entry.id).email || '') === patientEmail)
+        .map((entry) => entry.id),
+    );
+
     const now = Date.now();
     const uniquenessClaimId = patientEmail;
 
@@ -926,6 +947,19 @@ class StorageEngine {
     const invitationRef = doc(db, 'patientInvitations', invitation.id);
     const claimRef = getInvitationClaimRef(clinician.uid, uniquenessClaimId);
     await runTransaction(db, async (transaction) => {
+      // Reread matches before writing so a concurrent unlink or link is
+      // reflected in the decision. A revoked read fails the transaction.
+      for (const patientId of matchingPatientIds) {
+        const patientSnapshot = await transaction.get(doc(db, 'clients', patientId));
+        if (!patientSnapshot.exists()) continue;
+        const patient = readClientProfile(patientSnapshot.data(), patientSnapshot.id);
+        if (normalizeEmail(patient.email || '') !== patientEmail) continue;
+        const currentClinicianId = getPatientClinicianId(patient);
+        if (!currentClinicianId) continue;
+        if (patient.clinicId === clinicId) throw new Error('This patient is already connected to your clinic.');
+        if (currentClinicianId === clinician.uid) throw new Error('This patient is already connected to you.');
+      }
+
       const claimSnapshot = await transaction.get(claimRef);
       if (claimSnapshot.exists()) {
         const claim = claimSnapshot.data() as { invitationId?: string; expiresAt?: unknown };
