@@ -120,7 +120,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
               {brand.name}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Clinician Suite • Muse S Athena</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Clinician Suite</div>
           </div>
         </div>
 

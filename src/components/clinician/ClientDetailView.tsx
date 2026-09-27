@@ -17,7 +17,6 @@ import {
   deriveSessionBandRows,
   finiteMetric,
   formatSigned,
-  getLearningScoreContentState,
   getSessionContentState,
   getSessionTabLabel,
 } from './clinicalDetailMetrics';
@@ -52,7 +51,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   onSendMessage,
   onScheduleClient,
 }) => {
-  const [activeTab, setActiveTab] = useState<'eeg' | 'protocol' | 'brainmaps' | 'telemetry' | 'sessions'>('eeg');
+  const [activeTab, setActiveTab] = useState<'eeg' | 'protocol' | 'brainmaps' | 'sessions'>('eeg');
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
   const [showBrainMapUpload, setShowBrainMapUpload] = useState(false);
   const [persistedBrainMapsByPatient, setPersistedBrainMapsByPatient] = useState<Record<string, QEEGBrainMap[]>>({});
@@ -199,11 +198,14 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const psdAxisMaximum = Math.ceil(psdMaximum / 10) * 10 || 1;
   const psdAxisValues = [0, 0.25, 0.5, 0.75, 1].map((fraction) => psdAxisMaximum * fraction);
   const learningScores = deriveLearningScorePoints(sessions);
+  const assignedDeviceName = [client.assignedDevice?.displayName, client.assignedDevice?.model]
+    .find((name) => typeof name === 'string' && name.trim().length > 0)?.trim();
+  const learningScoreX = (index: number) => learningScores.points.length === 1
+    ? 365 : 65 + (index * 600) / (learningScores.points.length - 1);
   const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
   const imprintLabel = imprintState.status === 'valid' ? 'Current'
     : imprintState.status === 'expired' ? 'Expired'
       : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
-  const learningScoreContentState = getLearningScoreContentState(sessionContentState, learningScores.points.length);
   const pdfIsPending = pdfUi.clientId === client.id && pdfUi.pendingSessionId !== undefined;
   const pdfExportDisabled = sessionsState !== 'ready' || pdfIsPending;
 
@@ -266,7 +268,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition || 'Condition unavailable'} • Protocol: <strong>{evidenceProtocolName}</strong> • Assigned device: <strong>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</strong>
+              {client.condition || 'Condition unavailable'} • Protocol: <strong>{evidenceProtocolName}</strong>{assignedDeviceName && <> • Assigned device: <strong>{assignedDeviceName}</strong></>}
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Neural Imprint: <strong>{imprintLabel}</strong>
@@ -300,7 +302,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           { id: 'eeg', label: 'EEG Overview & Spectral PSD' },
           { id: 'protocol', label: 'Protocol Settings' },
           { id: 'brainmaps', label: `QEEG Records (${brainMaps.length})` },
-          { id: 'telemetry', label: 'Live Telemetry' },
           { id: 'sessions', label: getSessionTabLabel(sessionContentState, sessions.length) },
         ].map((tab) => (
           <button
@@ -414,7 +415,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             )}
             
             {/* Learning Curve Chart */}
-            <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+            {learningScores.points.length > 0 && <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
                 <div>
                   <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
@@ -426,13 +427,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 </div>
               </div>
               
-              {learningScoreContentState === 'loading' ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading learning scores…</div>
-              ) : learningScoreContentState === 'error' ? (
-                <div role="alert" style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Learning scores are unavailable because sessions could not be loaded.</div>
-              ) : learningScoreContentState === 'empty' ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>No persisted learning-rate scores are available.</div>
-              ) : <div className="chart-touch-container" style={{ width: '100%', height: '160px' }}>
+              <div className="chart-touch-container" style={{ width: '100%', height: '160px' }}>
                 <svg viewBox="0 0 700 160" style={{ width: '100%', minWidth: '420px', height: '100%' }}>
                   {[0, 25, 50, 75, 100].map((val) => {
                     const y = 140 - val * 1.2;
@@ -448,7 +443,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   
                   {/* Line Path */}
                   <path
-                    d={learningScores.points.map((point, idx) => `${idx === 0 ? 'M' : 'L'} ${65 + idx * 100} ${140 - point.value * 1.2}`).join(' ')}
+                    d={learningScores.points.map((point, idx) => `${idx === 0 ? 'M' : 'L'} ${learningScoreX(idx)} ${140 - point.value * 1.2}`).join(' ')}
                     fill="none"
                     stroke="var(--brand-primary)"
                     strokeWidth="3"
@@ -456,10 +451,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   
                   {/* Points */}
                   {learningScores.points.map((point, idx) => (
-                    <circle key={point.id} cx={65 + idx * 100} cy={140 - point.value * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
+                    <circle key={point.id} cx={learningScoreX(idx)} cy={140 - point.value * 1.2} r="5" fill="var(--surface-clinician-base)" stroke="var(--brand-primary)" strokeWidth="2" />
                   ))}
                 </svg>
-              </div>}
+              </div>
               {learningScores.invalidCount > 0 && (
                 <div role="status" style={{ color: 'var(--status-alert)', fontSize: '11px' }}>
                   {learningScores.invalidCount} session{learningScores.invalidCount === 1 ? '' : 's'} omitted because the score is missing or invalid.
@@ -470,7 +465,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   {learningScores.invalidDateCount} scored session{learningScores.invalidDateCount === 1 ? '' : 's'} omitted because the recorded date is invalid.
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -608,38 +603,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         </div>
       )}
 
-      {/* TAB 4: LIVE TELEMETRY */}
-      {activeTab === 'telemetry' && (
-        <div className="card-clinician" style={{ padding: '20px 16px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Live EEG Telemetry</h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Not connected — no active patient telemetry source is available in this clinician view.
-            </p>
-          </div>
-
-          <div className="card-patient-recessed" role="status" style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-            <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Connection</div>
-              <div style={{ fontSize: '13px', fontWeight: 700 }}>Not connected</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Assigned device</div>
-              <div style={{ fontSize: '13px', fontWeight: 700 }}>{client.assignedDevice?.displayName || client.assignedDevice?.model || 'Unavailable'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Contact / impedance</div>
-              <div style={{ fontSize: '13px', fontWeight: 700 }}>Unavailable</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Waveform / sample rate / packet loss</div>
-              <div style={{ fontSize: '13px', fontWeight: 700 }}>Unavailable</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: ARCHIVED SESSION LOGS */}
+      {/* ARCHIVED SESSION LOGS */}
       <div className="card-clinician" style={{ padding: '18px 16px', backgroundColor: '#FFFFFF', display: activeTab === 'sessions' ? 'block' : 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Session Logs</h3>

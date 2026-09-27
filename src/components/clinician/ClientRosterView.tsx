@@ -395,7 +395,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Status</th>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Condition / Protocol</th>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Last Session</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Capacity Score</th>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Sessions</th>
               <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
             </tr>
@@ -403,7 +402,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           <tbody>
             {filteredClients.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
                   No patients match the selected filter.
                 </td>
               </tr>
@@ -447,7 +446,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
                     {formatLastSessionDate(client.lastSessionDate)}
                   </td>
-                  <td style={{ padding: '14px 16px', color: 'var(--text-tertiary)' }}>Unavailable</td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
                     {client.completedSessionsCount ?? 0}
                   </td>
@@ -525,8 +523,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
               <div>
-                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: unavailable</span>
-                <span style={{ color: 'var(--text-tertiary)', marginLeft: '12px' }}>Sessions: </span>
+                <span style={{ color: 'var(--text-tertiary)' }}>Sessions: </span>
                 <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>

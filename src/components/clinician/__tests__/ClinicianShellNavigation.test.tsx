@@ -23,6 +23,14 @@ const text = (node: ReactTestInstance): string => node.children.map((child) => t
 const click = async (root: ReactTestInstance, label: string) => { const button = root.findAllByType('button').find((item) => text(item) === label)!; await act(async () => button.props.onClick()); };
 
 describe('clinician shell navigation and unread badge', () => {
+  it('does not advertise a device model in the clinic header', async () => {
+    let view!: ReactTestRenderer;
+    await act(async () => { view = create(shell()); });
+    expect(text(view.root)).toContain('Clinician Suite');
+    expect(text(view.root)).not.toContain('Muse S Athena');
+    await act(async () => { view.unmount(); });
+  });
+
   it('keeps exact patient selection across roster, detail, calendar and thread, clearing a removed patient', async () => {
     let view!: ReactTestRenderer;
     await act(async () => { view = create(shell()); });
