@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { defineConfig } from '@playwright/test';
+import { storageStatePath } from './e2e/helpers/auth';
 
 const e2eEnvFile = resolve('.env.e2e');
 if (existsSync(e2eEnvFile)) {
@@ -79,13 +80,13 @@ export default defineConfig({
             name: 'patient',
             testMatch: /patient\.readonly\.spec\.ts/,
             dependencies: ['auth-patient'],
-            use: { storageState: 'e2e/.auth/patient.json' },
+            use: { storageState: storageStatePath.patient },
         },
         {
             name: 'clinician',
             testMatch: /clinician\.readonly\.spec\.ts/,
             dependencies: ['auth-clinician'],
-            use: { storageState: 'e2e/.auth/clinician.json' },
+            use: { storageState: storageStatePath.clinician },
         },
         {
             name: 'deployed-rules',
@@ -107,14 +108,14 @@ export default defineConfig({
             testMatch: /patient-demo\.stateful\.spec\.ts/,
             dependencies: bothAccounts,
             timeout: statefulTimeout,
-            use: { ...noCapture, screenshot: 'only-on-failure', storageState: 'e2e/.auth/patient.json' },
+            use: { ...noCapture, screenshot: 'only-on-failure', storageState: storageStatePath.patient },
         },
         {
             name: 'stateful-clinician',
             testMatch: /care-collaboration\.stateful\.spec\.ts/,
             dependencies: ['deployed-rules'],
             timeout: statefulTimeout,
-            use: { ...noCapture, screenshot: 'only-on-failure', storageState: 'e2e/.auth/clinician.json' },
+            use: { ...noCapture, screenshot: 'only-on-failure', storageState: storageStatePath.clinician },
         },
         {
             name: 'stateful-isolation',
@@ -126,7 +127,6 @@ export default defineConfig({
         {
             name: 'cleanup',
             testMatch: /cleanup\.maintenance\.ts/,
-            dependencies: bothAccounts,
             timeout: statefulTimeout,
             use: noCapture,
         },

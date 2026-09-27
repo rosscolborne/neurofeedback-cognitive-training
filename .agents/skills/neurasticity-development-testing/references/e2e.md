@@ -25,7 +25,7 @@ npm run test:e2e:guard       # browser checks for the permission-denied guard
 npm run test:e2e:preflight   # read-only Admin check of config, identities, leases, fixture
 ```
 
-Auth setup reads local `.env.e2e` and saves ignored storage states under `e2e/.auth/`. Never commit, print, attach, or inspect credentials or storage-state contents. Run `npm run test:e2e:auth` to refresh the states when they expire. Auth setup has trace and screenshot capture disabled to avoid credential exposure.
+Auth setup reads credentials from the current process and saves storage states in a private OS temporary directory. Playwright removes it at the end of a standalone run; the session command uses its own temporary directory and removes that at the end. Auth setup runs as a dependency of each authenticated project, so storage states do not need to survive between commands. Never commit, print, attach, or inspect credentials or storage-state contents. Auth setup has trace and screenshot capture disabled.
 
 Browser specs and auth setup import `test` from `e2e/fixtures.ts` so console, page, and Firestore network permission denials fail the test, including denials in additional browser contexts. Stateful specs inherit that guard through `e2e/helpers/statefulFixture.ts`. The cleanup-plan unit test imports directly from Playwright because it opens no browser. The fresh-account isolation spec calls `permissionErrorGuard.expectDenialsIn` only for the context running its deliberate cross-account denial probes; other contexts remain guarded and stateful cleanup still runs.
 
@@ -43,18 +43,7 @@ npm run test:e2e:stateful:isolation   # disposable accounts + cross-tenant denia
 npm run test:e2e:cleanup              # operator review of an unfinished run
 ```
 
-They need Admin access to the browser app's project: `E2E_FIREBASE_PROJECT_ID`,
-the exact `E2E_PATIENT_UID`/`E2E_CLINICIAN_UID` matching the configured emails,
-`E2E_ENABLE_PRIVILEGED_CLEANUP=true`, exactly one of
-`E2E_CONFIRM_DEDICATED_PROJECT=true` or
-`E2E_CONFIRM_SHARED_PROJECT_TEST_ACCOUNTS=true`, and either
-`E2E_FIREBASE_SERVICE_ACCOUNT_PATH` (an ignored key file) plus
-`E2E_FIREBASE_SERVICE_ACCOUNT_EMAIL` pinning that key's dedicated account.
-Application Default Credentials and the default `firebase-adminsdk-*` account
-are refused. The helpers refuse to run unless the browser project, Admin
-project, key-file project, browser identities, Admin Auth records, and the
-allow-list all agree. Do not use the test accounts manually while a stateful
-suite runs.
+Use `npm run test:e2e:session -- patient|clinician|isolation|preflight|reset` after a human `gcloud auth application-default login`. The command resets fixed test identities, mints ten-minute impersonated tokens for `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com` in memory, runs auth setup and preflight, runs the selected suite, and resets again. It pins the development project and refuses key files and non-human ADC. The browser project, Admin project, browser identities, and Admin Auth records must agree. See [WB-44 credential and fixture setup](../../../../docs/e2e-credentials.md) for the one-time IAM steps and recovery. Do not use the test accounts manually during a run.
 
 `E2E_CLEANUP_MODE` is required. `.env.e2e` may set it only to `plan`; the
 config refuses `execute`, `E2E_RUN_STATEFUL`, `E2E_CLEANUP_RUN_ID`,
@@ -91,24 +80,24 @@ unattributed. The clinic is restored only while the approved pair are its sole
 members. Stateful care and isolation suites run only after
 `npm run test:e2e:rules` passes.
 
-These gates (confirmation flags, npm-script checks, plan digests) prevent
-accidents. They are not a security boundary against anyone who can run code
-with the key: that person can call firebase-admin directly. Limit the key's
-IAM roles and who holds it.
+These gates (pinned project, IAM, confirmation flags, leases, plan digests)
+prevent accidents. A person who can impersonate the E2E service account can
+also use its Admin permissions directly; grant Token Creator only to approved
+developers on that service account.
 
 A run that ends without clean cleanup leaves its lease in place. Stale
-baselines are never restored automatically. Review it read-only with
-`E2E_CLEANUP_RUN_ID=<run> E2E_CLEANUP_MODE=plan npm run test:e2e:cleanup`,
-then execute with the digest that plan printed:
-`E2E_CLEANUP_RUN_ID=<run> E2E_CLEANUP_MODE=execute E2E_CLEANUP_PLAN_SHA=<digest> npm run test:e2e:cleanup`.
+baselines are never restored automatically. Recovery is Admin-only and needs
+no browser storage state or saved fixture passwords. Review it read-only with
+`npm run test:e2e:recover -- <run> plan`, then execute with the digest that
+plan printed: `npm run test:e2e:recover -- <run> execute <digest>`.
 Execution refuses if the state no longer matches the reviewed plan. The window
 ends where the run recorded it, or (for a crash before that) shortly after the
 last heartbeat, so later manual activity is left alone. Recovery never
 recreates deleted documents, and it refuses a run whose recorded clinic no
 longer matches the clinician's practitioner record (a scenario that changes
 practitioner onboarding mid-run would need that check revisited). Adding `E2E_CLEANUP_ACCEPT_RETAINED=<run>` to a
-reviewed recovery releases the lease while leaving the reported items
-untouched.
+reviewed recovery (`--accept-retained` after the digest) releases the lease
+while leaving the reported items untouched.
 
 Read-only suites still load the real app, which may back-fill missing profile
 fields for the signed-in account; cleanup then treats that document as
