@@ -244,6 +244,8 @@ describe('session aggregate migration behavior', () => {
     expect(applySessionCompletionToClient(clientFixture(), { ...current, isDemo: true }).tidalGardenState?.growthPoints).toBe(60);
     expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: 0 }).tidalGardenState?.growthPoints).toBe(0);
     expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: 9999 }).tidalGardenState?.growthPoints).toBe(75);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current,
+      durationSeconds: 75, configuredDurationSeconds: 60, inZoneSeconds: 75 }).tidalGardenState?.growthPoints).toBe(150);
     expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: Number.NaN }).tidalGardenState?.growthPoints).toBe(0);
     expect(applySessionCompletionToClient(clientFixture(), { ...current, configuredDurationSeconds: 0 }).tidalGardenState?.growthPoints).toBe(0);
     expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: undefined,

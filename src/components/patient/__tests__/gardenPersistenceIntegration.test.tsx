@@ -111,3 +111,65 @@ it('opens a legacy garden, completes verified non-Demo training through the real
   expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(10);
   await act(async () => { view.unmount(); });
 });
+
+it('caps a short completed session at 150 XP despite later in-zone frames and a replayed save', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  memory.client = { ...createBlankProfile('patient-1', 'patient@example.test'),
+    assignedProtocol: 'alpha-enhancement',
+    customProtocolConfig: { ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1 },
+  };
+  memory.sessions = [];
+  engine.isHardwareConnected = true;
+  stream.sequence = 0;
+  stream.lastFrameAtMs = 0;
+  firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
+    get: async () => snapshot(),
+    set: (ref: { path: string }, payload: Record<string, unknown>) => {
+      if (ref.path === 'sessions') memory.sessions.push(payload as unknown as SessionRecord);
+      else memory.client = { ...memory.client!, ...payload } as ClientProfile;
+    },
+  }));
+  firestore.getDoc.mockImplementation(async () => snapshot());
+
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(<SessionRunner client={memory.client!} selectedExperience="tidal-garden"
+    onComplete={async (session) => { await storageEngine.createSession(session); }} onCancel={vi.fn()} />); });
+  await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
+  await act(async () => { button(view, 'Begin Training').props.onClick(); });
+  for (let second = 0; second < 60; second++) {
+    await act(async () => {
+      stream.sequence++;
+      stream.lastFrameAtMs = Date.now();
+      stream.callback?.(frame(true));
+      vi.advanceTimersByTime(1_000);
+    });
+  }
+  const canvas = view.root.find((node) => (node.type as unknown) === 'experience-view');
+  expect(canvas.props.growthPoints).toBe(150);
+  expect(memory.sessions).toHaveLength(1);
+  expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false,
+    durationSeconds: 60, configuredDurationSeconds: 60, inZoneSeconds: 60 });
+  expect(memory.client?.tidalGardenState?.growthPoints).toBe(150);
+
+  // Valid fresh hardware frames after completion cannot extend the award.
+  for (let second = 0; second < 15; second++) {
+    await act(async () => {
+      stream.sequence++;
+      stream.lastFrameAtMs = Date.now();
+      stream.callback?.(frame(true));
+      vi.advanceTimersByTime(1_000);
+    });
+  }
+  expect(canvas.props.growthPoints).toBe(150);
+  expect(memory.sessions[0]).toMatchObject({ durationSeconds: 60, inZoneSeconds: 60 });
+  expect(memory.client?.tidalGardenState?.growthPoints).toBe(150);
+
+  // Replaying the same ID with over-duration evidence cannot award it twice.
+  await expect(storageEngine.createSession({ ...memory.sessions[0], durationSeconds: 75, inZoneSeconds: 75 }))
+    .resolves.toMatchObject({ created: false });
+  expect(memory.sessions).toHaveLength(1);
+  expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(150);
+  await act(async () => { view.unmount(); });
+});
