@@ -2,7 +2,7 @@
 
 ## Current test entry points
 
-- `npm run test` runs Vitest.
+- `npm test` runs the default offline Vitest suite. With a local BrainFlow service started by `npm run brainflow`, `npm run test:brainflow:integration` runs the two service-backed Vitest files separately; see the [README checks](../../../../README.md#checks).
 - `npm run test:python` runs the pytest suite through `uv`.
 - `npm run lint` and `npm run build` provide the repository's lint and TypeScript/build checks.
 - Playwright tests are in `e2e/`; configuration is in `playwright.config.ts`.
@@ -52,7 +52,7 @@ npm run test:e2e:stateful:isolation   # disposable accounts + cross-tenant denia
 npm run test:e2e:cleanup              # operator review of an unfinished run
 ```
 
-Use `npm run test:e2e:session -- patient|clinician|isolation|preflight|reset` after a human `gcloud auth application-default login` and approval to reset the shared fixtures. The command resets fixed test identities, mints ten-minute impersonated tokens for `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com` in memory, runs auth setup and preflight, runs the selected suite, and resets again. It pins the development project and refuses key files and non-human ADC. The browser project, Admin project, browser identities, and Admin Auth records must agree. See [WB-44 credential and fixture setup](../../../../docs/e2e-credentials.md) for IAM status and recovery. Do not use the test accounts manually during a run.
+Use `npm run test:e2e:session -- patient|clinician|isolation|preflight|reset` after a human `gcloud auth application-default login` when the task or session explicitly authorizes shared fixture reset and the selected stateful run. The command resets fixed test identities, mints ten-minute impersonated tokens for `waveable-e2e@brainwell-327dc.iam.gserviceaccount.com` in memory, runs auth setup and preflight, runs the selected suite, and resets again. It pins the development project and refuses key files and non-human ADC. The browser project, Admin project, browser identities, and Admin Auth records must agree. See [WB-44 credential and fixture setup](../../../../docs/e2e-credentials.md) for IAM status and recovery. Do not use the test accounts manually during a run.
 
 `E2E_CLEANUP_MODE` is required. `.env.e2e` may set it only to `plan`; the
 config refuses `execute`, `E2E_RUN_STATEFUL`, `E2E_CLEANUP_RUN_ID`,
