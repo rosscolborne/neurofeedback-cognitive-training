@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   getSessions: vi.fn(),
   saveSession: vi.fn(),
   getClient: vi.fn(),
+  exportCsv: vi.fn(),
 }));
 
 vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: {} }));
@@ -15,6 +16,7 @@ vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
 vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient } }));
+vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
 vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
@@ -110,5 +112,54 @@ describe('PatientShell persisted profile writes', () => {
     expect(onClientPersistedElsewhere).toHaveBeenCalledWith(refreshed);
     expect(onUpdateClient).not.toHaveBeenCalled();
     renderer.unmount();
+  });
+
+  it('exports every stored Profile row through the shared exporter, including demos and invalid timestamps', async () => {
+    const allRows = [
+      { id: 'demo', isDemo: true, timestamp: 0 },
+      { id: 'legacy', timestamp: Date.parse('2026-09-27T12:00:00Z') },
+    ];
+    state.getSessions.mockResolvedValueOnce(allRows);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+    });
+    act(() => renderer.root.findAllByType('button').find((button) =>
+      button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
+    )!.props.onClick());
+    await act(async () => {
+      await renderer.root.findAllByType('button').find((button) => button.children.some((child) => child === 'Export Data (CSV)'))!.props.onClick();
+    });
+    expect(state.getSessions).toHaveBeenCalledWith(client.id);
+    expect(state.exportCsv).toHaveBeenCalledTimes(1);
+    expect(state.exportCsv.mock.calls[0][0]).toBe(allRows);
+    renderer.unmount();
+  });
+
+  it('keeps Profile read-error and empty-result gates before export delivery', async () => {
+    const originalAlert = globalThis.alert;
+    const alert = vi.fn();
+    Object.defineProperty(globalThis, 'alert', { configurable: true, value: alert });
+    state.getSessions.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]);
+    let renderer!: ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+      });
+      act(() => renderer.root.findAllByType('button').find((button) =>
+        button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
+      )!.props.onClick());
+      const exportButton = () => renderer.root.findAllByType('button').find((button) => button.children.some((child) => child === 'Export Data (CSV)'))!;
+      await act(async () => { await exportButton().props.onClick(); });
+      await act(async () => { await exportButton().props.onClick(); });
+      expect(alert.mock.calls.map(([message]) => message)).toEqual([
+        'Session data is unavailable right now. Try again after the connection recovers.',
+        'No session data to export.',
+      ]);
+      expect(state.exportCsv).not.toHaveBeenCalled();
+      renderer.unmount();
+    } finally {
+      Object.defineProperty(globalThis, 'alert', { configurable: true, value: originalAlert });
+    }
   });
 });

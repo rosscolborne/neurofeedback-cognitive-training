@@ -10,6 +10,7 @@ import {
   getTimeInZonePercent,
   ProgressPeriod,
 } from './patientMetrics';
+import { exportPatientSessionCsv } from './patientSessionCsv';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
@@ -75,50 +76,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
 
   const exportCSV = () => {
     if (exportAvailability !== 'ready') return;
-    const headers = ['Date', 'Protocol', 'Experience', 'Duration (s)', 'Time In Zone %', 'Coherence %', 'Peak Score', 'Mood'];
-    const rows = progressDisplay.validSessions.map(s => [
-      s.date,
-      s.protocol,
-      s.experience,
-      s.durationSeconds,
-      s.timeInZonePercent,
-      s.averageCoherence,
-      s.peakFocusScore,
-      s.moodRating || 'N/A',
-    ]);
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const filename = `waveable_progress_${new Date().toISOString().split('T')[0]}.csv`;
-
-    if (navigator.share && navigator.canShare) {
-      const file = new File([blob], filename, { type: 'text/csv' });
-      if (navigator.canShare({ files: [file] })) {
-        navigator.share({
-          files: [file],
-          title: 'Session Progress',
-        }).then(() => {
-          setExportStatus('done');
-          setTimeout(() => setExportStatus('idle'), 3000);
-        }).catch(() => {
-          setExportStatus('idle');
-        });
-        return;
-      }
-    }
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 200);
-    setExportStatus('done');
-    setTimeout(() => setExportStatus('idle'), 3000);
+    exportPatientSessionCsv(progressDisplay.validSessions, setExportStatus);
   };
 
   return (
