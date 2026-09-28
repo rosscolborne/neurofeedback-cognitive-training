@@ -86,10 +86,10 @@ test('report range totals agree with visible patient rows and PDF export', async
         const interval = (await page.getByText(/^Interval:/).innerText()).split(' · Source:')[0].replace('Interval: ', '');
         expect(interval).toMatch(/\w+ \d+, \d{4} – \w+ \d+, \d{4} \([^)]+\)/);
         intervals.push(interval);
-        const total = Number((await reportMetric(page, 'Persisted Sessions').innerText()).match(/Persisted Sessions\s*(\d+)/)?.[1]);
+        const total = Number((await reportMetric(page, 'Sessions recorded').innerText()).match(/Sessions recorded\s*(\d+)/)?.[1]);
         expect(Number.isFinite(total)).toBe(true);
         const rows = patientRows(page);
-        const cohort = Number((await reportMetric(page, 'Selected Cohort').innerText()).match(/Selected Cohort\s*(\d+)/)?.[1]);
+        const cohort = Number((await reportMetric(page, 'Patients in cohort').innerText()).match(/Patients in cohort\s*(\d+)/)?.[1]);
         selectedCohort = cohort;
         await expect(rows).toHaveCount(cohort || 1);
         const rowCounts = await rows.locator('td:nth-child(2)').allInnerTexts();
@@ -100,7 +100,7 @@ test('report range totals agree with visible patient rows and PDF export', async
     expect(intervals[0]).not.toBe(intervals[1]);
     expect(intervals[2]).toMatch(/^Jan 1, \d{4} – /);
     expect(selectedCohort, 'The read-only clinician fixture needs a reportable patient').toBeGreaterThan(0);
-    const sampleCount = Number((await reportMetric(page, 'Sample Workspace Records').innerText()).match(/Sample Workspace Records\s*(\d+)/)?.[1]);
+    const sampleCount = Number((await reportMetric(page, 'Sample records').innerText()).match(/Sample records\s*(\d+)/)?.[1]);
     expect(sampleCount).toBe(0);
 
     const firstPatientRow = patientRows(page).first();
