@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 const projectId = 'demo-neurasticity-protocol-e2e';
 if (process.env.GCLOUD_PROJECT !== projectId ||
@@ -203,4 +203,41 @@ export async function readLifecycleRecords(oldUid: string, newUid: string, clini
   return { oldClient: oldClient.data(), newClient: newClient.data(), invitation: invitation.data(),
     claimExists: claim.exists, oldAuthExists: oldAuth,
     appointmentStatuses: appointments.docs.map((entry) => entry.data().status as string) };
+}
+
+/** Patient-owned self-directed history: one saved session plus grown Garden and progress fields. */
+export async function seedSelfDirectedHistory(patientUid: string) {
+  const sessionId = `self-directed-${randomUUID().replaceAll('-', '')}`;
+  const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
+  const timestamp = Date.now() - 60_000;
+  await Promise.all([
+    adminDb.doc(`sessions/${sessionId}`).set({
+      id: sessionId, patientId: patientUid, clinicId: 'self-guided', schemaVersion: 2,
+      timestamp, date: new Date(timestamp).toLocaleDateString(),
+      experience: 'breath-weave', protocol: 'alpha-enhancement', durationSeconds: 600,
+      isDemo: false, patientNotes: 'Self-directed reflection', moodRating: 4,
+      timeSeries: [{ t: 5, alpha: 8, inZone: true }],
+    }),
+    adminDb.doc(`clients/${patientUid}`).update({ tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'] }),
+  ]);
+  return { sessionId, garden };
+}
+
+export async function readPatientTrainingRecord(patientUid: string) {
+  const snapshot = await adminDb.doc(`clients/${patientUid}`).get();
+  const data = snapshot.data() ?? {};
+  return {
+    clinicianId: (data.clinicianId ?? null) as string | null,
+    assignedProtocol: data.assignedProtocol as string | undefined,
+    allowedExperiences: data.allowedExperiences as string[] | undefined,
+    hasCustomProtocolConfig: data.customProtocolConfig !== undefined,
+    tidalGardenState: data.tidalGardenState as Record<string, unknown> | undefined,
+    completedSessionsCount: data.completedSessionsCount as number | undefined,
+    badges: data.badges as string[] | undefined,
+  };
+}
+
+/** Recreate a legacy profile written before these fields existed. */
+export async function removePatientFields(patientUid: string, fields: string[]) {
+  await adminDb.doc(`clients/${patientUid}`).update(Object.fromEntries(fields.map((field) => [field, FieldValue.delete()])));
 }
