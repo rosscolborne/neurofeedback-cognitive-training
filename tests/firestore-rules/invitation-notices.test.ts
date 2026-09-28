@@ -1,10 +1,10 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-    collection, deleteDoc, doc, getDoc, getDocs, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch,
+    collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch,
     type Firestore,
 } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { as, clinicA, clinicB, closeEnvironment, emailOf, ids, past, resetWorld, seedDocuments } from './fixture';
+import { anonymous, as, clinicA, clinicB, closeEnvironment, emailOf, ids, past, resetWorld, seedDocuments } from './fixture';
 
 // Code-free pending-invitation notices: patientInvitationNotices/{email}/clinicians/{clinicianId}.
 // Shapes mirror storageEngine.createPatientInvitation, cancelPatientInvitation and acceptPatientInvitation.
@@ -112,6 +112,58 @@ describe('invitation notice reads', () => {
         await assertFails(getDocs(query(collection(patient, 'patientInvitations'), where('patientEmail', '==', email))));
         await assertFails(getDoc(doc(patient, claimPath(ids.clinicianA))));
         await assertFails(getDocs(collection(patient, `patientInvitationClaims/${ids.clinicianA}/emails`)));
+    });
+});
+
+describe('invitation notice read isolation', () => {
+    it('keeps the intended path-scoped reads for the addressed email and the owning clinician', async () => {
+        await inviteFromBoth();
+        const own = await assertSucceeds(getDocs(collection(await as(ids.unlinked), `patientInvitationNotices/${email}/clinicians`)));
+        expect(own.docs).toHaveLength(2);
+        await assertSucceeds(getDoc(doc(await as(ids.unlinked), noticePath(ids.clinicianB))));
+        await assertSucceeds(getDoc(doc(await as(ids.clinicianB), noticePath(ids.clinicianB))));
+    });
+
+    it('denies anonymous reads', async () => {
+        await inviteFromBoth();
+        await assertFails(getDocs(collection(await anonymous(), `patientInvitationNotices/${email}/clinicians`)));
+        await assertFails(getDoc(doc(await anonymous(), noticePath(ids.clinicianA))));
+    });
+
+    it('denies an account whose token carries a different email, even with the addressed UID', async () => {
+        await inviteFromBoth();
+        const otherEmail = await as(ids.unlinked, { email: 'someone-else@example.test' });
+        await assertFails(getDocs(collection(otherEmail, `patientInvitationNotices/${email}/clinicians`)));
+        await assertFails(getDoc(doc(otherEmail, noticePath(ids.clinicianA))));
+    });
+
+    it('denies listing the top-level notice collection', async () => {
+        await inviteFromBoth();
+        await assertFails(getDocs(collection(await as(ids.unlinked), 'patientInvitationNotices')));
+        await assertFails(getDocs(collection(await as(ids.clinicianA), 'patientInvitationNotices')));
+    });
+
+    it('denies collection-group queries for patients and clinicians', async () => {
+        await inviteFromBoth();
+        const patient = await as(ids.unlinked);
+        await assertFails(getDocs(collectionGroup(patient, 'clinicians')));
+        await assertFails(getDocs(query(collectionGroup(patient, 'clinicians'), where('expiresAt', '>', past))));
+        await assertFails(getDocs(collectionGroup(await as(ids.clinicianA), 'clinicians')));
+        await assertFails(getDocs(collectionGroup(await as(ids.patientA), 'clinicians')));
+    });
+});
+
+describe('invitation notice write integrity', () => {
+    it('refuses rewriting the expiry to a value that does not match the pending invitation', async () => {
+        await inviteFromBoth();
+        const clinician = await as(ids.clinicianA);
+        const before = (await getDoc(doc(clinician, noticePath(ids.clinicianA)))).get('expiresAt') as Timestamp;
+        for (const expiresAt of [Timestamp.fromMillis(Date.now() + 20 * 24 * 60 * 60 * 1000), Timestamp.fromMillis(Date.now() - 60_000)]) {
+            await assertFails(setDoc(doc(clinician, noticePath(ids.clinicianA)), { expiresAt, updatedAt: serverTimestamp() }));
+            await assertFails(updateDoc(doc(clinician, noticePath(ids.clinicianA)), { expiresAt, updatedAt: serverTimestamp() }));
+        }
+        const after = (await getDoc(doc(clinician, noticePath(ids.clinicianA)))).get('expiresAt') as Timestamp;
+        expect(after.toMillis()).toBe(before.toMillis());
     });
 });
 

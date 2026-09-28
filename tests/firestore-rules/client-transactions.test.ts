@@ -92,7 +92,10 @@ describe('invitation transactions', () => {
 });
 
 /** storageEngine.disconnectFromClinician, as the signed-in patient */
-function disconnectFromClinician(database: Firestore, patientId: string, appointmentIds: string[] = []) {
+function disconnectFromClinician(
+    database: Firestore, patientId: string, appointmentIds: string[] = [],
+    appointmentExtra: Record<string, unknown> = {}, profileExtra: Record<string, unknown> = {},
+) {
     return runTransaction(database, async (transaction) => {
         const client = await transaction.get(doc(database, `clients/${patientId}`));
         const appointments = await Promise.all(appointmentIds.map((id) => transaction.get(doc(database, `appointments/${id}`))));
@@ -101,10 +104,12 @@ function disconnectFromClinician(database: Firestore, patientId: string, appoint
                 status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: client.id,
                 cancellationRequestId: 'cancel_dddddddddddddddddddddddd', updatedAt: serverTimestamp(),
                 revision: (appointment.get('revision') as number) + 1,
+                ...appointmentExtra,
             });
         }
         transaction.update(client.ref, {
             clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
+            ...profileExtra,
         });
     });
 }
@@ -215,6 +220,39 @@ describe('relationship transactions', () => {
         await assertFails(updateDoc(clientRef, { ...cleared, name: 'Renamed' }));
         await assertFails(updateDoc(clientRef, { ...cleared, clinicianId: ids.clinicianB, clinicId: clinicB }));
         await assertFails(updateDoc(doc(await as(ids.patientB), `clients/${ids.patientA}`), cleared));
+    });
+
+    it.each([
+        ['notes', { notes: 'changed during disconnect' }],
+        ['startsAt', { startsAt: Timestamp.fromMillis(Date.now() + 14 * 24 * 60 * 60 * 1000) }],
+        ['patientId', { patientId: ids.patientB }],
+        ['clinicianId', { clinicianId: ids.clinicianB }],
+        ['cancelledBy', { cancelledBy: ids.clinicianA }],
+    ])('a disconnect cannot also change the appointment’s %s', async (_field, appointmentExtra) => {
+        const patientA = await as(ids.patientA);
+        await assertFails(disconnectFromClinician(patientA, ids.patientA, [seededAppointmentId], appointmentExtra));
+        // The canonical cancellation alone, in the same disconnect, is still allowed.
+        await assertSucceeds(disconnectFromClinician(patientA, ids.patientA, [seededAppointmentId]));
+        const appointment = await getDoc(doc(patientA, `appointments/${seededAppointmentId}`));
+        expect(appointment.get('status')).toBe('cancelled');
+        expect(appointment.get('notes')).toBe('seeded');
+        expect(appointment.get('patientId')).toBe(ids.patientA);
+        expect(appointment.get('clinicianId')).toBe(ids.clinicianA);
+        expect(appointment.get('cancelledBy')).toBe(ids.patientA);
+    });
+
+    it.each([
+        ['keeping clinicId', { clinicId: clinicA }],
+        ['clearing only clinicianId', { clinicId: clinicA, acceptedInvitationId: 'INVA-AAAA-AAAA' }],
+        ['relinking through linkedClinicianCode', { linkedClinicianCode: ids.clinicianB }],
+        ['changing the assignment', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }],
+        ['changing the custom protocol config', { customProtocolConfig: { id: 'custom', name: 'Patient-made rule' } }],
+    ])('a disconnect write refuses %s', async (_label, profileExtra) => {
+        const patientA = await as(ids.patientA);
+        await assertFails(disconnectFromClinician(patientA, ids.patientA, [], {}, profileExtra));
+        const profile = await getDoc(doc(patientA, `clients/${ids.patientA}`));
+        expect(profile.get('clinicianId')).toBe(ids.clinicianA);
+        expect(profile.get('assignedProtocol')).toBe('theta-beta-ratio');
     });
 
     it('a patient cancels a clinician’s appointment only in the write that disconnects from that clinician', async () => {

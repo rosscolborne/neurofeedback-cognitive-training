@@ -175,8 +175,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // One live claim exists for each clinician + normalized patient email.
-    // It is created atomically with an invitation and released on cancel/accept.
     // A code-free notice that a clinician has a pending invitation for this email.
     // It tells the addressed account to show Connect to Clinician; accepting
     // still needs the invitation code, which only the invitation itself holds.
@@ -221,6 +219,8 @@ service cloud.firestore {
         noPendingInvitationRemains();
     }
 
+    // One live claim exists for each clinician + normalized patient email.
+    // It is created atomically with an invitation and released on cancel/accept.
     match /patientInvitationClaims/{clinicianId}/emails/{emailKey} {
       function matchesPendingInvitation() {
         let invitation = getAfter(/databases/$(database)/documents/patientInvitations/$(request.resource.data.invitationId)).data;
