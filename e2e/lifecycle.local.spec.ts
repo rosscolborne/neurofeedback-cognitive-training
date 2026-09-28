@@ -75,7 +75,6 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     await loginThroughUi(oldPatient, fixture.patient);
     await arriveAtPatientDashboard(oldPatient);
     await oldPatient.getByRole('button', { name: 'Profile', exact: true }).click();
-    oldPatient.once('dialog', (dialog) => { void dialog.accept(); });
     await oldPatient.getByRole('button', { name: 'Delete Account' }).click();
     await oldPatient.getByLabel('Enter your password to confirm account deletion').fill(fixture.patient.password);
     await oldPatient.getByRole('button', { name: 'Confirm account deletion' }).click();
@@ -156,11 +155,12 @@ test('wrong deletion password keeps the account, profile, and clinician roster i
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    patient.once('dialog', (dialog) => { void dialog.accept(); });
     await patient.getByRole('button', { name: 'Delete Account' }).click();
     await patient.getByLabel('Enter your password to confirm account deletion').fill('WrongLocalPassword!123');
     await patient.getByRole('button', { name: 'Confirm account deletion' }).click();
-    await expect(patient.getByRole('alert')).toContainText(/password|credential/i);
+    await expect(patient.getByRole('alert')).toHaveText('Incorrect password. Please try again.');
+    await expect(patient.getByLabel('Enter your password to confirm account deletion')).toHaveValue('');
+    await expect(patient.getByLabel('Enter your password to confirm account deletion')).toBeEnabled();
     expect(await authenticatedUserId(patient)).toBe(fixture.patient.uid);
     await expect(rosterRow).toHaveCount(1);
     await patient.reload();

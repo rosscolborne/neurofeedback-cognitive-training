@@ -11,6 +11,7 @@ import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { EducationHub } from './EducationHub';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
+import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
 import { PatientMessagingView } from './PatientMessagingView';
 import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
@@ -138,6 +139,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
   const handleDeleteAccount = async () => {
     if (isDeletingAccount || !deletePassword) return;
+    // Submitting is the final confirmation. Hand the password to reauthentication
+    // and drop it from state so teardown never re-renders it.
+    const password = deletePassword;
+    setDeletePassword('');
     const user = auth.currentUser;
     if (!user?.email || user.uid !== client.id) {
       setAccountDeletionError('Your signed-in account changed. Restart account deletion.');
@@ -145,33 +150,49 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     }
     setIsDeletingAccount(true);
     setAccountDeletionError(null);
+    // Publishing the deactivated profile mid-teardown would swap in the resume
+    // screen just before the redirect, so it is only published if deletion fails.
+    const deactivation: { client?: ClientProfile } = {};
     try {
-      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, deletePassword));
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
-      await storageEngine.preparePatientAccountDeletion(user.uid, onClientPersistedElsewhere);
+      await storageEngine.preparePatientAccountDeletion(user.uid, (deactivated) => { deactivation.client = deactivated; });
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
       await user.delete();
       window.location.href = '/welcome';
     } catch (err) {
-      setAccountDeletionError(err instanceof Error ? err.message : 'Account deletion could not finish. Please try again.');
-    } finally {
-      setDeletePassword('');
+      if (deactivation.client) onClientPersistedElsewhere(deactivation.client);
+      setAccountDeletionError(getAccountDeletionErrorMessage(err));
+      // Only failure leaves the pending state; success keeps it until the redirect lands.
       setIsDeletingAccount(false);
     }
   };
 
   const openAccountDeletion = () => {
-    if (!client.accountDeletionStartedAt && !window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) return;
     setAccountDeletionError(null);
     setShowDeletePassword(true);
   };
 
-  const deletionPasswordForm = showDeletePassword && (
+  const cancelAccountDeletion = () => {
+    setShowDeletePassword(false);
+    setDeletePassword('');
+    setAccountDeletionError(null);
+  };
+
+  const deletionPasswordForm = showDeletePassword && (isDeletingAccount ? (
+    <div className="account-deletion-confirmation account-deletion-status" role="status" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+      Deleting your account…
+    </div>
+  ) : (
     <form
       className="account-deletion-confirmation"
       onSubmit={(event) => { event.preventDefault(); void handleDeleteAccount(); }}
-      aria-busy={isDeletingAccount}
     >
+      {!client.accountDeletionStartedAt && (
+        <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
+          Are you sure you want to delete your account? This action cannot be undone.
+        </p>
+      )}
       <label className="account-deletion-label" htmlFor="account-deletion-password">
         Enter your password to confirm account deletion
         <input
@@ -179,19 +200,24 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           id="account-deletion-password"
           type="password"
           autoComplete="current-password"
+          autoFocus
           value={deletePassword}
           onChange={(event) => setDeletePassword(event.target.value)}
-          disabled={isDeletingAccount}
           aria-invalid={!!accountDeletionError}
           aria-describedby={accountDeletionError ? 'account-deletion-error' : undefined}
         />
       </label>
       {accountDeletionError && <p className="account-deletion-error" id="account-deletion-error" role="alert">{accountDeletionError}</p>}
-      <button className="btn account-deletion-submit" type="submit" disabled={isDeletingAccount || !deletePassword}>
-        {isDeletingAccount ? 'Finishing…' : 'Confirm account deletion'}
-      </button>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '8px' }}>
+        <button className="btn account-deletion-submit" type="submit" disabled={!deletePassword}>
+          Confirm account deletion
+        </button>
+        <button className="btn btn-ghost" type="button" onClick={cancelAccountDeletion} style={{ minHeight: '42px', marginTop: '4px' }}>
+          Cancel
+        </button>
+      </div>
     </form>
-  );
+  ));
 
   const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
     if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;

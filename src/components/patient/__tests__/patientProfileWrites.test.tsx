@@ -40,6 +40,41 @@ const client: ClientProfile = {
 };
 const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 
+// Firebase Auth and Firestore throw an Error carrying a string code.
+const firebaseError = (code: string) =>
+  Object.assign(new Error(`Firebase: Error (${code}).`), { name: 'FirebaseError', code });
+const deactivated: ClientProfile = { ...client, accountDeletionStartedAt: new Date(), clinicianId: undefined, clinicId: undefined };
+const flush = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+
+const stubWindow = (overrides: Record<string, unknown>) => {
+  const originalWindow = globalThis.window;
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { ...originalWindow, ...overrides } });
+  return () => Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+};
+
+/** Mirrors App: a profile persisted elsewhere replaces the mounted client. */
+const StatefulShell: React.FC<{ initial: ClientProfile; onPersisted: (updated: ClientProfile) => void }> = ({ initial, onPersisted }) => {
+  const [current, setCurrent] = React.useState(initial);
+  return <PatientShell brand={brand} client={current} onUpdateClient={vi.fn()} onClientPersistedElsewhere={(updated) => { onPersisted(updated); setCurrent(updated); }} onOpenRebrand={vi.fn()} />;
+};
+
+const rendered = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
+const deletionTrigger = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button')
+  .find((button) => button.children.some((child) => typeof child === 'string' && child.includes('Delete Account')))!;
+const openProfileDeletion = (renderer: ReactTestRenderer) => {
+  act(() => renderer.root.findAllByType('button').find((button) => button.findAllByType('span').some((span) => span.children.join('') === 'Profile'))!.props.onClick());
+  act(() => deletionTrigger(renderer).props.onClick());
+};
+const deletionPasswordInputs = (renderer: ReactTestRenderer) => renderer.root.findAllByProps({ id: 'account-deletion-password' });
+const typeDeletionPassword = (renderer: ReactTestRenderer, value: string) =>
+  act(() => renderer.root.findByProps({ id: 'account-deletion-password' }).props.onChange({ target: { value } }));
+const submitDeletion = (renderer: ReactTestRenderer) =>
+  renderer.root.findByProps({ className: 'account-deletion-confirmation' }).props.onSubmit({ preventDefault: vi.fn() });
+const deletionError = (renderer: ReactTestRenderer) => renderer.root.findByProps({ id: 'account-deletion-error' }).children.join('');
+const deletionStatusText = (renderer: ReactTestRenderer) => renderer.root
+  .findAll((node) => typeof node.type === 'string' && node.props.role === 'status' && String(node.props.className).includes('account-deletion-status'))
+  .map((node) => node.children.join(''));
+
 describe('PatientShell persisted profile writes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,8 +86,6 @@ describe('PatientShell persisted profile writes', () => {
   });
 
   it('does not delete a different account when Auth changes during password confirmation', async () => {
-    const originalWindow = globalThis.window;
-    Object.defineProperty(globalThis, 'window', { configurable: true, value: { ...originalWindow, confirm: () => true } });
     const oldUser = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
     state.auth.currentUser = oldUser;
     let finishReauth!: () => void;
@@ -60,73 +93,189 @@ describe('PatientShell persisted profile writes', () => {
     let renderer!: ReactTestRenderer;
     try {
       await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
-      const profile = renderer.root.findAllByType('button').find((button) => button.findAllByType('span').some((span) => span.children.join('') === 'Profile'))!;
-      act(() => profile.props.onClick());
-      act(() => renderer.root.findAllByType('button').find((button) => button.children.some((child) => typeof child === 'string' && child.includes('Delete Account')))!.props.onClick());
-      act(() => renderer.root.findByProps({ id: 'account-deletion-password' }).props.onChange({ target: { value: 'secret' } }));
+      openProfileDeletion(renderer);
+      typeDeletionPassword(renderer, 'secret');
       await act(async () => {
-        renderer.root.findAllByType('form').at(-1)!.props.onSubmit({ preventDefault: vi.fn() });
+        submitDeletion(renderer);
         await Promise.resolve();
       });
       state.auth.currentUser = { uid: 'other-patient', email: 'other@example.com', delete: vi.fn(async () => {}) };
       await act(async () => { finishReauth(); await Promise.resolve(); });
       expect(state.prepareDeletion).not.toHaveBeenCalled();
       expect(oldUser.delete).not.toHaveBeenCalled();
+      // App-authored guard messages are written for the patient and stay verbatim.
+      expect(deletionError(renderer)).toBe('Your signed-in account changed. Restart account deletion.');
     } finally {
       renderer?.unmount();
-      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
     }
   });
 
-  it('keeps deletion confirmation masked and disabled while pending, then shows reauthentication errors', async () => {
-    const originalWindow = globalThis.window;
-    Object.defineProperty(globalThis, 'window', { configurable: true, value: { ...originalWindow, confirm: () => true } });
+  it('opens deletion in-app, holds a pending status, and turns a wrong password into a readable retry', async () => {
+    const confirm = vi.fn(() => true);
+    const restoreWindow = stubWindow({ confirm });
     const user = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
     state.auth.currentUser = user;
-    let rejectReauth!: (reason: Error) => void;
+    let rejectReauth!: (reason: unknown) => void;
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { rejectReauth = reject; }));
+    const onClientPersistedElsewhere = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />); });
     try {
-      act(() => renderer.root.findAllByType('button').find((button) => button.findAllByType('span').some((span) => span.children.join('') === 'Profile'))!.props.onClick());
-      act(() => renderer.root.findAllByType('button').find((button) => button.children.some((child) => typeof child === 'string' && child.includes('Delete Account')))!.props.onClick());
+      openProfileDeletion(renderer);
+      // The in-app step is the only confirmation: no browser dialog first.
+      expect(confirm).not.toHaveBeenCalled();
+      expect(rendered(renderer)).toContain('This action cannot be undone.');
       const password = () => renderer.root.findByProps({ id: 'account-deletion-password' });
       const submit = () => renderer.root.findByProps({ className: 'btn account-deletion-submit' });
       expect(password().props.type).toBe('password');
       expect(password().props.autoComplete).toBe('current-password');
       expect(password().props.className).toBe('account-deletion-password');
+      expect(submit().children.join('')).toBe('Confirm account deletion');
       expect(submit().props.disabled).toBe(true);
-      act(() => password().props.onChange({ target: { value: 'secret' } }));
+      typeDeletionPassword(renderer, 'Wrong-Horse-7731');
       expect(submit().props.disabled).toBe(false);
 
-      const form = () => renderer.root.findByProps({ className: 'account-deletion-confirmation' });
-      await act(async () => { form().props.onSubmit({ preventDefault: vi.fn() }); await Promise.resolve(); });
-      expect(form().props['aria-busy']).toBe(true);
-      expect(password().props.disabled).toBe(true);
-      expect(submit().children.join('')).toBe('Finishing…');
-      expect(submit().props.disabled).toBe(true);
+      await act(async () => { submitDeletion(renderer); await Promise.resolve(); });
+      expect(state.reauthenticate).toHaveBeenCalledWith(user, { email: client.email, password: 'Wrong-Horse-7731' });
+      expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
+      expect(deletionPasswordInputs(renderer)).toHaveLength(0);
+      expect(renderer.root.findAllByProps({ className: 'account-deletion-confirmation' })).toHaveLength(0);
+      expect(rendered(renderer)).not.toContain('Wrong-Horse-7731');
+      expect(deletionTrigger(renderer).props.disabled).toBe(true);
 
-      await act(async () => { rejectReauth(new Error('Incorrect password')); await Promise.resolve(); });
-      expect(form().props['aria-busy']).toBe(false);
+      await act(async () => {
+        rejectReauth(firebaseError('auth/invalid-credential'));
+        await Promise.resolve();
+      });
+      expect(deletionStatusText(renderer)).toEqual([]);
+      expect(deletionError(renderer)).toBe('Incorrect password. Please try again.');
+      expect(rendered(renderer)).not.toMatch(/Firebase|auth\//);
       expect(password().props.value).toBe('');
-      expect(password().props.disabled).toBe(false);
+      expect(password().props.disabled).toBeFalsy();
       expect(password().props['aria-invalid']).toBe(true);
       expect(password().props['aria-describedby']).toBe('account-deletion-error');
-      expect(renderer.root.findByProps({ id: 'account-deletion-error' }).children.join('')).toBe('Incorrect password');
       expect(submit().props.disabled).toBe(true);
+      expect(deletionTrigger(renderer).props.disabled).toBe(false);
+      expect(state.prepareDeletion).not.toHaveBeenCalled();
+      expect(user.delete).not.toHaveBeenCalled();
+      expect(onClientPersistedElsewhere).not.toHaveBeenCalled();
+      typeDeletionPassword(renderer, 'Correct-Horse-7731');
+      expect(submit().props.disabled).toBe(false);
+    } finally {
+      await act(async () => { renderer.unmount(); });
+      restoreWindow();
+    }
+  });
+
+  it('Cancel closes the deletion step and clears the password and error', async () => {
+    state.auth.currentUser = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
+    state.reauthenticate.mockRejectedValueOnce(firebaseError('auth/wrong-password'));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    try {
+      openProfileDeletion(renderer);
+      typeDeletionPassword(renderer, 'Wrong-Horse-7731');
+      await act(async () => { submitDeletion(renderer); await flush(); });
+      expect(deletionError(renderer)).toBe('Incorrect password. Please try again.');
+      typeDeletionPassword(renderer, 'Half-Typed-7731');
+
+      act(() => renderer.root.findByProps({ className: 'account-deletion-confirmation' }).findAllByType('button')
+        .find((button) => button.children.join('') === 'Cancel')!.props.onClick());
+      expect(deletionPasswordInputs(renderer)).toHaveLength(0);
+      expect(renderer.root.findAllByProps({ id: 'account-deletion-error' })).toHaveLength(0);
+      expect(rendered(renderer)).not.toContain('Half-Typed-7731');
+
+      act(() => deletionTrigger(renderer).props.onClick());
+      const password = renderer.root.findByProps({ id: 'account-deletion-password' });
+      expect(password.props.value).toBe('');
+      expect(password.props['aria-invalid']).toBe(false);
+      expect(renderer.root.findAllByProps({ id: 'account-deletion-error' })).toHaveLength(0);
       expect(state.prepareDeletion).not.toHaveBeenCalled();
     } finally {
       await act(async () => { renderer.unmount(); });
-      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    }
+  });
+
+  it('keeps one pending status through a successful deletion, never re-rendering the form or recovery screen', async () => {
+    const location = { href: '' };
+    const restoreWindow = stubWindow({ location });
+    let finishAuthDeletion!: () => void;
+    const user = { uid: client.id, email: client.email, delete: vi.fn(() => new Promise<void>((resolve) => { finishAuthDeletion = resolve; })) };
+    state.auth.currentUser = user;
+    state.reauthenticate.mockResolvedValue(undefined);
+    state.prepareDeletion.mockImplementation(async (_uid: string, onDeactivated?: (updated: ClientProfile) => void) => {
+      onDeactivated?.(deactivated);
+    });
+    const persisted = vi.fn();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<StatefulShell initial={client} onPersisted={persisted} />); });
+    try {
+      openProfileDeletion(renderer);
+      typeDeletionPassword(renderer, 'Correct-Horse-7731');
+      await act(async () => { submitDeletion(renderer); await flush(); });
+      expect(state.prepareDeletion).toHaveBeenCalledWith(client.id, expect.any(Function));
+      expect(user.delete).toHaveBeenCalledTimes(1);
+      expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
+      expect(deletionPasswordInputs(renderer)).toHaveLength(0);
+      expect(rendered(renderer)).not.toContain('Finish deleting your account');
+      expect(rendered(renderer)).not.toContain('Correct-Horse-7731');
+      expect(persisted).not.toHaveBeenCalled();
+
+      await act(async () => { finishAuthDeletion(); await flush(); });
+      expect(location.href).toBe('/welcome');
+      // Success leaves the status up until the browser navigates away.
+      expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
+      expect(deletionPasswordInputs(renderer)).toHaveLength(0);
+      expect(rendered(renderer)).not.toContain('Finish deleting your account');
+      expect(persisted).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => { renderer.unmount(); });
+      restoreWindow();
+    }
+  });
+
+  it('returns cleanup failures to the resumable screen: Firebase errors read generically and are logged, app errors stay', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
+    state.auth.currentUser = user;
+    state.reauthenticate.mockResolvedValue(undefined);
+    const permissionDenied = firebaseError('permission-denied');
+    const appointmentError = new Error('A future appointment could not be cancelled automatically. Your clinic connection is removed; contact support to finish account deletion.');
+    state.prepareDeletion
+      .mockImplementationOnce(async (_uid: string, onDeactivated?: (updated: ClientProfile) => void) => { onDeactivated?.(deactivated); throw permissionDenied; })
+      .mockImplementationOnce(async (_uid: string, onDeactivated?: (updated: ClientProfile) => void) => { onDeactivated?.(deactivated); throw appointmentError; });
+    const persisted = vi.fn();
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<StatefulShell initial={client} onPersisted={persisted} />); });
+    try {
+      openProfileDeletion(renderer);
+      typeDeletionPassword(renderer, 'Correct-Horse-7731');
+      await act(async () => { submitDeletion(renderer); await flush(); });
+      // The deactivated profile is applied once teardown has failed, so the resumable screen takes over.
+      expect(persisted).toHaveBeenCalledWith(deactivated);
+      expect(rendered(renderer)).toContain('Finish deleting your account');
+      expect(deletionError(renderer)).toBe('Account deletion could not finish. Please try again.');
+      expect(rendered(renderer)).not.toMatch(/Firebase|permission-denied/);
+      expect(consoleError).toHaveBeenCalledWith(expect.any(String), permissionDenied);
+      expect(renderer.root.findByProps({ id: 'account-deletion-password' }).props.value).toBe('');
+
+      typeDeletionPassword(renderer, 'Correct-Horse-7731');
+      await act(async () => { submitDeletion(renderer); await flush(); });
+      expect(deletionError(renderer)).toBe(appointmentError.message);
+      // Only the unexpected Firebase error is logged; the app-authored one is not.
+      expect(consoleError.mock.calls.filter(([, logged]) => logged instanceof Error)).toEqual([[expect.any(String), permissionDenied]]);
+      expect(user.delete).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => { renderer.unmount(); });
+      consoleError.mockRestore();
     }
   });
 
   it('reloads the marked finish screen and retries after Auth deletion fails', async () => {
-    const originalWindow = globalThis.window;
-    const testWindow = { ...originalWindow, location: { href: '' } };
-    Object.defineProperty(globalThis, 'window', { configurable: true, value: testWindow });
+    const location = { href: '' };
+    const restoreWindow = stubWindow({ location });
     const user = { uid: client.id, email: client.email, delete: vi.fn()
-      .mockRejectedValueOnce(new Error('Auth temporarily unavailable'))
+      .mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
       .mockResolvedValueOnce(undefined) };
     state.auth.currentUser = user;
     state.reauthenticate.mockResolvedValue(undefined);
@@ -137,21 +286,24 @@ describe('PatientShell persisted profile writes', () => {
       await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
       const submit = async () => {
         act(() => renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Finish account deletion')!.props.onClick());
-        act(() => renderer.root.findByProps({ id: 'account-deletion-password' }).props.onChange({ target: { value: 'secret' } }));
-        await act(async () => { renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); await Promise.resolve(); await Promise.resolve(); });
+        // Resuming is already confirmed: no browser dialog (the stub has none) and no repeated warning.
+        expect(rendered(renderer)).not.toContain('This action cannot be undone.');
+        typeDeletionPassword(renderer, 'secret');
+        await act(async () => { submitDeletion(renderer); await flush(); });
       };
       await submit();
       expect(user.delete).toHaveBeenCalledTimes(1);
-      expect(JSON.stringify(renderer.toJSON())).toContain('Auth temporarily unavailable');
+      expect(deletionError(renderer)).toBe('Unable to connect. Check your internet connection and try again.');
       await act(async () => { renderer.unmount(); });
       await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
       expect(JSON.stringify(renderer.toJSON())).toContain('Finish deleting your account');
       await submit();
       expect(user.delete).toHaveBeenCalledTimes(2);
-      expect(testWindow.location.href).toBe('/welcome');
+      expect(location.href).toBe('/welcome');
+      expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
     } finally {
       renderer?.unmount();
-      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+      restoreWindow();
     }
   });
 
