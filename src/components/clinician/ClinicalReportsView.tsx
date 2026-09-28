@@ -36,6 +36,8 @@ function MetricCard({ label, value, detail, icon }: { label: string; value: stri
   );
 }
 
+const filterButtonStyle: React.CSSProperties = { padding: '6px 12px', fontSize: '13px' };
+
 export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ clients, brand, onSelectClient }) => {
   const [filterCohort, setFilterCohort] = useState<ClinicalReportCohortFilter>('real');
   const [dateRange, setDateRange] = useState<ClinicalReportRange>('30d');
@@ -116,13 +118,13 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
               ['real', `Enrolled (${clients.filter(client => !client.isDemo).length})`],
               ['demo', `Sample (${clients.filter(client => client.isDemo).length})`],
             ] as Array<[ClinicalReportCohortFilter, string]>).map(([id, label]) => (
-              <button key={id} onClick={() => setFilterCohort(id)} className={filterCohort === id ? 'btn btn-dense' : 'btn btn-ghost'}>{label}</button>
+              <button key={id} onClick={() => setFilterCohort(id)} className={filterCohort === id ? 'btn btn-dense' : 'btn btn-ghost'} style={filterButtonStyle}>{label}</button>
             ))}
           </div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={labelStyle}>Window:</span>
             {([['30d', 'Last 30 Days'], ['90d', 'Last 90 Days'], ['ytd', 'YTD']] as Array<[ClinicalReportRange, string]>).map(([id, label]) => (
-              <button key={id} onClick={() => setDateRange(id)} className={dateRange === id ? 'btn btn-dense' : 'btn btn-ghost'}>{label}</button>
+              <button key={id} onClick={() => setDateRange(id)} className={dateRange === id ? 'btn btn-dense' : 'btn btn-ghost'} style={filterButtonStyle}>{label}</button>
             ))}
           </div>
         </div>
@@ -174,7 +176,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
             <tbody>
               {analytics.patientRows.map(row => (
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : getClinicalProtocolTemplate(resolvePatientProtocol(row.client))?.name ?? 'Protocol unavailable'}</div></td>
+                  <td style={{ padding: '12px 14px', minWidth: '170px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600, justifyContent: 'flex-start', textAlign: 'left', minHeight: 0 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : getClinicalProtocolTemplate(resolvePatientProtocol(row.client))?.name ?? 'Protocol unavailable'}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Included · synthetic provenance' : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.sampleSessionCount > 0 ? 'Fictional · excluded' : ''}</div></td>
