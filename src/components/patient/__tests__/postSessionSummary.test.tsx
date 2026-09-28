@@ -35,8 +35,8 @@ describe('PostSessionSummary authenticity', () => {
   it('labels Demo feedback synthetic and does not present synthetic bands as measurements', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<PostSessionSummary session={session} onViewProgress={vi.fn()} />); });
-    expect(text(renderer)).toContain('Training Demo · Synthetic acquisition');
-    expect(text(renderer)).toContain('Measured average band powers: unavailable in Training Demo');
+    expect(text(renderer)).toContain('Training Demo — these results are simulated');
+    expect(text(renderer)).toContain('Not measured in Demo');
     expect(text(renderer)).not.toContain('θ=0.0');
     await act(async () => { renderer.unmount(); });
   });
