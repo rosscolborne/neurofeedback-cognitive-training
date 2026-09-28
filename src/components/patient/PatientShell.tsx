@@ -21,6 +21,7 @@ import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperie
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { resolvePatientProtocol } from '../../services/protocols';
+import { clearPendingInvitation } from '../../services/pendingInvitation';
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import {
   getClinicalProtocolTemplate,
@@ -111,10 +112,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const measuredAlphaPeakHz = client.individualBaselineModel?.algorithmVersion === 'neurogambit-15s-v1'
     ? undefined : client.individualBaselineModel?.alphaPeakHz;
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
+  // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
+  const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
+    && client.acceptedInvitationId.toUpperCase() === initialInvitationCode.toUpperCase();
+  useEffect(() => {
+    if (isClinicianLinked && pendingInvitationAlreadyAccepted) onInvitationDismissed?.();
+  }, [isClinicianLinked, pendingInvitationAlreadyAccepted, onInvitationDismissed]);
   const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
   const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
 
   const handleLogout = async () => {
+    clearPendingInvitation();
     await signOut(auth);
     window.location.href = '/';
   };
@@ -151,6 +159,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       await storageEngine.preparePatientAccountDeletion(user.uid, onClientPersistedElsewhere);
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
       await user.delete();
+      clearPendingInvitation();
       window.location.href = '/welcome';
     } catch (err) {
       setAccountDeletionError(err instanceof Error ? err.message : 'Account deletion could not finish. Please try again.');
@@ -429,7 +438,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
       {/* Main Tab Content */}
       <main style={{ flex: 1, padding: '20px' }}>
-        {activeTab === 'home' && isClinicianLinked && initialInvitationCode && (
+        {activeTab === 'home' && isClinicianLinked && initialInvitationCode && !pendingInvitationAlreadyAccepted && (
           <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px' }}>
             <p role="alert">You're already connected to a clinician. Disconnect before accepting another invitation.</p>
             <p>Invitation code: <span className="font-mono">{initialInvitationCode}</span></p>

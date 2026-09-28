@@ -12,6 +12,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
+import { clearPendingInvitation } from '../services/pendingInvitation';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   activateClinicianDemoWorkspace,
@@ -311,6 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     ++authGenerationRef.current;
+    clearPendingInvitation();
     demoTransitionRef.current = null;
     identityRef.current = null;
     forgetClinicianDemoWorkspace();
