@@ -162,12 +162,9 @@ test('unassigned patient resolves the same default in clinician, patient, and De
   const patientPage = await browser.newPage();
   const dialog = await patientDetails(patientPage, fixture);
   await expect(detailValue(dialog, 'Protocol')).toContainText('Lubar Theta/Beta Ratio Protocol');
-  await expect(detailValue(dialog, 'Theta Min Frequency')).toContainText('4 Hz');
-  await expect(detailValue(dialog, 'Theta Max Frequency')).toContainText('8 Hz');
-  await expect(detailValue(dialog, 'Beta Min Frequency')).toContainText('13 Hz');
-  await expect(detailValue(dialog, 'Beta Max Frequency')).toContainText('30 Hz');
-  await expect(detailValue(dialog, 'Reward condition')).toContainText('Below');
-  await expect(detailValue(dialog, 'Reward threshold')).toContainText('1.85');
+  await expect(detailValue(dialog, 'Theta')).toContainText('4–8 Hz');
+  await expect(detailValue(dialog, 'Beta')).toContainText('13–30 Hz');
+  await expect(detailValue(dialog, 'Reward when')).toContainText('Theta/Beta below 1.85');
   await returnHome(patientPage);
   await startPatientTrainingInDemoMode(patientPage);
   await expect(telemetryCell(patientPage, 'THETA/BETA')).toBeVisible();
@@ -225,8 +222,7 @@ test('default Beta feedback agrees with the live reward value and in-zone trend'
   const page = await browser.newPage();
   const dialog = await patientDetails(page, fixture);
   await expect(detailValue(dialog, 'Protocol')).toContainText('Beta De-arousal Downtraining');
-  await expect(detailValue(dialog, 'Min Frequency')).toContainText('13 Hz');
-  await expect(detailValue(dialog, 'Max Frequency')).toContainText('30 Hz');
+  await expect(detailValue(dialog, 'Training band')).toContainText('13–30 Hz');
   await expect(detailValue(dialog, 'Reward when')).toContainText('Below 14 µV');
   await returnHome(page);
   await startPatientTrainingInDemoMode(page);

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Brain, Clock3, X } from 'lucide-react';
+import { Brain, X } from 'lucide-react';
+import { FactGrid } from '../ui/FactGrid';
 import type { ClientProfile, ProtocolTemplate } from '../../types';
 import {
   CLINICAL_PROTOCOL_TEMPLATES,
@@ -27,6 +28,15 @@ function describeTrainingRule(config: ProtocolRuntimeConfig): string {
   return `${config.lowerIsBetter ? 'Below' : 'Above'} ${config.initialThreshold}${definition?.unit ?? ''}`;
 }
 
+const formatRange = (band: { freqMin: number; freqMax: number }) => `${band.freqMin}–${band.freqMax} Hz`;
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  if (remainder === 0) return `${minutes} minutes`;
+  return minutes > 0 ? `${minutes} min ${remainder} s` : `${remainder} seconds`;
+}
+
 function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
   const resolvedProtocol = resolvePatientProtocol(client);
   const saved = client.customProtocolConfig;
@@ -38,19 +48,17 @@ function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
   ) ?? null;
 }
 
-const Detail: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div
-    style={{
-      padding: '12px 14px',
-      borderRadius: '16px',
-      background: 'var(--surface-patient-recessed)',
-      minWidth: 0,
-    }}
-  >
-    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{label}</div>
-    <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.45 }}>{value}</div>
-  </div>
-);
+/**
+ * Only notes a clinician saved with this assignment are theirs. Template rationale (also used to
+ * prefill the builder) is reference text, not a note from the patient's clinician.
+ */
+function getClinicianAuthoredNotes(client: ClientProfile, protocol: ProtocolTemplate | null): string | null {
+  const saved = client.customProtocolConfig;
+  const notes = saved && protocol === saved ? saved.clinicalNotes?.trim() : undefined;
+  if (!notes) return null;
+  const templateNotes = getClinicalProtocolTemplate(resolvePatientProtocol(client))?.clinicalNotes?.trim();
+  return notes === templateNotes ? null : notes;
+}
 
 export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ client, onClose }) => {
   const protocol = getDisplayedProtocol(client);
@@ -62,6 +70,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
   const runtime = resolveProtocolRuntime(client);
   const reward = runtime.ok ? getRuntimeRewardDefinition(runtime.config) : null;
+  const clinicianNotes = getClinicianAuthoredNotes(client, protocol);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,10 +103,10 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
         aria-modal="true"
         aria-labelledby="protocol-details-title"
         style={{
-          width: 'min(680px, 100%)',
+          width: 'min(560px, 100%)',
           maxHeight: 'min(840px, calc(100dvh - 32px))',
           overflowY: 'auto',
-          borderRadius: '28px',
+          borderRadius: '24px',
           background: 'var(--surface-patient-card)',
           border: '1px solid var(--border-subtle)',
           boxShadow: '0 24px 70px rgba(58, 49, 43, 0.2)',
@@ -130,54 +139,53 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
           </button>
         </div>
 
-        <div style={{ padding: '18px 20px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
-            <Detail label="Protocol" value={evidenceProtocolName} />
-            <Detail label="Name" value={assignmentAlias ?? 'No custom name'} />
+        <div style={{ padding: '20px 20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Protocol</div>
+            <div style={{ marginTop: '2px', fontSize: '18px', fontWeight: 600, lineHeight: 1.3, color: 'var(--text-primary)' }}>{evidenceProtocolName}</div>
+            {assignmentAlias && (
+              <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Assigned as <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{assignmentAlias}</strong>
+              </div>
+            )}
           </div>
 
           {runtime.ok ? (
-            <>
-              {reward?.kind === 'ratio' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-                    <Detail label={`${reward.numeratorName} Min Frequency`} value={`${reward.numerator.freqMin} Hz`} />
-                    <Detail label={`${reward.numeratorName} Max Frequency`} value={`${reward.numerator.freqMax} Hz`} />
-                    <Detail label={`${reward.denominatorName} Min Frequency`} value={`${reward.denominator.freqMin} Hz`} />
-                    <Detail label={`${reward.denominatorName} Max Frequency`} value={`${reward.denominator.freqMax} Hz`} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-                    <Detail label="Reward condition" value={reward.condition === 'below' ? 'Below' : 'Above'} />
-                    <Detail label="Reward threshold" value={runtime.config.initialThreshold} />
-                    <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-                  {reward?.kind === 'amplitude' && (
-                  <>
-                    <Detail label="Min Frequency" value={`${reward.band.freqMin} Hz`} />
-                    <Detail label="Max Frequency" value={`${reward.band.freqMax} Hz`} />
-                  </>
-                  )}
-                  <Detail label="Reward when" value={describeTrainingRule(runtime.config)} />
-                  <Detail label="Duration" value={`${runtime.config.durationSeconds / 60} minutes`} />
-                </div>
-              )}
-              <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>
-                The value must reach the threshold to be in zone. The threshold may adapt during training; the session display shows the measured value and current feedback state.
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '18px', borderTop: '1px solid var(--border-subtle)' }}>
+              <FactGrid
+                minColumnWidth={120}
+                facts={[
+                  ...(reward?.kind === 'ratio'
+                    ? [
+                        { label: reward.numeratorName, value: formatRange(reward.numerator) },
+                        { label: reward.denominatorName, value: formatRange(reward.denominator) },
+                        { label: 'Reward when', value: `${reward.numeratorName}/${reward.denominatorName} ${reward.condition === 'below' ? 'below' : 'above'} ${runtime.config.initialThreshold}` },
+                      ]
+                    : [
+                        ...(reward?.kind === 'amplitude' ? [{ label: 'Training band', value: formatRange(reward.band) }] : []),
+                        { label: 'Reward when', value: describeTrainingRule(runtime.config) },
+                      ]),
+                  { label: 'Session length', value: formatDuration(runtime.config.durationSeconds) },
+                ]}
+              />
+              <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                Your target can adjust as you train.
               </p>
-            </>
-          ) : <div role="alert">Training unavailable: {runtime.error}</div>}
-
-          <div style={{ padding: '15px 16px', borderRadius: '18px', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 700 }}>
-              <Clock3 size={16} color="var(--brand-primary)" /> Clinician notes
             </div>
-            <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.55 }}>
-              {protocol?.clinicalNotes || 'No clinician notes provided.'}
-            </p>
-          </div>
+          ) : (
+            <div role="alert" style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '13px', lineHeight: 1.5 }}>
+              <strong>Training unavailable.</strong> This protocol can’t run as configured. Please contact your clinician.
+            </div>
+          )}
+
+          {clinicianNotes && (
+            <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--surface-patient-recessed)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Note from your clinician</div>
+              <p style={{ margin: '6px 0 0', color: 'var(--text-primary)', fontSize: '14px', lineHeight: 1.55, maxWidth: '60ch', whiteSpace: 'pre-line' }}>
+                {clinicianNotes}
+              </p>
+            </div>
+          )}
         </div>
       </section>
     </div>

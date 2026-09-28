@@ -16,17 +16,25 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { FactGrid, type Fact } from '../ui/FactGrid';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
-import { resolvePatientProtocol } from '../../services/protocols';
+import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
 import { clearPendingInvitation } from '../../services/pendingInvitation';
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
+
+const IMPRINT_TAG: Record<'valid' | 'expired' | 'invalid' | 'not-calibrated', string> = {
+  valid: 'status-tag-active',
+  expired: 'status-tag-paused',
+  invalid: 'status-tag-alert',
+  'not-calibrated': 'status-tag-neutral',
+};
 
 interface PatientShellProps {
   brand: ClinicBrandConfig;
@@ -106,11 +114,18 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     : undefined;
   const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
   const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString();
+  const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
   const imprintLabel = imprintState.status === 'valid' ? 'Current'
     : imprintState.status === 'expired' ? 'Expired'
       : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
   const measuredAlphaPeakHz = client.individualBaselineModel?.algorithmVersion === 'neurogambit-15s-v1'
     ? undefined : client.individualBaselineModel?.alphaPeakHz;
+  const imprintFacts: Fact[] = [
+    ...(imprintDate ? [{ label: 'Calibrated', value: <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time> }] : []),
+    ...(imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
+      ? [{ label: 'Alpha peak', value: `${measuredAlphaPeakHz.toFixed(1)} Hz` }] : []),
+    ...(imprintState.expiresAt != null ? [{ label: 'Expires', value: <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString()}</time> }] : []),
+  ];
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
   // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
   const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
@@ -269,9 +284,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const clinicianConnection = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
       {isClinicianLinked ? (
-        <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-active-bg)', color: 'var(--status-active)', fontSize: '13px', fontWeight: 600 }}>
-          Connected to your clinician
-        </div>
+        <span className="status-tag status-tag-active" style={{ alignSelf: 'flex-start', padding: '6px 12px', fontSize: '13px' }}>
+          <CheckCircle2 size={15} aria-hidden="true" />
+          <span>Connected to your clinician</span>
+        </span>
       ) : !showClinicianLink ? (
         <button onClick={() => setShowClinicianLink(true)} className="btn btn-secondary" style={{ width: '100%' }}>
           Connect to Clinician
@@ -459,6 +475,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             client={client}
             onStartSession={handleStartSession}
             onNavigateTab={setActiveTab}
+            onOpenProtocolDetails={() => setShowProtocolDetails(true)}
           />
         )}
 
@@ -568,15 +585,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
-            <section className="card-patient" aria-label="Neural Imprint" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <h2 style={{ fontSize: '17px', margin: 0 }}>Neural Imprint</h2>
-              <div><strong>Status:</strong> {imprintLabel}</div>
-              {imprintDate && <div><strong>Calibrated:</strong> <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time></div>}
-              {imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
-                && <div><strong>Alpha peak:</strong> {measuredAlphaPeakHz.toFixed(1)} Hz</div>}
-              {imprintState.expiresAt != null && <div><strong>Expires:</strong> <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString()}</time></div>}
-              <button type="button" className="btn btn-secondary" onClick={onRecalibrate}>Recalibrate</button>
-            </section>
             {/* Profile Info Card */}
             <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -687,98 +695,81 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 </div>
               )}
 
-              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div><strong>Goal:</strong> {client.condition || 'Unavailable'}</div>
-                {protocolAlias && <div><strong>Name:</strong> {protocolAlias}</div>}
-                <div><strong>Protocol:</strong> {evidenceProtocol?.name ?? resolvedProtocol.replace(/-/g, ' ').toUpperCase()}</div>
-                <div><strong>Weekly Target:</strong> {client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable'}</div>
-                <div><strong>Completed:</strong> {client.completedSessionsCount} sessions total</div>
-              </div>
-            </div>
-
-            {/* Actions Card */}
-            <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button
-                onClick={() => setShowOnboarding(true)}
-                className="btn btn-secondary"
-                style={{ width: '100%' }}
-              >
-                Re-run Assessment & Headband Setup
-              </button>
-
-              <button
-                onClick={() => setShowProtocolDetails(true)}
-                className="btn btn-secondary"
-                style={{ width: '100%' }}
-              >
-                View Protocol Details
-              </button>
-
+              <FactGrid
+                style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}
+                facts={[
+                  { label: 'Goal', value: client.condition || 'Unavailable' },
+                  { label: 'Protocol', value: protocolAlias ? `${protocolAlias} · ${protocolName}` : protocolName },
+                  { label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' },
+                  { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
+                ]}
+              />
               {clinicianConnection}
             </div>
-
-            {/* Account Section — separated and pushed down */}
-            <div style={{ marginTop: '16px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', paddingLeft: '4px' }}>
-                Account
+            <section className="card-patient" aria-label="Neural Imprint" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px 12px' }}>
+                <h2 style={{ fontSize: '17px', fontWeight: 600, margin: 0, whiteSpace: 'nowrap' }}>Neural Imprint</h2>
+                <span className={`status-tag ${IMPRINT_TAG[imprintState.status]}`} style={{ flexShrink: 0, padding: '3px 10px' }}>{imprintLabel}</span>
               </div>
-              <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <button
-                  onClick={handleToggleMute}
-                  className="btn btn-secondary"
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              {imprintState.status === 'not-calibrated' && (
+                <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                  Calibrate with your headset to set your personal training baseline.
+                </p>
+              )}
+              {imprintFacts.length > 0 && <FactGrid facts={imprintFacts} />}
+              <button type="button" className="btn btn-secondary" style={{ alignSelf: 'flex-start', padding: '9px 20px', fontSize: '14px' }} onClick={onRecalibrate}>
+                {imprintState.status === 'not-calibrated' ? 'Calibrate' : 'Recalibrate'}
+              </button>
+            </section>
+
+            <div>
+              <h2 className="section-label">Training</h2>
+              <div className="list-group">
+                <button type="button" className="list-row" onClick={() => setShowProtocolDetails(true)} aria-label="View Protocol Details">
+                  <ClipboardList size={18} className="list-row-icon" aria-hidden="true" />
+                  <span className="list-row-label">Protocol Details</span>
+                  <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
+                </button>
+                <button type="button" className="list-row" onClick={() => setShowOnboarding(true)}>
+                  <RotateCcw size={18} className="list-row-icon" aria-hidden="true" />
+                  <span className="list-row-label">
+                    Redo Setup
+                    <span className="list-row-hint">Training goal and headband</span>
+                  </span>
+                  <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="section-label">Account</h2>
+              <div className="list-group">
+                <button type="button" className="list-row" onClick={handleToggleMute}>
+                  {isMuted ? <VolumeX size={18} className="list-row-icon" aria-hidden="true" /> : <Volume2 size={18} className="list-row-icon" aria-hidden="true" />}
                   {isMuted ? 'Unmute App Audio' : 'Mute App Audio'}
                 </button>
-
-                <button
-                  onClick={exportCSV}
-                  className="btn btn-secondary"
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <FileText size={15} />
+                <button type="button" className="list-row" onClick={exportCSV}>
+                  <FileText size={18} className="list-row-icon" aria-hidden="true" />
                   {exportStatus === 'done' ? 'Exported ✓' : 'Export Data (CSV)'}
                 </button>
-
-                <button
-                  onClick={handleLogout}
-                  className="btn btn-secondary"
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <LogOut size={15} /> Log Out
+                <button type="button" className="list-row" onClick={handleLogout}>
+                  <LogOut size={18} className="list-row-icon" aria-hidden="true" />
+                  Log Out
                 </button>
-
-                <div className="account-deletion-section">
-                  <button
-                    onClick={openAccountDeletion}
-                    disabled={isDeletingAccount}
-                    className="btn btn-secondary account-deletion-trigger"
-                    type="button"
-                  >
-                    <Trash2 size={15} /> Delete Account
-                  </button>
-                  {deletionPasswordForm}
-                </div>
               </div>
+            </div>
+
+            <div className="list-group">
+              <button
+                onClick={openAccountDeletion}
+                disabled={isDeletingAccount}
+                className="list-row list-row-danger account-deletion-trigger"
+                type="button"
+              >
+                <Trash2 size={18} className="list-row-icon" aria-hidden="true" />
+                Delete Account
+              </button>
+              {deletionPasswordForm && <div style={{ padding: '0 16px 16px' }}>{deletionPasswordForm}</div>}
             </div>
 
             <ChangePasswordForm variant="patient" />

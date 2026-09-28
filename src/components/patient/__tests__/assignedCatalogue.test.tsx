@@ -143,7 +143,7 @@ describe('patient assigned catalogue', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<PatientShell brand={brand} client={unlinked} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
     act(() => renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Profile')!.props.onClick());
-    act(() => renderer.root.findAllByType('button').find((node) => node.children.includes('Re-run Assessment & Headband Setup'))!.props.onClick());
+    act(() => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes('Redo Setup')).length > 0 || node.children.includes('Redo Setup'))!.props.onClick());
     await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'alpha-enhancement' }); });
     expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
       assignedProtocol: 'alpha-enhancement',

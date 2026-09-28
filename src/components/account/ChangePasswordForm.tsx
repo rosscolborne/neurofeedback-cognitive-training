@@ -73,7 +73,7 @@ export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
         </h2>
       </div>
       <p style={{ fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)', margin: '0 0 16px' }}>
-        Change the password you use to sign in. Your current password is required to verify your identity.
+        Change the password you use to sign in.
       </p>
 
       {isDemoAccount ? (

@@ -179,10 +179,10 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
 
             await patientPage.getByRole('button', { name: 'Profile', exact: true }).click();
             await expect(patientPage.getByRole('button', { name: 'Connect to Clinician', exact: true })).toBeVisible();
-            await expect(patientPage.getByText('Goal:', { exact: true }).locator('..')).toContainText('Unavailable');
+            await expect(patientPage.getByText('Goal', { exact: true }).locator('..')).toContainText('Unavailable');
             await expect(patientPage.getByText('Protocol:', { exact: true }).locator('..')).toContainText('Assignment required');
-            await expect(patientPage.getByText('Weekly Target:', { exact: true }).locator('..')).toContainText('Unavailable');
-            await expect(patientPage.getByText('Completed:', { exact: true }).locator('..')).toContainText('0 sessions total');
+            await expect(patientPage.getByText('Weekly target', { exact: true }).locator('..')).toContainText('Unavailable');
+            await expect(patientPage.getByText('Completed', { exact: true }).locator('..')).toContainText('0 sessions total');
             await expect(patientPage.getByText('Connected to your clinician', { exact: true })).toHaveCount(0);
 
             const dedicatedPatientName = dedicatedPatient.name;

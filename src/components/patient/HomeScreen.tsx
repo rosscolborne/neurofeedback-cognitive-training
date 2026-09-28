@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
-import { resolvePatientProtocol } from '../../services/protocols';
+import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { Play, ChevronRight, BookOpen } from 'lucide-react';
+import { Play, ChevronRight, BookOpen, Brain } from 'lucide-react';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import {
   buildPatientProgressDisplayModel,
@@ -16,6 +16,7 @@ interface HomeScreenProps {
   client: ClientProfile;
   onStartSession: (exp: ExperienceType) => void;
   onNavigateTab: (tab: 'home' | 'sessions' | 'education' | 'progress' | 'profile') => void;
+  onOpenProtocolDetails?: () => void;
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
@@ -31,6 +32,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   client,
   onStartSession,
   onNavigateTab,
+  onOpenProtocolDetails,
 }) => {
   const assignmentKey = client.allowedExperiences.join('|');
   const [selection, setSelection] = useState<{ assignmentKey: string; experience: ExperienceType | undefined }>({
@@ -82,6 +84,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const protocolAlias = client.customProtocolConfig
     ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
+  const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
 
   // Hide scroll hint once user scrolls the pills
   useEffect(() => {
@@ -105,17 +108,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
       {/* Greeting Header */}
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '12px', marginBottom: '4px' }}>
         <h1
           className="font-display"
           style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15 }}
         >
           {getGreeting()}{client.name ? `, ${client.name.split(' ')[0]}.` : '.'}
         </h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {protocolAlias && <>Name: <strong style={{ color: 'var(--text-primary)' }}>{protocolAlias}</strong> · </>}
-          Protocol: <strong style={{ color: 'var(--text-primary)' }}>{evidenceProtocol?.name ?? resolvedProtocol.replace(/-/g, ' ').toUpperCase()}</strong>
-        </p>
+        <button
+          type="button"
+          className="protocol-chip"
+          onClick={onOpenProtocolDetails}
+          disabled={!onOpenProtocolDetails}
+          aria-label={`Protocol: ${protocolAlias ? `${protocolAlias}, ` : ''}${protocolName}. View protocol details`}
+        >
+          <Brain size={15} color="var(--brand-primary)" aria-hidden="true" style={{ flexShrink: 0 }} />
+          <span>
+            {protocolAlias && <>{protocolAlias}<span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}> · </span></>}
+            {protocolName}
+          </span>
+          {onOpenProtocolDetails && <ChevronRight size={14} color="var(--text-tertiary)" aria-hidden="true" style={{ flexShrink: 0 }} />}
+        </button>
       </div>
 
       {/* Today's Prescribed Session Card */}
