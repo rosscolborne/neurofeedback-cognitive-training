@@ -722,6 +722,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               </div>
             </div>
 
+            <ChangePasswordForm variant="patient" />
+
+            {/* Destructive action last, after routine account settings. */}
             <div className="list-group">
               <button
                 onClick={openAccountDeletion}
@@ -734,8 +737,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               </button>
               {deletionPasswordForm && <div style={{ padding: '0 16px 16px' }}>{deletionPasswordForm}</div>}
             </div>
-
-            <ChangePasswordForm variant="patient" />
           </div>
         )}
       </main>
@@ -746,6 +747,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
       {/* Patient Mobile Bottom Tab Bar */}
       <nav
+        className="patient-bottom-nav"
         style={{
           position: 'sticky',
           bottom: 0,

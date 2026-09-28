@@ -39,14 +39,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     assignmentKey,
     experience: getAssignedExperienceIds(client.allowedExperiences)[0],
   });
-  const [showScrollHint, setShowScrollHint] = useState(true);
   const [sessionState, setSessionState] = useState<{
     clientId: string;
     status: 'loading' | 'ready' | 'error';
     sessions: SessionRecord[];
   }>({ clientId: client.id, status: 'loading', sessions: [] });
   const [nowMs] = useState(() => Date.now());
-  const pillsRef = useRef<HTMLDivElement>(null);
   const sessionStatus = sessionState.clientId === client.id ? sessionState.status : 'loading';
   const sessions = sessionState.clientId === client.id ? sessionState.sessions : EMPTY_SESSIONS;
 
@@ -85,25 +83,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
   const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
-
-  // Hide scroll hint once user scrolls the pills
-  useEffect(() => {
-    const el = pillsRef.current;
-    if (!el) return;
-    const handleScroll = () => {
-      if (el.scrollLeft > 20) setShowScrollHint(false);
-    };
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Check if pills overflow (need scroll hint)
-  useEffect(() => {
-    const el = pillsRef.current;
-    if (el && el.scrollWidth <= el.clientWidth) {
-      setShowScrollHint(false);
-    }
-  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
@@ -162,73 +141,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {activeExperience?.description ?? 'Your training plan has no available experiences.'}
         </p>
 
-        {/* Experience Selector Pills — scrollable with fade hint */}
-        <div style={{ position: 'relative' }}>
-          <div
-            ref={pillsRef}
-            style={{
-              display: 'flex',
-              gap: '6px',
-              overflowX: 'auto',
-              paddingBottom: '4px',
-              scrollSnapType: 'x mandatory',
-              WebkitOverflowScrolling: 'touch',
-              msOverflowStyle: 'none',
-              scrollbarWidth: 'none',
-            }}
-          >
-            {allowedIds.map(exp => {
-              const Icon = EXPERIENCE_CATALOGUE[exp].icon;
-              return (
-                <button
-                  key={exp}
-                  onClick={(e) => {
-                    if (!canStartAssignedExperience(latestAllowed.current, exp)) return;
-                    setSelection({ assignmentKey, experience: exp });
-                    (e.currentTarget as HTMLButtonElement).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                  }}
-                  style={{
-                    background: effectiveSelectedExp === exp ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
-                    border: effectiveSelectedExp === exp ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: effectiveSelectedExp === exp ? 'var(--brand-primary)' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    scrollSnapAlign: 'start',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Icon size={14} /> {EXPERIENCE_CATALOGUE[exp].name}
-                </button>
-              );
-            })}
-          </div>
-          {/* Right fade gradient to hint scrollability */}
-          {showScrollHint && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                bottom: '4px',
-                width: '48px',
-                background: 'linear-gradient(to right, transparent, var(--surface-patient-card))',
-                pointerEvents: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                paddingRight: '4px',
-              }}
-            >
-              <ChevronRight size={16} color="var(--text-tertiary)" style={{ opacity: 0.7 }} />
-            </div>
-          )}
+        {/* Experience pills scroll edge to edge; the next pill peeks and fades at the card edge. */}
+        <div className="pill-scroller" role="group" aria-label="Assigned experiences">
+          {allowedIds.map(exp => {
+            const Icon = EXPERIENCE_CATALOGUE[exp].icon;
+            const isSelected = effectiveSelectedExp === exp;
+            return (
+              <button
+                key={exp}
+                type="button"
+                aria-pressed={isSelected}
+                className={`pill-scroller-item${isSelected ? ' is-selected' : ''}`}
+                onClick={(e) => {
+                  if (!canStartAssignedExperience(latestAllowed.current, exp)) return;
+                  setSelection({ assignmentKey, experience: exp });
+                  (e.currentTarget as HTMLButtonElement).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }}
+              >
+                <Icon size={14} aria-hidden="true" /> {EXPERIENCE_CATALOGUE[exp].name}
+              </button>
+            );
+          })}
         </div>
 
         <button
@@ -303,7 +236,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <div>
               <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Average time in target zone</span>
-              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>Past 7 days</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+                Past 7 days{progressDisplay.periodSessions.some((session) => session.isDemo === true) && ' · includes simulated Demo'}
+              </div>
             </div>
             <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--brand-primary)' }}>
               {progressDisplay.summary?.averageTimeInZonePercent != null
@@ -317,8 +252,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <svg viewBox="0 0 300 40" style={{ width: '100%', height: '100%' }} aria-label="Time in target zone by session">
                 <path d={progressDisplay.chart.area} fill="var(--brand-primary-subtle)" opacity="0.6" />
                 <path d={progressDisplay.chart.line} fill="none" stroke="var(--brand-primary)" strokeWidth="2.5" />
-                {progressDisplay.chart.points.map(point => (
-                  <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="3" fill="var(--brand-primary)" />
+                {progressDisplay.chart.points.map((point, index) => (
+                  <circle key={index} cx={point.x} cy={point.y} r="3" fill="var(--brand-primary)" />
                 ))}
               </svg>
             ) : (

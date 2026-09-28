@@ -38,7 +38,7 @@ test.describe('patient Demo persistence (stateful)', () => {
 
         await expect(page.getByRole('heading', { name: 'Session Complete', exact: true })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText('Training Demo — these results are simulated, not measured EEG.', { exact: true })).toBeVisible();
-        await expect(page.getByText('Synthetic time in target zone', { exact: true })).toBeVisible();
+        await expect(page.getByText('Simulated time in target zone', { exact: true })).toBeVisible();
         await page.getByText('Session details', { exact: true }).click();
         await expect(page.getByText('Not measured in Demo', { exact: true })).toBeVisible();
 

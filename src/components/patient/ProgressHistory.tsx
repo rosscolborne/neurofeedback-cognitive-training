@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ClientProfile, SessionRecord } from '../../types';
 import { storageEngine, INITIAL_BADGES } from '../../services/storageEngine';
-import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText, Lock, CheckCircle2 } from 'lucide-react';
+import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText, Lock, CheckCircle2, Pencil } from 'lucide-react';
 import {
   buildPatientProgressDisplayModel,
   getDurationSeconds,
@@ -132,6 +132,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
   const exportAvailability = getSessionExportState(progressDisplay.presentation);
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
+  const periodDemoCount = progressDisplay.periodSessions.filter((session) => session.isDemo === true).length;
 
   const exportCSV = () => {
     if (exportAvailability !== 'ready') return;
@@ -232,12 +233,14 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               {periodLabel} · {progressDisplay.summary
                 ? `${progressDisplay.summary.sessionCount} session${progressDisplay.summary.sessionCount !== 1 ? 's' : ''}`
                 : 'Session count unavailable'}
+              {/* Demo results are simulated; say so wherever they feed an average. */}
+              {periodDemoCount > 0 && ` · includes ${periodDemoCount} simulated Demo`}
             </div>
           </div>
         </div>
 
         {/* Dynamic SVG Area Chart */}
-        <div style={{ width: '100%', height: '140px', overflow: 'hidden' }}>
+        <div style={{ width: '100%', height: '146px', overflow: 'hidden' }}>
           {progressDisplay.chart?.line ? (
             <>
               <svg viewBox="0 0 360 120" style={{ width: '100%', height: '120px' }}>
@@ -256,12 +259,12 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                {progressDisplay.chart.points.map(point => (
-                  <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="4" fill="var(--brand-primary)" />
+                {progressDisplay.chart.points.map((point, index) => (
+                  <circle key={index} cx={point.x} cy={point.y} r="4" fill="var(--brand-primary)" />
                 ))}
                 <line x1="20" y1="110" x2="350" y2="110" stroke="var(--border-default)" strokeWidth="1" />
               </svg>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 8px' }}>
+              <div style={{ display: 'flex', justifyContent: progressDisplay.chart.labels.length > 1 ? 'space-between' : 'center', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 8px' }}>
                 {progressDisplay.chart.labels.map((label, i) => (
                   <span key={i}>{label}</span>
                 ))}
@@ -421,7 +424,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                         <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Your journal</div>
                         {!isEditingJournal && (
-                          <button type="button" className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '13px', color: 'var(--brand-primary)', minHeight: 0 }} onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}>Edit journal</button>
+                          <button type="button" className="btn btn-ghost" style={{ padding: '4px 6px', gap: '5px', fontSize: '13px', fontWeight: 600, color: 'var(--brand-primary)', minHeight: 0 }} onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}><Pencil size={13} aria-hidden="true" />Edit journal</button>
                         )}
                       </div>
                       {isEditingJournal ? <div onClick={(event) => event.stopPropagation()} style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -434,13 +437,16 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                         <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}><button type="button" className="btn btn-primary" style={journalButtonStyle} disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" className="btn btn-ghost" style={journalButtonStyle} disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
                         {journal.error && <p role="alert" style={{ color: 'var(--status-alert)', fontSize: '13px' }}>Journal could not be saved. Your changes are still here; try again.</p>}
                       </div> : (
-                        <p style={{ margin: '4px 0 0', fontSize: '14px', lineHeight: 1.5, color: s.patientNotes ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                        <p style={{ margin: '6px 0 0', paddingLeft: '12px', borderLeft: '3px solid var(--border-default)', fontSize: '14px', lineHeight: 1.55, color: s.patientNotes ? 'var(--text-primary)' : 'var(--text-secondary)', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
                           {s.patientNotes || 'No journal entry yet.'}
                         </p>
                       )}
                     </div>
 
-                    <FactGrid minColumnWidth={92} facts={detailFacts} style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }} />
+                    <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Session details</div>
+                      <FactGrid minColumnWidth={92} facts={detailFacts} />
+                    </div>
                   </div>
                 )}
               </div>

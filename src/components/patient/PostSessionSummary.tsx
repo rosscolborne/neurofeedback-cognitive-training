@@ -138,7 +138,7 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
           <div>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {session.isDemo ? 'Synthetic time in target zone' : 'Time in target zone'}
+              {session.isDemo ? 'Simulated time in target zone' : 'Time in target zone'}
             </div>
             <div style={{ fontSize: '40px', fontWeight: 700, lineHeight: 1.1, color: 'var(--brand-primary)' }}>
               {session.timeInZonePercent}%
@@ -194,7 +194,7 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
           <Heart size={15} color="var(--brand-primary)" />
           <span>How do you feel?</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '6px' }}>
           {MOODS.map(m => (
             <button
               key={m.value}

@@ -521,6 +521,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     audioEngine.setMuted(next);
   };
 
+  // Durations in a sentence read as words ("4 min 12 s"); the countdown keeps the m:ss clock format.
+  const formatSpokenDuration = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return m === 0 ? `${s} s` : s === 0 ? `${m} min` : `${m} min ${s} s`;
+  };
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -1113,7 +1120,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               End this session?
             </h3>
             <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              You trained for {formatTime(totalSecondsElapsed)}, with {Math.floor(inZoneSeconds)}s in your target zone.
+              You trained for {formatSpokenDuration(totalSecondsElapsed)}, {formatSpokenDuration(Math.floor(inZoneSeconds))} of it in your target zone.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button

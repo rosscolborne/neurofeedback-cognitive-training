@@ -1179,6 +1179,13 @@ input, select, textarea, button {
   vertical-align: top;
 }
 
+/* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field. */
+@media (max-width: 767px) {
+  body:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'])):focus) :is(.patient-bottom-nav, .clinician-mobile-bottom-nav) {
+    display: none;
+  }
+}
+
 .patient-nav-label {
   font-size: 10px;
 }
@@ -1342,9 +1349,10 @@ input, select, textarea, button {
   min-height: 28px;
   padding: 2px 4px;
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  /* A utility link: quieter than the category tag and pushed to the far edge, away from the choice itself. */
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -1389,7 +1397,6 @@ input, select, textarea, button {
   }
 
   .train-card-foot {
-    justify-content: flex-start;
     gap: 12px;
     padding-top: 4px;
   }
@@ -1452,6 +1459,56 @@ input, select, textarea, button {
 }
 
 /* Quiet, tappable protocol identity shown under patient headings. */
+.pill-scroller {
+  /* Bleeds to the card edge so the next pill visibly continues past it instead of being cut at the text column. */
+  --pill-bleed: var(--space-5);
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(-1 * var(--pill-bleed));
+  padding: 2px var(--pill-bleed) 4px;
+  scroll-padding-inline: var(--pill-bleed);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - 36px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - 36px), transparent 100%);
+}
+
+.pill-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.pill-scroller-item {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-patient-recessed);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.pill-scroller-item.is-selected {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-subtle);
+  color: var(--brand-primary);
+}
+
+@media (max-width: 360px) {
+  .pill-scroller {
+    --pill-bleed: 18px;
+  }
+}
+
 .protocol-chip {
   display: inline-flex;
   align-items: center;

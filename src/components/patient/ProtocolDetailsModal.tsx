@@ -142,7 +142,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
                 facts={describeProtocolRule(runtime.config)}
               />
               <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
-                Your target can adjust as you train.
+                The target adjusts during training: a little harder when you are often in the zone, a little easier when you rarely are.
               </p>
             </div>
           ) : (
