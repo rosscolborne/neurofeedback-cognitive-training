@@ -166,6 +166,18 @@ describe('self-directed patient shell', () => {
     await act(async () => { renderer.unmount(); });
   });
 
+  it('keeps a customized self-directed list when the assessment is re-run with the same protocol', async () => {
+    const customized = { ...unlinked(), allowedExperiences: ['signal-sort', 'tidal-garden'] as ClientProfile['allowedExperiences'] };
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(shell(customized)); });
+    tab(renderer, 'Profile');
+    act(() => button(renderer, 'Re-run Assessment & Headband Setup')!.props.onClick());
+    await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'theta-beta-ratio' }); });
+    expect(state.saveSelfDirectedTrainingSetup).not.toHaveBeenCalled();
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'onboarding-flow')).toHaveLength(0);
+    await act(async () => { renderer.unmount(); });
+  });
+
   it('switches to the clinician plan and explains why nothing was saved when a clinician linked meanwhile', async () => {
     const clinicianPlan = linked();
     state.saveSelfDirectedTrainingSetup.mockRejectedValueOnce(new ClinicianManagedTrainingError(clinicianPlan));

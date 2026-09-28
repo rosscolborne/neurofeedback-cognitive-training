@@ -177,15 +177,16 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             await expect(reportMetric(patientPage, 'Sessions')).toContainText('0');
             await expect(reportMetric(patientPage, 'Measured sessions')).toContainText('0');
 
-            await patientPage.getByRole('button', { name: 'Visits', exact: true }).click();
-            await expect(patientPage.getByText('No appointments scheduled', { exact: true })).toBeVisible();
-            await expect(patientPage.getByText('New appointments from your linked clinician will appear here.', { exact: true })).toBeVisible();
+            // WB-102: an unlinked patient has no clinician-dependent destinations.
+            await expect(patientPage.getByRole('button', { name: 'Visits', exact: true })).toHaveCount(0);
+            await expect(patientPage.getByRole('button', { name: 'Messages', exact: true })).toHaveCount(0);
 
             await patientPage.getByRole('button', { name: 'Profile', exact: true }).click();
             await expect(patientPage.getByRole('button', { name: 'Connect to Clinician', exact: true })).toBeVisible();
-            await expect(patientPage.getByText('Goal', { exact: true }).locator('..')).toContainText('Unavailable');
+            await expect(patientPage.getByText('Training setup', { exact: true }).locator('..')).toContainText('Self-directed');
+            await expect(patientPage.getByText('Goal', { exact: true })).toHaveCount(0);
             await expect(patientPage.getByText('Protocol:', { exact: true }).locator('..')).toContainText('Assignment required');
-            await expect(patientPage.getByText('Weekly target', { exact: true }).locator('..')).toContainText('Unavailable');
+            await expect(patientPage.getByText('Weekly target', { exact: true })).toHaveCount(0);
             await expect(patientPage.getByText('Completed', { exact: true }).locator('..')).toContainText('0 sessions total');
             await expect(patientPage.getByText('Connected to your clinician', { exact: true })).toHaveCount(0);
 

@@ -417,7 +417,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         onFinish={async updated => {
           const nextProtocol = updated.assignedProtocol;
           if (!isClinicianLinked && nextProtocol) {
-            await handleSaveTrainingSetup(buildSelfDirectedTrainingSetup(nextProtocol));
+            // Re-running setup only to re-pair a headband must not discard a customized experience list.
+            if (nextProtocol !== resolvedProtocol) await handleSaveTrainingSetup(buildSelfDirectedTrainingSetup(nextProtocol));
           } else {
             await onUpdateClient({ ...client, ...updated });
           }
