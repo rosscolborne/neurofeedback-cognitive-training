@@ -586,6 +586,153 @@ input, select, textarea, button {
   color: var(--text-secondary);
 }
 
+/* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
+.train-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.train-grid > .card-patient {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.train-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--brand-primary);
+}
+
+.train-card-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: 600 15px/1.25 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Stretch the name button over the card so the whole card is one target. */
+.train-card-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.train-card-name:focus-visible {
+  outline: none;
+}
+
+.train-card-name:focus-visible::after {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: -2px;
+}
+
+.train-card-desc {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.train-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.train-card-tag {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.train-card-research {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.train-card-research:hover {
+  color: var(--brand-primary);
+}
+
+.train-card-research:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 1px;
+}
+
+/* Narrow phones: one experience per row, icon beside the text, so names and descriptions stay readable. */
+@media (max-width: 419px) {
+  .train-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .train-grid > .card-patient {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 3px;
+    align-items: start;
+    padding: 14px 16px;
+  }
+
+  .train-card-icon {
+    grid-row: 1 / span 3;
+    margin-bottom: 0;
+  }
+
+  .train-card-name,
+  .train-card-desc,
+  .train-card-foot {
+    grid-column: 2;
+  }
+
+  .train-card-desc {
+    -webkit-line-clamp: 2;
+  }
+
+  .train-card-foot {
+    justify-content: flex-start;
+    gap: 12px;
+    padding-top: 4px;
+  }
+}
+
 /* NeuroGambit compact controls. */
 .ng-tracks {
   display: grid;

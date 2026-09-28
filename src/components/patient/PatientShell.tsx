@@ -490,7 +490,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
+            <div className="train-grid">
               {getAssignedExperienceIds(client.allowedExperiences).map(id => {
                 const exp = EXPERIENCE_CATALOGUE[id];
                 const Icon = exp.icon;
@@ -499,71 +499,31 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     key={exp.id}
                     onClick={() => handleStartSession(exp.id)}
                     className="card-patient"
-                    style={{
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '24px 12px 16px',
-                      textAlign: 'center',
-                      transition: 'all 0.2s ease',
-                      background: exp.gradient,
-                      gap: '8px',
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
+                    style={{ background: exp.gradient }}
                   >
-                    <div
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: 'var(--radius-md)',
-                        backgroundColor: 'var(--brand-primary-subtle)',
-                        color: 'var(--brand-primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      <Icon size={24} />
+                    <div className="train-card-icon" aria-hidden="true">
+                      <Icon size={22} />
                     </div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                    {/* The whole card starts the session; this button makes it reachable by keyboard and assistive tech. */}
+                    <button type="button" className="train-card-name" aria-describedby={`train-desc-${exp.id}`}>
                       {exp.name}
+                    </button>
+                    <p id={`train-desc-${exp.id}`} className="train-card-desc">{exp.description}</p>
+                    <div className="train-card-foot">
+                      <span className="status-tag status-tag-active train-card-tag">{exp.badge}</span>
+                      {exp.researchUrl && (
+                        <a
+                          href={exp.researchUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="train-card-research"
+                          aria-label={`Research for ${exp.name} (opens in a new tab)`}
+                        >
+                          <BookOpen size={12} aria-hidden="true" /> Research
+                        </a>
+                      )}
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-                      {exp.description}
-                    </div>
-                    {exp.researchUrl && (
-                      <a 
-                        href={exp.researchUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          marginTop: '6px',
-                          fontSize: '10px',
-                          color: 'var(--brand-primary)',
-                          textDecoration: 'none',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          background: 'var(--brand-primary-subtle)',
-                          padding: '4px 8px',
-                          borderRadius: '12px',
-                          fontWeight: 500,
-                          transition: 'background 0.2s',
-                        }}
-                        onMouseOver={(e) => e.currentTarget.style.background = 'rgba(74, 144, 217, 0.2)'}
-                        onMouseOut={(e) => e.currentTarget.style.background = 'var(--brand-primary-subtle)'}
-                      >
-                        <BookOpen size={10} /> View Research
-                      </a>
-                    )}
-                    <span className="status-tag status-tag-active" style={{ fontSize: '9px', padding: '2px 8px', marginTop: '4px' }}>
-                      {exp.badge}
-                    </span>
                   </div>
                 );
               })}
