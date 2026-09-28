@@ -160,27 +160,29 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
                       : `Customized: ${experiences.length} of ${EXPERIENCE_IDS.length} experiences`}
                   </div>
                 </div>
-                {!usesDefaults && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {!usesDefaults && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={isSaving}
+                      onClick={() => { setExperiences([...choice.defaultExperiences]); setSaveError(null); }}
+                      style={{ padding: '8px 12px', fontSize: '13px' }}
+                    >
+                      <RotateCcw size={14} aria-hidden="true" /> Use protocol defaults
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-ghost"
-                    disabled={isSaving}
-                    onClick={() => { setExperiences([...choice.defaultExperiences]); setSaveError(null); }}
+                    aria-expanded={showExperiences}
+                    aria-controls="training-setup-experiences"
+                    onClick={() => setShowExperiences((open) => !open)}
                     style={{ padding: '8px 12px', fontSize: '13px' }}
                   >
-                    <RotateCcw size={14} aria-hidden="true" /> Use protocol defaults
+                    {showExperiences ? 'Hide experiences' : 'Customize experiences'}
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  aria-expanded={showExperiences}
-                  aria-controls="training-setup-experiences"
-                  onClick={() => setShowExperiences((open) => !open)}
-                  style={{ padding: '8px 12px', fontSize: '13px' }}
-                >
-                  {showExperiences ? 'Hide experiences' : 'Customize experiences'}
-                </button>
+                </div>
               </div>
               {showExperiences && (
                 <div id="training-setup-experiences" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
