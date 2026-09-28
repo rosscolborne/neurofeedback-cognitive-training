@@ -33,8 +33,8 @@ export const ChessboardView: React.FC<ChessboardViewProps> = ({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(8, 1fr)',
-        gridTemplateRows: 'repeat(8, 1fr)',
+        gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
+        gridTemplateRows: 'repeat(8, minmax(0, 1fr))',
         aspectRatio: '1 / 1',
         width: '100%',
         maxWidth: '460px',
@@ -119,7 +119,7 @@ export const ChessboardView: React.FC<ChessboardViewProps> = ({
                 <ChessPieceSvg
                   type={piece.type}
                   color={piece.color}
-                  size={42}
+                  size="74%"
                 />
               )}
 

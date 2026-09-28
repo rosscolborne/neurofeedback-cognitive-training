@@ -38,6 +38,7 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
   const orbIdRef = useRef(0);
 
   const smr = eegData?.bands.smr ?? 6.5;
+  const stillnessLevel = Math.round(Math.max(0.2, Math.min(1.0, (smr - 4) / 8)) * 5);
   const inZone = eegData?.inZone ?? true;
   const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 
@@ -122,7 +123,7 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
       ctx.fillStyle = '#A35338';
       ctx.font = '600 12px "DM Sans", -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Target Signal (SMR)', leftGateX + gateWidth / 2, gateY + 7);
+      ctx.fillText('Target', leftGateX + gateWidth / 2, gateY + 7);
 
       // Gate 2: Secondary Channel (Right)
       const rightGateX = width * 0.54;
@@ -135,7 +136,7 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
       ctx.stroke();
 
       ctx.fillStyle = '#635377';
-      ctx.fillText('Filtered Noise', rightGateX + gateWidth / 2, gateY + 7);
+      ctx.fillText('Noise', rightGateX + gateWidth / 2, gateY + 7);
 
       // 5. Update and render falling orbs with calm magnetic convergence
       orbsRef.current.forEach((orb) => {
@@ -297,8 +298,14 @@ export const SignalSortGame: React.FC<SignalSortProps> = ({ eegData, isPaused = 
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
         }}
       >
-        <Shield size={12} color="var(--brand-primary)" />
-        <span>SMR Motor Stillness: {smr.toFixed(1)} µV</span>
+        <Shield size={12} color="var(--brand-primary)" aria-hidden="true" />
+        <span>Stillness</span>
+        {/* Same 0–1 stillness ratio that slows the falling signals; shown as a level, not raw µV. */}
+        <span role="meter" aria-label="Stillness" aria-valuemin={0} aria-valuemax={5} aria-valuenow={stillnessLevel} style={{ display: 'flex', gap: '2px' }}>
+          {[1, 2, 3, 4, 5].map((step) => (
+            <span key={step} style={{ width: '5px', height: '10px', borderRadius: '2px', background: step <= stillnessLevel ? 'var(--brand-primary)' : 'var(--border-default)' }} />
+          ))}
+        </span>
       </div>
     </div>
   );

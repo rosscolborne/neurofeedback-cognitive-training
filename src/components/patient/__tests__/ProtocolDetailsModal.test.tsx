@@ -37,8 +37,7 @@ describe('patient protocol details training rule', () => {
     expect(resolveProtocolRuntime(client)).toMatchObject({ ok: true,
       config: { protocol: 'smr-enhancement', initialThreshold: 7.5 } });
     const text = await details(client);
-    expect(text).toContain('12 Hz');
-    expect(text).toContain('15 Hz');
+    expect(text).toContain('12–15 Hz');
     expect(text).toContain('Above 7.5 µV');
     expect(text).not.toContain('Training unavailable');
   });
@@ -47,8 +46,7 @@ describe('patient protocol details training rule', () => {
     const legacy = { ...assigned(false), assignedProtocol: 'alpha-enhancement' as const,
       customProtocolConfig: { ...alpha, rewardBand: { ...alpha.rewardBand, freqMax: 12 } } };
     const text = await details(legacy);
-    expect(text).toContain('8 Hz');
-    expect(text).toContain('13 Hz');
+    expect(text).toContain('8–13 Hz');
     expect(text).toContain('Above 11 µV');
   });
   it('shows both default ratio bands and a unitless reward threshold', async () => {
@@ -56,19 +54,12 @@ describe('patient protocol details training rule', () => {
     const client = { ...assigned(false), assignedProtocol: 'theta-beta-ratio' as const,
       customProtocolConfig: { ...ratioTemplate, customRewardEnabled: false } };
     const text = await details(client);
-    expect(text).toContain('Theta Min Frequency');
-    expect(text).toContain('Theta Max Frequency');
-    expect(text).toContain('Beta Min Frequency');
-    expect(text).toContain('Beta Max Frequency');
-    expect(text).toContain('4 Hz');
-    expect(text).toContain('8 Hz');
-    expect(text).toContain('13 Hz');
-    expect(text).toContain('30 Hz');
-    expect(text).toContain('Reward condition');
-    expect(text).toContain('Below');
-    expect(text).toContain('Reward threshold');
-    expect(text).toContain('1.85');
-    expect(text.indexOf('Beta Max Frequency')).toBeLessThan(text.indexOf('Reward condition'));
+    expect(text).toContain('"Theta"');
+    expect(text).toContain('"Beta"');
+    expect(text).toContain('4–8 Hz');
+    expect(text).toContain('13–30 Hz');
+    expect(text).toContain('Theta/Beta below 1.85');
+    expect(text.indexOf('13–30 Hz')).toBeLessThan(text.indexOf('Reward when'));
     expect(text).not.toContain('1.85 µV');
   });
   it('shows the active default beta rule without inactive template values', async () => {
@@ -78,10 +69,8 @@ describe('patient protocol details training rule', () => {
     });
     const text = await details(client);
     expect(text).toContain('Test 123');
-    expect(text).toContain('Min Frequency');
-    expect(text).toContain('Max Frequency');
-    expect(text).toContain('13 Hz');
-    expect(text).toContain('30 Hz');
+    expect(text).toContain('Training band');
+    expect(text).toContain('13–30 Hz');
     expect(text).toContain('Below 14 µV');
     expect(text).not.toContain('9–12 Hz');
     expect(text).not.toContain('10 µV');
@@ -98,12 +87,20 @@ describe('patient protocol details training rule', () => {
       },
     });
     const text = await details(client);
-    expect(text).toContain('Min Frequency');
-    expect(text).toContain('Max Frequency');
-    expect(text).toContain('9 Hz');
-    expect(text).toContain('12 Hz');
+    expect(text).toContain('Training band');
+    expect(text).toContain('9–12 Hz');
     expect(text).toContain('Above 10 µV');
-    expect(text).not.toContain('13 Hz');
+    expect(text).not.toContain('13–30 Hz');
     expect(text).not.toContain('at or below 14');
+  });
+
+  it('does not present template rationale as a note from the clinician', async () => {
+    const templateOnly = await details(assigned(false));
+    expect(template.clinicalNotes).toBeTruthy();
+    expect(templateOnly).not.toContain(template.clinicalNotes);
+    expect(templateOnly).not.toContain('Note from your clinician');
+    const edited = await details({ ...assigned(false), customProtocolConfig: { ...template, clinicalNotes: 'Keep sessions in the evening.' } });
+    expect(edited).toContain('Note from your clinician');
+    expect(edited).toContain('Keep sessions in the evening.');
   });
 });

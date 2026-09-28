@@ -77,8 +77,26 @@ describe('production appointment repository', () => {
   });
 
   it('reports malformed persisted data rather than disguising it as an empty calendar', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     firestore.getDocs.mockResolvedValueOnce({ docs: [document('broken', { clinicianId: 'clinician-1' })] }).mockResolvedValueOnce({ docs: [] });
-    await expect(repository.list('clinician', ['patient-1'])).rejects.toThrow(/broken.*invalid persisted data/);
+    const failure = repository.list('clinician', ['patient-1']);
+    await expect(failure).rejects.toThrow('Appointment details could not be read');
+    await expect(failure).rejects.not.toThrow(/broken/);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('invalid persisted data'), ['broken']);
+    warn.mockRestore();
+  });
+
+  it('keeps readable appointments when one document is malformed and reports how many were skipped', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const onUnreadable = vi.fn();
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [document('good', canonical()), document('broken', { clinicianId: 'clinician-1', type: 'unknown' })] })
+      .mockResolvedValueOnce({ docs: [] });
+    const listed = await repository.list('clinician', ['patient-1'], { onUnreadable });
+    expect(listed.map((item) => item.id)).toEqual(['good']);
+    expect(onUnreadable).toHaveBeenCalledWith(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Skipped 1'), ['broken']);
+    warn.mockRestore();
   });
 
   it('creates a linked-patient appointment with normalized time and server-owned metadata', async () => {

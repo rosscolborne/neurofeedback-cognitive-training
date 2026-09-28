@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ClientProfile, SessionRecord } from '../../types';
 import { storageEngine, INITIAL_BADGES } from '../../services/storageEngine';
-import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText } from 'lucide-react';
+import { Trophy, Award, Waves, Target, Wind, Compass, Send, FileText, Lock, CheckCircle2, Pencil } from 'lucide-react';
 import {
   buildPatientProgressDisplayModel,
   getDurationSeconds,
@@ -11,6 +11,9 @@ import {
   ProgressPeriod,
 } from './patientMetrics';
 import { exportPatientSessionCsv } from './patientSessionCsv';
+import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
+import { FactGrid, type Fact } from '../ui/FactGrid';
+import { MOODS } from './sessionMoods';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
@@ -31,6 +34,54 @@ const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
 
 const formatBandPower = (value: unknown): string => (
   typeof value === 'number' && Number.isFinite(value) ? `${value}µV` : 'Unavailable'
+);
+
+/** Subjective rating with the name the patient chose it by, e.g. "Focused · 4/5". */
+const moodLabel = (rating: number) => {
+  const mood = MOODS.find((entry) => entry.value === rating);
+  return mood ? `${mood.label} · ${mood.score}` : `${rating}/5`;
+};
+const journalLabelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' };
+const journalFieldStyle: React.CSSProperties = { padding: '8px 10px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: '13px' };
+const journalButtonStyle: React.CSSProperties = { padding: '7px 16px', fontSize: '13px' };
+
+/** Minutes up to an hour, then hours and minutes. Each number stays with its unit (no-break space),
+ *  so a narrow stat cell wraps as "5 h / 55 min" rather than splitting "55 / min". */
+function formatTrainingTime(totalSeconds: number): string {
+  const minutes = Math.round(totalSeconds / 60);
+  if (minutes < 60) return `${minutes}\u00A0min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}\u00A0h ${rest}\u00A0min` : `${hours}\u00A0h`;
+}
+
+/** Short weekday date; the year appears only when it differs from this year. */
+function formatSessionDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short', day: 'numeric', month: 'short',
+    ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
+/** Compact time-in-zone ring; the number carries the meaning and the ring shows proportion. */
+const ZoneRing: React.FC<{ percent: number | null }> = ({ percent }) => (
+  <div
+    role="img"
+    aria-label={percent == null ? 'Time in zone unavailable' : `${percent}% in zone`}
+    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+  >
+    <div style={{ position: 'relative', width: '46px', height: '46px' }}>
+      <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }} aria-hidden="true">
+        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--surface-patient-recessed)" strokeWidth="3.2" />
+        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--brand-primary)" strokeWidth="3.2" strokeDasharray={`${percent ?? 0}, 100`} strokeLinecap="round" />
+      </svg>
+      <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+        {percent == null ? '—' : `${percent}%`}
+      </span>
+    </div>
+    <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>in zone</span>
+  </div>
 );
 
 export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
@@ -82,6 +133,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
   const exportAvailability = getSessionExportState(progressDisplay.presentation);
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
+  const periodDemoCount = progressDisplay.periodSessions.filter((session) => session.isDemo === true).length;
 
   const exportCSV = () => {
     if (exportAvailability !== 'ready') return;
@@ -182,12 +234,14 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               {periodLabel} · {progressDisplay.summary
                 ? `${progressDisplay.summary.sessionCount} session${progressDisplay.summary.sessionCount !== 1 ? 's' : ''}`
                 : 'Session count unavailable'}
+              {/* Demo results are simulated; say so wherever they feed an average. */}
+              {periodDemoCount > 0 && ` · includes ${periodDemoCount} simulated Demo`}
             </div>
           </div>
         </div>
 
         {/* Dynamic SVG Area Chart */}
-        <div style={{ width: '100%', height: '140px', overflow: 'hidden' }}>
+        <div style={{ width: '100%', height: '146px', overflow: 'hidden' }}>
           {progressDisplay.chart?.line ? (
             <>
               <svg viewBox="0 0 360 120" style={{ width: '100%', height: '120px' }}>
@@ -206,12 +260,12 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                {progressDisplay.chart.points.map(point => (
-                  <circle key={`${point.x}-${point.y}`} cx={point.x} cy={point.y} r="4" fill="var(--brand-primary)" />
+                {progressDisplay.chart.points.map((point, index) => (
+                  <circle key={index} cx={point.x} cy={point.y} r="4" fill="var(--brand-primary)" />
                 ))}
                 <line x1="20" y1="110" x2="350" y2="110" stroke="var(--border-default)" strokeWidth="1" />
               </svg>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 8px' }}>
+              <div style={{ display: 'flex', justifyContent: progressDisplay.chart.labels.length > 1 ? 'space-between' : 'center', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', padding: '0 8px' }}>
                 {progressDisplay.chart.labels.map((label, i) => (
                   <span key={i}>{label}</span>
                 ))}
@@ -263,15 +317,15 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+      <div className="card-patient stat-strip" style={{ padding: '14px 8px' }}>
         {[
           ['Sessions', progressDisplay.summary ? String(progressDisplay.summary.sessionCount) : '—'],
-          ['Training time', progressDisplay.summary ? `${Math.round(progressDisplay.summary.totalDurationSeconds / 60)} min` : '—'],
+          ['Training time', progressDisplay.summary ? formatTrainingTime(progressDisplay.summary.totalDurationSeconds) : '—'],
           ['Measured sessions', progressDisplay.summary ? String(progressDisplay.summary.measuredSessions.length) : '—'],
         ].map(([label, value]) => (
-          <div key={label} className="card-patient" style={{ padding: '12px', textAlign: 'center' }}>
-            <div className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '3px' }}>{label}</div>
+          <div key={label}>
+            <div className="stat-strip-value">{value}</div>
+            <div className="stat-strip-label">{label}</div>
           </div>
         ))}
       </div>
@@ -307,19 +361,30 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
             const timestamp = getSessionTimestamp(s);
             const timeInZone = getTimeInZonePercent(s);
             const durationSeconds = getDurationSeconds(s);
-            const displayDate = timestamp == null
-              ? (s.date || 'Date unavailable')
-              : new Date(timestamp).toLocaleDateString();
+            const displayDate = timestamp == null ? (s.date || 'Date unavailable') : formatSessionDate(timestamp);
+            const isEditingJournal = journal?.clientId === client.id && journal.sessionId === s.id;
+            const detailFacts: Fact[] = [
+              { label: 'Protocol', value: s.protocol ? protocolDisplayName(s.protocol) : 'Unavailable', wide: true },
+              ...(s.isDemo
+                ? [{ label: 'Band power', value: 'Not measured in Demo' }]
+                : s.averageBands
+                  ? [
+                      { label: 'Theta', value: formatBandPower(s.averageBands.theta) },
+                      { label: 'Alpha', value: formatBandPower(s.averageBands.alpha) },
+                      { label: 'Beta', value: formatBandPower(s.averageBands.beta) },
+                    ]
+                  : [{ label: 'Band power', value: 'Unavailable' }]),
+            ];
             return (
               <div
                 key={s.id}
                 className="card-patient"
                 style={{
                   cursor: 'pointer',
-                  padding: '16px 20px',
+                  padding: '14px 16px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
+                  gap: '14px',
                 }}
                 onClick={() => {
                   if (journal?.clientId === client.id) {
@@ -329,94 +394,60 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   setExpandedSession(isExpanded ? null : { clientId: client.id, sessionId: s.id });
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {displayDate}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                      {s.experience ? experienceDisplayName(s.experience) : 'Experience unavailable'}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      Duration: {durationSeconds == null ? 'Unavailable' : `${Math.round(durationSeconds / 60)} mins`}
-                      {' • '}{s.experience ? s.experience.replace(/-/g, ' ') : 'Experience unavailable'}
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {displayDate}{' · '}{durationSeconds == null ? 'Duration unavailable' : `${Math.round(durationSeconds / 60)} min`}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
-                      <span className="status-tag status-tag-active" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                        {s.protocol ? s.protocol.replace(/-/g, ' ') : 'Protocol unavailable'}
-                      </span>
-                      {s.isDemo && (
-                        <span className="status-tag" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                            Training Demo · Synthetic acquisition
-                        </span>
-                      )}
-                      {s.moodRating && (
-                        <span className="font-mono" style={{ fontSize: '11px', background: 'var(--surface-patient-recessed)', padding: '2px 6px', borderRadius: '4px' }}>
-                          State {s.moodRating}/5
-                        </span>
-                      )}
-                    </div>
+                    {(s.isDemo || s.moodRating) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                        {s.isDemo && <span className="status-tag status-tag-paused" style={{ fontSize: '11px', padding: '2px 8px' }}>Training Demo</span>}
+                        {s.moodRating && <span className="status-tag status-tag-neutral" style={{ fontSize: '11px', padding: '2px 8px' }}>{moodLabel(s.moodRating)}</span>}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Circular Score Mini-Gauge */}
-                  <div style={{ position: 'relative', width: '54px', height: '54px' }}>
-                    <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="var(--surface-patient-recessed)"
-                        strokeWidth="3.5"
-                      />
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="var(--brand-primary)"
-                        strokeWidth="3.5"
-                        strokeDasharray={`${timeInZone ?? 0}, 100`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <span className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {timeInZone == null ? '—' : `${timeInZone}%`}
-                      </span>
-                      <span style={{ fontSize: '8px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>In zone</span>
-                    </div>
-                  </div>
+                  <ZoneRing percent={timeInZone} />
                 </div>
 
-                {/* Expandable Session Detail */}
                 {isExpanded && (
-                  <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {s.isDemo ? (
-                      <div><strong>Average Band Powers:</strong> Not measured — synthetic Training Demo feedback</div>
-                    ) : s.averageBands ? (
-                      <div>
-                        <strong>Average Band Powers:</strong> Theta {formatBandPower(s.averageBands.theta)}
-                        {' | '}Alpha {formatBandPower(s.averageBands.alpha)}
-                        {' | '}Beta {formatBandPower(s.averageBands.beta)}
+                  <div style={{ paddingTop: '14px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {s.clinicianNotes && (
+                      <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--brand-primary-subtle)' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--brand-primary)' }}>From your clinician</div>
+                        <p style={{ margin: '4px 0 0', fontSize: '14px', lineHeight: 1.5, color: 'var(--text-primary)' }}>{s.clinicianNotes}</p>
                       </div>
-                    ) : (
-                      <div><strong>Average Band Powers:</strong> Unavailable</div>
                     )}
-                    {s.patientNotes && <div style={{ marginTop: '4px' }}><strong>Notes:</strong> {s.patientNotes}</div>}
-                    {s.clinicianNotes && <div style={{ marginTop: '4px', color: 'var(--brand-primary)' }}><strong>Clinician Feedback:</strong> {s.clinicianNotes}</div>}
-                    {journal?.clientId === client.id && journal.sessionId === s.id ? <div onClick={(event) => event.stopPropagation()} style={{ marginTop: '10px' }}>
-                      <label htmlFor={`journal-${s.id}`}>Personal journal</label>
-                      <textarea id={`journal-${s.id}`} value={journal.patientNotes} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, patientNotes: event.target.value } : current)} style={{ display: 'block', width: '100%', minHeight: '64px' }} />
-                      <label htmlFor={`mood-${s.id}`}>Mood</label>
-                      <select id={`mood-${s.id}`} value={journal.moodRating ?? ''} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, moodRating: event.target.value ? Number(event.target.value) as SessionRecord['moodRating'] : undefined } : current)}>
-                        <option value="">Not recorded</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}/5</option>)}
-                      </select>
-                      <div><button type="button" disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
-                      {journal.error && <p role="alert">Journal could not be saved. Your changes are still here; try again.</p>}
-                    </div> : <button type="button" onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}>Edit journal</button>}
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Your journal</div>
+                        {!isEditingJournal && (
+                          <button type="button" className="btn btn-ghost" style={{ padding: '4px 6px', gap: '5px', fontSize: '13px', fontWeight: 600, color: 'var(--brand-primary)', minHeight: 0 }} onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}><Pencil size={13} aria-hidden="true" />Edit journal</button>
+                        )}
+                      </div>
+                      {isEditingJournal ? <div onClick={(event) => event.stopPropagation()} style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label htmlFor={`journal-${s.id}`} style={journalLabelStyle}>Personal journal</label>
+                        <textarea id={`journal-${s.id}`} value={journal.patientNotes} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, patientNotes: event.target.value } : current)} style={{ ...journalFieldStyle, display: 'block', width: '100%', minHeight: '72px', resize: 'vertical' }} />
+                        <label htmlFor={`mood-${s.id}`} style={journalLabelStyle}>Mood</label>
+                        <select id={`mood-${s.id}`} style={{ ...journalFieldStyle, alignSelf: 'flex-start', minWidth: '140px' }} value={journal.moodRating ?? ''} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, moodRating: event.target.value ? Number(event.target.value) as SessionRecord['moodRating'] : undefined } : current)}>
+                          <option value="">No rating</option>{MOODS.map((mood) => <option key={mood.value} value={mood.value}>{moodLabel(mood.value)}</option>)}
+                        </select>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}><button type="button" className="btn btn-primary" style={journalButtonStyle} disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" className="btn btn-ghost" style={journalButtonStyle} disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
+                        {journal.error && <p role="alert" style={{ color: 'var(--status-alert)', fontSize: '13px' }}>Journal could not be saved. Your changes are still here; try again.</p>}
+                      </div> : (
+                        <p style={{ margin: '6px 0 0', paddingLeft: '12px', borderLeft: '3px solid var(--border-default)', fontSize: '14px', lineHeight: 1.55, color: s.patientNotes ? 'var(--text-primary)' : 'var(--text-secondary)', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
+                          {s.patientNotes || 'No journal entry yet.'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Session details</div>
+                      <FactGrid minColumnWidth={92} facts={detailFacts} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -441,31 +472,36 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
               : 'Milestone evidence unavailable.'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(128px, 1fr))', gap: '10px' }}>
           {INITIAL_BADGES.filter(badge => VISIBLE_BADGE_IDS.has(badge.id)).map(badge => {
             const isUnlocked = progressDisplay.earnedBadgeIds?.has(badge.id) === true;
             const Icon = BADGE_ICONS[badge.iconName] || Trophy;
             return (
               <div
                 key={badge.id}
+                aria-label={`${badge.title}: ${isUnlocked ? 'earned' : 'locked'}. ${badge.description}`}
+                role="group"
                 style={{
+                  position: 'relative',
                   background: isUnlocked ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
-                  border: isUnlocked ? '1.5px solid var(--brand-primary)' : '1px dashed var(--border-default)',
+                  border: isUnlocked ? '1px solid var(--brand-primary)' : '1px solid transparent',
                   borderRadius: 'var(--radius-md)',
-                  padding: '12px 8px',
+                  padding: '14px 10px 12px',
                   textAlign: 'center',
-                  opacity: isUnlocked ? 1 : 0.45,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   gap: '4px',
                 }}
               >
-                <div style={{ color: 'var(--brand-primary)', padding: '4px' }}>
-                  <Icon size={20} />
+                <span aria-hidden="true" style={{ position: 'absolute', top: '8px', right: '8px', color: isUnlocked ? 'var(--brand-primary)' : 'var(--text-tertiary)' }}>
+                  {isUnlocked ? <CheckCircle2 size={14} /> : <Lock size={12} />}
+                </span>
+                <div aria-hidden="true" style={{ color: isUnlocked ? 'var(--brand-primary)' : 'var(--text-tertiary)', padding: '2px' }}>
+                  <Icon size={22} />
                 </div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>{badge.title}</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: isUnlocked ? 'var(--text-primary)' : 'var(--text-secondary)', lineHeight: 1.25 }}>{badge.title}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
                   {badge.description}
                 </div>
               </div>

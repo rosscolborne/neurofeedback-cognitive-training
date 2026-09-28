@@ -339,7 +339,7 @@ export const GenerativeWebXRCanvas: React.FC<GenerativeArtProps> = ({ eegData })
             Generative EEG Tapestry
           </span>
           <span style={{ fontSize: '11px', color: (eegData?.inZone ?? true) ? '#68D391' : '#CBD5E0', fontWeight: 500 }}>
-            • {(eegData?.inZone ?? true) ? 'Alpha Synchrony' : 'Relaxing'}
+            • {(eegData?.inZone ?? true) ? 'In zone' : 'Settling in'}
           </span>
         </div>
 

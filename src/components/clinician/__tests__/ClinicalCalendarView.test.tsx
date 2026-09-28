@@ -57,6 +57,20 @@ describe('mounted production appointment surfaces', () => {
   });
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+  it('keeps readable appointments visible when some saved records cannot be read', async () => {
+    const list = vi.fn(async (_role: string, _ids?: string[], options?: { onUnreadable?: (count: number) => void }) => {
+      options?.onUnreadable?.(2);
+      return [appointment()];
+    });
+    const renderer = await mountClinician(repository({ list }));
+    expect(renderer.root.findAllByType('article')).toHaveLength(1);
+    expect(text(renderer.root)).toContain('2 appointments couldn’t be displayed');
+    let patientRenderer!: ReactTestRenderer;
+    await act(async () => { patientRenderer = create(<PatientAppointmentsView repository={repository({ list })} />); });
+    expect(patientRenderer.root.findAllByType('article')).toHaveLength(1);
+    expect(text(patientRenderer.root)).toContain('Some appointment details couldn’t be displayed');
+  });
+
   it('renders loading, genuine empty, error, and retry states', async () => {
     const first = deferred<ProductionAppointment[]>();
     const list = vi.fn().mockReturnValueOnce(first.promise);

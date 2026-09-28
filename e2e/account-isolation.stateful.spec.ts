@@ -126,6 +126,10 @@ function reportMetric(page: Page, label: string) {
     return page.getByText(label, { exact: true }).locator('..').locator('..');
 }
 
+function reportCoverage(page: Page, label: string) {
+    return page.getByLabel('Data coverage', { exact: true }).getByText(label, { exact: true }).locator('..');
+}
+
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -179,10 +183,10 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
 
             await patientPage.getByRole('button', { name: 'Profile', exact: true }).click();
             await expect(patientPage.getByRole('button', { name: 'Connect to Clinician', exact: true })).toBeVisible();
-            await expect(patientPage.getByText('Goal:', { exact: true }).locator('..')).toContainText('Unavailable');
+            await expect(patientPage.getByText('Goal', { exact: true }).locator('..')).toContainText('Unavailable');
             await expect(patientPage.getByText('Protocol:', { exact: true }).locator('..')).toContainText('Assignment required');
-            await expect(patientPage.getByText('Weekly Target:', { exact: true }).locator('..')).toContainText('Unavailable');
-            await expect(patientPage.getByText('Completed:', { exact: true }).locator('..')).toContainText('0 sessions total');
+            await expect(patientPage.getByText('Weekly target', { exact: true }).locator('..')).toContainText('Unavailable');
+            await expect(patientPage.getByText('Completed', { exact: true }).locator('..')).toContainText('0 sessions total');
             await expect(patientPage.getByText('Connected to your clinician', { exact: true })).toHaveCount(0);
 
             const dedicatedPatientName = dedicatedPatient.name;
@@ -216,13 +220,13 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             await expect(clinicianPage.getByText('No eligible clinical or training Demo sessions were found in this interval.', { exact: true })).toBeVisible();
             await expect(clinicianPage.getByRole('button', { name: 'Enrolled (0)', exact: true })).toBeVisible();
             await expect(clinicianPage.getByRole('button', { name: 'Sample (0)', exact: true })).toBeVisible();
-            await expect(reportMetric(clinicianPage, 'Selected Cohort')).toContainText('0');
-            await expect(reportMetric(clinicianPage, 'Persisted Sessions')).toContainText('0');
-            await expect(reportMetric(clinicianPage, 'Training Demo Completions')).toContainText('0');
-            await expect(reportMetric(clinicianPage, 'Sample Workspace Records')).toContainText('0');
-            await expect(reportMetric(clinicianPage, 'Average In-Zone Time')).toContainText('Unavailable');
-            await expect(reportMetric(clinicianPage, 'Device Snapshot Coverage')).toContainText('Unavailable');
-            await expect(clinicianPage.getByText('Device models recorded: Unavailable.', { exact: true })).toBeVisible();
+            await expect(reportMetric(clinicianPage, 'Patients in cohort')).toContainText('0');
+            await expect(reportMetric(clinicianPage, 'Sessions recorded')).toContainText('0');
+            await expect(reportMetric(clinicianPage, 'Average in-zone time')).toContainText('Unavailable');
+            await expect(reportCoverage(clinicianPage, 'Demo sessions')).toContainText('0');
+            await expect(reportCoverage(clinicianPage, 'Sample records')).toContainText('0');
+            await expect(reportCoverage(clinicianPage, 'Device snapshots')).toContainText('Unavailable');
+            await expect(reportCoverage(clinicianPage, 'Device models')).toContainText('Not recorded');
             await expect(clinicianPage.getByText('No patients are in this cohort.', { exact: true })).toBeVisible();
             await expect(clinicianPage.getByText(dedicatedPatientName, { exact: true })).toHaveCount(0);
 

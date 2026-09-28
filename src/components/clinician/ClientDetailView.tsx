@@ -11,6 +11,9 @@ import { BrainMapUploadModal } from './BrainMapUploadModal';
 import { PatientAvatar } from './PatientAvatar';
 import { ClinicianSessionDetail } from './ClinicianSessionDetail';
 import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
+import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
+import { FactGrid } from '../ui/FactGrid';
+import { describeProtocolRule } from '../protocolRuleFacts';
 import {
   assessQeegRecord,
   deriveLearningScorePoints,
@@ -136,7 +139,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     pdfRequestRef.current = request;
     setPdfUi({ clientId: client.id, pendingSessionId: selected?.id ?? null, error: null });
     try {
-      await generatePatientClinicalPDF(client, selected ? [selected] : sessions, brand);
+      if (selected) await generatePatientClinicalPDF(client, [selected], brand, 'selected-session');
+      else await generatePatientClinicalPDF(client, sessions, brand);
     } catch {
       if (mountedRef.current && pdfGenerationRef.current === request.generation) {
         setPdfUi((current) => current.clientId === client.id
@@ -180,6 +184,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const assignedProtocol = resolvePatientProtocol(client);
   const evidenceProtocolName = getClinicalProtocolTemplate(assignedProtocol)?.name ?? assignedProtocol.replace(/-/g, ' ').toUpperCase();
   const persistedBrainMaps = persistedBrainMapsByPatient[client.id] ?? [];
+  const protocolRuntime = resolveProtocolRuntime(client);
   const brainMapLoadState = brainMapLoadResult?.clientId === client.id ? brainMapLoadResult.state : 'loading';
   const persistedIds = new Set(persistedBrainMaps.map((map) => map.id));
   const profileBrainMaps: unknown[] = Array.isArray(client.brainMaps) ? client.brainMaps : [];
@@ -221,105 +226,76 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           <ArrowLeft size={16} /> Back to Patient Roster
         </button>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowBrainMapUpload(true)}
-            disabled={brainMapLoadState !== 'ready'}
-            className="btn btn-ghost"
-            style={{ border: '1px solid var(--border-default)', fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Upload size={14} /> Add Manual QEEG Record
-          </button>
-          <button
-            onClick={() => { void handleDownloadPDF(); }}
-            disabled={pdfExportDisabled}
-            className="btn btn-dense"
-            style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Download size={14} /> Export Clinical PDF
-          </button>
-        </div>
+        <button
+          onClick={() => { void handleDownloadPDF(); }}
+          disabled={pdfExportDisabled}
+          className="btn btn-ghost detail-action"
+          style={{ fontSize: '12px', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Download size={14} /> Export Clinical PDF
+        </button>
       </div>
       {pdfUi.clientId === client.id && pdfUi.error && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '13px' }}>{pdfUi.error}</div>}
       {pdfIsPending && <div role="status" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{pdfUi.pendingSessionId ? `Exporting session ${pdfUi.pendingSessionId} PDF…` : 'Exporting clinical PDF…'}</div>}
 
-      {/* Client Profile Header Card */}
-      <div
-        className="card-clinician"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-          padding: '18px 20px',
-          backgroundColor: '#FFFFFF',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <PatientAvatar avatarUrl={client.avatarUrl} size={52} />
-          <div>
+      {/* Patient header: identity, a chip row of care facts, and one action group. */}
+      <section className="card-clinician detail-header" aria-label="Patient summary">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', minWidth: 0 }}>
+          <PatientAvatar avatarUrl={client.avatarUrl} size={48} />
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+              <h1 style={{ fontSize: '20px', fontWeight: 600, lineHeight: 1.25, color: 'var(--text-primary)', margin: 0, overflowWrap: 'anywhere' }}>
                 {client.name}
               </h1>
-              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '10px', padding: '2px 7px' }}>
-                ● {client.status.toUpperCase()}
+              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '11px', padding: '2px 8px', textTransform: 'capitalize' }}>
+                {client.status}
               </span>
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition || 'Condition unavailable'} • Protocol: <strong>{evidenceProtocolName}</strong>{assignedDeviceName && <> • Assigned device: <strong>{assignedDeviceName}</strong></>}
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Neural Imprint: <strong>{imprintLabel}</strong>
-              {imprintState.calibratedAt != null && <> • Calibrated <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString()}</time></>}
+            <div className="detail-chips">
+              <span className="detail-chip">{client.condition || 'Condition unavailable'}</span>
+              <span className="detail-chip"><Settings2 size={12} aria-hidden="true" /> {evidenceProtocolName}</span>
+              <span className={`detail-chip detail-chip-${imprintState.status}`}>
+                Neural Imprint: {imprintLabel}
+                {imprintState.calibratedAt != null && <> · <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</time></>}
+              </span>
+              {assignedDeviceName && <span className="detail-chip">Assigned device: {assignedDeviceName}</span>}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowProtocolBuilder(true)}
-            className="btn btn-ghost"
-            style={{ border: '1px solid var(--border-default)', fontSize: '12px', padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Settings2 size={14} /> Adjust Protocol
-          </button>
+        <div className="detail-actions">
           <button
             onClick={onSendMessage}
-            className="btn btn-secondary"
-            style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            className="btn btn-secondary detail-action-primary"
+            style={{ padding: '8px 14px', fontSize: '13px' }}
           >
             <Send size={14} /> Message Patient
           </button>
-          {onScheduleClient && <button type="button" onClick={onScheduleClient} className="btn btn-secondary" style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={14} /> Schedule</button>}
+          {onScheduleClient && <button type="button" onClick={onScheduleClient} className="btn btn-ghost detail-action" style={{ padding: '8px 14px', fontSize: '13px' }}><Calendar size={14} /> Schedule</button>}
+          <button
+            onClick={() => setShowProtocolBuilder(true)}
+            className="btn btn-ghost detail-action"
+            style={{ padding: '8px 14px', fontSize: '13px' }}
+          >
+            <Settings2 size={14} /> Adjust Protocol
+          </button>
         </div>
-      </div>
+      </section>
 
-      {/* Horizontally Scrollable Navigation Tabs */}
+      {/* Detail tabs: one row on wider screens, a 2×2 segmented control on phones. */}
       <div className="clinician-tabs-scroll">
         {[
-          { id: 'eeg', label: 'EEG Overview & Spectral PSD' },
+          { id: 'eeg', label: 'EEG Overview' },
           { id: 'protocol', label: 'Protocol Settings' },
           { id: 'brainmaps', label: `QEEG Records (${brainMaps.length})` },
           { id: 'sessions', label: getSessionTabLabel(sessionContentState, sessions.length) },
         ].map((tab) => (
           <button
             key={tab.id}
+            type="button"
             onClick={() => setActiveTab(tab.id as any)}
-            style={{
-              background: 'none',
-              border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid var(--brand-primary)' : '2px solid transparent',
-              color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontWeight: activeTab === tab.id ? 600 : 500,
-              fontSize: '13px',
-              padding: '8px 4px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              transition: 'all 0.15s ease',
-            }}
+            aria-current={activeTab === tab.id ? 'true' : undefined}
+            className={`clinician-tab${activeTab === tab.id ? ' is-active' : ''}`}
           >
             {tab.label}
           </button>
@@ -336,12 +312,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   Spectral Power Distribution (µV²) Across Sessions
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Comparable BrainFlow Welch band powers. These overview bands are fixed; the active reward frequencies are shown in Protocol Settings.
+                  BrainFlow Welch band power per session, in fixed overview bands. Reward bands are in Protocol Settings.
                 </p>
               </div>
 
               {/* Chart Legend */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11px' }}>
+              {psdGroups.length > 0 && <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-delta)' }} />
                   <span>Delta ({STANDARD_EEG_BANDS_HZ.delta.min}–{STANDARD_EEG_BANDS_HZ.delta.max} Hz)</span>
@@ -358,7 +334,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-beta)' }} />
                   <span>Beta ({STANDARD_EEG_BANDS_HZ.beta.min}–{STANDARD_EEG_BANDS_HZ.beta.max} Hz)</span>
                 </div>
-              </div>
+              </div>}
             </div>
 
             {sessionContentState === 'loading' ? (
@@ -400,16 +376,22 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </svg>
             </div>}
             {psdGroups.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
-                {psdGroups.map((row) => (
-                  <div key={`values-${row.id}`}>
-                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV²
-                  </div>
-                ))}
+              <div className="scroll-x" style={{ marginTop: '10px' }}>
+                <table className="psd-table">
+                  <thead><tr><th scope="col">Session</th><th scope="col">Delta</th><th scope="col">Theta</th><th scope="col">Alpha</th><th scope="col">Beta</th></tr></thead>
+                  <tbody>
+                    {psdGroups.map((row) => (
+                      <tr key={`values-${row.id}`}>
+                        <th scope="row">{row.label}</th><td>{row.bands!.delta}</td><td>{row.bands!.theta}</td><td>{row.bands!.alpha}</td><td>{row.bands!.beta}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-secondary)' }}>Values in µV².</div>
               </div>
             )}
             {invalidPsdRows.length > 0 && sessionsState === 'ready' && (
-              <div role="status" style={{ marginTop: '8px', color: 'var(--status-alert)', fontSize: '11px' }}>
+              <div role="status" style={{ marginTop: '10px', color: 'var(--text-secondary)', fontSize: '12px' }}>
                 {invalidPsdRows.length} session{invalidPsdRows.length === 1 ? '' : 's'} omitted because comparable BrainFlow Welch band power is unavailable or incomplete.
               </div>
             )}
@@ -472,26 +454,50 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
       {/* TAB 2: PROTOCOL SETTINGS */}
       {activeTab === 'protocol' && (
-        <div className="card-clinician" style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#FFFFFF' }}>
+        <div className="card-clinician" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px', backgroundColor: '#FFFFFF' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                Active Protocol: {client.customProtocolConfig
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Active protocol</div>
+              <h3 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: '2px 0 0' }}>
+                {client.customProtocolConfig
                   ? (assignedProtocol ? getProtocolAssignmentAlias(client.customProtocolConfig, assignedProtocol) : undefined) || client.customProtocolConfig.name || 'Unavailable'
                   : evidenceProtocolName}
               </h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                {client.customProtocolConfig && <>Evidence-Based Protocol: <strong>{client.customProtocolConfig.name}</strong> • </>}
-                10-20 Site: <strong>{client.customProtocolConfig?.montageSite || 'Unavailable'}</strong> • Channel mapping: <strong>{client.customProtocolConfig?.museChannelMapping || 'Unavailable'}</strong>
-              </p>
+              {client.customProtocolConfig && (
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Based on {client.customProtocolConfig.name}</div>
+              )}
             </div>
-            <button onClick={() => setShowProtocolBuilder(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '6px 12px' }}>
+            <button onClick={() => setShowProtocolBuilder(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>
               Edit Protocol
             </button>
           </div>
 
-          <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, padding: '12px 14px' }}>
-            <strong>Clinical notes:</strong> {client.customProtocolConfig?.clinicalNotes || 'Unavailable — no notes are stored with this assignment.'}
+          {protocolRuntime.ok ? (
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Training rule</div>
+              <FactGrid facts={describeProtocolRule(protocolRuntime.config)} minColumnWidth={130} />
+            </div>
+          ) : (
+            <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '13px' }}>
+              <strong>Training unavailable:</strong> {protocolRuntime.error}
+            </div>
+          )}
+
+          <div style={{ paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Documentation</div>
+            <FactGrid
+              minColumnWidth={160}
+              facts={[
+                { label: '10–20 site', value: client.customProtocolConfig?.montageSite || 'Not set' },
+                { label: 'Channel mapping', value: client.customProtocolConfig?.museChannelMapping || 'Not set' },
+              ]}
+            />
+            <div style={{ marginTop: '14px', padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Clinical notes</div>
+              <p style={{ margin: '4px 0 0', maxWidth: '72ch', fontSize: '13px', lineHeight: 1.55, color: client.customProtocolConfig?.clinicalNotes ? 'var(--text-primary)' : 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
+                {client.customProtocolConfig?.clinicalNotes || 'No notes are stored with this assignment.'}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -607,9 +613,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       <div className="card-clinician" style={{ padding: '18px 16px', backgroundColor: '#FFFFFF', display: activeTab === 'sessions' ? 'block' : 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Session Logs</h3>
-            <button onClick={() => { void handleDownloadPDF(); }} disabled={pdfExportDisabled} className="btn btn-dense" style={{ fontSize: '11px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={12} /> Export PDF
-            </button>
           </div>
 
           {sessionContentState === 'loading' ? (
@@ -617,44 +620,63 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           ) : sessionContentState === 'error' ? (
             <div role="alert" style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session logs could not be loaded.</div>
           ) : sessions.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {sessions.map((s) => (
+            <div className="session-log" role="list" aria-label="Session logs">
+              <div className="session-log-head" aria-hidden="true">
+                <span>Session</span><span>Duration</span><span>In zone</span><span>Coherence</span><span>Mood</span><span>Reflection</span><span />
+              </div>
+              {sessions.map((s) => {
+                const isOpen = openedSession?.id === s.id;
+                const durationText = typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : null;
+                const hasCoherence = typeof s.averageCoherence === 'number' && Number.isFinite(s.averageCoherence);
+                const sessionDate = typeof s.timestamp === 'number' && Number.isFinite(s.timestamp) && s.timestamp > 0
+                  ? new Date(s.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                  : (s.date || 'Date unavailable');
+                return (
                 <React.Fragment key={s.id}>
-                <div
-                  style={{
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '10px 12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    backgroundColor: 'var(--surface-patient-base)',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '13px' }}>
-                      {s.date || 'Date unavailable'} • {s.experience ? s.experience.replace(/-/g, ' ').toUpperCase() : 'EXPERIENCE UNAVAILABLE'}
+                <div role="listitem" className={`session-log-row${isOpen ? ' is-open' : ''}`}>
+                  <div className="sl-main">
+                    <div className="sl-title">
+                      {s.experience ? experienceDisplayName(s.experience) : 'Experience unavailable'}
+                      {s.isDemo && <span className="detail-chip" style={{ fontSize: '11px', padding: '1px 7px' }}>Demo</span>}
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} | In-Zone: {finiteMetric(s.timeInZonePercent, '%')} | Coherence: {finiteMetric(s.averageCoherence, '%')}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Protocol: {s.protocol ? s.protocol.replace(/-/g, ' ') : 'Not recorded'} · Mood: {s.moodRating == null ? 'Not recorded' : `${s.moodRating}/5`} · Reflection: {s.patientNotes ? 'Recorded' : 'Not recorded'}</div>
-                    {s.clinicianNotes && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
-                        Clinician: {s.clinicianNotes}
-                      </div>
-                    )}
+                    <div className="sl-sub">{sessionDate} · {s.protocol ? protocolDisplayName(s.protocol) : 'Protocol not recorded'}</div>
+                    {/* Phones: one quiet line instead of a chip per value; the columns below carry it on wider screens. */}
+                    <div className="sl-meta" aria-hidden="true">{[durationText ?? 'Duration unavailable', hasCoherence ? `Coherence ${finiteMetric(s.averageCoherence, '%')}` : null, s.moodRating == null ? null : `Mood ${s.moodRating}/5`, s.patientNotes ? 'Reflection added' : null].filter(Boolean).join(' · ')}</div>
                   </div>
-                  <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }}>Open {s.id}</button>
-                  <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <FileText size={12} /> PDF
-                  </button>
+                  <div className="sl-cell"><span className="sl-label">Duration </span>{durationText ?? 'Unavailable'}</div>
+                  <div className="sl-cell sl-zone"><span className="sl-label">In zone </span>{finiteMetric(s.timeInZonePercent, '%')}<span className="sl-zone-caption" aria-hidden="true">in zone</span></div>
+                  <div className={`sl-cell${hasCoherence ? '' : ' sl-empty'}`}><span className="sl-label">Coherence </span>{finiteMetric(s.averageCoherence, '%')}</div>
+                  <div className={`sl-cell${s.moodRating == null ? ' sl-empty' : ''}`}><span className="sl-label">Mood </span>{s.moodRating == null ? '—' : `${s.moodRating}/5`}</div>
+                  <div className={`sl-cell${s.patientNotes ? '' : ' sl-empty'}`}><span className="sl-label">Reflection </span>{s.patientNotes ? 'Added' : '—'}</div>
+                  <div className="sl-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isOpen) { setSelectedSession(null); return; }
+                        setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] }));
+                        setSelectedSession({ clientId: client.id, sessionId: s.id });
+                      }}
+                      aria-label={`${isOpen ? 'Close' : 'Open'} ${s.id}`}
+                      aria-expanded={isOpen}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '12px', padding: '5px 14px' }}
+                    >
+                      {isOpen ? 'Close' : 'Open'}
+                    </button>
+                    <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <FileText size={13} /> PDF
+                    </button>
+                  </div>
+                  {s.clinicianNotes && (
+                    <div className="sl-feedback">
+                      Clinician: {s.clinicianNotes}
+                    </div>
+                  )}
                 </div>
-                {openedSessions[client.id]?.includes(s.id) && <div style={{ display: openedSession?.id === s.id ? 'block' : 'none' }}><ClinicianSessionDetail key={`${client.id}-${s.id}`} session={s} onSaved={handleFeedbackSaved} /></div>}
+                {openedSessions[client.id]?.includes(s.id) && <div style={{ display: isOpen ? 'block' : 'none' }}><ClinicianSessionDetail key={`${client.id}-${s.id}`} session={s} onSaved={handleFeedbackSaved} /></div>}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>

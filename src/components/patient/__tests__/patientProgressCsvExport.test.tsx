@@ -49,9 +49,9 @@ describe('Progress CSV caller', () => {
     expect(text()).not.toContain('Still Waters');
     expect(text()).not.toContain('Skyline Pilot');
     const gardenCard = () => renderer.root.findAllByType('div').find((node) => node.children.includes('Garden Keeper'))!.parent!;
-    expect(gardenCard().props.style.opacity).toBe(0.45);
+    expect(gardenCard().props['aria-label']).toContain('Garden Keeper: locked');
     await act(async () => { renderer.update(<ProgressHistory client={{ ...client, tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: [], lastWatered: '' } }} />); });
-    expect(gardenCard().props.style.opacity).toBe(1);
+    expect(gardenCard().props['aria-label']).toContain('Garden Keeper: earned');
     renderer.unmount();
   });
 

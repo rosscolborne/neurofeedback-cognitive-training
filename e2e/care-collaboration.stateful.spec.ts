@@ -117,7 +117,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await invitePanel.getByPlaceholder('patient@example.com', { exact: true }).fill(patientEmail!);
             await invitePanel.getByText('Primary Clinical Indication', { exact: true }).locator('..').locator('select').selectOption('ADHD (Inattentive)');
             await invitePanel.getByText('Assigned Protocol', { exact: true }).locator('..').locator('select').selectOption('theta-beta-ratio');
-            await invitePanel.getByPlaceholder('Unavailable', { exact: true }).fill('3');
+            await invitePanel.getByPlaceholder('e.g. 3', { exact: true }).fill('3');
             await invitePanel.getByRole('button', { name: 'Create Invitation', exact: true }).click();
 
             const createdPanel = clinician.page.getByRole('heading', { name: 'Invitation created', exact: true }).locator('..');
@@ -187,8 +187,8 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await expect(interval).toContainText('Last 90 days');
             await yearToDate.click();
             await expect(interval).toContainText('Year to date');
-            await expect(clinician.page.getByText('This is not a clinical outcome or significance claim.', { exact: false }).or(
-                clinician.page.getByText('Unavailable — at least two sessions with recorded in-zone measurements are required.', { exact: true }),
+            await expect(clinician.page.getByText('not a clinical outcome or significance claim.', { exact: false }).or(
+                clinician.page.getByText('Needs at least two sessions with a recorded in-zone measurement.', { exact: true }),
             )).toBeVisible();
 
             await clinician.page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -270,7 +270,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await createDialog.getByLabel('Patient', { exact: true }).selectOption({ label: patientName });
             await createDialog.getByLabel('Date', { exact: true }).fill(futureDate(45));
             await createDialog.getByLabel('Local time', { exact: true }).fill('11:20');
-            await createDialog.getByLabel('IANA timezone', { exact: true }).fill('America/Toronto');
+            await createDialog.getByLabel('Timezone', { exact: true }).fill('America/Toronto');
             await createDialog.getByLabel('Duration (minutes)', { exact: true }).fill('45');
             await createDialog.getByLabel('Type', { exact: true }).selectOption('remote-training');
             await createDialog.getByLabel('Notes', { exact: true }).fill(appointmentLabel);

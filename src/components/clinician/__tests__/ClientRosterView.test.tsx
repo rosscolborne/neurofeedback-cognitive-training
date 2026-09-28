@@ -81,7 +81,7 @@ describe('ClientRosterView blank-profile editing', () => {
     act(() => renderer.root.findByProps({ title: 'Edit Patient' }).props.onClick({ stopPropagation: vi.fn() }));
     const selects = renderer.root.findAllByType('select');
     expect(selects.map((select) => select.props.value)).toContain('');
-    const weeklyTarget = renderer.root.findAllByType('input').find((input) => input.props.placeholder === 'Unavailable');
+    const weeklyTarget = renderer.root.findAllByType('input').find((input) => input.props.placeholder === 'e.g. 3');
     expect(weeklyTarget?.props.value).toBe('');
 
     await act(async () => {
@@ -114,7 +114,7 @@ describe('ClientRosterView blank-profile editing', () => {
     const inputs = renderer.root.findAllByType('input');
     act(() => inputs.find((input) => input.props.placeholder === 'e.g. Alex Morgan')!.props.onChange({ target: { value: 'New Patient' } }));
     expect(renderer.root.findAllByType('select').map((select) => select.props.value)).toEqual(expect.arrayContaining(['', '']));
-    expect(inputs.find((input) => input.props.placeholder === 'Unavailable')?.props.value).toBe('');
+    expect(inputs.find((input) => input.props.placeholder === 'e.g. 3')?.props.value).toBe('');
 
     await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
     expect(onAddClient).not.toHaveBeenCalled();
@@ -139,7 +139,7 @@ describe('ClientRosterView blank-profile editing', () => {
     const selects = renderer.root.findAllByType('select');
     act(() => selects[0].props.onChange({ target: { value: '' } }));
     act(() => selects[1].props.onChange({ target: { value: '' } }));
-    const weeklyTarget = renderer.root.findAllByType('input').find((input) => input.props.placeholder === 'Unavailable')!;
+    const weeklyTarget = renderer.root.findAllByType('input').find((input) => input.props.placeholder === 'e.g. 3')!;
     act(() => weeklyTarget.props.onChange({ target: { value: '' } }));
     await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
 

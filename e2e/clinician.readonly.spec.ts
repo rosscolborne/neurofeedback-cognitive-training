@@ -6,6 +6,11 @@ function reportMetric(page: import('@playwright/test').Page, label: string) {
     return page.getByText(label, { exact: true }).locator('../..');
 }
 
+/** PDF text in drawing order (each caption followed by its value), with whitespace collapsed. */
+function pdfReadingText(path: string): string {
+    return execFileSync('pdftotext', ['-raw', path, '-'], { encoding: 'utf8' }).replace(/\s+/g, ' ');
+}
+
 function patientRows(page: import('@playwright/test').Page) {
     return page.getByRole('heading', { name: 'Patient interval activity', exact: true })
         .locator('../..').locator('tbody tr');
@@ -55,7 +60,7 @@ test('linked patient detail shows honest telemetry and QEEG evidence states', as
     await page.getByRole('button', { name: /^Session Logs/ }).click();
     await expect(page.getByText('Loading session logs…', { exact: true })).toBeHidden();
     await expect(page.getByText('No training sessions recorded yet for this patient.', { exact: true })
-        .or(page.getByText(/Duration: (?:\d+ min|Unavailable) \| In-Zone:/).first())).toBeVisible();
+        .or(page.getByRole('list', { name: 'Session logs' }).getByRole('listitem').first())).toBeVisible();
 });
 
 test('Settings reloads the saved clinic identity without editing it', async ({ page }) => {
@@ -86,10 +91,10 @@ test('report range totals agree with visible patient rows and PDF export', async
         const interval = (await page.getByText(/^Interval:/).innerText()).split(' · Source:')[0].replace('Interval: ', '');
         expect(interval).toMatch(/\w+ \d+, \d{4} – \w+ \d+, \d{4} \([^)]+\)/);
         intervals.push(interval);
-        const total = Number((await reportMetric(page, 'Persisted Sessions').innerText()).match(/Persisted Sessions\s*(\d+)/)?.[1]);
+        const total = Number((await reportMetric(page, 'Sessions recorded').innerText()).match(/Sessions recorded\s*(\d+)/)?.[1]);
         expect(Number.isFinite(total)).toBe(true);
         const rows = patientRows(page);
-        const cohort = Number((await reportMetric(page, 'Selected Cohort').innerText()).match(/Selected Cohort\s*(\d+)/)?.[1]);
+        const cohort = Number((await reportMetric(page, 'Patients in cohort').innerText()).match(/Patients in cohort\s*(\d+)/)?.[1]);
         selectedCohort = cohort;
         await expect(rows).toHaveCount(cohort || 1);
         const rowCounts = await rows.locator('td:nth-child(2)').allInnerTexts();
@@ -100,7 +105,7 @@ test('report range totals agree with visible patient rows and PDF export', async
     expect(intervals[0]).not.toBe(intervals[1]);
     expect(intervals[2]).toMatch(/^Jan 1, \d{4} – /);
     expect(selectedCohort, 'The read-only clinician fixture needs a reportable patient').toBeGreaterThan(0);
-    const sampleCount = Number((await reportMetric(page, 'Sample Workspace Records').innerText()).match(/Sample Workspace Records\s*(\d+)/)?.[1]);
+    const sampleCount = Number((await reportMetric(page, 'Sample records').innerText()).match(/Sample records\s*(\d+)/)?.[1]);
     expect(sampleCount).toBe(0);
 
     const firstPatientRow = patientRows(page).first();
@@ -110,13 +115,13 @@ test('report range totals agree with visible patient rows and PDF export', async
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Practice Summary (PDF)', exact: true }).click();
     const download = await downloadPromise;
-    const pdfText = execFileSync('pdftotext', ['-layout', await download.path(), '-'], { encoding: 'utf8' });
+    const pdfText = pdfReadingText(await download.path());
     for (const [label, expected] of [
         ['title', 'Practice Session Activity Report'],
-        ['interval', `Reporting interval: ${intervals[2].replace(/ \([^)]+\)$/, '')}`],
-        ['cohort', `Selected cohort: ${selectedCohort} patient profiles`],
-        ['session total', `Persisted sessions: ${totals[2]}`],
-        ['sample count', 'Sample workspace records: 0'],
+        ['interval', `REPORTING INTERVAL ${intervals[2].replace(/ \([^)]+\)$/, '')}`],
+        ['cohort', `PATIENTS IN COHORT ${selectedCohort}`],
+        ['session total', `SESSIONS RECORDED ${totals[2]}`],
+        ['sample count', 'Sample workspace records 0'],
         ['patient row', patientName],
         ['missing-value note', 'Unavailable values are not replaced'],
     ] as const) {
@@ -126,12 +131,12 @@ test('report range totals agree with visible patient rows and PDF export', async
     const patientDownloadPromise = page.waitForEvent('download');
     await firstPatientRow.getByRole('button', { name: 'PDF', exact: true }).click();
     const patientDownload = await patientDownloadPromise;
-    const patientPdfText = execFileSync('pdftotext', ['-layout', await patientDownload.path(), '-'], { encoding: 'utf8' });
+    const patientPdfText = pdfReadingText(await patientDownload.path());
     for (const [label, expected] of [
         ['title', 'Patient Session Activity Report'],
-        ['patient', `Patient: ${patientName}`],
-        ['interval', `Reporting interval: ${intervals[2].replace(/ \([^)]+\)$/, '')}`],
-        ['session total', `Persisted sessions: ${patientSessions}`],
+        ['patient', patientName],
+        ['interval', `REPORTING INTERVAL ${intervals[2].replace(/ \([^)]+\)$/, '')}`],
+        ['session total', `SESSIONS RECORDED ${patientSessions}`],
     ] as const) {
         expect(patientPdfText.includes(expected), `Patient PDF ${label} matches the visible report`).toBe(true);
     }

@@ -98,7 +98,7 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
       await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
       await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
       await clinician.locator('form select').nth(1).selectOption('alpha-enhancement');
-      await clinician.getByPlaceholder('Unavailable').fill('3');
+      await clinician.getByPlaceholder('e.g. 3').fill('3');
       await clinician.getByRole('button', { name: 'Create Invitation' }).click();
       await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
       code = await findPendingLifecycleInvitation(fixture.clinician.uid, fixture.patient.email);
@@ -212,7 +212,7 @@ test('unlink preserves the training list and Garden; a new invitation replaces t
     await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
     await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
     await clinician.locator('form select').nth(1).selectOption('alpha-enhancement');
-    await clinician.getByPlaceholder('Unavailable').fill('3');
+    await clinician.getByPlaceholder('e.g. 3').fill('3');
     await clinician.getByRole('button', { name: 'Create Invitation' }).click();
     await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
     const code = await findPendingLifecycleInvitation(fixture.clinician.uid, fixture.patient.email);
@@ -257,7 +257,7 @@ test('active linked patient cannot be reinvited until removed from the clinician
       await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
       await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
       await clinician.locator('form select').nth(1).selectOption('theta-beta-ratio');
-      await clinician.getByPlaceholder('Unavailable').fill('3');
+      await clinician.getByPlaceholder('e.g. 3').fill('3');
       await clinician.getByRole('button', { name: 'Create Invitation' }).click();
     };
 

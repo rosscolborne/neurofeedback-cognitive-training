@@ -1,20 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
+import { protocolDisplayName } from '../../services/protocols';
+import { MOODS } from './sessionMoods';
+import { FactGrid, type Fact } from '../ui/FactGrid';
 import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
 
 interface PostSessionSummaryProps {
   session: SessionRecord;
   onViewProgress: () => void;
 }
-
-const MOODS: Array<{ value: 1 | 2 | 3 | 4 | 5; label: string; score: string }> = [
-  { value: 1, label: 'Tense', score: '1/5' },
-  { value: 2, label: 'Neutral', score: '2/5' },
-  { value: 3, label: 'Calm', score: '3/5' },
-  { value: 4, label: 'Focused', score: '4/5' },
-  { value: 5, label: 'Flow State', score: '5/5' },
-];
 
 const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
   session,
@@ -71,22 +66,28 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
   };
 
   const timeSeries = session.timeSeries || [];
-
-  // Compute chart from REAL recorded data — theta/beta ratio over time
-  // Find min/max for proper Y-axis scaling
-  const ratioValues = timeSeries.map(d => d.thetaBetaRatio);
-  const dataMin = ratioValues.length > 0 ? Math.min(...ratioValues) : 0;
-  const dataMax = ratioValues.length > 0 ? Math.max(...ratioValues) : 3;
-  const yRange = Math.max(0.5, dataMax - dataMin); // Avoid division by zero
-  const chartPadding = yRange * 0.1;
-
-  const points = timeSeries.map((d, i) => {
-    const x = (i / Math.max(1, timeSeries.length - 1)) * 340 + 20;
-    // Map real thetaBetaRatio to Y pixel: lower ratio = higher on chart (better)
-    const normalized = (d.thetaBetaRatio - (dataMin - chartPadding)) / (yRange + 2 * chartPadding);
-    const y = 20 + normalized * 120; // 20px top margin, 120px chart height
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
+  const zoneTimeline = timeSeries.map((point) => point.inZone === true);
+  const inZonePointCount = zoneTimeline.filter(Boolean).length;
+  const secondaryFacts: Fact[] = [
+    ...(session.averageTrainingScore != null ? [{ label: 'Training score', value: `${session.averageTrainingScore}/100` }] : []),
+    ...(session.averageMindfulness != null ? [{ label: 'Mindfulness', value: `${session.averageMindfulness}/100` }] : []),
+    ...(session.averageCoherence != null ? [{ label: 'Coherence', value: `${session.averageCoherence}%` }] : []),
+  ];
+  const detailFacts: Fact[] = [
+    { label: 'Protocol', value: protocolDisplayName(session.protocol), wide: true },
+    ...(session.isDemo
+      ? [{ label: 'Band power', value: 'Not measured in Demo' }]
+      : session.averageBands
+        ? [
+            { label: 'Theta', value: `${session.averageBands.theta.toFixed(1)} µV` },
+            { label: 'Alpha', value: `${session.averageBands.alpha.toFixed(1)} µV` },
+            { label: 'SMR', value: `${session.averageBands.smr.toFixed(1)} µV` },
+            { label: 'Beta', value: `${session.averageBands.beta.toFixed(1)} µV` },
+          ]
+        : [{ label: 'Band power', value: 'Unavailable' }]),
+    { label: 'Target adjustments', value: String(session.adaptiveAdjustmentsCount) },
+    { label: 'Recorded points', value: String(timeSeries.length) },
+  ];
 
   return (
     <div
@@ -127,132 +128,73 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
         </p>
         {session.isDemo && (
           <p role="status" style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>
-            Training Demo · Synthetic acquisition. Feedback below is simulated, not measured EEG.
+            Training Demo — these results are simulated, not measured EEG.
           </p>
         )}
       </div>
 
-      {/* Primary Metrics Card */}
-      <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Session duration</span>
-          <span className="font-mono" style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {formatDuration(session.durationSeconds)}
-          </span>
-        </div>
-        <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-            {session.isDemo ? 'Synthetic time in target zone' : 'Time in target training zone'}
-          </span>
-          <span className="font-mono" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--brand-primary)' }}>
-            {session.timeInZonePercent}%
-          </span>
-        </div>
-        <>
-          <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Training score (baseline-relative)</span>
-            <span className="font-mono" style={{ fontSize: '16px', fontWeight: 700, color: '#7B68AE' }}>
-              {session.averageTrainingScore == null ? '--' : session.averageTrainingScore}
-            </span>
+      {/* Primary result: time in zone, with duration and any measured scores as secondary figures. */}
+      <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
+          <div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              {session.isDemo ? 'Simulated time in target zone' : 'Time in target zone'}
+            </div>
+            <div style={{ fontSize: '40px', fontWeight: 700, lineHeight: 1.1, color: 'var(--brand-primary)' }}>
+              {session.timeInZonePercent}%
+            </div>
           </div>
-        </>
-        {session.averageMindfulness != null && (
-          <>
-            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Average mindfulness</span>
-              <span className="font-mono" style={{ fontSize: '16px', fontWeight: 600, color: '#7B68AE' }}>
-                {session.averageMindfulness}
-              </span>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Duration</div>
+            <div className="font-mono" style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {formatDuration(session.durationSeconds)}
             </div>
-          </>
-        )}
-        {(session.averageValence != null || session.averageArousal != null) && (
-          <>
-            <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Valence / Arousal</span>
-              <span className="font-mono" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {session.averageValence?.toFixed(2) ?? '—'} / {session.averageArousal?.toFixed(2) ?? '—'}
-              </span>
-            </div>
-          </>
-        )}
-        <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Inter-hemispheric coherence</span>
-          <span className="font-mono" style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {session.averageCoherence == null ? '--' : `${session.averageCoherence}%`}
-          </span>
+          </div>
         </div>
+        {secondaryFacts.length > 0 && (
+          <FactGrid facts={secondaryFacts} minColumnWidth={110} style={{ paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }} />
+        )}
       </div>
 
-      {/* Performance Time-Series Chart */}
+      {/* When the session was in zone, from the recorded points (protocol-independent). */}
       <div className="card-patient" style={{ padding: '16px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-          {session.isDemo ? 'Synthetic Feedback Trajectory' : 'Neural Stability Trajectory & In-Zone Windows'}
+        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
+          {session.isDemo ? 'Simulated time in zone' : 'In zone over time'}
         </div>
-        <svg viewBox="0 0 380 150" style={{ width: '100%', height: '130px', overflow: 'visible' }}>
-          <defs>
-            <linearGradient id="chartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#E8967A" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="#E8967A" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-          <polygon
-            points={`20,140 ${points} 360,140`}
-            fill="url(#chartGrad)"
-          />
-          <polyline
-            fill="none"
-            stroke="#E8967A"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={points}
-          />
-          <line x1="20" y1="140" x2="360" y2="140" stroke="var(--border-default)" strokeWidth="1" />
-        </svg>
+        {zoneTimeline.length >= 2 ? (
+          <>
+            <div role="img" aria-label={`In zone for ${inZonePointCount} of ${zoneTimeline.length} recorded moments`} style={{ display: 'flex', gap: '1px', height: '28px', borderRadius: '6px', overflow: 'hidden' }}>
+              {zoneTimeline.map((inZone, index) => (
+                <span key={index} style={{ flex: 1, background: inZone ? 'var(--brand-primary)' : 'var(--surface-patient-recessed)' }} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              <span>Start</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <span aria-hidden="true" style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--brand-primary)' }} /> In zone
+              </span>
+              <span>End</span>
+            </div>
+          </>
+        ) : (
+          <p role="status" style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Not enough session data to show a timeline.
+          </p>
+        )}
       </div>
 
-      {/* Key Insights Section — computed from real session data */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <CheckCircle size={16} color="var(--brand-primary)" />
-          <span>Session Summary</span>
-        </div>
-        <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-          • Trained for {Math.round(session.durationSeconds / 60)} minutes using {session.protocol.replace(/-/g, ' ')} protocol.<br />
-          • Spent {session.timeInZonePercent}% of active training time in the {session.isDemo ? 'simulated target zone' : 'target neural zone'}.<br />
-          {session.isDemo ? (
-            <>• Measured average band powers: unavailable in Training Demo.<br /></>
-          ) : session.averageBands ? (
-            <>• Average band powers: θ={session.averageBands.theta.toFixed(1)} µV, α={session.averageBands.alpha.toFixed(1)} µV, SMR={session.averageBands.smr.toFixed(1)} µV, β={session.averageBands.beta.toFixed(1)} µV.<br /></>
-          ) : (
-            <>• Average band powers: unavailable.<br /></>
-          )}
-          {session.averageMindfulness != null && (
-            <>• Average mindfulness score: {session.averageMindfulness}/100.<br /></>
-          )}
-          {session.averageTrainingScore != null && (
-            <>• Training score (baseline-relative): {session.averageTrainingScore}/100.<br /></>
-          )}
-          {session.adaptiveAdjustmentsCount > 0 && (
-            <>• Adaptive engine made {session.adaptiveAdjustmentsCount} threshold adjustment{session.adaptiveAdjustmentsCount > 1 ? 's' : ''} (final threshold: {session.finalThreshold.toFixed(2)}).<br /></>
-          )}
-          • {timeSeries.length} data points recorded over the session.
-        </div>
-      </div>
+      <details className="card-patient" style={{ padding: '14px 16px' }}>
+        <summary style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Session details</summary>
+        <FactGrid facts={detailFacts} minColumnWidth={110} style={{ marginTop: '14px' }} />
+      </details>
 
       {/* Clinical Subjective Mood Check-in */}
       <div className="card-patient" style={{ padding: '16px' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Heart size={15} color="var(--brand-primary)" />
-          <span>Subjective Mental State Rating</span>
+          <span>How do you feel?</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '6px' }}>
           {MOODS.map(m => (
             <button
               key={m.value}
@@ -282,13 +224,13 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
       {/* Patient Notes */}
       <div className="card-patient" style={{ padding: '16px' }}>
         <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-          Personal Training Journal (Optional)
+          Journal (optional)
         </label>
         <textarea
           value={patientNotes}
           onChange={e => { if (pending.current) return; setPatientNotes(e.target.value); setIsSaved(false); }}
           disabled={isSaving}
-          placeholder="Note any cognitive sensations, focus shifts, or ambient environment details..."
+          placeholder="How did the session feel? Anything that helped or distracted you?"
           style={{
             width: '100%',
             height: '65px',

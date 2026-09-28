@@ -31,6 +31,11 @@ test('linked patient and clinician exchange persisted messages while an unrelate
     const patientComposer = patient.getByLabel('Message your clinician');
     await expect(patientComposer).toBeEnabled();
     await patientComposer.fill('A longer draft that wraps across multiple lines on a phone screen. '.repeat(4));
+    // While typing on a phone the tab bar steps aside for the keyboard; once focus leaves, the
+    // wrapped draft still sits above the tab bar rather than under it.
+    await expect(patient.locator('nav').last()).toBeHidden();
+    await patientComposer.blur();
+    await expect(patient.locator('nav').last()).toBeVisible();
     const composerBox = await patientComposer.boundingBox();
     const navigationBox = await patient.locator('nav').last().boundingBox();
     expect(composerBox && navigationBox).toBeTruthy();

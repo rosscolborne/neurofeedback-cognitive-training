@@ -14,7 +14,7 @@ async function submitInvitation(page: Page, email: string, name = 'Invited Patie
   await page.getByPlaceholder('patient@example.com').fill(email);
   await page.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
   await page.locator('form select').nth(1).selectOption('alpha-enhancement');
-  await page.getByPlaceholder('Unavailable').fill('3');
+  await page.getByPlaceholder('e.g. 3').fill('3');
   await page.getByRole('button', { name: 'Create Invitation' }).click();
 }
 
@@ -70,6 +70,50 @@ test('an already-linked patient cannot accept another pending invitation', async
     await page.getByRole('button', { name: 'Dismiss invitation' }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'already connected to a clinician' })).toHaveCount(0);
     await expect(page.getByText('Training Session', { exact: true })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('an invitation opened before logging out does not follow a later normal login', async ({ browser }) => {
+  const fixture = await seedLinkedPatient();
+  const code = await seedPendingLifecycleInvitation(fixture);
+  const context = await browser.newContext();
+  const conflict = (page: Page) => page.getByRole('alert').filter({ hasText: 'already connected to a clinician' });
+  try {
+    const page = await context.newPage();
+    await loginThroughUi(page, fixture.patient);
+    await arriveAtPatientDashboard(page);
+    await page.goto(`/#/connect/${code}`);
+    await expect(conflict(page)).toBeVisible();
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await page.getByRole('button', { name: /Log Out/ }).click();
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+    expect(await page.evaluate(() => sessionStorage.getItem('waveable_pending_invitation'))).toBeNull();
+
+    await loginThroughUi(page, fixture.patient);
+    await arriveAtPatientDashboard(page);
+    await expect(conflict(page)).toHaveCount(0);
+    await expect(page.getByText(code, { exact: true })).toHaveCount(0);
+    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
+      .toEqual({ pendingCount: 1, claimExists: true });
+  } finally {
+    await context.close();
+  }
+});
+
+test('reopening the invitation a patient already accepted shows no conflict', async ({ browser }) => {
+  const acceptedCode = 'LIFE-DONE-0001';
+  const fixture = await seedLinkedPatient({ acceptedInvitationId: acceptedCode });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await loginThroughUi(page, fixture.patient);
+    await arriveAtPatientDashboard(page);
+    await page.goto(`/#/connect/${acceptedCode}`);
+    await expect(page).toHaveURL(/\/#\/$/);
+    await expect(page.getByRole('alert').filter({ hasText: 'already connected to a clinician' })).toHaveCount(0);
+    expect(await page.evaluate(() => sessionStorage.getItem('waveable_pending_invitation'))).toBeNull();
   } finally {
     await context.close();
   }

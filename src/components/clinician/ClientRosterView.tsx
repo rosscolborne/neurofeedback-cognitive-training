@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
 import { timestampToMillis } from '../../services/dataMappers';
-import { resolvePatientProtocol } from '../../services/protocols';
+import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
 import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemplates';
 import { PatientAvatar } from './PatientAvatar';
 import { formatLastSessionDate } from './formatLastSessionDate';
@@ -17,6 +17,8 @@ import {
   Clock3,
   Copy,
   CheckCircle2,
+  ChevronRight,
+  Settings2,
 } from 'lucide-react';
 
 interface ClientRosterViewProps {
@@ -308,11 +310,12 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </section>
       )}
 
-      <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <button type="button" onClick={() => setShowHistory(!showHistory)} aria-expanded={showHistory} className="btn btn-ghost" style={{ alignSelf: 'flex-start', fontSize: '13px', fontWeight: 700 }}>
+      <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: showHistory ? '8px 12px 12px' : '4px 8px' }}>
+        <button type="button" onClick={() => setShowHistory(!showHistory)} aria-expanded={showHistory} className="btn btn-ghost" style={{ alignSelf: 'flex-start', gap: '6px', padding: '6px 8px', fontSize: '13px', fontWeight: 600 }}>
+          <ChevronRight size={15} aria-hidden="true" style={{ transform: showHistory ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s ease' }} />
           Invitation history ({historicalInvitations.length})
         </button>
-        {showHistory && historicalInvitations.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No past invitations yet.</div>}
+        {showHistory && historicalInvitations.length === 0 && <div style={{ padding: '0 8px', fontSize: '12px', color: 'var(--text-secondary)' }}>No past invitations yet.</div>}
         {showHistory && historicalInvitations.map((invitation) => {
           const status = invitationStatus(invitation);
           const date = status === 'accepted' ? invitation.acceptedAt : invitation.expiresAt;
@@ -440,8 +443,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span className={`status-tag status-tag-${client.status}`}>
-                      ● {client.status.toUpperCase()}
+                    <span className={`status-tag status-tag-${client.status}`} style={{ textTransform: 'capitalize' }}>
+                      {client.status}
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
@@ -451,7 +454,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                    {formatLastSessionDate(client.lastSessionDate)}
+                    {/* A missing last-session date with sessions on record is a gap in the data, not "no session". */}
+                    {!client.lastSessionDate && (client.completedSessionsCount ?? 0) > 0 ? 'Date unavailable' : formatLastSessionDate(client.lastSessionDate)}
                   </td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
                     {client.completedSessionsCount ?? 0}
@@ -507,31 +511,26 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <PatientAvatar avatarUrl={client.avatarUrl} size={42} />
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>{client.name}</span>
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{client.email}</div>
                 </div>
               </div>
-              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '10px', padding: '3px 8px' }}>
-                ● {client.status.toUpperCase()}
+              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '11px', padding: '3px 8px', textTransform: 'capitalize', flexShrink: 0 }}>
+                {client.status}
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
-              <span style={{ background: 'var(--surface-clinician-sidebar)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
-                {client.condition || 'Condition unavailable'}
-              </span>
-              <span style={{ color: 'var(--text-secondary)' }}>
-                Protocol: <strong>{getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? resolvePatientProtocol(client).replace(/-/g, ' ')}</strong>
-              </span>
+            <div className="detail-chips" style={{ marginTop: 0 }}>
+              <span className="detail-chip">{client.condition || 'Condition unavailable'}</span>
+              <span className="detail-chip"><Settings2 size={12} aria-hidden="true" /> {getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? protocolDisplayName(resolvePatientProtocol(client))}</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
-              <div>
-                <span style={{ color: 'var(--text-tertiary)' }}>Sessions: </span>
-                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
+              <div style={{ color: 'var(--text-secondary)' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{client.completedSessionsCount ?? 0}</span> {(client.completedSessionsCount ?? 0) === 1 ? 'session' : 'sessions'}
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {onMessageClient && <button type="button" onClick={(e) => { e.stopPropagation(); onMessageClient(client.id); }} className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '11px' }} aria-label={`Message ${client.name}`}><MessageSquare size={12} /> Message</button>}
@@ -662,7 +661,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     background: '#FFFFFF',
                   }}
                 >
-                  <option value="">Unavailable</option>
+                  <option value="" disabled={!editingClient}>{editingClient ? 'Not set' : 'Select an indication'}</option>
                   <option value="ADHD (Inattentive)">ADHD (Inattentive)</option>
                   <option value="ADHD (Combined)">ADHD (Combined)</option>
                   <option value="Generalized Anxiety">Generalized Anxiety</option>
@@ -671,7 +670,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: editingClient ? '1fr 1fr' : '1fr', gap: '10px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                     Assigned Protocol
@@ -688,7 +687,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       background: '#FFFFFF',
                     }}
                   >
-                    <option value="">Use default (Theta/Beta)</option>
+                    <option value="" disabled={!editingClient}>{editingClient ? 'Use default (Theta/Beta)' : 'Select a protocol'}</option>
                     <option value="theta-beta-ratio">Theta/Beta (Lubar)</option>
                     <option value="smr-enhancement">SMR (Sterman)</option>
                     <option value="alpha-enhancement">Alpha (Hardt)</option>
@@ -696,7 +695,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     <option value="beta-downtraining">Beta Downtraining</option>
                   </select>
                 </div>
-                <div>
+                {/* Invitations do not carry a status; it applies once the patient is on the roster. */}
+                {editingClient && <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                     Status
                   </label>
@@ -716,7 +716,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     <option value="paused">Paused</option>
                     <option value="completed">Completed</option>
                   </select>
-                </div>
+                </div>}
               </div>
 
               <div>
@@ -729,7 +729,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   step={1}
                   value={formSessionsPerWeek}
                   onChange={(e) => setFormSessionsPerWeek(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="Unavailable"
+                  placeholder="e.g. 3"
                   style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
                 />
               </div>

@@ -39,6 +39,10 @@
   --status-completed-bg: #F2EFF8;
   --status-alert: #C46060;
   --status-alert-bg: #FDF0F0;
+  /* Chip text on the -bg tints above: darker shades that keep small bold labels at WCAG AA (4.5:1). */
+  --status-active-text: #467034;
+  --status-paused-text: #735C1E;
+  --status-alert-text: #A84646;
 
   /* Color-Blind-Safe EEG Bands */
   --chart-delta: #4A90D9;  /* Solid Blue */
@@ -114,6 +118,11 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Form controls otherwise fall back to the browser's system and monospace fonts. */
+input, select, textarea, button {
+  font-family: inherit;
 }
 
 /* Typography Utility Classes */
@@ -355,6 +364,59 @@ html, body {
   cursor: pointer;
 }
 
+.messaging-suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 8px;
+}
+
+/* Phones: one swipeable row instead of three stacked cards above the composer. Each suggestion shows in
+   full on two lines and the next one peeks and fades at the edge, so the row reads as scrollable. */
+@media (max-width: 767px) {
+  .messaging-suggestions {
+    display: flex;
+    overflow-x: auto;
+    margin: 0 -12px;
+    padding: 0 12px 2px;
+    scroll-padding-inline: 12px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    /* Edges fade only while more suggestions lie beyond them (see useScrollEdges). */
+    --fade-start: 0px;
+    --fade-end: 32px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+  }
+
+  .messaging-suggestions[data-scroll-start='false'] {
+    --fade-start: 24px;
+  }
+
+  .messaging-suggestions[data-scroll-end='true'] {
+    --fade-end: 0px;
+  }
+
+  /* Trailing space after the last card, which some WebKit versions drop from padding-inline-end. */
+  .messaging-suggestions::after {
+    content: '';
+    flex: 0 0 4px;
+  }
+
+  .messaging-suggestions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .messaging-suggestions .messaging-suggestion {
+    flex: 0 0 78%;
+    width: auto;
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    white-space: normal;
+    scroll-snap-align: start;
+  }
+}
+
 .messaging-suggestion:hover {
   border-color: var(--text-tertiary);
   background: var(--surface-patient-recessed);
@@ -379,12 +441,12 @@ html, body {
 
 .status-tag-active {
   background-color: var(--status-active-bg);
-  color: var(--status-active);
+  color: var(--status-active-text);
 }
 
 .status-tag-paused {
   background-color: var(--status-paused-bg);
-  color: var(--status-paused);
+  color: var(--status-paused-text);
 }
 
 .status-tag-completed {
@@ -394,7 +456,1320 @@ html, body {
 
 .status-tag-alert {
   background-color: var(--status-alert-bg);
-  color: var(--status-alert);
+  color: var(--status-alert-text);
+}
+
+.status-tag-neutral {
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-secondary);
+}
+
+/* Label/value facts: structured metadata instead of "Label: value" prose. */
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--fact-min, 132px), 1fr));
+  gap: 14px 16px;
+  margin: 0;
+}
+
+.fact-grid > div {
+  min-width: 0;
+}
+
+.fact-grid > .fact-wide {
+  grid-column: 1 / -1;
+}
+
+.fact-grid dt {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.fact-grid dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 360px) {
+  .fact-grid {
+    --fact-min: 104px;
+    gap: 12px;
+  }
+
+  .card-patient {
+    padding: 18px;
+  }
+}
+
+/* A row of related figures in one card, separated by hairlines. */
+.stat-strip {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  text-align: center;
+}
+
+.stat-strip > div {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.stat-strip > div + div {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.stat-strip-value {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+  /* Wraps only between unit groups ("5 h" / "55 min") when a phone-width cell is too narrow. */
+  text-wrap: balance;
+}
+
+.stat-strip-label {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+/* When one value wraps ("5 h / 55 min"), values share a bottom line and labels a top line. */
+@supports (grid-template-rows: subgrid) {
+  .stat-strip {
+    grid-template-rows: auto auto;
+  }
+
+  .stat-strip > div {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+  }
+
+  .stat-strip-value {
+    align-self: end;
+  }
+}
+
+/* Small uppercase heading above a group of cards or rows. */
+.section-label {
+  margin: 0 0 8px;
+  padding-left: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Settings-style action rows grouped in one card. */
+.list-group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-patient-card);
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 16px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font: 500 15px/1.35 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.list-row:first-child {
+  border-top: 0;
+}
+
+.list-row:hover:not(:disabled) {
+  background: var(--surface-patient-base);
+}
+
+.list-row:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: -2px;
+}
+
+.list-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.list-row-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.list-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-row-hint {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.list-row-trail {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.list-row-danger,
+.list-row-danger .list-row-icon {
+  color: #A94444;
+}
+
+/* Live session feedback values: equal columns that shrink together on small phones. */
+.session-telemetry {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  text-align: center;
+}
+
+.session-telemetry > div {
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.session-telemetry > div + div {
+  border-left: 1px solid var(--border-default);
+}
+
+.session-telemetry-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  overflow-wrap: break-word;
+}
+
+.session-telemetry-group {
+  white-space: nowrap;
+}
+
+/* Labels wrap to different line counts; subgrid rows keep every value on one shared baseline,
+   with each label sitting directly above its value. */
+@supports (grid-template-rows: subgrid) {
+  .session-telemetry {
+    grid-template-rows: auto auto auto;
+  }
+
+  .session-telemetry > div {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
+
+  .session-telemetry-label {
+    align-self: end;
+  }
+}
+
+.session-telemetry-value {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.ng-match-clock-bar {
+  flex: 1;
+  max-width: 140px;
+}
+
+@media (max-width: 360px) {
+  .session-telemetry > div {
+    padding: 0 3px;
+  }
+
+  .session-telemetry-label {
+    font-size: 10px;
+  }
+
+  .session-telemetry-value {
+    font-size: 13px;
+  }
+
+  .ng-tracks button {
+    font-size: 12px;
+  }
+
+  /* Track names must never truncate: drop the icons, tighten padding, and wrap if a font runs wide. */
+  .ng-tracks button {
+    padding: 6px 4px;
+  }
+
+  .ng-tracks button svg {
+    display: none;
+  }
+
+  .ng-tracks button span {
+    overflow: visible;
+    text-align: center;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  /* Too narrow for clock, bar and rate badge side by side: the bar takes its own full-width row. */
+  .ng-match-clock {
+    flex-wrap: wrap;
+  }
+
+  .ng-match-clock-bar {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+.session-telemetry-note {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* Clinician patient header: facts as chips, actions as one group that recomposes on phones. */
+.detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  background: #FFFFFF;
+}
+
+.detail-header > div:first-child {
+  flex: 1 1 360px;
+}
+
+.detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: var(--surface-clinician-sidebar);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.detail-chip-valid {
+  background: var(--status-active-bg);
+  color: var(--status-active-text);
+}
+
+.detail-chip-expired {
+  background: var(--status-paused-bg);
+  color: var(--status-paused-text);
+}
+
+.detail-chip-invalid {
+  background: var(--status-alert-bg);
+  color: var(--status-alert-text);
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-action {
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+@media (max-width: 767px) {
+  .detail-header {
+    padding: 16px;
+  }
+
+  .detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .detail-action-primary {
+    grid-column: 1 / -1;
+  }
+
+  .detail-actions .btn {
+    white-space: nowrap;
+  }
+}
+
+/* Clinician session log: a scannable table on desktop, compact labelled cards on phones. */
+.session-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-log-head,
+.session-log-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 72px 64px 90px 56px 86px 148px;
+  align-items: center;
+  column-gap: 12px;
+}
+
+.session-log-head {
+  padding: 0 12px 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.session-log-row {
+  row-gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-patient-base);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.session-log-row.is-open {
+  border-color: var(--text-tertiary);
+  background: #FFFFFF;
+}
+
+.sl-main {
+  min-width: 0;
+}
+
+.sl-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.sl-sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-cell {
+  position: relative;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* "Unavailable" and "—" recede behind recorded values (secondary text, still AA). */
+.sl-empty {
+  color: var(--text-secondary);
+}
+
+.sl-zone {
+  font-weight: 700;
+}
+
+/* Column labels stay available to screen readers; the visible header row carries them on wide screens. */
+.sl-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sl-meta,
+.sl-zone-caption {
+  display: none;
+}
+
+.sl-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sl-feedback {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .session-log-head {
+    display: none;
+  }
+
+  .session-log-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .sl-main {
+    flex: 1 1 calc(100% - 90px);
+  }
+
+  .sl-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    order: -1;
+    margin-left: auto;
+    font-size: 17px;
+    line-height: 1.1;
+  }
+
+  .sl-zone-caption {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .sl-main {
+    order: -2;
+  }
+
+  .sl-meta {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .sl-cell:not(.sl-zone) {
+    display: none;
+  }
+
+  .sl-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .sl-feedback {
+    flex: 1 1 100%;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
+.psd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.psd-table th,
+.psd-table td {
+  padding: 5px 10px;
+  border-top: 1px solid var(--border-subtle);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.psd-table thead th {
+  border-top: 0;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.psd-table th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
+/* Clinician calendar rows: a date tile anchors each appointment. */
+.appt-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+}
+
+.appt-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  width: 56px;
+  min-height: 60px;
+  padding: 6px 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-clinician-sidebar);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.appt-date strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.appt-main {
+  min-width: 0;
+}
+
+.appt-when {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.appt-name {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.appt-name-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: 500 13px/1.4 var(--font-body);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--border-default);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.appt-name-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.appt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.appt-notes {
+  max-width: 72ch;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.appt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.appt-actions .btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Cancelled appointments recede, but their status chip stays at full contrast: it is the one thing
+   on the card that must stay legible. */
+.card-patient.appt-cancelled > :not(.status-tag),
+.appt-row.appt-cancelled > :not(.appt-main),
+.appt-row.appt-cancelled .appt-main > :not(.appt-meta),
+.appt-row.appt-cancelled .appt-meta > :not(.status-tag) {
+  opacity: 0.7;
+}
+
+@media (max-width: 767px) {
+  .appt-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .appt-date {
+    width: 48px;
+  }
+
+  .appt-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+/* Clinician reports */
+.report-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.report-stat {
+  padding: 16px;
+  background: #FFFFFF;
+}
+
+.report-stat-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.report-stat-value {
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.report-stat-detail {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.report-about summary {
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-about ul {
+  max-width: 72ch;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.trend-compare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin: 12px 0 10px;
+}
+
+.trend-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.trend-value {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.trend-change {
+  padding-left: 24px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.trend-chart {
+  margin-top: 4px;
+}
+
+.trend-plot {
+  position: relative;
+  height: 140px;
+  margin: 6px 6px 0 38px;
+}
+
+.trend-plot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.trend-tick {
+  position: absolute;
+  left: -38px;
+  width: 30px;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: right;
+}
+
+.trend-marker {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #FFFFFF;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  box-sizing: content-box;
+  transform: translate(-50%, -50%);
+}
+
+/* Many sessions: smaller markers so neighbours don't merge on phones. */
+.trend-chart.is-dense .trend-marker {
+  width: 5px;
+  height: 5px;
+  border-width: 1px;
+}
+
+/* Training Demo values are simulated: hollow markers keep them identifiable in the trend. */
+.trend-marker.is-demo {
+  width: 6px;
+  height: 6px;
+  border: 2px solid var(--brand-primary);
+  background: #FFFFFF;
+}
+
+.trend-legend-demo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 6px 0 38px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.trend-legend-demo .trend-marker {
+  position: static;
+  display: inline-block;
+  transform: none;
+}
+
+.trend-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 8px 6px 0 38px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.report-coverage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 20px;
+  padding: 14px 16px;
+  background: var(--surface-clinician-sidebar);
+  border-color: transparent;
+}
+
+.report-coverage > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.report-coverage strong {
+  color: var(--text-primary);
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.report-coverage-label {
+  font-weight: 600;
+}
+
+.report-table td,
+.report-table th {
+  position: relative;
+  padding: 12px 14px;
+  vertical-align: top;
+}
+
+.report-table th {
+  padding-block: 10px;
+}
+
+.report-patient-cell {
+  min-width: 170px;
+}
+
+.report-patient-protocol {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* Desktop shows the protocol under the patient name; phones give it its own column instead. */
+.report-col-protocol {
+  display: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field.
+   !important is required: the patient bar sets display inline and the clinician bar forces display: flex !important. */
+@media (max-width: 767px) {
+  body:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'])):focus) :is(.patient-bottom-nav, .clinician-mobile-bottom-nav) {
+    display: none !important;
+  }
+}
+
+.patient-nav-label {
+  font-size: 10px;
+}
+
+/* Seven tabs share 320px; a slightly smaller label keeps neighbouring words apart. */
+@media (max-width: 359px) {
+  .patient-nav-label {
+    font-size: 9px;
+  }
+}
+
+/* Deliberate horizontal scroll: a soft edge shadow appears only while more columns are off-screen
+   (cover gradients scroll with the content, shadows stay with the box). Cells must not paint a background
+   where the shadow should show. */
+.scroll-x {
+  --scroll-bg: #FFFFFF;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    linear-gradient(to right, var(--scroll-bg) 30%, transparent) left center / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--scroll-bg) 30%, transparent) right center / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(20, 20, 20, 0.16), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(20, 20, 20, 0.16), transparent) right center / 12px 100% no-repeat scroll;
+  background-color: var(--scroll-bg);
+}
+
+/* Metric cells keep value and coverage caption on one line each; the table scrolls instead. */
+.report-table td:not(:first-child) {
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .report-table th:first-child,
+  .report-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #FFFFFF;
+    box-shadow: 1px 0 0 var(--border-subtle);
+  }
+
+  /* Phones: the pinned column carries only the name, so Sessions, Adherence and In zone are visible first. */
+  .report-table td,
+  .report-table th {
+    padding: 10px;
+  }
+
+  .report-patient-cell {
+    width: 120px;
+    min-width: 104px;
+    max-width: 132px;
+    padding-left: 12px;
+    overflow-wrap: break-word;
+  }
+
+  .report-patient-cell .btn {
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
+  .report-patient-protocol {
+    display: none;
+  }
+
+  .report-col-protocol {
+    display: table-cell;
+  }
+
+  .report-table thead th:first-child {
+    background: var(--surface-clinician-sidebar);
+  }
+
+  .report-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .report-stat {
+    padding: 14px;
+  }
+
+  .report-stat-value {
+    font-size: 26px;
+  }
+
+  .report-coverage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trend-plot {
+    height: 120px;
+  }
+
+  .trend-change {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
+.train-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.train-grid > .card-patient {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.train-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--brand-primary);
+}
+
+.train-card-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: 600 15px/1.25 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Stretch the name button over the card so the whole card is one target. */
+.train-card-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.train-card-name:focus-visible {
+  outline: none;
+}
+
+.train-card-name:focus-visible::after {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: -2px;
+}
+
+.train-card-desc {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.train-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.train-card-tag {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.train-card-research {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  /* A utility link: quieter than the category tag and pushed to the far edge, away from the choice itself. */
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.train-card-research:hover {
+  color: var(--brand-primary);
+}
+
+.train-card-research:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 1px;
+}
+
+/* Narrow phones: one experience per row, icon beside the text, so names and descriptions stay readable. */
+@media (max-width: 419px) {
+  .train-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .train-grid > .card-patient {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 3px;
+    align-items: start;
+    padding: 14px 16px;
+  }
+
+  .train-card-icon {
+    grid-row: 1 / span 3;
+    margin-bottom: 0;
+  }
+
+  .train-card-name,
+  .train-card-desc,
+  .train-card-foot {
+    grid-column: 2;
+  }
+
+  .train-card-desc {
+    -webkit-line-clamp: 2;
+  }
+
+  .train-card-foot {
+    gap: 12px;
+    padding-top: 4px;
+  }
+}
+
+/* NeuroGambit compact controls. */
+.ng-tracks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-patient-recessed);
+}
+
+.ng-tracks button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  font: 600 13px/1.2 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.ng-tracks button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ng-quiet-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 8px;
+  white-space: nowrap;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 12px/1.2 var(--font-body);
+  cursor: pointer;
+}
+
+.ng-quiet-action:hover {
+  background: var(--surface-patient-recessed);
+}
+
+.ng-quiet-action:focus-visible,
+.ng-tracks button:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 1px;
+}
+
+/* Quiet, tappable protocol identity shown under patient headings. */
+.pill-scroller {
+  /* Bleeds to the card edge so the next pill visibly continues past it instead of being cut at the text column. */
+  --pill-bleed: var(--space-5);
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(-1 * var(--pill-bleed));
+  padding: 2px var(--pill-bleed) 4px;
+  scroll-padding-inline: var(--pill-bleed);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  --pill-fade-end: 36px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - var(--pill-fade-end)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - var(--pill-fade-end)), transparent 100%);
+}
+
+/* At the end, fade only the padding so the last pill lands un-faded. */
+.pill-scroller[data-scroll-end='true'] {
+  --pill-fade-end: var(--pill-bleed);
+}
+
+.pill-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.pill-scroller-item {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-patient-recessed);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.pill-scroller-item.is-selected {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-subtle);
+  color: var(--brand-primary);
+}
+
+@media (max-width: 360px) {
+  .pill-scroller {
+    --pill-bleed: 18px;
+  }
+}
+
+.protocol-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--surface-patient-card);
+  color: var(--text-primary);
+  font: 600 13px/1.3 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.protocol-chip:hover {
+  border-color: var(--text-tertiary);
+}
+
+.protocol-chip:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.protocol-chip > span {
+  min-width: 0;
 }
 
 /* Animations */
@@ -559,6 +1934,55 @@ html, body {
   display: none;
 }
 
+.clinician-tab {
+  flex-shrink: 0;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.clinician-tab.is-active {
+  border-bottom-color: var(--brand-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Phones: four tabs don't fit one row, so they become a 2×2 segmented control with every tab visible. */
+@media (max-width: 479px) {
+  .clinician-tabs-scroll {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--surface-clinician-sidebar);
+    overflow: visible;
+  }
+
+  .clinician-tab {
+    min-height: 40px;
+    padding: 8px 6px;
+    border-bottom: 0;
+    border-radius: calc(var(--radius-md) - 3px);
+    white-space: normal;
+    text-align: center;
+  }
+
+  .clinician-tab.is-active {
+    background: #FFFFFF;
+    color: var(--brand-primary);
+    box-shadow: 0 1px 2px rgba(20, 20, 20, 0.08);
+  }
+}
+
 /* Touch-optimized Chart and Grid Wrappers */
 .chart-touch-container {
   width: 100%;
@@ -611,6 +2035,13 @@ html, body {
   padding-top: 16px;
   border-top: 1px solid var(--account-deletion-red);
   text-align: left;
+}
+
+/* Inside the Profile list the Delete Account row already separates the step; no second rule. */
+.list-group .account-deletion-confirmation {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .account-deletion-recovery .account-deletion-confirmation {

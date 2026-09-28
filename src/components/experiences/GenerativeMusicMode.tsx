@@ -161,11 +161,11 @@ export const GenerativeMusicMode: React.FC<GenerativeMusicProps> = ({ eegData })
   const getParamMapping = (): string => {
     switch (activeMode) {
       case 'brain-melody':
-        return 'α → pitch  ·  attention → tempo  ·  β → duration';
+        return 'Your brain activity shapes pitch, tempo and note length.';
       case 'neural-synth':
-        return 'α → carrier  ·  θ → mod depth  ·  β → mod rate';
+        return 'Your brain activity shapes the tone and its movement.';
       case 'brainwave-drums':
-        return 'α → instrument  ·  attention → tempo  ·  θ → ghost notes';
+        return 'Your brain activity picks the instruments and tempo.';
     }
   };
 
@@ -298,7 +298,7 @@ export const GenerativeMusicMode: React.FC<GenerativeMusicProps> = ({ eegData })
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Waves size={13} color="var(--brand-primary)" />
-            <span style={{ color: '#A0AEC0', fontFamily: 'monospace', fontSize: '10px', letterSpacing: '0.02em' }}>
+            <span style={{ color: '#CBD2DC', fontSize: '12px', lineHeight: 1.4 }}>
               {getParamMapping()}
             </span>
           </div>

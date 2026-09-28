@@ -4,7 +4,7 @@ import { clinicSettingsRepository } from '../../services/clinicSettingsRepositor
 import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { errorMessage, primaryLicenseIdentifier, primaryLicensePresentation, settingsNotice, transitionSettingsSaveState, type SettingsLoadState, type SettingsSaveState } from '../../services/clinicSettingsState';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
-import { Activity, Award, CheckCircle2, ShieldCheck, Sliders } from 'lucide-react';
+import { Award, CheckCircle2, Sliders } from 'lucide-react';
 
 interface ClinicSettingsViewProps {
   brand: ClinicBrandConfig;
@@ -112,28 +112,17 @@ export const ClinicSettingsView: React.FC<ClinicSettingsViewProps> = ({ brand, o
       </div>
 
       <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '14px' }}>
-          <Activity size={18} color="var(--brand-primary)" />
-          <div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Supported hardware reference</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Product capability information only — not a live device or patient assignment status.</div></div>
-        </div>
-        <div style={{ padding: '12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-recessed)' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>Muse-compatible browser training</div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>The application includes browser Bluetooth support for compatible devices. No device assignment, connection, firmware, signal quality, or readiness information is available on this settings page.</div>
-        </div>
-      </div>
-
-      <div className="card-clinician" style={{ padding: '20px', backgroundColor: '#FFFFFF' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Sliders size={18} color="var(--brand-primary)" /><div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic branding</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Current preview: <strong>{brand.name}</strong> · <span style={{ fontWeight: 700 }}>{brand.primaryAccent}</span></div></div></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Sliders size={18} color="var(--brand-primary)" /><div><h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Clinic branding</h2><div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><span aria-hidden="true" style={{ width: '12px', height: '12px', borderRadius: '3px', background: brand.primaryAccent, border: '1px solid var(--border-default)' }} /><strong>{brand.name}</strong> · <span className="font-mono">{brand.primaryAccent}</span></span></div></div></div>
           <button onClick={onOpenRebrand} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>Open theme customizer</button>
         </div>
       </div>
 
       <ChangePasswordForm variant="clinician" />
 
-      <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-patient-recessed)', display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-        <ShieldCheck size={20} color="var(--text-secondary)" />
-        <div><strong>Access boundary:</strong> clinic and practitioner records are loaded through the signed-in account and clinic membership. Compliance certification is not inferred from this screen.</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 4px', fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+        <p style={{ margin: 0 }}>Supported hardware: Muse-compatible headsets through browser Bluetooth. This is a capability reference, not a live device or patient assignment status.</p>
+        <p style={{ margin: 0 }}>Clinic and practitioner records load through your signed-in account and clinic membership. This screen does not certify compliance.</p>
       </div>
     </div>
   );

@@ -24,7 +24,9 @@ test.describe('patient data authenticity (read-only)', () => {
         await expect(protocolDialog).toBeVisible();
         await expect(protocolDialog.getByText('Your assigned protocol', { exact: true })).toBeVisible();
         await expect(protocolDialog.getByText('Protocol', { exact: true })).toBeVisible();
-        await expect(protocolDialog.getByText('Duration', { exact: true })).toBeVisible();
+        await expect(protocolDialog.getByText('Session length', { exact: true }).or(
+            protocolDialog.getByText('Training unavailable.', { exact: true }),
+        )).toBeVisible();
         await protocolDialog.getByRole('button', { name: 'Close protocol details', exact: true }).click();
 
         await page.getByRole('button', { name: 'Home', exact: true }).click();
@@ -33,7 +35,7 @@ test.describe('patient data authenticity (read-only)', () => {
         const unavailableProtocol = page.getByRole('heading', { name: 'Protocol unavailable', exact: true });
         await expect(headsetGate.or(unavailableProtocol)).toBeVisible();
         if (await unavailableProtocol.isVisible()) {
-            await expect(page.getByRole('alert')).toContainText('unsupported and block training');
+            await expect(page.getByRole('alert')).toContainText('ask your clinician to review your protocol');
             await page.getByRole('button', { name: 'Return to dashboard', exact: true }).click();
         } else {
             await page.getByRole('button', { name: 'Cancel & Return to Dashboard', exact: true }).click();

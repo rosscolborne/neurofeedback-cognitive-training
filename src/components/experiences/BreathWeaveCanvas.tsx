@@ -18,6 +18,7 @@ export const BreathWeaveCanvas: React.FC<BreathWeaveProps> = ({
   const [activeCadence, setActiveCadence] = useState<'box' | '4-7-8' | 'resonance'>(initialCadence);
   const [currentPhase, setCurrentPhase] = useState<'Inhale' | 'Hold' | 'Exhale' | 'Rest'>('Inhale');
   const lastPhaseRef = useRef<'Inhale' | 'Hold' | 'Exhale' | 'Rest'>('Inhale');
+  const cycleClockRef = useRef({ cadence: activeCadence, time: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -27,7 +28,10 @@ export const BreathWeaveCanvas: React.FC<BreathWeaveProps> = ({
 
     let animationId: number;
     let lastTime = performance.now();
-    let cycleTime = 0;
+    // EEG updates restart this effect several times a second; keep the breathing
+    // cycle running across restarts and start over only when the cadence changes.
+    if (cycleClockRef.current.cadence !== activeCadence) cycleClockRef.current = { cadence: activeCadence, time: 0 };
+    let cycleTime = cycleClockRef.current.time;
 
     const resize = () => {
       if (!canvas) return;
@@ -69,6 +73,7 @@ export const BreathWeaveCanvas: React.FC<BreathWeaveProps> = ({
 
       if (!isPaused) {
         cycleTime += dt;
+        cycleClockRef.current.time = cycleTime;
       }
 
       const width = canvas.getBoundingClientRect().width;

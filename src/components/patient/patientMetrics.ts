@@ -268,12 +268,13 @@ export function generateTimeInZoneChart(
   });
   const line = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
   const area = `${line} L ${points.at(-1)?.x.toFixed(1)} ${height} L ${points[0].x.toFixed(1)} ${height} Z`;
-  const labelCount = Math.min(4, measured.length);
-  const labels = Array.from({ length: labelCount }, (_, index) => {
-    const sessionIndex = Math.floor(index * (measured.length - 1) / Math.max(1, labelCount - 1));
-    const timestamp = getSessionTimestamp(measured[sessionIndex]) as number;
-    return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone });
-  });
+  // Points are spaced by session order, not time, so only the range's first and last day are labelled;
+  // several sessions on one day would otherwise repeat the same date along the axis.
+  const dayLabel = (session: SessionRecord) => new Date(getSessionTimestamp(session) as number)
+    .toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone });
+  const firstDay = dayLabel(measured[0]);
+  const lastDay = dayLabel(measured[measured.length - 1]);
+  const labels = firstDay === lastDay ? [firstDay] : [firstDay, lastDay];
   return { line, area, labels, points };
 }
 

@@ -17,8 +17,8 @@ export const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ pati
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation.messages]);
 
   return <section aria-label="Messages" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 150px)' }}>
-    <header style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-default)' }}><h1 style={{ margin: 0 }}>Messages</h1><div>{clinicianName}</div></header>
-    <div aria-live="polite" style={{ flex: 1, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <header style={{ padding: '0 0 14px', borderBottom: '1px solid var(--border-default)' }}><h1 className="font-display" style={{ margin: 0, fontSize: 28, fontWeight: 400, color: 'var(--text-primary)' }}>Messages</h1><div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{clinicianName}</div></header>
+    <div aria-live="polite" style={{ flex: 1, padding: '16px 0', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {conversation.cursor && <button type="button" className="btn btn-ghost" disabled={conversation.isLoadingOlder} onClick={() => void conversation.loadOlder()}>{conversation.isLoadingOlder ? 'Loading…' : 'Load older messages'}</button>}
       {conversation.loadState === 'loading' && <div>Loading messages…</div>}
       {conversation.loadState === 'error' && <div role="alert" style={{ color: 'var(--status-alert)' }}>{conversation.loadError}<button type="button" className="btn btn-ghost" onClick={conversation.retryLoad}><RefreshCw size={14} /> Retry</button></div>}

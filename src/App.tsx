@@ -20,17 +20,22 @@ import { RoleSelection } from './pages/onboarding/RoleSelection';
 import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
+import { clearPendingInvitation } from './services/pendingInvitation';
 
-function InvitationEntryRedirect() {
+function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.RefObject<string | null> }) {
   const { invitationCode } = useParams();
   const navigate = useNavigate();
+  const retainInvitation = useRef<boolean | null>(null);
 
   useEffect(() => {
-    if (invitationCode) {
+    // Decided on first run, before App records the sign-out: an account that just
+    // signed out while a /connect URL was still open is not opening a new invitation.
+    retainInvitation.current ??= signedInUidRef.current === null;
+    if (invitationCode && retainInvitation.current) {
       window.sessionStorage.setItem('waveable_pending_invitation', invitationCode.toUpperCase());
     }
     navigate('/welcome', { replace: true });
-  }, [invitationCode, navigate]);
+  }, [invitationCode, navigate, signedInUidRef]);
 
   return null;
 }
@@ -83,6 +88,16 @@ export function App() {
       window.sessionStorage.setItem('waveable_pending_invitation', routeInvitationCode.toUpperCase());
     }
   }, [routeInvitationCode]);
+
+  // A pending invitation belongs to the sign-in it was opened for. When that
+  // account signs out or is replaced, drop it so the next login starts clean.
+  const signedInUidRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const uid = user?.uid ?? null;
+    if (signedInUidRef.current && signedInUidRef.current !== uid) clearPendingInvitation();
+    signedInUidRef.current = uid;
+  }, [loading, user?.uid]);
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
@@ -370,7 +385,7 @@ export function App() {
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/connect/:invitationCode" element={<InvitationEntryRedirect />} />
+            <Route path="/connect/:invitationCode" element={<InvitationEntryRedirect signedInUidRef={signedInUidRef} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (

@@ -44,17 +44,15 @@ describe('patient detail PDF export', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('passes the whole loaded list from both buttons and exactly one selected row session', async () => {
+  it('passes the whole loaded list from the header export and exactly one selected row session', async () => {
     const r = await mount();
     await act(async () => { await button(r, ' Export Clinical PDF').props.onClick(); });
-    expect(pdf.generatePatientClinicalPDF).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a' }), [session('one'), session('two')], brand);
-    await act(async () => { await button(r, ' Export PDF').props.onClick(); });
     expect(pdf.generatePatientClinicalPDF).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a' }), [session('one'), session('two')], brand);
     await act(async () => { button(r, 'Session Logs (2)').props.onClick(); });
     const row = buttons(r).filter((node) => node.children.includes(' PDF'))[1];
     await act(async () => { await row.props.onClick(); });
-    expect(pdf.generatePatientClinicalPDF).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a' }), [session('two')], brand);
-    expect(pdf.generatePatientClinicalPDF).toHaveBeenCalledTimes(3);
+    expect(pdf.generatePatientClinicalPDF).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a' }), [session('two')], brand, 'selected-session');
+    expect(pdf.generatePatientClinicalPDF).toHaveBeenCalledTimes(2);
     await act(async () => { r.unmount(); });
   });
 
@@ -77,9 +75,8 @@ describe('patient detail PDF export', () => {
     const row = buttons(r).filter((node) => node.children.includes(' PDF'))[0];
     await act(async () => { row.props.onClick(); button(r, ' Export Clinical PDF').props.onClick(); row.props.onClick(); });
     expect(pdf.generatePatientClinicalPDF).toHaveBeenCalledTimes(1);
-    expect(pdf.generatePatientClinicalPDF).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), [session('one')], brand);
+    expect(pdf.generatePatientClinicalPDF).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), [session('one')], brand, 'selected-session');
     expect(button(r, ' Export Clinical PDF').props.disabled).toBe(true);
-    expect(button(r, ' Export PDF').props.disabled).toBe(true);
     expect(buttons(r).filter((node) => node.children.includes(' PDF')).every((node) => node.props.disabled)).toBe(true);
     await act(async () => { pending.resolve(); await pending.promise; });
     expect(button(r, ' Export Clinical PDF').props.disabled).toBe(false);
@@ -92,11 +89,9 @@ describe('patient detail PDF export', () => {
     storage.getSessions.mockImplementation((id: string) => id === 'a' ? loading.promise : Promise.resolve([session('b-one', 'b')]));
     const r = await mount();
     expect(button(r, ' Export Clinical PDF').props.disabled).toBe(true);
-    expect(button(r, ' Export PDF').props.disabled).toBe(true);
     await act(async () => { button(r, ' Export Clinical PDF').props.onClick(); loading.reject(new Error('load failed')); });
     expect(pdf.generatePatientClinicalPDF).not.toHaveBeenCalled();
     expect(button(r, ' Export Clinical PDF').props.disabled).toBe(true);
-    expect(button(r, ' Export PDF').props.disabled).toBe(true);
     await act(async () => { r.update(<ClientDetailView {...props} client={client('b')} />); });
     pdf.generatePatientClinicalPDF.mockReturnValueOnce(oldExport.promise);
     await act(async () => { button(r, ' Export Clinical PDF').props.onClick(); });

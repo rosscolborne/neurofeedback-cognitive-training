@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductionAppointment } from '../appointmentTypes';
-import { applyConfirmedAppointment, resolveAppointmentSurfaceState } from '../appointmentViewState';
+import { applyConfirmedAppointment, groupAppointmentsForDisplay, resolveAppointmentSurfaceState } from '../appointmentViewState';
 
 const appointment = (overrides: Partial<ProductionAppointment> = {}): ProductionAppointment => ({
   dataKind: 'canonical',
@@ -35,5 +35,21 @@ describe('appointment surface state', () => {
     const failedResult: ProductionAppointment | null = null;
     const visible = failedResult ? applyConfirmedAppointment(confirmed, failedResult) : confirmed;
     expect(visible).toBe(confirmed);
+  });
+
+  it('groups for display without moving cancelled appointments into Upcoming', () => {
+    const now = 10 * 60_000;
+    const future = appointment({ id: 'future', startsAtMillis: now + 60_000 });
+    const underway = appointment({ id: 'underway', startsAtMillis: now - 10 * 60_000, status: 'in-progress' });
+    const cancelledFuture = appointment({ id: 'cancelled-future', startsAtMillis: now + 120_000, status: 'cancelled' });
+    const finished = appointment({ id: 'finished', startsAtMillis: 0, durationMinutes: 5, status: 'completed' });
+    const elapsed = appointment({ id: 'elapsed', startsAtMillis: 0, durationMinutes: 5 });
+    const groups = groupAppointmentsForDisplay([finished, future, cancelledFuture, underway, elapsed], now);
+    expect(groups.map((group) => [group.key, group.items.map((item) => item.id)])).toEqual([
+      ['upcoming', ['future', 'underway']],
+      ['past', ['finished', 'elapsed']],
+      ['cancelled', ['cancelled-future']],
+    ]);
+    expect(groupAppointmentsForDisplay([future], now).map((group) => group.key)).toEqual(['upcoming']);
   });
 });
