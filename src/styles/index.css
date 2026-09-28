@@ -667,6 +667,22 @@ input, select, textarea, button {
   .ng-tracks button {
     font-size: 12px;
   }
+
+  /* Track names must never truncate: drop the icons, tighten padding, and wrap if a font runs wide. */
+  .ng-tracks button {
+    padding: 6px 4px;
+  }
+
+  .ng-tracks button svg {
+    display: none;
+  }
+
+  .ng-tracks button span {
+    overflow: visible;
+    text-align: center;
+    text-overflow: clip;
+    white-space: normal;
+  }
 }
 
 .session-telemetry-note {
