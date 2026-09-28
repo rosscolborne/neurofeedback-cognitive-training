@@ -1697,6 +1697,13 @@ input, select, textarea, button {
   text-align: left;
 }
 
+/* Inside the Profile list the Delete Account row already separates the step; no second rule. */
+.list-group .account-deletion-confirmation {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .account-deletion-recovery .account-deletion-confirmation {
   max-width: 420px;
   padding: 16px;

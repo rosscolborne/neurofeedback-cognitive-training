@@ -229,7 +229,7 @@ export const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
 
           <div>
             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700 }}>
-              t_recover
+              Recovery
             </div>
             <div style={{ fontSize: '24px', fontWeight: 700, color: '#7B68AE' }}>
               {score.recoveryLatencySeconds}s
