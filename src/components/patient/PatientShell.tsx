@@ -679,11 +679,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <FactGrid
                 style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}
                 facts={[
-                  // Goal and weekly target are care-team fields; a self-directed patient without them is not missing anything.
-                  ...(isClinicianLinked || client.condition ? [{ label: 'Goal', value: client.condition || 'Unavailable' }] : []),
+                  // Goal and weekly target are care-team fields: shown only while a clinician manages the plan (values are kept on unlink).
+                  ...(isClinicianLinked ? [{ label: 'Goal', value: client.condition || 'Unavailable' }] : []),
                   { label: 'Protocol', value: protocolAlias ? `${protocolAlias} · ${protocolName}` : protocolName },
                   { label: 'Training setup', value: TRAINING_AUTHORITY_LABEL[trainingAuthority] },
-                  ...(isClinicianLinked || client.prescribedSessionsPerWeek != null
+                  ...(isClinicianLinked
                     ? [{ label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' }] : []),
                   { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
                 ]}

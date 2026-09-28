@@ -67,6 +67,9 @@ describe('patient training authority', () => {
     expect(() => buildSelfDirectedTrainingSetup('smr-enhancement', [])).toThrow('Choose at least one training experience.');
     expect(() => buildSelfDirectedTrainingSetup('smr-enhancement', ['spatial-audio' as never])).toThrow('not available');
     expect(normalizeExperienceSelection([...EXPERIENCE_IDS].reverse())).toEqual(EXPERIENCE_IDS);
+    // An unchanged default set is stored in template order, like invitation acceptance and new profiles.
+    const beta = getClinicalProtocolTemplate('beta-downtraining')!.recommendedExperiences;
+    expect(buildSelfDirectedTrainingSetup('beta-downtraining', [...beta].reverse()).allowedExperiences).toEqual(beta);
   });
 
   it('recognises canonical defaults regardless of stored order, and customized or legacy lists as custom', () => {

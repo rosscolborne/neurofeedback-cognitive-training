@@ -101,6 +101,11 @@ describe('self-directed patient shell', () => {
     // Unlinking keeps the last assignment as the self-directed starting point.
     tab(renderer, 'Train');
     expect(trainCards(renderer)).toHaveLength(smr.length);
+    // The former clinician's goal and weekly target are kept but no longer presented as care-team facts.
+    tab(renderer, 'Profile');
+    expect(text(renderer)).toContain('Self-directed');
+    expect(text(renderer)).not.toContain('Goal:');
+    expect(text(renderer)).not.toContain('Weekly Target:');
 
     await act(async () => { renderer.update(shell(linked())); });
     expect(navLabels(renderer)).toContain('Messages');
@@ -170,6 +175,11 @@ describe('self-directed patient shell', () => {
     await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
     expect(onClientPersistedElsewhere).toHaveBeenCalledWith(clinicianPlan);
     expect(text(renderer)).toContain('now managed by your clinician');
+    expect(button(renderer, 'Save setup')!.props.disabled).toBe(true);
+    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
+    expect(state.saveSelfDirectedTrainingSetup).toHaveBeenCalledTimes(1);
+    act(() => button(renderer, 'Close')!.props.onClick());
+    expect(renderer.root.findAllByType(SelfDirectedSetupModal)).toHaveLength(0);
     await act(async () => { renderer.unmount(); });
   });
 });

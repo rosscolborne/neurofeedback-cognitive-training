@@ -129,6 +129,10 @@ export function buildSelfDirectedTrainingSetup(
   }
   const allowedExperiences = normalizeExperienceSelection(experiences);
   if (allowedExperiences.length === 0) throw new Error('Choose at least one training experience.');
+  // An unchanged default set is stored exactly as every other writer stores canonical defaults.
+  if (usesProtocolDefaultExperiences(protocol, allowedExperiences)) {
+    return { assignedProtocol: protocol, allowedExperiences: [...choice.defaultExperiences] };
+  }
   return { assignedProtocol: protocol, allowedExperiences };
 }
 
