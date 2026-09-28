@@ -18,6 +18,7 @@ import {
   Copy,
   CheckCircle2,
   ChevronRight,
+  Settings2,
 } from 'lucide-react';
 
 interface ClientRosterViewProps {
@@ -453,7 +454,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                    {formatLastSessionDate(client.lastSessionDate)}
+                    {/* A missing last-session date with sessions on record is a gap in the data, not "no session". */}
+                    {!client.lastSessionDate && (client.completedSessionsCount ?? 0) > 0 ? 'Date unavailable' : formatLastSessionDate(client.lastSessionDate)}
                   </td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
                     {client.completedSessionsCount ?? 0}
@@ -523,7 +525,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
             <div className="detail-chips" style={{ marginTop: 0 }}>
               <span className="detail-chip">{client.condition || 'Condition unavailable'}</span>
-              <span className="detail-chip">{getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? protocolDisplayName(resolvePatientProtocol(client))}</span>
+              <span className="detail-chip"><Settings2 size={12} aria-hidden="true" /> {getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? protocolDisplayName(resolvePatientProtocol(client))}</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>

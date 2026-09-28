@@ -366,14 +366,19 @@ input, select, textarea, button {
   gap: 8px;
 }
 
-/* Phones: one scrollable row of suggestions instead of three stacked cards above the composer. */
+/* Phones: one swipeable row instead of three stacked cards above the composer. Each suggestion shows in
+   full on two lines and the next one peeks and fades at the edge, so the row reads as scrollable. */
 @media (max-width: 767px) {
   .messaging-suggestions {
     display: flex;
     overflow-x: auto;
     margin: 0 -12px;
     padding: 0 12px 2px;
+    scroll-padding-inline: 12px;
+    scroll-snap-type: x mandatory;
     scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
   }
 
   .messaging-suggestions::-webkit-scrollbar {
@@ -381,10 +386,13 @@ input, select, textarea, button {
   }
 
   .messaging-suggestions .messaging-suggestion {
-    flex: 0 0 auto;
+    flex: 0 0 78%;
     width: auto;
-    min-height: 36px;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    white-space: normal;
+    scroll-snap-align: start;
   }
 }
 
@@ -790,6 +798,7 @@ input, select, textarea, button {
 }
 
 .sl-cell {
+  position: relative;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -798,7 +807,18 @@ input, select, textarea, button {
   font-weight: 700;
 }
 
+/* Column labels stay available to screen readers; the visible header row carries them on wide screens. */
 .sl-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sl-meta,
+.sl-zone-caption {
   display: none;
 }
 
@@ -835,39 +855,43 @@ input, select, textarea, button {
   }
 
   .sl-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     order: -1;
     margin-left: auto;
-    font-size: 16px;
+    font-size: 17px;
+    line-height: 1.1;
+  }
+
+  .sl-zone-caption {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
   }
 
   .sl-main {
     order: -2;
   }
 
-  .sl-cell:not(.sl-zone) {
-    padding: 2px 8px;
-    border-radius: var(--radius-full);
-    background: var(--surface-clinician-sidebar);
-    font-size: 12px;
+  .sl-meta {
+    display: block;
+    margin-top: 4px;
     color: var(--text-secondary);
+    font-size: 12px;
   }
 
-  .sl-label {
-    display: inline;
-  }
-
-  .sl-zone .sl-label,
-  .sl-notes .sl-label {
-    display: none;
-  }
-
-  .sl-cell.sl-empty {
+  .sl-cell:not(.sl-zone) {
     display: none;
   }
 
   .sl-actions {
     flex: 1 1 100%;
     justify-content: flex-start;
+    gap: 8px;
+    margin-top: 2px;
   }
 
   .sl-feedback {
@@ -1196,6 +1220,21 @@ input, select, textarea, button {
   .patient-nav-label {
     font-size: 9px;
   }
+}
+
+/* Deliberate horizontal scroll: a soft edge shadow appears only while more columns are off-screen
+   (cover gradients scroll with the content, shadows stay with the box). Cells must not paint a background
+   where the shadow should show. */
+.scroll-x {
+  --scroll-bg: #FFFFFF;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    linear-gradient(to right, var(--scroll-bg) 30%, transparent) left center / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--scroll-bg) 30%, transparent) right center / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(20, 20, 20, 0.16), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(20, 20, 20, 0.16), transparent) right center / 12px 100% no-repeat scroll;
+  background-color: var(--scroll-bg);
 }
 
 /* Metric cells keep value and coverage caption on one line each; the table scrolls instead. */
@@ -1699,6 +1738,55 @@ input, select, textarea, button {
 }
 .clinician-tabs-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.clinician-tab {
+  flex-shrink: 0;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.clinician-tab.is-active {
+  border-bottom-color: var(--brand-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Phones: four tabs don't fit one row, so they become a 2×2 segmented control with every tab visible. */
+@media (max-width: 479px) {
+  .clinician-tabs-scroll {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--surface-clinician-sidebar);
+    overflow: visible;
+  }
+
+  .clinician-tab {
+    min-height: 40px;
+    padding: 8px 6px;
+    border-bottom: 0;
+    border-radius: calc(var(--radius-md) - 3px);
+    white-space: normal;
+    text-align: center;
+  }
+
+  .clinician-tab.is-active {
+    background: #FFFFFF;
+    color: var(--brand-primary);
+    box-shadow: 0 1px 2px rgba(20, 20, 20, 0.08);
+  }
 }
 
 /* Touch-optimized Chart and Grid Wrappers */

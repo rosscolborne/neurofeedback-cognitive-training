@@ -229,7 +229,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         <button
           onClick={() => { void handleDownloadPDF(); }}
           disabled={pdfExportDisabled}
-          className="btn btn-dense"
+          className="btn btn-ghost detail-action"
           style={{ fontSize: '12px', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           <Download size={14} /> Export Clinical PDF
@@ -282,7 +282,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         </div>
       </section>
 
-      {/* Horizontally Scrollable Navigation Tabs */}
+      {/* Detail tabs: one row on wider screens, a 2×2 segmented control on phones. */}
       <div className="clinician-tabs-scroll">
         {[
           { id: 'eeg', label: 'EEG Overview' },
@@ -292,20 +292,10 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
         ].map((tab) => (
           <button
             key={tab.id}
+            type="button"
             onClick={() => setActiveTab(tab.id as any)}
-            style={{
-              background: 'none',
-              border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid var(--brand-primary)' : '2px solid transparent',
-              color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontWeight: activeTab === tab.id ? 600 : 500,
-              fontSize: '13px',
-              padding: '8px 4px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              transition: 'all 0.15s ease',
-            }}
+            aria-current={activeTab === tab.id ? 'true' : undefined}
+            className={`clinician-tab${activeTab === tab.id ? ' is-active' : ''}`}
           >
             {tab.label}
           </button>
@@ -386,7 +376,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </svg>
             </div>}
             {psdGroups.length > 0 && (
-              <div style={{ overflowX: 'auto', marginTop: '10px' }}>
+              <div className="scroll-x" style={{ marginTop: '10px' }}>
                 <table className="psd-table">
                   <thead><tr><th scope="col">Session</th><th scope="col">Delta</th><th scope="col">Theta</th><th scope="col">Alpha</th><th scope="col">Beta</th></tr></thead>
                   <tbody>
@@ -623,9 +613,6 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
       <div className="card-clinician" style={{ padding: '18px 16px', backgroundColor: '#FFFFFF', display: activeTab === 'sessions' ? 'block' : 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Session Logs</h3>
-            <button onClick={() => { void handleDownloadPDF(); }} disabled={pdfExportDisabled} className="btn btn-dense" style={{ fontSize: '11px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={12} /> Export PDF
-            </button>
           </div>
 
           {sessionContentState === 'loading' ? (
@@ -635,10 +622,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           ) : sessions.length > 0 ? (
             <div className="session-log" role="list" aria-label="Session logs">
               <div className="session-log-head" aria-hidden="true">
-                <span>Session</span><span>Duration</span><span>In zone</span><span>Coherence</span><span>Mood</span><span>Notes</span><span />
+                <span>Session</span><span>Duration</span><span>In zone</span><span>Coherence</span><span>Mood</span><span>Reflection</span><span />
               </div>
               {sessions.map((s) => {
                 const isOpen = openedSession?.id === s.id;
+                const durationText = typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : null;
+                const hasCoherence = typeof s.averageCoherence === 'number' && Number.isFinite(s.averageCoherence);
                 const sessionDate = typeof s.timestamp === 'number' && Number.isFinite(s.timestamp) && s.timestamp > 0
                   ? new Date(s.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
                   : (s.date || 'Date unavailable');
@@ -651,14 +640,29 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                       {s.isDemo && <span className="detail-chip" style={{ fontSize: '11px', padding: '1px 7px' }}>Demo</span>}
                     </div>
                     <div className="sl-sub">{sessionDate} · {s.protocol ? protocolDisplayName(s.protocol) : 'Protocol not recorded'}</div>
+                    {/* Phones: one quiet line instead of a chip per value; the columns below carry it on wider screens. */}
+                    <div className="sl-meta" aria-hidden="true">{[durationText ?? 'Duration unavailable', hasCoherence ? `Coherence ${finiteMetric(s.averageCoherence, '%')}` : null, s.moodRating == null ? null : `Mood ${s.moodRating}/5`, s.patientNotes ? 'Reflection added' : null].filter(Boolean).join(' · ')}</div>
                   </div>
-                  <div className="sl-cell"><span className="sl-label">Duration </span>{typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'}</div>
-                  <div className="sl-cell sl-zone"><span className="sl-label">In zone </span>{finiteMetric(s.timeInZonePercent, '%')}</div>
-                  <div className={`sl-cell${typeof s.averageCoherence === 'number' && Number.isFinite(s.averageCoherence) ? '' : ' sl-empty'}`}><span className="sl-label">Coherence </span>{finiteMetric(s.averageCoherence, '%')}</div>
+                  <div className="sl-cell"><span className="sl-label">Duration </span>{durationText ?? 'Unavailable'}</div>
+                  <div className="sl-cell sl-zone"><span className="sl-label">In zone </span>{finiteMetric(s.timeInZonePercent, '%')}<span className="sl-zone-caption" aria-hidden="true">in zone</span></div>
+                  <div className={`sl-cell${hasCoherence ? '' : ' sl-empty'}`}><span className="sl-label">Coherence </span>{finiteMetric(s.averageCoherence, '%')}</div>
                   <div className={`sl-cell${s.moodRating == null ? ' sl-empty' : ''}`}><span className="sl-label">Mood </span>{s.moodRating == null ? '—' : `${s.moodRating}/5`}</div>
-                  <div className={`sl-cell sl-notes${s.patientNotes ? '' : ' sl-empty'}`}><span className="sl-label">Notes </span>{s.patientNotes ? 'Reflection' : '—'}</div>
+                  <div className={`sl-cell${s.patientNotes ? '' : ' sl-empty'}`}><span className="sl-label">Reflection </span>{s.patientNotes ? 'Added' : '—'}</div>
                   <div className="sl-actions">
-                    <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} aria-label={`Open ${s.id}`} aria-expanded={isOpen} className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 14px' }}>Open</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isOpen) { setSelectedSession(null); return; }
+                        setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] }));
+                        setSelectedSession({ clientId: client.id, sessionId: s.id });
+                      }}
+                      aria-label={`${isOpen ? 'Close' : 'Open'} ${s.id}`}
+                      aria-expanded={isOpen}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '12px', padding: '5px 14px' }}
+                    >
+                      {isOpen ? 'Close' : 'Open'}
+                    </button>
                     <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <FileText size={13} /> PDF
                     </button>

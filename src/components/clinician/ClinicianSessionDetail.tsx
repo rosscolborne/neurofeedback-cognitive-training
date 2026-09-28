@@ -96,8 +96,8 @@ export const ClinicianSessionDetail: React.FC<Props> = ({ session, onSaved }) =>
     </div>
     <div>
       <h4 style={{ ...sectionLabel, margin: '0 0 6px' }}>Recorded points{points.length > 0 ? ` (${points.length})` : ''}</h4>
-      {points.length === 0 ? <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>No recorded points for this session.</p> : <div style={{ overflow: 'auto', maxHeight: '280px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-        <thead><tr>{['Time (s)', 'Theta/beta ratio', 'Alpha', 'SMR', 'Beta', 'In zone'].map((heading) => <th key={heading} scope="col" style={tableHeading}>{heading}</th>)}</tr></thead>
+      {points.length === 0 ? <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>No recorded points for this session.</p> : <div className="scroll-x" style={{ overflow: 'auto', maxHeight: '280px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+        <thead><tr>{['Time (s)', 'Theta/beta', 'Alpha', 'SMR', 'Beta', 'In zone'].map((heading) => <th key={heading} scope="col" style={tableHeading}>{heading}</th>)}</tr></thead>
         <tbody>{points.map((point, index) => <tr key={`${point.t}-${index}`} style={{ borderTop: '1px solid var(--border-subtle)' }}><td style={tableCell}>{fact(point.t)}</td><td style={tableCell}>{fact(point.thetaBetaRatio)}</td><td style={tableCell}>{fact(point.alpha)}</td><td style={tableCell}>{fact(point.smr)}</td><td style={tableCell}>{fact(point.beta)}</td><td style={tableCell}>{typeof point.inZone === 'boolean' ? (point.inZone ? 'Yes' : 'No') : 'Not recorded'}</td></tr>)}</tbody>
       </table></div>}
     </div>

@@ -201,10 +201,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
           <div>
             <h2 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              Clinical Protocol Architect (Muse S Athena Compatible)
+              Clinical Protocol Architect
             </h2>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Evidence-based neurofeedback templates mapped to standard 10-20 sites and 4-channel Muse S Athena biosensors.
+              Templates mapped to 10-20 sites for the 4-channel Muse S Athena.
             </p>
           </div>
           <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px' }}>
@@ -215,7 +215,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
         {/* 1. Clinical Preset Templates Selection */}
         <div>
           <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
-            Clinical Evidence-Based Protocols
+            Protocol templates
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
             {CLINICAL_PROTOCOL_TEMPLATES.map((tmpl) => {
@@ -273,7 +273,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
               />
               <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
-                The evidence-based protocol name remains {selectedTemplate.name}.
+                The protocol is still named {selectedTemplate.name}.
               </div>
             </div>
             <div>
@@ -304,7 +304,8 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             <p style={{ margin: '6px 0 0', lineHeight: 1.5 }}>{PROTOCOL_RUNTIME_LIMITATIONS}</p>
           </details>
 
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+          <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)', fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>Default reward rule</div>
             {selectedRatio
               ? `Default training compares ${selectedRatio.numerator.freqMin}–${selectedRatio.numerator.freqMax} Hz power with ${selectedRatio.denominator.freqMin}–${selectedRatio.denominator.freqMax} Hz power. Reward when the ratio is ${selectedRatio.targetCondition} ${selectedRatio.targetThreshold}.`
               : selectedSingle
@@ -373,23 +374,30 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>{durationField}</div>
           </>}
 
-          <div>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+          <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+            <label htmlFor="protocol-clinical-notes" style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
               Physician Clinical Notes & Rationale
             </label>
             <textarea
+              id="protocol-clinical-notes"
+              aria-describedby="protocol-clinical-notes-hint"
               value={clinicalNotes}
               onChange={(e) => setClinicalNotes(e.target.value)}
               style={{
                 width: '100%',
-                height: '56px',
+                minHeight: '96px',
                 padding: '8px 10px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-default)',
-                fontSize: '12px',
-                resize: 'none',
+                fontSize: '13px',
+                lineHeight: 1.5,
+                resize: 'vertical',
               }}
             />
+            {/* Existing behaviour: an edited note appears in the patient's Protocol details. */}
+            <div id="protocol-clinical-notes-hint" style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              Patients see this note in Protocol details when it differs from the template text.
+            </div>
           </div>
 
           {saveError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{saveError}</div>}
@@ -397,7 +405,7 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
             <button type="submit" disabled={isSaving} className="btn btn-dense" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '160px' }}>
-              {isSaving ? 'Saving…' : 'Assign Protocol Configuration'}
+              {isSaving ? 'Saving…' : 'Assign protocol'}
             </button>
             <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, padding: '10px 14px', fontSize: '13px', minWidth: '100px' }}>
               Cancel

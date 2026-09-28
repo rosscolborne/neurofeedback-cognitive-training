@@ -21,7 +21,7 @@ async function openBuilder(page: Page) {
 }
 
 async function saveBuilder(page: Page) {
-  await page.getByRole('button', { name: 'Assign Protocol Configuration' }).click();
+  await page.getByRole('button', { name: 'Assign protocol', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Clinical Protocol Architect/ })).toBeHidden();
 }
 
