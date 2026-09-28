@@ -358,12 +358,13 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
       )}
 
       {/* Primary Chessboard with Peripheral Glow */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+      {/* Size the board to the space left under the HUD so the bottom ranks are never clipped. */}
+      <div style={{ flex: '1 1 0', minHeight: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', containerType: 'size' }}>
         <PeripheralAmbientGlow
           normalizedComposure={brainState.normalizedComposure}
           isClenching={brainState.isClenching}
         >
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', width: 'min(calc(100cqw - 6px), calc(100cqh - 6px), 460px)' }}>
             <ChessboardView
               chess={chess}
               selectedSquare={selectedSquare}

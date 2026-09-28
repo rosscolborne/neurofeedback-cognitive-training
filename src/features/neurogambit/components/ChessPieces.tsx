@@ -3,7 +3,8 @@ import React from 'react';
 interface ChessPieceSvgProps {
   type: 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
   color: 'w' | 'b';
-  size?: number;
+  /** Pixel size, or a CSS length such as a percentage of the square. */
+  size?: number | string;
 }
 
 export const ChessPieceSvg: React.FC<ChessPieceSvgProps> = ({ type, color, size = 48 }) => {
