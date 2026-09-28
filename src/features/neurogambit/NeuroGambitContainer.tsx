@@ -14,7 +14,7 @@ import { TimeDilationClock } from './components/TimeDilationClock';
 import { VagalBreathingPacer } from './components/VagalBreathingPacer';
 import { BaselineCalibrationModal } from './components/BaselineCalibrationModal';
 import { SessionSummaryModal } from './components/SessionSummaryModal';
-import { Crown, Zap, Shield, RotateCcw, Activity } from 'lucide-react';
+import { Crown, Zap, Shield, RotateCcw, Activity, Info } from 'lucide-react';
 
 interface NeuroGambitContainerProps {
   eegData: EEGDataPoint | null;
@@ -44,6 +44,7 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
     return () => { mountedRef.current = false; };
   }, []);
   const [selectedTrack, setSelectedTrack] = useState<NeuroGambitTrack>('composed-tactics');
+  const [showHowTo, setShowHowTo] = useState(false);
   const [sessionBaseline, setSessionBaseline] = useState<{ identity: string; value: NeuroGambitBaseline } | null>(null);
   const [calibrationPrompt, setCalibrationPrompt] = useState<{ identity: string; open: boolean } | null>(null);
   const [completedSummary, setCompletedSummary] = useState<NGIScore | null>(null);
@@ -171,7 +172,7 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
         padding: '12px 16px',
         boxSizing: 'border-box',
         overflowY: 'auto',
-        gap: '12px',
+        gap: '10px',
         position: 'relative',
       }}
     >
@@ -197,142 +198,61 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
         />
       )}
 
-      {/* Top Header: Track Selector & Live Neuro Telemetry */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '8px',
-        }}
-      >
-        {/* Track Pills */}
+      {/* Track selector: one full-width segmented control that stays on one line on phones. */}
+      <div role="group" aria-label="Training track" className="ng-tracks">
+        {([
+          { id: 'composed-tactics' as const, label: 'Composed Tactics', full: 'Track A: Composed Tactics', Icon: Crown, color: 'var(--brand-primary, #E8967A)' },
+          { id: 'tilt-crucible' as const, label: 'Tilt Crucible', full: 'Track B: Tilt Crucible', Icon: Shield, color: '#7B68AE' },
+        ]).map(({ id, label, full, Icon, color }) => {
+          const active = selectedTrack === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={active}
+              aria-label={full}
+              onClick={() => handleTrackChange(id)}
+              style={{
+                backgroundColor: active ? 'var(--surface-patient-card, #FFFFFF)' : 'transparent',
+                color: active ? color : 'var(--text-secondary, #6B6560)',
+                boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              <Icon size={14} aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <TimeDilationClock
+        secondsRemaining={clockSecondsRemaining}
+        clockRate={clockRate}
+        totalSeconds={120}
+      />
+
+      {/* Current puzzle and composure: the state the player needs before looking at the board. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '0 2px' }}>
+        <div style={{ minWidth: 0, fontSize: '12px', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${activePuzzle.title} (${activePuzzle.theme})`}>
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Puzzle {puzzleIndex + 1}/{totalPuzzles}</span>
+          <span style={{ color: 'var(--text-secondary)' }}> · {activePuzzle.title}</span>
+        </div>
         <div
           style={{
             display: 'flex',
-            backgroundColor: 'var(--surface-patient-recessed, #F2F1EE)',
-            padding: '3px',
-            borderRadius: '10px',
-            gap: '2px',
+            alignItems: 'center',
+            gap: '4px',
+            flexShrink: 0,
+            padding: '4px 9px',
+            borderRadius: '999px',
+            backgroundColor: brainState.normalizedComposure >= 1.0 ? 'rgba(92, 140, 70, 0.14)' : 'rgba(239, 68, 68, 0.12)',
+            color: brainState.normalizedComposure >= 1.0 ? '#4E7A3B' : '#B91C1C',
+            fontSize: '12px',
+            fontWeight: 700,
           }}
         >
-          <button
-            onClick={() => handleTrackChange('composed-tactics')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              borderRadius: '8px',
-              border: 'none',
-              cursor: 'pointer',
-              backgroundColor: selectedTrack === 'composed-tactics' ? 'var(--surface-patient-card, #FFFFFF)' : 'transparent',
-              color: selectedTrack === 'composed-tactics' ? 'var(--brand-primary, #E8967A)' : 'var(--text-secondary, #6B6560)',
-              boxShadow: selectedTrack === 'composed-tactics' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Crown size={14} />
-            <span>Track A: Composed Tactics</span>
-          </button>
-
-          <button
-            onClick={() => handleTrackChange('tilt-crucible')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              borderRadius: '8px',
-              border: 'none',
-              cursor: 'pointer',
-              backgroundColor: selectedTrack === 'tilt-crucible' ? 'var(--surface-patient-card, #FFFFFF)' : 'transparent',
-              color: selectedTrack === 'tilt-crucible' ? '#7B68AE' : 'var(--text-secondary, #6B6560)',
-              boxShadow: selectedTrack === 'tilt-crucible' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Shield size={14} />
-            <span>Track B: Tilt Crucible</span>
-          </button>
-        </div>
-
-        {/* Live Muse Telemetry Badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              borderRadius: '6px',
-              backgroundColor: brainState.normalizedComposure >= 1.0 ? 'rgba(92, 140, 70, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-              color: brainState.normalizedComposure >= 1.0 ? '#5C8C46' : '#EF4444',
-              fontSize: '11px',
-              fontWeight: 700,
-            }}
-          >
-            <Activity size={12} />
-            <span>Composure: {brainState.normalizedComposure.toFixed(2)}x</span>
-          </div>
-
-          <button
-            onClick={() => setCalibrationPrompt({ identity, open: true })}
-            style={{
-              padding: '4px 8px',
-              border: '1px solid var(--border-default)',
-              borderRadius: '6px',
-              backgroundColor: 'transparent',
-              fontSize: '10px',
-              color: 'var(--text-tertiary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <RotateCcw size={10} />
-            <span>Calibrate</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Clock and Puzzle Details */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <TimeDilationClock
-          secondsRemaining={clockSecondsRemaining}
-          clockRate={clockRate}
-          totalSeconds={120}
-        />
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
-          <div>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Puzzle {puzzleIndex + 1} of {totalPuzzles}:
-            </span>{' '}
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              {activePuzzle.title} ({activePuzzle.theme})
-            </span>
-          </div>
-
-          <button
-            onClick={() => finishSession()}
-            style={{
-              fontSize: '11px',
-              color: 'var(--brand-primary)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            Complete Session
-          </button>
+          <Activity size={12} aria-hidden="true" />
+          <span>Composure {brainState.normalizedComposure.toFixed(2)}×</span>
         </div>
       </div>
 
@@ -390,27 +310,46 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
         </PeripheralAmbientGlow>
       </div>
 
-      {/* Bottom Educational / Tactical Instructions */}
-      <div
-        style={{
-          padding: '8px 12px',
-          backgroundColor: 'var(--surface-patient-card, #FFFFFF)',
-          borderRadius: '10px',
-          border: '1px solid var(--border-default)',
-          fontSize: '11px',
-          color: 'var(--text-secondary)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}
-      >
-        <Zap size={14} color="var(--brand-primary)" />
-        <span>
-          {selectedTrack === 'composed-tactics'
-            ? 'Move 1 requires a 1.2s Composure Hold to verify candidate moves. Subsequent plies execute instantly.'
-            : 'When a sudden blunder occurs, breathe in cadence with the 4s/6s pacer. Board unlocks once composure recovers.'}
-        </span>
+      {/* Secondary controls sit below the board so they never compete with it. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0 4px' }}>
+        <div style={{ display: 'flex', gap: '0' }}>
+          <button type="button" className="ng-quiet-action" onClick={() => setCalibrationPrompt({ identity, open: true })}>
+            <RotateCcw size={13} aria-hidden="true" />
+            Calibrate
+          </button>
+          <button type="button" className="ng-quiet-action" aria-expanded={showHowTo} onClick={() => setShowHowTo((open) => !open)}>
+            <Info size={13} aria-hidden="true" />
+            How to play
+          </button>
+        </div>
+        <button type="button" className="ng-quiet-action" style={{ color: 'var(--brand-primary)' }} onClick={() => finishSession()}>
+          Complete Session
+        </button>
       </div>
+
+      {showHowTo && (
+        <div
+          style={{
+            padding: '10px 12px',
+            backgroundColor: 'var(--surface-patient-card, #FFFFFF)',
+            borderRadius: '10px',
+            border: '1px solid var(--border-default)',
+            fontSize: '12px',
+            lineHeight: 1.5,
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+          }}
+        >
+          <Zap size={14} color="var(--brand-primary)" aria-hidden="true" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <span>
+            {selectedTrack === 'composed-tactics'
+              ? 'Hold your first move for 1.2 seconds while staying composed to confirm it. Later moves play instantly.'
+              : 'After a sudden blunder, breathe with the 4s in / 6s out pacer. The board unlocks once your composure recovers.'}
+          </span>
+        </div>
+      )}
     </div>
   );
 };

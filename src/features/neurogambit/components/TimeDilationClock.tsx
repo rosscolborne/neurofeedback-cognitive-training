@@ -42,7 +42,7 @@ export const TimeDilationClock: React.FC<TimeDilationClockProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '10px 16px',
+        padding: '8px 14px',
         backgroundColor: 'var(--surface-patient-card, #FFFFFF)',
         border: '1px solid var(--border-default, #E8E6E1)',
         borderRadius: '12px',
@@ -52,13 +52,13 @@ export const TimeDilationClock: React.FC<TimeDilationClockProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Clock size={18} color={badgeColor} />
         <div>
-          <div style={{ fontSize: '10px', color: 'var(--text-tertiary, #8C8578)', textTransform: 'uppercase', fontWeight: 600 }}>
-            Match Clock
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary, #6B6560)', fontWeight: 600 }}>
+            Match clock
           </div>
           <div
             className="font-mono"
             style={{
-              fontSize: '20px',
+              fontSize: '18px',
               fontWeight: 700,
               color: isPanic ? '#EF4444' : 'var(--text-primary, #1A1A1A)',
               letterSpacing: '0.05em',
