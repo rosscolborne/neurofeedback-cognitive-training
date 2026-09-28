@@ -1,9 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft, Stethoscope } from 'lucide-react';
 import { shouldOfferClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
+
+// Client-side pause between reset emails to the same address so repeated clicks
+// cannot flood an inbox. Firebase still applies its own server-side limits.
+const RESET_COOLDOWN_MS = 60_000;
+
+const normalizeResetAddress = (value: string) => value.trim().toLowerCase();
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -14,33 +20,67 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [resetView, setResetView] = useState(false);
   const [resetError, setResetError] = useState('');
-  const [resetSent, setResetSent] = useState(false);
+  const [resetSent, setResetSent] = useState<'first' | 'repeat' | null>(null);
   const [resetPending, setResetPending] = useState(false);
   const resetPendingRef = useRef(false);
+  // When each normalized address may be sent another reset email. Kept at this
+  // level so it survives leaving and reopening the reset view; the ref gives
+  // handleReset the same synchronous guard as resetPendingRef.
+  const [resetAvailableAt, setResetAvailableAt] = useState<Record<string, number>>({});
+  const resetAvailableAtRef = useRef<Record<string, number>>({});
+  const [resetClock, setResetClock] = useState(() => Date.now());
 
   const resetConfirmation = 'If an account uses that email address, we’ll send password reset instructions.';
+  const resetRepeatConfirmation = 'If an account uses that email address, we’ll send a new reset email. Use the link in the most recent email. Earlier reset links no longer work.';
+  const resetDeliveryHint = 'Reset emails can take a few minutes to arrive. If you don’t see one, check your spam or junk folder.';
+
+  const resetAddressAvailableAt = resetAvailableAt[normalizeResetAddress(email)];
+  const resetCooldownSeconds = resetAddressAvailableAt === undefined
+    ? 0
+    : Math.max(0, Math.ceil((resetAddressAvailableAt - resetClock) / 1000));
+  const resetCoolingDown = resetView && resetCooldownSeconds > 0;
+
+  // Tick only while the visible address is cooling down.
+  useEffect(() => {
+    if (!resetCoolingDown) return undefined;
+    const timer = setInterval(() => setResetClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [resetCoolingDown]);
 
   const openReset = () => {
     setError('');
     setResetError('');
-    setResetSent(false);
+    setResetSent(null);
+    setResetClock(Date.now());
     setResetView(true);
   };
 
   const returnToLogin = () => {
     if (resetPendingRef.current) return;
     setResetError('');
-    setResetSent(false);
+    setResetSent(null);
     setError('');
     setResetView(false);
+  };
+
+  // A missing account goes through here too, so its message and cooldown match a real send.
+  const confirmResetRequest = (key: string) => {
+    const now = Date.now();
+    const repeat = resetAvailableAtRef.current[key] !== undefined;
+    resetAvailableAtRef.current = { ...resetAvailableAtRef.current, [key]: now + RESET_COOLDOWN_MS };
+    setResetAvailableAt(resetAvailableAtRef.current);
+    setResetClock(now);
+    setResetSent(repeat ? 'repeat' : 'first');
   };
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (resetPendingRef.current) return;
-    setResetError('');
-    setResetSent(false);
     const address = email.trim();
+    const key = normalizeResetAddress(address);
+    if ((resetAvailableAtRef.current[key] ?? 0) > Date.now()) return;
+    setResetError('');
+    setResetSent(null);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
       setResetError('Please enter a valid email address.');
       return;
@@ -49,11 +89,11 @@ export const Login: React.FC = () => {
     setResetPending(true);
     try {
       await requestPasswordReset(address);
-      setResetSent(true);
+      confirmResetRequest(key);
     } catch (err: any) {
       const code = err?.code;
       if (code === 'auth/user-not-found' || code === 'auth/email-not-found') {
-        setResetSent(true);
+        confirmResetRequest(key);
       } else if (code === 'auth/invalid-email') {
         setResetError('Please enter a valid email address.');
       } else if (code === 'auth/network-request-failed') {
@@ -128,6 +168,13 @@ export const Login: React.FC = () => {
     }
   };
 
+  const submitDisabled = resetView ? resetPending || resetCoolingDown : loading;
+  const resetSubmitLabel = resetPending
+    ? 'Sending...'
+    : resetCoolingDown
+      ? `Resend in ${resetCooldownSeconds}s`
+      : resetAddressAvailableAt === undefined ? 'Send reset instructions' : 'Resend reset instructions';
+
   return (
     <div style={{
       minHeight: '100dvh',
@@ -184,7 +231,10 @@ export const Login: React.FC = () => {
           fontSize: '14px',
           lineHeight: 1.4,
         }}>
-          {resetConfirmation}
+          {resetSent === 'repeat' ? resetRepeatConfirmation : resetConfirmation}
+          <span style={{ display: 'block', marginTop: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            {resetDeliveryHint}
+          </span>
         </div>
       )}
 
@@ -200,7 +250,8 @@ export const Login: React.FC = () => {
               setEmail(e.target.value);
               if (resetView) {
                 setResetError('');
-                setResetSent(false);
+                setResetSent(null);
+                setResetClock(Date.now());
               }
             }}
             placeholder="name@example.com"
@@ -242,7 +293,7 @@ export const Login: React.FC = () => {
 
         <button 
           type="submit" 
-          disabled={resetView ? resetPending : loading}
+          disabled={submitDisabled}
           style={{
             background: 'var(--brand-primary)',
             color: 'var(--brand-on-primary)',
@@ -251,12 +302,12 @@ export const Login: React.FC = () => {
             borderRadius: 'var(--radius-md)',
             fontSize: '18px',
             fontWeight: '600',
-            cursor: (resetView ? resetPending : loading) ? 'not-allowed' : 'pointer',
+            cursor: submitDisabled ? 'not-allowed' : 'pointer',
             marginTop: '8px',
-            opacity: (resetView ? resetPending : loading) ? 0.7 : 1
+            opacity: submitDisabled ? 0.7 : 1
           }}
         >
-          {resetView ? (resetPending ? 'Sending...' : 'Send reset instructions') : (loading ? 'Logging in...' : 'Log In')}
+          {resetView ? resetSubmitLabel : (loading ? 'Logging in...' : 'Log In')}
         </button>
       </form>
 
