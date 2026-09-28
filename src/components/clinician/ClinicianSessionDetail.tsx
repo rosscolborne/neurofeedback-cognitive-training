@@ -16,8 +16,8 @@ const sectionLabel: React.CSSProperties = { marginBottom: '4px', fontSize: '11px
 const tableHeading: React.CSSProperties = { position: 'sticky', top: 0, padding: '6px 10px', background: 'var(--surface-clinician-sidebar)', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' };
 const tableCell: React.CSSProperties = { padding: '4px 10px' };
 
-const Fact: React.FC<{ term: string; children: React.ReactNode }> = ({ term, children }) => (
-  <div style={{ minWidth: 0 }}>
+const Fact: React.FC<{ term: string; wide?: boolean; children: React.ReactNode }> = ({ term, wide, children }) => (
+  <div style={{ minWidth: 0, gridColumn: wide ? '1 / -1' : undefined }}>
     <dt style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{term}</dt>
     <dd style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{children}</dd>
   </div>
@@ -58,27 +58,41 @@ export const ClinicianSessionDetail: React.FC<Props> = ({ session, onSaved }) =>
   const points = Array.isArray(session.timeSeries) ? session.timeSeries : [];
   const device = session.device;
   const deviceText = device && [device.model, device.deviceId, device.firmwareVersion && `firmware ${device.firmwareVersion}`, typeof device.sampleRateHz === 'number' && Number.isFinite(device.sampleRateHz) && `${device.sampleRateHz} Hz`, device.transport].filter(Boolean).join(' · ');
+  const isNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+  // Recorded facts form the grid; absent ones are named once in a muted line instead of a wall of "Not recorded".
+  const facts: Array<{ term: string; value: React.ReactNode; recorded: boolean; wide?: boolean }> = [
+    { term: 'Protocol', value: session.protocol ? protocolDisplayName(session.protocol) : 'Not recorded', recorded: !!session.protocol },
+    { term: 'Acquisition', value: session.isDemo === true ? 'Training Demo · Synthetic acquisition' : session.isDemo === false ? 'Non-demo session' : 'Provenance not recorded', recorded: true },
+    { term: 'Mood', value: session.moodRating == null ? 'Not recorded' : `${session.moodRating}/5`, recorded: session.moodRating != null },
+    { term: 'Final threshold', value: fact(session.finalThreshold), recorded: isNumber(session.finalThreshold) },
+    { term: 'Adaptive adjustments', value: fact(session.adaptiveAdjustmentsCount), recorded: isNumber(session.adaptiveAdjustmentsCount) },
+    { term: 'Average training score', value: fact(session.averageTrainingScore), recorded: isNumber(session.averageTrainingScore) },
+    { term: 'Average coherence', value: fact(session.averageCoherence, '%'), recorded: isNumber(session.averageCoherence) },
+    { term: 'Peak focus', value: fact(session.peakFocusScore), recorded: isNumber(session.peakFocusScore) },
+    { term: 'Average mindfulness', value: fact(session.averageMindfulness), recorded: isNumber(session.averageMindfulness) },
+    { term: 'Average valence', value: fact(session.averageValence), recorded: isNumber(session.averageValence) },
+    { term: 'Average arousal', value: fact(session.averageArousal), recorded: isNumber(session.averageArousal) },
+    { term: 'Average band powers', wide: true, recorded: session.isDemo === true || !!session.averageBands, value: session.isDemo === true ? 'Not measured — synthetic Training Demo feedback' : session.averageBands
+      ? `Theta ${fact(session.averageBands.theta)} · Alpha ${fact(session.averageBands.alpha)} · Beta ${fact(session.averageBands.beta)}`
+      : 'Not recorded' },
+    { term: 'Device', value: deviceText || 'Not recorded', recorded: !!deviceText, wide: true },
+  ];
+  const recordedFacts = facts.filter((item) => item.recorded);
+  const missingFacts = facts.filter((item) => !item.recorded).map((item) => item.term);
   return <section aria-label={`Session ${session.id} details`} style={{ padding: '16px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--surface-clinician-card)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
     <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px 16px', margin: 0 }}>
-      <Fact term="Protocol">{session.protocol ? protocolDisplayName(session.protocol) : 'Not recorded'}</Fact>
-      <Fact term="Acquisition">{session.isDemo === true ? 'Training Demo · Synthetic acquisition' : session.isDemo === false ? 'Non-demo session' : 'Provenance not recorded'}</Fact>
-      <Fact term="Device">{deviceText || 'Not recorded'}</Fact>
-      <Fact term="Final threshold">{fact(session.finalThreshold)}</Fact>
-      <Fact term="Adaptive adjustments">{fact(session.adaptiveAdjustmentsCount)}</Fact>
-      <Fact term="Peak focus">{fact(session.peakFocusScore)}</Fact>
-      <Fact term="Average training score">{fact(session.averageTrainingScore)}</Fact>
-      <Fact term="Average coherence">{fact(session.averageCoherence, '%')}</Fact>
-      <Fact term="Average mindfulness">{fact(session.averageMindfulness)}</Fact>
-      <Fact term="Average valence">{fact(session.averageValence)}</Fact>
-      <Fact term="Average arousal">{fact(session.averageArousal)}</Fact>
-      <Fact term="Average band powers">{session.isDemo === true ? 'Not measured — synthetic Training Demo feedback' : session.averageBands
-        ? `Theta ${fact(session.averageBands.theta)} · Alpha ${fact(session.averageBands.alpha)} · Beta ${fact(session.averageBands.beta)}`
-        : 'Not recorded'}</Fact>
-      <Fact term="Mood">{session.moodRating == null ? 'Not recorded' : `${session.moodRating}/5`}</Fact>
+      {recordedFacts.map((item) => (
+        <Fact key={item.term} term={item.term} wide={item.wide}>{item.value}</Fact>
+      ))}
     </dl>
-    <div>
+    {missingFacts.length > 0 && (
+      <p style={{ margin: '-4px 0 0', fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+        <span style={{ fontWeight: 600 }}>Not recorded:</span> {missingFacts.join(', ')}
+      </p>
+    )}
+    <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)' }}>
       <div style={sectionLabel}>Patient reflection</div>
-      <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5, color: session.patientNotes ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{session.patientNotes || 'Not recorded'}</p>
+      <p style={{ margin: 0, maxWidth: '72ch', fontSize: '13px', lineHeight: 1.55, color: session.patientNotes ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{session.patientNotes || 'Not recorded'}</p>
     </div>
     <div>
       <h4 style={{ ...sectionLabel, margin: '0 0 6px' }}>Recorded points{points.length > 0 ? ` (${points.length})` : ''}</h4>

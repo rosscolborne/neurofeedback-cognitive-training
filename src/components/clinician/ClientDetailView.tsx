@@ -222,85 +222,66 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           <ArrowLeft size={16} /> Back to Patient Roster
         </button>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowBrainMapUpload(true)}
-            disabled={brainMapLoadState !== 'ready'}
-            className="btn btn-ghost"
-            style={{ border: '1px solid var(--border-default)', fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Upload size={14} /> Add Manual QEEG Record
-          </button>
-          <button
-            onClick={() => { void handleDownloadPDF(); }}
-            disabled={pdfExportDisabled}
-            className="btn btn-dense"
-            style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Download size={14} /> Export Clinical PDF
-          </button>
-        </div>
+        <button
+          onClick={() => { void handleDownloadPDF(); }}
+          disabled={pdfExportDisabled}
+          className="btn btn-dense"
+          style={{ fontSize: '12px', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Download size={14} /> Export Clinical PDF
+        </button>
       </div>
       {pdfUi.clientId === client.id && pdfUi.error && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '13px' }}>{pdfUi.error}</div>}
       {pdfIsPending && <div role="status" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{pdfUi.pendingSessionId ? `Exporting session ${pdfUi.pendingSessionId} PDF…` : 'Exporting clinical PDF…'}</div>}
 
-      {/* Client Profile Header Card */}
-      <div
-        className="card-clinician"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-          padding: '18px 20px',
-          backgroundColor: '#FFFFFF',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <PatientAvatar avatarUrl={client.avatarUrl} size={52} />
-          <div>
+      {/* Patient header: identity, a chip row of care facts, and one action group. */}
+      <section className="card-clinician detail-header" aria-label="Patient summary">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', minWidth: 0 }}>
+          <PatientAvatar avatarUrl={client.avatarUrl} size={48} />
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+              <h1 style={{ fontSize: '20px', fontWeight: 600, lineHeight: 1.25, color: 'var(--text-primary)', margin: 0, overflowWrap: 'anywhere' }}>
                 {client.name}
               </h1>
-              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '10px', padding: '2px 7px' }}>
-                ● {client.status.toUpperCase()}
+              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '11px', padding: '2px 8px', textTransform: 'capitalize' }}>
+                {client.status}
               </span>
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-              {client.condition || 'Condition unavailable'} • Protocol: <strong>{evidenceProtocolName}</strong>{assignedDeviceName && <> • Assigned device: <strong>{assignedDeviceName}</strong></>}
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Neural Imprint: <strong>{imprintLabel}</strong>
-              {imprintState.calibratedAt != null && <> • Calibrated <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString()}</time></>}
+            <div className="detail-chips">
+              <span className="detail-chip">{client.condition || 'Condition unavailable'}</span>
+              <span className="detail-chip"><Settings2 size={12} aria-hidden="true" /> {evidenceProtocolName}</span>
+              <span className={`detail-chip detail-chip-${imprintState.status}`}>
+                Neural Imprint: {imprintLabel}
+                {imprintState.calibratedAt != null && <> · <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString()}</time></>}
+              </span>
+              {assignedDeviceName && <span className="detail-chip">Assigned device: {assignedDeviceName}</span>}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowProtocolBuilder(true)}
-            className="btn btn-ghost"
-            style={{ border: '1px solid var(--border-default)', fontSize: '12px', padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Settings2 size={14} /> Adjust Protocol
-          </button>
+        <div className="detail-actions">
           <button
             onClick={onSendMessage}
-            className="btn btn-secondary"
-            style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            className="btn btn-secondary detail-action-primary"
+            style={{ padding: '8px 14px', fontSize: '13px' }}
           >
             <Send size={14} /> Message Patient
           </button>
-          {onScheduleClient && <button type="button" onClick={onScheduleClient} className="btn btn-secondary" style={{ padding: '7px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={14} /> Schedule</button>}
+          {onScheduleClient && <button type="button" onClick={onScheduleClient} className="btn btn-ghost detail-action" style={{ padding: '8px 14px', fontSize: '13px' }}><Calendar size={14} /> Schedule</button>}
+          <button
+            onClick={() => setShowProtocolBuilder(true)}
+            className="btn btn-ghost detail-action"
+            style={{ padding: '8px 14px', fontSize: '13px' }}
+          >
+            <Settings2 size={14} /> Adjust Protocol
+          </button>
         </div>
-      </div>
+      </section>
 
       {/* Horizontally Scrollable Navigation Tabs */}
       <div className="clinician-tabs-scroll">
         {[
-          { id: 'eeg', label: 'EEG Overview & Spectral PSD' },
+          { id: 'eeg', label: 'EEG Overview' },
           { id: 'protocol', label: 'Protocol Settings' },
           { id: 'brainmaps', label: `QEEG Records (${brainMaps.length})` },
           { id: 'sessions', label: getSessionTabLabel(sessionContentState, sessions.length) },
@@ -618,45 +599,46 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           ) : sessionContentState === 'error' ? (
             <div role="alert" style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session logs could not be loaded.</div>
           ) : sessions.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {sessions.map((s) => (
+            <div className="session-log" role="list" aria-label="Session logs">
+              <div className="session-log-head" aria-hidden="true">
+                <span>Session</span><span>Duration</span><span>In zone</span><span>Coherence</span><span>Mood</span><span>Notes</span><span />
+              </div>
+              {sessions.map((s) => {
+                const isOpen = openedSession?.id === s.id;
+                const sessionDate = typeof s.timestamp === 'number' && Number.isFinite(s.timestamp) && s.timestamp > 0
+                  ? new Date(s.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                  : (s.date || 'Date unavailable');
+                return (
                 <React.Fragment key={s.id}>
-                <div
-                  style={{
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '10px 12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    backgroundColor: 'var(--surface-patient-base)',
-                  }}
-                >
-                  <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: '13px' }}>
+                <div role="listitem" className={`session-log-row${isOpen ? ' is-open' : ''}`}>
+                  <div className="sl-main">
+                    <div className="sl-title">
                       {s.experience ? experienceDisplayName(s.experience) : 'Experience unavailable'}
-                      <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}> · {s.date || 'Date unavailable'}</span>
+                      {s.isDemo && <span className="detail-chip" style={{ fontSize: '11px', padding: '1px 7px' }}>Demo</span>}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} · In-zone: {finiteMetric(s.timeInZonePercent, '%')} · Coherence: {finiteMetric(s.averageCoherence, '%')}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Protocol: {s.protocol ? protocolDisplayName(s.protocol) : 'Not recorded'} · Mood: {s.moodRating == null ? 'Not recorded' : `${s.moodRating}/5`} · Reflection: {s.patientNotes ? 'Recorded' : 'Not recorded'}</div>
-                    {s.clinicianNotes && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
-                        Clinician: {s.clinicianNotes}
-                      </div>
-                    )}
+                    <div className="sl-sub">{sessionDate} · {s.protocol ? protocolDisplayName(s.protocol) : 'Protocol not recorded'}</div>
                   </div>
-                  <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} aria-label={`Open ${s.id}`} className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 14px' }}>Open</button>
-                  <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <FileText size={13} /> PDF
-                  </button>
+                  <div className="sl-cell"><span className="sl-label">Duration </span>{typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'}</div>
+                  <div className="sl-cell sl-zone"><span className="sl-label">In zone </span>{finiteMetric(s.timeInZonePercent, '%')}</div>
+                  <div className={`sl-cell${typeof s.averageCoherence === 'number' && Number.isFinite(s.averageCoherence) ? '' : ' sl-empty'}`}><span className="sl-label">Coherence </span>{finiteMetric(s.averageCoherence, '%')}</div>
+                  <div className={`sl-cell${s.moodRating == null ? ' sl-empty' : ''}`}><span className="sl-label">Mood </span>{s.moodRating == null ? '—' : `${s.moodRating}/5`}</div>
+                  <div className={`sl-cell sl-notes${s.patientNotes ? '' : ' sl-empty'}`}><span className="sl-label">Notes </span>{s.patientNotes ? 'Reflection' : '—'}</div>
+                  <div className="sl-actions">
+                    <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} aria-label={`Open ${s.id}`} aria-expanded={isOpen} className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 14px' }}>Open</button>
+                    <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <FileText size={13} /> PDF
+                    </button>
+                  </div>
+                  {s.clinicianNotes && (
+                    <div className="sl-feedback">
+                      Clinician: {s.clinicianNotes}
+                    </div>
+                  )}
                 </div>
-                {openedSessions[client.id]?.includes(s.id) && <div style={{ display: openedSession?.id === s.id ? 'block' : 'none' }}><ClinicianSessionDetail key={`${client.id}-${s.id}`} session={s} onSaved={handleFeedbackSaved} /></div>}
+                {openedSessions[client.id]?.includes(s.id) && <div style={{ display: isOpen ? 'block' : 'none' }}><ClinicianSessionDetail key={`${client.id}-${s.id}`} session={s} onSaved={handleFeedbackSaved} /></div>}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>

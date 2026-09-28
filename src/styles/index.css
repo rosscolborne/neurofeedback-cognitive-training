@@ -621,6 +621,236 @@ input, select, textarea, button {
   color: var(--text-secondary);
 }
 
+/* Clinician patient header: facts as chips, actions as one group that recomposes on phones. */
+.detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  background: #FFFFFF;
+}
+
+.detail-header > div:first-child {
+  flex: 1 1 360px;
+}
+
+.detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: var(--surface-clinician-sidebar);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.detail-chip-valid {
+  background: var(--status-active-bg);
+  color: var(--status-active);
+}
+
+.detail-chip-expired {
+  background: var(--status-paused-bg);
+  color: var(--status-paused);
+}
+
+.detail-chip-invalid {
+  background: var(--status-alert-bg);
+  color: var(--status-alert);
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-action {
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+@media (max-width: 767px) {
+  .detail-header {
+    padding: 16px;
+  }
+
+  .detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .detail-action-primary {
+    grid-column: 1 / -1;
+  }
+
+  .detail-actions .btn {
+    white-space: nowrap;
+  }
+}
+
+/* Clinician session log: a scannable table on desktop, compact labelled cards on phones. */
+.session-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-log-head,
+.session-log-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 72px 64px 90px 56px 86px 148px;
+  align-items: center;
+  column-gap: 12px;
+}
+
+.session-log-head {
+  padding: 0 12px 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.session-log-row {
+  row-gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-patient-base);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.session-log-row.is-open {
+  border-color: var(--text-tertiary);
+  background: #FFFFFF;
+}
+
+.sl-main {
+  min-width: 0;
+}
+
+.sl-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.sl-sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sl-zone {
+  font-weight: 700;
+}
+
+.sl-label {
+  display: none;
+}
+
+.sl-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sl-feedback {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .session-log-head {
+    display: none;
+  }
+
+  .session-log-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .sl-main {
+    flex: 1 1 calc(100% - 90px);
+  }
+
+  .sl-zone {
+    order: -1;
+    margin-left: auto;
+    font-size: 16px;
+  }
+
+  .sl-main {
+    order: -2;
+  }
+
+  .sl-cell:not(.sl-zone) {
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    background: var(--surface-clinician-sidebar);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .sl-label {
+    display: inline;
+  }
+
+  .sl-zone .sl-label,
+  .sl-notes .sl-label {
+    display: none;
+  }
+
+  .sl-cell.sl-empty {
+    display: none;
+  }
+
+  .sl-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .sl-feedback {
+    flex: 1 1 100%;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
 /* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
 .train-grid {
   display: grid;
