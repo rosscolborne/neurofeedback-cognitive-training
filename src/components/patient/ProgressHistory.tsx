@@ -12,6 +12,7 @@ import {
 } from './patientMetrics';
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
+import { MOODS } from './PostSessionSummary';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
@@ -34,6 +35,11 @@ const formatBandPower = (value: unknown): string => (
   typeof value === 'number' && Number.isFinite(value) ? `${value}µV` : 'Unavailable'
 );
 
+/** Subjective rating with the name the patient chose it by, e.g. "Focused · 4/5". */
+const moodLabel = (rating: number) => {
+  const mood = MOODS.find((entry) => entry.value === rating);
+  return mood ? `${mood.label} · ${mood.score}` : `${rating}/5`;
+};
 const journalLabelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' };
 const journalFieldStyle: React.CSSProperties = { padding: '8px 10px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: '13px' };
 const journalButtonStyle: React.CSSProperties = { padding: '7px 16px', fontSize: '13px' };
@@ -354,7 +360,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                       )}
                       {s.moodRating && (
                         <span className="status-tag" style={{ fontSize: '11px', padding: '2px 8px', background: 'var(--surface-patient-recessed)', color: 'var(--text-secondary)' }}>
-                          State {s.moodRating}/5
+                          {moodLabel(s.moodRating)}
                         </span>
                       )}
                     </div>
@@ -417,7 +423,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                       <textarea id={`journal-${s.id}`} value={journal.patientNotes} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, patientNotes: event.target.value } : current)} style={{ ...journalFieldStyle, display: 'block', width: '100%', minHeight: '72px', resize: 'vertical' }} />
                       <label htmlFor={`mood-${s.id}`} style={journalLabelStyle}>Mood</label>
                       <select id={`mood-${s.id}`} style={{ ...journalFieldStyle, alignSelf: 'flex-start', minWidth: '140px' }} value={journal.moodRating ?? ''} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, moodRating: event.target.value ? Number(event.target.value) as SessionRecord['moodRating'] : undefined } : current)}>
-                        <option value="">Not recorded</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}/5</option>)}
+                        <option value="">Not recorded</option>{MOODS.map((mood) => <option key={mood.value} value={mood.value}>{moodLabel(mood.value)}</option>)}
                       </select>
                       <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}><button type="button" className="btn btn-primary" style={journalButtonStyle} disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" className="btn btn-ghost" style={journalButtonStyle} disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
                       {journal.error && <p role="alert" style={{ color: 'var(--status-alert)' }}>Journal could not be saved. Your changes are still here; try again.</p>}

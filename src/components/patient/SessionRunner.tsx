@@ -143,6 +143,14 @@ export const resolveSessionCareProvenance = (client: ClientProfile): Pick<Sessio
   };
 };
 
+/** Which protocol settings drive feedback at runtime; collapsed so it does not crowd the session. */
+const ProtocolRuntimeNote: React.FC<{ style?: React.CSSProperties }> = ({ style }) => (
+  <details style={{ fontSize: '11px', lineHeight: 1.4, color: 'var(--text-tertiary)', ...style }}>
+    <summary style={{ cursor: 'pointer', width: 'fit-content' }}>About protocol settings</summary>
+    <p style={{ margin: '4px 0 0', fontSize: '10px' }}>{PROTOCOL_RUNTIME_LIMITATIONS}</p>
+  </details>
+);
+
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
   onBaselinePersisted,
@@ -685,9 +693,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           <ShieldCheck size={14} />
           <span>Runs 100% in your browser. No server downloads required.</span>
         </div>
-        <p style={{ fontSize: '10px', color: 'var(--text-tertiary)', lineHeight: 1.4, margin: 0 }}>
-          {PROTOCOL_RUNTIME_LIMITATIONS}
-        </p>
+        <ProtocolRuntimeNote />
       </div>
     );
   }
@@ -868,9 +874,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         </div>
       </header>
 
-      <div role="status" style={{ padding: '5px 14px', fontSize: '9px', lineHeight: 1.3, color: 'var(--text-tertiary)' }}>
-        {PROTOCOL_RUNTIME_LIMITATIONS}
-      </div>
+      <ProtocolRuntimeNote style={{ padding: '4px 14px 0' }} />
 
       {acquisitionError && (
         <div role="alert" style={{ padding: '8px 14px', color: '#B91C1C', background: '#FEE2E2', fontSize: '12px', lineHeight: 1.4 }}>

@@ -70,7 +70,7 @@ test('patient edits an older session journal and sees the saved note and mood af
     const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'skyline drift' }).first();
     await reloadedCard.click();
     await expect(reloadedCard).toContainText('Notes: After reviewing the session, I felt calmer.');
-    await expect(reloadedCard).toContainText('State 4/5');
+    await expect(reloadedCard).toContainText('Focused · 4/5');
   } finally {
     await context.close();
   }
