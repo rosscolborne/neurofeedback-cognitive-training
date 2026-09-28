@@ -90,7 +90,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
 
 export const MessageBubble = ({ message, ownRole }: { message: ProductionMessage; ownRole: 'clinician' | 'patient' }) => {
   const own = message.senderRole === ownRole;
-  return <div style={{ alignSelf: own ? 'flex-end' : 'flex-start', maxWidth: '82%' }}><div style={{ padding: '10px 14px', borderRadius: 8, background: own ? '#3A4B58' : '#fff', color: own ? '#fff' : 'var(--text-primary)' }}>{message.text}</div><div style={{ fontSize: 10 }}>{formatMessageTime(message.createdAt)}{message.readOnly ? ' • Previous correspondence (read-only)' : ''}</div></div>;
+  return <div style={{ alignSelf: own ? 'flex-end' : 'flex-start', maxWidth: '82%' }}><div style={{ padding: '10px 14px', borderRadius: 12, border: own ? '1px solid transparent' : '1px solid var(--border-subtle)', background: own ? '#3A4B58' : '#fff', color: own ? '#fff' : 'var(--text-primary)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.text}</div><div style={{ marginTop: 4, padding: '0 4px', fontSize: 11, color: 'var(--text-tertiary)', textAlign: own ? 'right' : 'left' }}>{formatMessageTime(message.createdAt)}{message.readOnly ? ' • Previous correspondence (read-only)' : ''}</div></div>;
 };
 const StatusNotice = ({ text }: { text: string }) => <div style={{ margin: 'auto', padding: 20, textAlign: 'center', color: 'var(--text-tertiary)' }}>{text}</div>;
 const ErrorNotice = ({ message, onRetry }: { message: string; onRetry: () => void }) => <div role="alert" style={{ margin: 16, padding: 12, color: 'var(--status-alert)' }}><AlertCircle size={16} /> {message} <button type="button" className="btn btn-ghost" onClick={onRetry}><RefreshCw size={14} /> Retry</button></div>;
