@@ -17,15 +17,17 @@ export const PatientAppointmentsView: React.FC<PatientAppointmentsViewProps> = (
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [nowMs] = useState(() => Date.now());
+  const [unreadableCount, setUnreadableCount] = useState(0);
   const mountedRef = useRef(true);
   const loadRequestRef = useRef(0);
   const load = useCallback(async () => {
     const request = ++loadRequestRef.current;
     setState('loading'); setError('');
     try {
-      const loaded = await repository.list('patient');
+      let skipped = 0;
+      const loaded = await repository.list('patient', [], { onUnreadable: (count) => { skipped = count; } });
       if (!mountedRef.current || request !== loadRequestRef.current) return;
-      setAppointments(loaded); setState('ready');
+      setAppointments(loaded); setUnreadableCount(skipped); setState('ready');
     } catch (reason) {
       if (!mountedRef.current || request !== loadRequestRef.current) return;
       setError(errorMessage(reason)); setState('error');
@@ -34,9 +36,11 @@ export const PatientAppointmentsView: React.FC<PatientAppointmentsViewProps> = (
   useEffect(() => {
     const request = ++loadRequestRef.current;
     let active = true;
-    repository.list('patient').then((loaded) => {
+    let skipped = 0;
+    repository.list('patient', [], { onUnreadable: (count) => { skipped = count; } }).then((loaded) => {
       if (!active || request !== loadRequestRef.current) return;
       setAppointments(loaded);
+      setUnreadableCount(skipped);
       setState('ready');
     }).catch((reason: unknown) => {
       if (!active || request !== loadRequestRef.current) return;
@@ -57,6 +61,7 @@ export const PatientAppointmentsView: React.FC<PatientAppointmentsViewProps> = (
   // Cancelled visits are listed apart so they never read as an upcoming appointment.
   return <section aria-label="Appointments" style={{ display: 'grid', gap: 12 }}>
     <h1 className="font-display" style={{ margin: 0, fontSize: 28, fontWeight: 400, color: 'var(--text-primary)' }}>Appointments</h1>
+    {unreadableCount > 0 && <div role="status" className="card-patient" style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>Some appointment details couldn’t be displayed. Contact your clinician if a visit seems to be missing.</div>}
     {groupAppointmentsForDisplay(appointments, nowMs).map((group) => <section key={group.key} aria-label={`${group.title} appointments`} style={{ display: 'grid', gap: 10 }}>
       <h2 className="section-label" style={{ margin: '6px 0 0' }}>{group.title}</h2>
       {group.items.map(renderAppointment)}

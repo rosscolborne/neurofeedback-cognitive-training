@@ -59,8 +59,18 @@ export function createCancellationRequestId(): string {
   return `cancel_${globalThis.crypto.randomUUID().replace(/-/g, '')}`;
 }
 
+export interface AppointmentListOptions {
+  /** Called with the number of documents that were skipped because they could not be read. */
+  onUnreadable?: (count: number) => void;
+}
+
 export class AppointmentRepository {
-  async list(role: AppointmentListRole, currentPatientIds: string[] = []): Promise<AppointmentRecord[]> {
+  /**
+   * Unreadable documents are skipped (ids logged for support, never shown) and reported through
+   * `onUnreadable` so the view can say some appointments are missing. If nothing is readable the
+   * list still fails, so malformed data never looks like an empty calendar.
+   */
+  async list(role: AppointmentListRole, currentPatientIds: string[] = [], options: AppointmentListOptions = {}): Promise<AppointmentRecord[]> {
     const uid = signedInUserId();
     const patientIds = [...new Set(currentPatientIds.filter((id) => typeof id === 'string' && id.trim() === id && id.length > 0))];
     const constraints = role === 'clinician'
@@ -79,11 +89,18 @@ export class AppointmentRepository {
     const snapshots = await Promise.all(constraints.map((filters) => getDocs(query(collection(db, 'appointments'), ...filters))));
     const documents = new Map<string, { id: string; data: () => unknown }>();
     for (const snapshot of snapshots) for (const item of snapshot.docs) documents.set(item.id, item);
-    const appointments = [...documents.values()].map((item) => {
+    const appointments: AppointmentRecord[] = [];
+    const unreadableIds: string[] = [];
+    for (const item of documents.values()) {
       const appointment = readAnyAppointmentDocument(item.data(), item.id);
-      if (!appointment) throw new Error(`Appointment ${item.id} has invalid persisted data`);
-      return appointment;
-    });
+      if (appointment) appointments.push(appointment);
+      else unreadableIds.push(item.id);
+    }
+    if (unreadableIds.length > 0) {
+      console.warn(`Skipped ${unreadableIds.length} appointment document(s) with invalid persisted data`, unreadableIds);
+      if (appointments.length === 0) throw new Error('Appointment details could not be read');
+      options.onUnreadable?.(unreadableIds.length);
+    }
     return sortAppointments(appointments);
   }
 

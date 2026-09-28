@@ -61,6 +61,7 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({ clie
   const linkedPatientIds = useMemo(() => linkedClients.map((client) => client.id), [linkedClients]);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
+  const [unreadableCount, setUnreadableCount] = useState(0);
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -80,9 +81,10 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({ clie
     ++viewGenerationRef.current;
     setLoadState('loading'); setLoadError(''); setCancellingIds(new Set());
     try {
-      const loaded = await repository.list('clinician', linkedPatientIds);
+      let skipped = 0;
+      const loaded = await repository.list('clinician', linkedPatientIds, { onUnreadable: (count) => { skipped = count; } });
       if (!mountedRef.current || request !== loadRequestRef.current) return;
-      cancellationOperations.current.clear(); setCancelErrors({}); setAppointments(loaded); setLoadState('ready');
+      cancellationOperations.current.clear(); setCancelErrors({}); setAppointments(loaded); setUnreadableCount(skipped); setLoadState('ready');
     } catch (error) {
       if (!mountedRef.current || request !== loadRequestRef.current) return;
       setLoadError(getErrorMessage(error)); setLoadState('error');
@@ -92,9 +94,11 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({ clie
     const request = ++loadRequestRef.current;
     ++viewGenerationRef.current;
     let active = true;
-    repository.list('clinician', linkedPatientIds).then((loaded) => {
+    let skipped = 0;
+    repository.list('clinician', linkedPatientIds, { onUnreadable: (count) => { skipped = count; } }).then((loaded) => {
       if (!active || request !== loadRequestRef.current) return;
       setAppointments(loaded);
+      setUnreadableCount(skipped);
       setLoadState('ready');
     }).catch((error: unknown) => {
       if (!active || request !== loadRequestRef.current) return;
@@ -163,6 +167,7 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({ clie
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><div><h1 style={{ margin: 0, fontSize: 22 }}>Clinical appointments</h1><p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 12 }}>Times are shown in each appointment’s timezone.</p></div><button className="btn btn-dense" onClick={openCreate} disabled={linkedClients.length === 0}><Plus size={16} /> Schedule appointment</button></div>
     {actionError && !showForm && <div role="alert" className="card-clinician" style={{ padding: 12, color: 'var(--status-alert)' }}><AlertCircle size={14} /> {actionError}</div>}
+    {unreadableCount > 0 && <div role="status" className="card-clinician" style={{ padding: 12, fontSize: 13, color: 'var(--text-secondary)' }}>{unreadableCount === 1 ? '1 appointment' : `${unreadableCount} appointments`} couldn’t be displayed because the saved details are incomplete.</div>}
     {appointments.length === 0 ? <div className="card-clinician" style={{ padding: 36, textAlign: 'center' }}><Calendar size={34} style={{ opacity: 0.45, margin: '0 auto 8px' }} /><div style={{ fontWeight: 600 }}>No appointments scheduled</div><div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>{linkedClients.length ? 'Schedule the first appointment when you are ready.' : 'Link a patient before scheduling an appointment.'}</div></div> : <>
       {appointmentGroups.map((group) => <section key={group.key} aria-label={`${group.title} appointments`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <h2 className="section-label" style={{ margin: '4px 0 0' }}>{group.title}</h2>
