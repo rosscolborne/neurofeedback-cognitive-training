@@ -95,4 +95,29 @@ describe('deterministic PDF report text', () => {
     expect(content.metrics).toContain('Persisted sessions: 2');
     expect(content.metrics).toContain('Adherence: Not calculated for an all-sessions export (weekly prescription: 1 session)');
   });
+
+  it('only lifts existing metric lines into stat blocks, so the layout never hides a fact', () => {
+    const labelsOf = (lines: string[]) => new Set(lines.map((line) => line.split(': ')[0]));
+    const selection = buildPatientSelectionReportAnalytics(client, [session(), session({ id: 'two', isDemo: true })], generatedAt, 'UTC');
+    const intervalAnalytics = buildClinicalReportAnalytics([client], [session()], interval);
+    const contents = [
+      buildPracticeReportText(intervalAnalytics, brand, generatedAt),
+      buildPatientReportText(client, intervalAnalytics, brand, generatedAt, 'interval'),
+      buildPatientReportText(client, selection, brand, generatedAt, 'all-sessions'),
+      buildPatientReportText(client, buildPatientSelectionReportAnalytics(client, [session()], generatedAt, 'UTC'), brand, generatedAt, 'selected-session'),
+    ];
+    for (const content of contents) {
+      const presented = [...(content.highlights ?? []), ...(content.sessionHero?.facts ?? [])];
+      expect(presented.length).toBeGreaterThan(0);
+      for (const item of presented) expect(labelsOf(content.metrics)).toContain(item.replaces);
+    }
+  });
+
+  it('makes the selected session the report hero, including its reflection', () => {
+    const selected = session({ experience: 'skyline-drift', protocol: 'beta-downtraining', isDemo: true, device: undefined, patientNotes: 'Felt calmer.' });
+    const analytics = buildPatientSelectionReportAnalytics(client, [selected], generatedAt, 'UTC');
+    const hero = buildPatientReportText(client, analytics, brand, generatedAt, 'selected-session').sessionHero;
+    expect(hero).toMatchObject({ when: 'Sep 19, 2026, 10:00 AM', experience: 'Skyline Drift', protocol: 'Beta De-arousal Downtraining', reflection: 'Felt calmer.' });
+    expect(hero?.facts.map((fact) => `${fact.label}: ${fact.value}`)).toEqual(['Duration: 10 min', 'In zone: 0%', 'Source: Training Demo (simulated)', 'Device: Unavailable']);
+  });
 });

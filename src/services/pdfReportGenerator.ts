@@ -6,6 +6,7 @@ import type { ClientProfile, ClinicBrandConfig, SessionRecord } from '../types';
 import type { ClinicalReportAnalytics } from '../components/clinician/clinicalReportAnalytics';
 import { buildClinicalReportAnalytics, formatMetric } from '../components/clinician/clinicalReportAnalytics';
 import { protocolDisplayName } from './protocols';
+import { experienceDisplayName } from '../components/displayLabels';
 import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 
 export interface ReportTextContent {
@@ -15,6 +16,29 @@ export interface ReportTextContent {
   notes: string[];
   tableHeader: string;
   tableRows: string[];
+  /** Presentation only: headline figures drawn as stat blocks. Each names the metric line it presents. */
+  highlights?: ReportHighlight[];
+  /** Presentation only: the single session a selected-session report is about, drawn as the page's hero. */
+  sessionHero?: ReportSessionHero;
+  /** Presentation only: clinic accent for rules and the scope band. */
+  accent?: string;
+}
+
+export interface ReportHighlight {
+  label: string;
+  value: string;
+  detail?: string;
+  /** Label of the metric line this block presents, so the details list does not repeat it. */
+  replaces?: string;
+}
+
+export interface ReportSessionHero {
+  when: string;
+  experience: string;
+  protocol: string;
+  facts: ReportHighlight[];
+  reflection?: string;
+  feedback?: string;
 }
 
 function reportInterval(analytics: ClinicalReportAnalytics): string {
@@ -51,6 +75,13 @@ export function buildPracticeReportText(
     : 'Observed in-zone change: Unavailable (fewer than two recorded measurements).';
 
   return {
+    accent: brand?.primaryAccent,
+    highlights: [
+      { label: 'Patients in cohort', value: `${analytics.clients.length}`, replaces: 'Selected cohort' },
+      { label: 'Sessions recorded', value: `${analytics.totalSessions}`, detail: analytics.demoSessionCount > 0 ? `includes ${analytics.demoSessionCount} Demo (simulated)` : undefined, replaces: 'Persisted sessions' },
+      { label: 'Adherence', value: formatMetric(analytics.adherencePercent, '%'), detail: analytics.expectedSessions == null ? 'no weekly target' : `${analytics.totalSessions} of ${analytics.expectedSessions} expected sessions`, replaces: 'Interval adherence' },
+      { label: 'Average in zone', value: formatMetric(analytics.averageInZonePercent.value, '%'), detail: `${analytics.averageInZonePercent.recordedSessions}/${analytics.averageInZonePercent.eligibleSessions} sessions measured`, replaces: 'Average in-zone time' },
+    ],
     title: 'Practice Session Activity Report',
     metadata: [
       `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
@@ -150,7 +181,41 @@ export function buildPatientReportText(
         `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
         `Device snapshot coverage: ${deviceCoverage}`,
       ];
+  const selected = scope === 'selected-session' ? sessions[0] : undefined;
+  const sessionDuration = (session: SessionRecord) => typeof session.durationSeconds === 'number' && Number.isFinite(session.durationSeconds) && session.durationSeconds >= 0
+    ? `${Math.round(session.durationSeconds / 60)} min`
+    : 'Unavailable';
+  const sessionInZone = (session: SessionRecord) => typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100
+    ? `${session.timeInZonePercent}%`
+    : 'Unavailable';
+  const sessionSource = (session: SessionRecord) => session.isDemo === true ? 'Training Demo (simulated)' : 'Non-Demo';
+  const sessionHero: ReportSessionHero | undefined = selected ? {
+    when: formatSessionWhen(selected, timeZone),
+    experience: selected.experience ? experienceDisplayName(selected.experience) : 'Experience not recorded',
+    protocol: selected.protocol ? getClinicalProtocolTemplate(selected.protocol)?.name ?? protocolDisplayName(selected.protocol) : 'Protocol not recorded',
+    facts: [
+      { label: 'Duration', value: sessionDuration(selected), replaces: 'Session duration' },
+      { label: 'In zone', value: sessionInZone(selected), replaces: 'In-zone time' },
+      { label: 'Source', value: sessionSource(selected), replaces: 'Sessions in this report' },
+      { label: 'Device', value: selected.device?.model?.trim() || 'Unavailable', replaces: 'Device snapshot coverage' },
+    ],
+    reflection: selected.patientNotes?.trim() || undefined,
+    feedback: selected.clinicianNotes?.trim() || undefined,
+  } : undefined;
+  const highlights: ReportHighlight[] | undefined = selected ? undefined : [
+    { label: 'Sessions recorded', value: `${row?.sessionCount ?? 0}`, replaces: 'Persisted sessions' },
+    { label: 'Demo sessions', value: `${row?.demoSessionCount ?? 0}`, detail: 'simulated; included', replaces: 'Training Demo completions' },
+    { label: 'Recorded duration', value: formatMetric(row?.durationMinutes ?? null, ' min'), replaces: 'Total recorded duration' },
+    ...(scope === 'interval'
+      ? [{ label: 'Adherence', value: formatMetric(row?.adherencePercent ?? null, '%'), detail: row?.expectedSessions == null ? 'no weekly target' : `${row.sessionCount} of ${row.expectedSessions} expected sessions`, replaces: 'Interval adherence' }]
+      : []),
+    { label: 'Average in zone', value: formatMetric(row?.averageInZonePercent ?? null, '%'), detail: `${row?.inZoneRecordedSessions ?? 0}/${row?.sessionCount ?? 0} sessions measured`, replaces: 'Average in-zone time' },
+    { label: 'Device details', value: row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable', detail: `${row?.deviceRecordedSessions ?? 0}/${row?.sessionCount ?? 0} sessions`, replaces: 'Device snapshot coverage' },
+  ];
   return {
+    accent: brand?.primaryAccent,
+    highlights,
+    sessionHero,
     title: scope === 'selected-session' ? 'Selected Session Report' : 'Patient Session Activity Report',
     metadata: [
       `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
@@ -166,136 +231,328 @@ export function buildPatientReportText(
     notes: [
       scope === 'interval'
         ? `Adherence formula: recorded sessions, including Training Demo sessions, divided by expected sessions (weekly target × ${analytics.interval.dayCount}/7 days), capped at 100%.`
-        : 'Adherence is calculated in interval reports from the Reports view, where the scheduling window is defined.',
+        : 'Adherence is calculated in interval reports from the Reports view, where the reporting window is defined.',
       'Training Demo sessions are simulated; they are included and labeled Demo. Fictional sample-workspace records are separate and excluded.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
       'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
     ],
     tableHeader: 'Date/time | Source | Duration | In-zone | Device',
-    tableRows: sessions.map(session => {
-      const duration = typeof session.durationSeconds === 'number' && Number.isFinite(session.durationSeconds) && session.durationSeconds >= 0
-        ? `${Math.round(session.durationSeconds / 60)} min`
-        : 'Unavailable';
-      const inZone = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100
-        ? `${session.timeInZonePercent}%`
-        : 'Unavailable';
-      const source = session.isDemo === true ? 'Training Demo (simulated)' : 'Non-Demo';
-      return `${formatSessionWhen(session, timeZone)} | ${source} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
-    }),
+    tableRows: sessions.map(session => `${formatSessionWhen(session, timeZone)} | ${sessionSource(session)} | ${sessionDuration(session)} | ${sessionInZone(session)} | ${session.device?.model?.trim() || 'Unavailable'}`),
   };
 }
 
-const PAGE = { left: 15, right: 195, top: 18, bottom: 282 };
-const INK = { primary: [26, 26, 26], secondary: [107, 101, 96], rule: [220, 217, 211], band: [242, 241, 238] } as const;
+const PAGE = { left: 16, right: 194, top: 18, bottom: 278, footer: 288 };
+const INK = {
+  primary: [26, 26, 26],
+  secondary: [107, 101, 96],
+  tertiary: [150, 143, 132],
+  rule: [224, 221, 215],
+  band: [244, 243, 240],
+  zebra: [250, 249, 247],
+} as const;
+const DEFAULT_ACCENT = [168, 72, 47] as const;
+type Rgb = readonly number[];
 
-/** Lays out the report text as labelled facts, notes and a column table; the wording is unchanged. */
+function accentColor(hex?: string): Rgb {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex?.trim() ?? '');
+  if (!match) return DEFAULT_ACCENT;
+  const value = parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+function splitFact(line: string): { label: string | null; value: string } {
+  const split = line.indexOf(': ');
+  return split > 0 && split < 40 ? { label: line.slice(0, split), value: line.slice(split + 2) } : { label: null, value: line };
+}
+
+/**
+ * Lays the report text out as a clinical document: identity header, scope band, headline figures
+ * (or the selected session as the hero), a scannable table, and secondary data notes. Wording and
+ * values come from the text builders unchanged; this only decides hierarchy and placement.
+ */
 function renderReport(content: ReportTextContent): jsPDF {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const width = PAGE.right - PAGE.left;
+  const accent = accentColor(content.accent);
   let y = PAGE.top;
-  const font = (size: number, bold = false, color: readonly number[] = INK.primary) => {
+  const font = (size: number, bold = false, color: Rgb = INK.primary) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
     doc.setFontSize(size);
     doc.setTextColor(color[0], color[1], color[2]);
   };
+  const fill = (color: Rgb) => doc.setFillColor(color[0], color[1], color[2]);
   const ensureSpace = (height: number) => {
     if (y + height <= PAGE.bottom) return false;
     doc.addPage();
     y = PAGE.top;
     return true;
   };
-  const rule = (color: readonly number[] = INK.rule) => {
-    doc.setDrawColor(color[0], color[1], color[2]);
-    doc.setLineWidth(0.2);
-    doc.line(PAGE.left, y, PAGE.right, y);
+  const caption = (text: string, x: number, at: number, color: Rgb = INK.secondary) => {
+    font(6.8, true, color);
+    doc.text(text.toUpperCase(), x, at, { charSpace: 0.25 });
   };
-  const heading = (text: string) => {
-    ensureSpace(14);
-    y += 5;
+  const section = (title: string) => {
+    ensureSpace(20);
+    y += 4;
     font(11, true);
-    doc.text(text, PAGE.left, y);
-    y += 2;
-    rule();
-    y += 5;
+    doc.text(title, PAGE.left, y);
+    y += 2.2;
+    doc.setDrawColor(INK.rule[0], INK.rule[1], INK.rule[2]);
+    doc.setLineWidth(0.25);
+    doc.line(PAGE.left, y, PAGE.right, y);
+    y += 6;
   };
-  /** "Label: value" lines become a two-column list; other lines span the full width. */
-  const facts = (lines: string[]) => {
-    const labelWidth = 48;
-    lines.forEach((line) => {
-      const split = line.indexOf(': ');
-      const label = split > 0 && split < 40 ? line.slice(0, split) : null;
-      const value = label ? line.slice(split + 2) : line;
+
+  const metadata = content.metadata.map(splitFact);
+  const meta = new Map(metadata.filter((fact) => fact.label).map((fact) => [fact.label as string, fact.value]));
+  const clinic = meta.get('Clinic');
+  const patient = meta.get('Patient');
+  const scopeLabel = meta.has('Report scope') ? 'Report scope' : meta.has('Reporting interval') ? 'Reporting interval' : null;
+  const sourceLine = content.metadata.find((line) => line.startsWith('Source: '));
+
+  // Identity header.
+  caption(clinic && clinic !== 'Unavailable' ? clinic : 'Clinic', PAGE.left, y);
+  y += 8;
+  font(19, true);
+  doc.text(content.title, PAGE.left, y);
+  y += 7;
+  if (patient) {
+    font(12.5, true, INK.secondary);
+    doc.text(patient, PAGE.left, y);
+    y += 5.5;
+  }
+  doc.setDrawColor(accent[0], accent[1], accent[2]);
+  doc.setLineWidth(0.9);
+  doc.line(PAGE.left, y, PAGE.left + 22, y);
+  y += 6;
+
+  // What this report covers, stated once and prominently.
+  if (scopeLabel) {
+    font(10, true);
+    const lines = doc.splitTextToSize(meta.get(scopeLabel) ?? '', width - 12);
+    const height = 8 + lines.length * 4.6;
+    fill(INK.band);
+    doc.roundedRect(PAGE.left, y, width, height, 1.5, 1.5, 'F');
+    fill(accent);
+    doc.rect(PAGE.left, y, 1.2, height, 'F');
+    caption(scopeLabel, PAGE.left + 5, y + 4.8);
+    font(10, true);
+    doc.text(lines, PAGE.left + 5, y + 9.8);
+    y += height + 6;
+  }
+
+  /** Label-over-value facts in columns (captions small and muted, values readable). */
+  const factGrid = (facts: Array<{ label: string | null; value: string }>, columns: number) => {
+    const columnWidth = width / columns;
+    for (let index = 0; index < facts.length; index += columns) {
+      const row = facts.slice(index, index + columns);
       font(9);
-      const valueLines = doc.splitTextToSize(value, label ? width - labelWidth : width);
-      ensureSpace(valueLines.length * 4.4 + 1);
-      if (label) {
-        font(8.5, false, INK.secondary);
-        doc.text(label, PAGE.left, y);
+      const wrapped = row.map((fact) => doc.splitTextToSize(fact.value, columnWidth - 5));
+      const height = Math.max(...wrapped.map((lines) => lines.length)) * 4 + 7.5;
+      ensureSpace(height);
+      row.forEach((fact, column) => {
+        const x = PAGE.left + column * columnWidth;
+        caption(fact.label ?? '', x, y);
         font(9);
+        doc.text(wrapped[column], x, y + 4.6);
+      });
+      y += height;
+    }
+  };
+  // The hero already states when the selected session was recorded.
+  const shownElsewhere = ['Clinic', 'Patient', 'Source', scopeLabel, ...(content.sessionHero ? ['Session recorded'] : [])];
+  factGrid(metadata.filter((fact) => fact.label && !shownElsewhere.includes(fact.label)), 3);
+
+  /** Headline figures as quiet tiles: caption, large value, one line of context. */
+  const statBlocks = (items: ReportHighlight[]) => {
+    const columns = items.length <= 4 ? items.length : 3;
+    const gap = 4;
+    const blockWidth = (width - gap * (columns - 1)) / columns;
+    for (let index = 0; index < items.length; index += columns) {
+      const row = items.slice(index, index + columns);
+      font(7.2);
+      const details = row.map((item) => item.detail ? doc.splitTextToSize(item.detail, blockWidth - 8).slice(0, 2) : []);
+      const height = 17 + Math.max(0, ...details.map((lines) => lines.length)) * 3.3;
+      ensureSpace(height + gap);
+      row.forEach((item, column) => {
+        const x = PAGE.left + column * (blockWidth + gap);
+        fill(INK.band);
+        doc.roundedRect(x, y, blockWidth, height, 1.5, 1.5, 'F');
+        caption(item.label, x + 4, y + 5.5);
+        font(item.value.length > 11 ? 11 : 16, true);
+        doc.text(item.value, x + 4, y + 13);
+        if (details[column].length) {
+          font(7.2, false, INK.secondary);
+          doc.text(details[column], x + 4, y + 17.6);
+        }
+      });
+      y += height + gap;
+    }
+  };
+
+  /** The one session a selected-session report is about. */
+  const sessionHero = (hero: ReportSessionHero) => {
+    const factWidth = (width - 10) / hero.facts.length;
+    font(10, false, INK.secondary);
+    const context = doc.splitTextToSize(`${hero.experience} · ${hero.protocol}`, width - 10);
+    const height = 34 + context.length * 4.4;
+    ensureSpace(height + 4);
+    fill(INK.band);
+    doc.roundedRect(PAGE.left, y, width, height, 2, 2, 'F');
+    fill(accent);
+    doc.rect(PAGE.left, y, 1.2, height, 'F');
+    caption('Selected session', PAGE.left + 5, y + 6, accent);
+    font(15, true);
+    doc.text(hero.when, PAGE.left + 5, y + 13.5);
+    font(10, false, INK.secondary);
+    doc.text(context, PAGE.left + 5, y + 19.5);
+    const factsY = y + 22 + context.length * 4.4;
+    hero.facts.forEach((fact, index) => {
+      const x = PAGE.left + 5 + index * factWidth;
+      caption(fact.label, x, factsY);
+      const missing = fact.value === 'Unavailable';
+      font(fact.value.length > 14 ? 9.5 : 12, true, missing ? INK.tertiary : INK.primary);
+      doc.text(doc.splitTextToSize(fact.value, factWidth - 4).slice(0, 2), x, factsY + 5.6);
+    });
+    y += height + 6;
+    const quote = (label: string, text: string) => {
+      font(9.5);
+      const lines = doc.splitTextToSize(text, width - 8);
+      ensureSpace(Math.min(lines.length, 12) * 4.4 + 10);
+      caption(label, PAGE.left, y);
+      y += 4.6;
+      doc.setDrawColor(INK.rule[0], INK.rule[1], INK.rule[2]);
+      doc.setLineWidth(0.8);
+      doc.line(PAGE.left + 0.6, y - 3.2, PAGE.left + 0.6, y - 3.2 + lines.length * 4.4);
+      font(9.5);
+      lines.forEach((line: string) => {
+        ensureSpace(4.4);
+        doc.text(line, PAGE.left + 4, y);
+        y += 4.4;
+      });
+      y += 4;
+    };
+    if (hero.reflection) quote('Patient reflection', hero.reflection);
+    if (hero.feedback) quote('Clinician feedback', hero.feedback);
+  };
+
+  /** Everything else in the summary, as a compact label/value list. */
+  const detailList = (facts: Array<{ label: string | null; value: string }>) => {
+    const labelWidth = 50;
+    facts.forEach((fact) => {
+      font(8.5);
+      const lines = doc.splitTextToSize(fact.value, fact.label ? width - labelWidth : width);
+      ensureSpace(lines.length * 4.1 + 1.6);
+      if (fact.label) {
+        font(8, false, INK.secondary);
+        doc.text(fact.label, PAGE.left, y);
       }
-      doc.text(valueLines, PAGE.left + (label ? labelWidth : 0), y);
-      y += valueLines.length * 4.4 + 1;
+      font(8.5, false, fact.value.startsWith('Unavailable') || fact.value.startsWith('Not calculated') ? INK.secondary : INK.primary);
+      doc.text(lines, PAGE.left + (fact.label ? labelWidth : 0), y);
+      y += lines.length * 4.1 + 1.6;
     });
   };
-  const notes = (lines: string[]) => {
-    lines.forEach((line) => {
-      font(8.5, false, INK.secondary);
-      const wrapped = doc.splitTextToSize(line, width - 4);
-      ensureSpace(wrapped.length * 4 + 1.5);
-      doc.text('•', PAGE.left, y);
-      doc.text(wrapped, PAGE.left + 4, y);
-      y += wrapped.length * 4 + 1.5;
-    });
-  };
+
   const table = (header: string, rows: string[]) => {
     const headerCells = header.split(' | ');
     const rowCells = rows.map((row) => row.split(' | '));
-    font(8);
-    // Headers may wrap between words but never inside one.
+    font(8.3);
+    // Headers may wrap between words but never inside one; the first column gets extra room.
     const natural = headerCells.map((cell, column) => Math.max(
-      doc.getTextWidth(cell) * 0.75,
+      doc.getTextWidth(cell) * 0.8,
       ...cell.split(' ').map((word) => doc.getTextWidth(word) + 1),
       ...rowCells.map((cells) => doc.getTextWidth(cells[column] ?? '')),
       12,
-    ));
-    const scale = width / natural.reduce((sum, value) => sum + value + 3, 0);
-    const columns = natural.map((value) => (value + 3) * scale);
-    const drawRow = (cells: string[], bold: boolean) => {
-      font(8, bold, bold ? INK.secondary : INK.primary);
-      const wrapped = columns.map((columnWidth, column) => doc.splitTextToSize(cells[column] ?? '', columnWidth - 2));
-      const height = Math.max(...wrapped.map((lines) => lines.length)) * 3.6 + 2.6;
-      if (ensureSpace(height) && !bold) drawRow(headerCells, true);
-      if (bold) {
-        doc.setFillColor(INK.band[0], INK.band[1], INK.band[2]);
-        doc.rect(PAGE.left, y - 3.6, width, height, 'F');
-      }
-      font(8, bold, bold ? INK.secondary : INK.primary);
-      let x = PAGE.left + 1.5;
-      wrapped.forEach((lines, column) => { doc.text(lines, x, y); x += columns[column]; });
+    ) * (column === 0 ? 1.1 : 1));
+    const scale = width / natural.reduce((sum, value) => sum + value + 4, 0);
+    const columns = natural.map((value) => (value + 4) * scale);
+    const drawHeader = () => {
+      font(7.2, true, INK.secondary);
+      const wrapped = columns.map((columnWidth, column) => doc.splitTextToSize(headerCells[column] ?? '', columnWidth - 3));
+      const height = Math.max(...wrapped.map((lines) => lines.length)) * 3.3 + 4.4;
+      ensureSpace(height + 8);
+      fill(INK.band);
+      doc.rect(PAGE.left, y, width, height, 'F');
+      let x = PAGE.left + 2;
+      font(7.2, true, INK.secondary);
+      wrapped.forEach((lines, column) => { doc.text(lines, x, y + 4.6); x += columns[column]; });
       y += height;
-      if (!bold) { y -= 3.1; rule(); y += 3.1; }
     };
-    drawRow(headerCells, true);
+    drawHeader();
     if (rows.length === 0) {
-      font(8, false, INK.secondary);
-      doc.text('No eligible sessions in the selected interval.', PAGE.left + 1.5, y);
-      y += 5;
+      font(8.5, false, INK.secondary);
+      doc.text('No eligible sessions in the selected interval.', PAGE.left + 2, y + 5.5);
+      y += 9;
+      return;
     }
-    rowCells.forEach((cells) => drawRow(cells, false));
+    rowCells.forEach((cells, index) => {
+      font(8.3);
+      const wrapped = columns.map((columnWidth, column) => doc.splitTextToSize(cells[column] ?? '', columnWidth - 3));
+      const height = Math.max(...wrapped.map((lines) => lines.length)) * 3.6 + 3.1;
+      if (ensureSpace(height)) drawHeader();
+      if (index % 2 === 1) {
+        fill(INK.zebra);
+        doc.rect(PAGE.left, y, width, height, 'F');
+      }
+      let x = PAGE.left + 2;
+      wrapped.forEach((lines, column) => {
+        const value = cells[column] ?? '';
+        // Repeated missing values stay visible but recede; the first column is the row's identity.
+        font(8.3, column === 0, value.startsWith('Unavailable') ? INK.tertiary : INK.primary);
+        doc.text(lines, x, y + 4.1);
+        x += columns[column];
+      });
+      y += height;
+    });
+    doc.setDrawColor(INK.rule[0], INK.rule[1], INK.rule[2]);
+    doc.setLineWidth(0.25);
+    doc.line(PAGE.left, y, PAGE.right, y);
+    y += 2;
   };
 
-  font(17, true);
-  doc.text(content.title, PAGE.left, y);
-  y += 4;
-  rule(INK.primary);
-  y += 7;
-  facts(content.metadata);
-  heading('Summary');
-  facts(content.metrics);
-  heading('Session detail');
-  table(content.tableHeader, content.tableRows);
-  heading('Data interpretation');
-  notes(content.notes);
+  section('Summary');
+  if (content.sessionHero) sessionHero(content.sessionHero);
+  else if (content.highlights?.length) statBlocks(content.highlights);
+  const presented = new Set([...(content.highlights ?? []), ...(content.sessionHero?.facts ?? [])].map((item) => item.replaces).filter(Boolean));
+  const remaining = content.metrics.map(splitFact).filter((fact) => !fact.label || !presented.has(fact.label));
+  if (remaining.length) {
+    y += 3;
+    detailList(remaining);
+  }
+
+  // A selected-session report already shows its one session above; a one-row table would repeat it.
+  if (!content.sessionHero) {
+    const isPatientTable = content.tableHeader.startsWith('Patient');
+    section(`${isPatientTable ? 'Patients' : 'Sessions'} (${content.tableRows.length})`);
+    table(content.tableHeader, content.tableRows);
+  }
+
+  // Provenance and caveats stay complete but secondary, and are kept together on one page.
+  const aboutLines = [...(sourceLine ? [sourceLine] : []), ...content.notes];
+  font(7.6);
+  const aboutWrapped = aboutLines.map((line) => doc.splitTextToSize(line, width - 4) as string[]);
+  ensureSpace(11 + aboutWrapped.reduce((sum, lines) => sum + lines.length * 3.5 + 1.4, 0));
+  y += 6;
+  font(9, true, INK.secondary);
+  doc.text('About this report', PAGE.left, y);
+  y += 5;
+  aboutWrapped.forEach((wrapped) => {
+    font(7.6, false, INK.secondary);
+    doc.text('•', PAGE.left, y);
+    doc.text(wrapped, PAGE.left + 3.5, y);
+    y += wrapped.length * 3.5 + 1.4;
+  });
+
+  const pages = doc.getNumberOfPages();
+  for (let page = 1; page <= pages; page += 1) {
+    doc.setPage(page);
+    doc.setDrawColor(INK.rule[0], INK.rule[1], INK.rule[2]);
+    doc.setLineWidth(0.2);
+    doc.line(PAGE.left, PAGE.footer - 4, PAGE.right, PAGE.footer - 4);
+    font(7, false, INK.tertiary);
+    doc.text([clinic && clinic !== 'Unavailable' ? clinic : null, content.title, patient].filter(Boolean).join(' · '), PAGE.left, PAGE.footer);
+    doc.text(`Page ${page} of ${pages}`, PAGE.right, PAGE.footer, { align: 'right' });
+  }
   return doc;
 }
 
