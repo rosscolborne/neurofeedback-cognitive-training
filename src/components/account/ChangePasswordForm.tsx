@@ -145,9 +145,9 @@ export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
           <div>
             <button
               type="submit"
-              className="btn btn-primary"
+              className={variant === 'patient' ? 'btn btn-primary' : 'btn btn-dense'}
               disabled={isSubmitting}
-              style={{ padding: '9px 14px', fontSize: '12px', opacity: isSubmitting ? 0.7 : 1 }}
+              style={{ padding: variant === 'patient' ? '10px 20px' : '9px 14px', fontSize: variant === 'patient' ? '14px' : '12px', opacity: isSubmitting ? 0.7 : 1 }}
             >
               {isSubmitting ? 'Changing password…' : 'Change password'}
             </button>

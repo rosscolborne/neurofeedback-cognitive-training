@@ -270,7 +270,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await createDialog.getByLabel('Patient', { exact: true }).selectOption({ label: patientName });
             await createDialog.getByLabel('Date', { exact: true }).fill(futureDate(45));
             await createDialog.getByLabel('Local time', { exact: true }).fill('11:20');
-            await createDialog.getByLabel('IANA timezone', { exact: true }).fill('America/Toronto');
+            await createDialog.getByLabel('Timezone', { exact: true }).fill('America/Toronto');
             await createDialog.getByLabel('Duration (minutes)', { exact: true }).fill('45');
             await createDialog.getByLabel('Type', { exact: true }).selectOption('remote-training');
             await createDialog.getByLabel('Notes', { exact: true }).fill(appointmentLabel);

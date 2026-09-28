@@ -17,6 +17,7 @@ import {
   Clock3,
   Copy,
   CheckCircle2,
+  ChevronRight,
 } from 'lucide-react';
 
 interface ClientRosterViewProps {
@@ -308,11 +309,12 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
         </section>
       )}
 
-      <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <button type="button" onClick={() => setShowHistory(!showHistory)} aria-expanded={showHistory} className="btn btn-ghost" style={{ alignSelf: 'flex-start', fontSize: '13px', fontWeight: 700 }}>
+      <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: showHistory ? '8px 12px 12px' : '4px 8px' }}>
+        <button type="button" onClick={() => setShowHistory(!showHistory)} aria-expanded={showHistory} className="btn btn-ghost" style={{ alignSelf: 'flex-start', gap: '6px', padding: '6px 8px', fontSize: '13px', fontWeight: 600 }}>
+          <ChevronRight size={15} aria-hidden="true" style={{ transform: showHistory ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s ease' }} />
           Invitation history ({historicalInvitations.length})
         </button>
-        {showHistory && historicalInvitations.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No past invitations yet.</div>}
+        {showHistory && historicalInvitations.length === 0 && <div style={{ padding: '0 8px', fontSize: '12px', color: 'var(--text-secondary)' }}>No past invitations yet.</div>}
         {showHistory && historicalInvitations.map((invitation) => {
           const status = invitationStatus(invitation);
           const date = status === 'accepted' ? invitation.acceptedAt : invitation.expiresAt;

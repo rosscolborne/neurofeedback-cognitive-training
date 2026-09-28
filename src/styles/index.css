@@ -116,6 +116,11 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Form controls otherwise fall back to the browser's system and monospace fonts. */
+input, select, textarea, button {
+  font-family: inherit;
+}
+
 /* Typography Utility Classes */
 .font-display {
   font-family: var(--font-display);
