@@ -38,6 +38,7 @@ export const TimeDilationClock: React.FC<TimeDilationClockProps> = ({
 
   return (
     <div
+      className="ng-match-clock"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -69,7 +70,7 @@ export const TimeDilationClock: React.FC<TimeDilationClockProps> = ({
         </div>
       </div>
 
-      <div style={{ flex: 1, maxWidth: '140px' }}>
+      <div className="ng-match-clock-bar">
         <div
           style={{
             width: '100%',

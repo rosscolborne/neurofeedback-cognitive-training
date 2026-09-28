@@ -124,6 +124,15 @@ const DEMO_STATES = [
 
 type DemoState = (typeof DEMO_STATES)[number]['id'];
 const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
+
+/** Keeps each frequency range whole, so a narrow telemetry cell breaks "BETA / (13–30 Hz)", never "BETA (13–30 / Hz)". */
+function telemetryLabel(label: string | undefined): React.ReactNode {
+  const open = label?.indexOf(' (') ?? -1;
+  if (!label || open < 0) return label;
+  return <>{label.slice(0, open)} {label.slice(open + 1).split(' / ').map((range, index) => (
+    <React.Fragment key={index}>{index > 0 && ' / '}<span className="session-telemetry-group">{range}</span></React.Fragment>
+  ))}</>;
+}
 const HARDWARE_SOURCE_MAX_AGE_MS = 2_000;
 interface SessionRunnerProps {
   client: ClientProfile;
@@ -994,7 +1003,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           style={{ padding: '8px 6px', flexShrink: 0 }}
         >
           <div>
-            <div className="session-telemetry-label">{activeReward?.label}</div>
+            <div className="session-telemetry-label">{telemetryLabel(activeReward?.label)}</div>
             <div className="session-telemetry-value font-mono">{activeReward?.value}</div>
             {activeReward?.value !== 'Unavailable' && eegData?.inZoneAvailable && (
               <div className="session-telemetry-note">{eegData.inZone ? 'In zone now' : 'Out of zone now'}</div>
@@ -1015,7 +1024,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             </div>
           )}
           <div>
-            <div className="session-telemetry-label">In zone · last {RECENT_IN_ZONE_WINDOW_SECONDS}s</div>
+            <div className="session-telemetry-label">In zone · <span className="session-telemetry-group">last {RECENT_IN_ZONE_WINDOW_SECONDS}s</span></div>
             <div className="session-telemetry-value font-mono" style={{ color: 'var(--brand-primary)' }}>
               {recentInZonePercent != null ? `${recentInZonePercent}%` : (eegData?.inZoneAvailable ? (eegData.inZone ? '100%' : '0%') : '--')}
             </div>

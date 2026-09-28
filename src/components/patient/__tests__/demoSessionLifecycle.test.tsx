@@ -62,6 +62,17 @@ const client = {
 } as ClientProfile;
 
 const text = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
+/** Rendered text as a reader sees it, across inline spans. */
+const visibleText = (renderer: ReactTestRenderer) => {
+  const parts: string[] = [];
+  const walk = (node: unknown): void => {
+    if (typeof node === 'string') parts.push(node);
+    else if (Array.isArray(node)) node.forEach(walk);
+    else if (node && typeof node === 'object' && 'children' in node) walk((node as { children: unknown }).children);
+  };
+  walk(renderer.toJSON());
+  return parts.join('');
+};
 const button = (renderer: ReactTestRenderer, label: string): ReactTestInstance => {
   const match = renderer.root.findAllByType('button').find((candidate) =>
     candidate.findAll((node) => node.children.some((child) => typeof child === 'string' && child.includes(label))).length > 0
@@ -143,7 +154,7 @@ describe('mounted patient Demo session lifecycle', () => {
           brainflowScores: { mindfulnessScore: 88, restfulnessScore: 92, method: 'demo' },
         });
       });
-      const output = text(runner);
+      const output = visibleText(runner);
       await act(async () => { runner.unmount(); });
       return output;
     };

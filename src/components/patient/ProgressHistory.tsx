@@ -45,13 +45,14 @@ const journalLabelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 6
 const journalFieldStyle: React.CSSProperties = { padding: '8px 10px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: '13px' };
 const journalButtonStyle: React.CSSProperties = { padding: '7px 16px', fontSize: '13px' };
 
-/** Minutes up to an hour, then hours and minutes. */
+/** Minutes up to an hour, then hours and minutes. Each number stays with its unit (no-break space),
+ *  so a narrow stat cell wraps as "5 h / 55 min" rather than splitting "55 / min". */
 function formatTrainingTime(totalSeconds: number): string {
   const minutes = Math.round(totalSeconds / 60);
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return `${minutes}\u00A0min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+  return rest ? `${hours}\u00A0h ${rest}\u00A0min` : `${hours}\u00A0h`;
 }
 
 /** Short weekday date; the year appears only when it differs from this year. */
