@@ -48,6 +48,41 @@ export async function seedLinkedPatient(extra: Record<string, unknown> = {}): Pr
   return { clinician, patient, name };
 }
 
+export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture): Promise<LocalPatientFixture> {
+  const id = randomUUID().slice(0, 12);
+  const patient = { uid: `patient-${id}`, email: `patient-${id}@example.test`, password: 'LocalEmulator!123' };
+  const name = `Protocol Patient ${id}`;
+  await adminAuth.createUser({ ...patient, displayName: name });
+  await Promise.all([
+    adminDb.doc(`users/${patient.uid}`).set({ role: 'patient' }),
+    adminDb.doc(`clients/${patient.uid}`).set({
+      id: patient.uid, name, email: patient.email, status: 'active',
+      clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+      condition: 'ADHD (Inattentive)', allowedExperiences: ['skyline-drift'],
+      prescribedSessionsPerWeek: 3, completedSessionsCount: 0, currentStreak: 0,
+      brainMaps: [], badges: [], isDemo: false,
+    }),
+  ]);
+  return { clinician: fixture.clinician, patient, name };
+}
+
+export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'skyline-drift', timestamp = Date.now()) {
+  const id = `review-${randomUUID().replaceAll('-', '')}`;
+  await adminDb.doc(`sessions/${id}`).set({
+    id, patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+    timestamp, date: new Date(timestamp).toLocaleDateString(), schemaVersion: 2,
+    experience, protocol: 'theta-beta-ratio', durationSeconds: 600,
+    isDemo: false, patientNotes, moodRating: 3,
+    timeSeries: [{ t: 5, alpha: 8, inZone: true }],
+  });
+  return id;
+}
+
+export async function readReviewSessionFeedback(sessionId: string): Promise<string | undefined> {
+  const snapshot = await adminDb.doc(`sessions/${sessionId}`).get();
+  return snapshot.get('clinicianNotes');
+}
+
 /** Provision records only in the isolated emulator for rules-bound persistence tests. */
 export async function seedPersistenceRecords(fixture: LocalPatientFixture, marker: string): Promise<string> {
   const { patient, clinician } = fixture;

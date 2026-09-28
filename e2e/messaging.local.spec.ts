@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient } from './helpers/localEmulator';
+import { seedAdditionalLinkedPatient, seedLinkedPatient } from './helpers/localEmulator';
 import { readPersistedMessagesAs } from './helpers/persistenceAssertions';
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
@@ -38,13 +38,13 @@ test('linked patient and clinician exchange persisted messages while an unrelate
 
     await loginThroughUi(clinician, linked.clinician);
     await arriveAtClinicianDashboard(clinician);
-    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    await expect(clinician.getByRole('button', { name: 'Messages, 0 unread conversations' }).first()).toBeVisible();
     await patientComposer.fill(patientText);
     await patient.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(patient.getByText(patientText, { exact: true })).toBeVisible();
     await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
-    await expect(clinician.getByRole('button', { name: 'Messages, unread message' }).first()).toBeVisible();
-    await clinician.getByRole('button', { name: 'Messages, unread message' }).first().click();
+    await expect(clinician.getByRole('button', { name: 'Messages, 1 unread conversations' }).first()).toBeVisible();
+    await clinician.getByRole('button', { name: 'Messages, 1 unread conversations' }).first().click();
     await expect(clinician.getByRole('heading', { name: 'Patient Messages' })).toBeVisible();
     const patientRow = clinician.getByRole('button', { name: new RegExp(`${linked.name} Open conversation`) });
     await expect(patientRow).toContainText('Unread');
@@ -52,13 +52,13 @@ test('linked patient and clinician exchange persisted messages while an unrelate
     await expect(clinician.getByLabel(`Message ${linked.name}`)).toBeEnabled();
     await expect(clinician.getByText(patientText, { exact: true })).toBeVisible();
     await expect(patientRow).not.toContainText('Unread');
-    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    await expect(clinician.getByRole('button', { name: 'Messages, 0 unread conversations' }).first()).toBeVisible();
 
     await patient.getByRole('button', { name: 'Home', exact: true }).click();
     await clinician.getByLabel(`Message ${linked.name}`).fill(clinicianText);
     await clinician.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(clinician.getByText(clinicianText, { exact: true })).toBeVisible();
-    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
+    await expect(clinician.getByRole('button', { name: 'Messages, 0 unread conversations' }).first()).toBeVisible();
     await expect(patientRow).not.toContainText('Unread');
     await expect(patient.getByRole('button', { name: 'Messages, unread message' })).toBeVisible();
     await patient.getByRole('button', { name: 'Messages, unread message' }).click();
@@ -75,8 +75,8 @@ test('linked patient and clinician exchange persisted messages while an unrelate
 
     await clinician.reload();
     await arriveAtClinicianDashboard(clinician);
-    await expect(clinician.getByRole('button', { name: 'Messages, unread message' })).toHaveCount(0);
-    await clinician.getByRole('button', { name: 'Messages', exact: true }).first().click();
+    await expect(clinician.getByRole('button', { name: 'Messages, 0 unread conversations' }).first()).toBeVisible();
+    await clinician.getByRole('button', { name: 'Messages, 0 unread conversations' }).first().click();
     await clinician.getByRole('button', { name: new RegExp(`${linked.name}\\s+Open conversation`) }).click();
     await expect(clinician.getByText(patientText, { exact: true })).toBeVisible();
     await expect(clinician.getByText(clinicianText, { exact: true })).toBeVisible();
@@ -118,5 +118,40 @@ test('linked patient and clinician exchange persisted messages while an unrelate
     expect(pageErrors).toEqual([]);
   } finally {
     await Promise.allSettled([patientContext.close(), clinicianContext.close(), unrelatedContext.close()]);
+  }
+});
+
+test('two unread patient conversations show badge 2 even when one patient sends twice', async ({ browser }) => {
+  const first = await seedLinkedPatient();
+  const second = await seedAdditionalLinkedPatient(first);
+  const firstContext = await browser.newContext();
+  const secondContext = await browser.newContext();
+  const clinicianContext = await browser.newContext();
+  try {
+    for (const [context, fixture, texts] of [
+      [firstContext, first, ['First patient message', 'First patient follow-up']],
+      [secondContext, second, ['Second patient message']],
+    ] as const) {
+      const patient = await context.newPage();
+      await loginThroughUi(patient, fixture.patient);
+      await arriveAtPatientDashboard(patient);
+      await patient.getByRole('button', { name: 'Messages', exact: true }).click();
+      for (const message of texts) {
+        await patient.getByLabel('Message your clinician').fill(message);
+        await patient.getByRole('button', { name: 'Send', exact: true }).click();
+        await expect(patient.getByText(message, { exact: true })).toBeVisible();
+      }
+    }
+
+    const clinician = await clinicianContext.newPage();
+    await loginThroughUi(clinician, first.clinician);
+    await arriveAtClinicianDashboard(clinician);
+    const messagesTab = clinician.getByRole('button', { name: 'Messages, 2 unread conversations' }).first();
+    await expect(messagesTab).toBeVisible();
+    await messagesTab.click();
+    await expect(clinician.getByRole('button', { name: new RegExp(`${first.name} Open conversation`) })).toContainText('Unread');
+    await expect(clinician.getByRole('button', { name: new RegExp(`${second.name} Open conversation`) })).toContainText('Unread');
+  } finally {
+    await Promise.allSettled([firstContext.close(), secondContext.close(), clinicianContext.close()]);
   }
 });

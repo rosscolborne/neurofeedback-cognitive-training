@@ -93,6 +93,57 @@ test('fresh patient signup shows the default TBR protocol and only its assigned 
   }
 });
 
+test('clinician protocol change updates patient Home and Train without losing Garden progress', async ({ browser }) => {
+  const theta = getClinicalProtocolTemplate('theta-beta-ratio')!;
+  const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
+  const fixture = await seedLinkedPatient({
+    assignedProtocol: theta.protocolType,
+    allowedExperiences: theta.recommendedExperiences,
+    tidalGardenState: { stage: 3, growthPoints: 601, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
+  });
+  const clinicianContext = await browser.newContext();
+  const patientContext = await browser.newContext();
+  try {
+    const clinician = await clinicianContext.newPage();
+    const patient = await patientContext.newPage();
+    await loginThroughUi(patient, fixture.patient);
+    await arriveAtPatientDashboard(patient);
+    await patient.getByRole('button', { name: 'Progress', exact: true }).click();
+    await expect(patient.getByText('Garden Keeper', { exact: true })).toBeVisible();
+
+    await clinicianDetail(clinician, fixture);
+    await openBuilder(clinician);
+    await clinician.getByRole('button', { name: /Hardt Alpha Synchrony Protocol/ }).click();
+    await saveBuilder(clinician);
+
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
+    await expect(patient.locator('main')).toContainText('Hardt Alpha Synchrony Protocol');
+    for (const name of ['Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing']) {
+      await expect(patient.getByRole('button', { name, exact: true })).toHaveCount(1);
+    }
+    for (const name of ['Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode', 'NeuroGambit']) {
+      await expect(patient.getByRole('button', { name, exact: true })).toHaveCount(0);
+    }
+    await patient.getByRole('button', { name: 'Train', exact: true }).click();
+    const cards = patient.locator('main .card-patient');
+    await expect(cards).toHaveCount(alpha.recommendedExperiences.length);
+    for (const name of ['Generative XR', 'Generative Music', 'Contemplative Reading', 'Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing', 'Generative Mandala']) {
+      await expect(cards.getByText(name, { exact: true })).toHaveCount(1);
+    }
+    for (const name of ['Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode', 'NeuroGambit']) {
+      await expect(cards.getByText(name, { exact: true })).toHaveCount(0);
+    }
+    await patient.getByRole('button', { name: 'Progress', exact: true }).click();
+    await expect(patient.getByText('Garden Keeper', { exact: true })).toBeVisible();
+    await patient.getByRole('button', { name: 'Home', exact: true }).click();
+    await startPatientTrainingInDemoMode(patient, 'Tidal Garden');
+    await expect(patient.getByText('Tidal Garden: Stage 3 (601 XP)')).toBeVisible();
+  } finally {
+    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+  }
+});
+
 async function inZoneTrend(page: Page): Promise<number | null> {
   const text = await telemetryCell(page, 'In-Zone (10s)').innerText();
   const value = text.match(/(\d+)%/);

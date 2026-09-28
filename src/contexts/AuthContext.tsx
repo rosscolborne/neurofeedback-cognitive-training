@@ -224,7 +224,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     deactivateClinicianDemoWorkspace();
     setUser(null);
     setRole(null);
-    setLoading(true);
     try {
       // onAuthStateChanged is the single owner of identity/role hydration. A
       // second fetch here could finish after a newer account transition.

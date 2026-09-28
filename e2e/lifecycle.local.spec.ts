@@ -141,6 +141,38 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
 });
 }
 
+test('wrong deletion password keeps the account, profile, and clinician roster intact', async ({ browser }) => {
+  const fixture = await seedLinkedPatient();
+  const clinicianContext = await browser.newContext();
+  const patientContext = await browser.newContext();
+  try {
+    const clinician = await clinicianContext.newPage();
+    const patient = await patientContext.newPage();
+    await loginThroughUi(clinician, fixture.clinician);
+    await arriveAtClinicianDashboard(clinician);
+    const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
+    await expect(rosterRow).toHaveCount(1);
+
+    await loginThroughUi(patient, fixture.patient);
+    await arriveAtPatientDashboard(patient);
+    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
+    patient.once('dialog', (dialog) => { void dialog.accept(); });
+    await patient.getByRole('button', { name: 'Delete Account' }).click();
+    await patient.getByLabel('Enter your password to confirm account deletion').fill('WrongLocalPassword!123');
+    await patient.getByRole('button', { name: 'Confirm account deletion' }).click();
+    await expect(patient.getByRole('alert')).toContainText(/password|credential/i);
+    expect(await authenticatedUserId(patient)).toBe(fixture.patient.uid);
+    await expect(rosterRow).toHaveCount(1);
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
+    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
+    await expect(patient.getByText('Connected to your clinician')).toBeVisible();
+    await expect(rosterRow).toHaveCount(1);
+  } finally {
+    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+  }
+});
+
 test('unlink preserves the training list and Garden; a new invitation replaces the protocol and list together', async ({ browser }) => {
   const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
   const staleCustomProtocol = { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Old custom reward' };
