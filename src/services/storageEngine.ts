@@ -20,6 +20,12 @@ import { BRAND_PRESETS } from './brandEngine';
 import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 import { DEFAULT_PROTOCOL } from './protocols';
+import {
+  buildSelfDirectedTrainingSetup,
+  ClinicianManagedTrainingError,
+  hasActiveClinicianRelationship,
+  type SelfDirectedTrainingSetup,
+} from './patientTrainingAuthority';
 import { auth, db } from './firebase';
 import {
   collection,
@@ -1280,6 +1286,42 @@ class StorageEngine {
       (payload.customProtocolConfig as Record<string, unknown>).ratioReward = deleteField();
     }
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
+  }
+
+  /**
+   * Replace an unlinked patient's own training assignment. The transaction
+   * re-reads the relationship so a stale screen can never overwrite an
+   * assignment that a clinician took over in the meantime, and it writes only
+   * the assignment fields so concurrent progress and history stay intact.
+   */
+  public async saveSelfDirectedTrainingSetup(patientId: string, setup: SelfDirectedTrainingSetup): Promise<ClientProfile> {
+    const { assignedProtocol, allowedExperiences } = buildSelfDirectedTrainingSetup(setup.assignedProtocol, setup.allowedExperiences);
+    const apply = (current: ClientProfile): ClientProfile => {
+      if (current.accountDeletionStartedAt) throw new Error('Training setup is unavailable while account deletion is in progress.');
+      if (hasActiveClinicianRelationship(current)) throw new ClinicianManagedTrainingError(current);
+      return { ...current, assignedProtocol, allowedExperiences: [...allowedExperiences], customProtocolConfig: undefined };
+    };
+    if (this.isDemoWorkspace()) {
+      const index = this.demoClients.findIndex((client) => client.id === patientId);
+      if (index < 0) throw new Error('Your patient profile is unavailable.');
+      const updated = apply(this.demoClients[index]);
+      this.demoClients[index] = updated;
+      return updated;
+    }
+    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to change your training setup.');
+    const clientRef = doc(db, 'clients', patientId);
+    return runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(clientRef);
+      if (!snapshot.exists()) throw new Error('Your patient profile is unavailable. Try again.');
+      const updated = apply(readClientProfile(snapshot.data(), snapshot.id));
+      transaction.update(clientRef, {
+        assignedProtocol,
+        allowedExperiences,
+        customProtocolConfig: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+      return updated;
+    });
   }
 
   public async saveIndividualBaselineModel(patientId: string, baselineModel: IndividualBaselineModel): Promise<void> {
