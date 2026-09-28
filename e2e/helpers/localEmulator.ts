@@ -122,6 +122,17 @@ export async function readPendingInvitationState(clinicianUid: string, email: st
   };
 }
 
+export async function readLocalInvitationRecord(code: string) {
+  const snapshot = await adminDb.doc(`patientInvitations/${code}`).get();
+  const data = snapshot.data();
+  return data && {
+    status: data.status as string | undefined,
+    patientId: data.patientId as string | undefined,
+    assignedProtocol: data.assignedProtocol as string | undefined,
+    updatedAtMillis: data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : undefined,
+  };
+}
+
 export async function seedLifecycleHistory(fixture: LocalPatientFixture): Promise<void> {
   await Promise.all([
     adminDb.doc(`sessions/lifecycle-${fixture.patient.uid}`).set({

@@ -39,6 +39,7 @@ interface PatientShellProps {
   initialInvitationCode?: string;
   invitationRouteCode?: string;
   onInvitationAccepted?: () => void;
+  onInvitationDismissed?: () => void;
 }
 
 export const PatientShell: React.FC<PatientShellProps> = ({
@@ -51,6 +52,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   initialInvitationCode,
   invitationRouteCode,
   onInvitationAccepted,
+  onInvitationDismissed,
 }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
@@ -427,6 +429,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
       {/* Main Tab Content */}
       <main style={{ flex: 1, padding: '20px' }}>
+        {activeTab === 'home' && isClinicianLinked && initialInvitationCode && (
+          <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px' }}>
+            <p role="alert">You're already connected to a clinician. Disconnect before accepting another invitation.</p>
+            <p>Invitation code: <span className="font-mono">{initialInvitationCode}</span></p>
+            <button type="button" className="btn btn-secondary" onClick={onInvitationDismissed}>Dismiss invitation</button>
+          </section>
+        )}
         {activeTab === 'home' && !isClinicianLinked && (
           <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div>

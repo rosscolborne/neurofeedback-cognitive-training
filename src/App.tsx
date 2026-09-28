@@ -318,7 +318,14 @@ export function App() {
           client={visibleCurrentClient}
           initialInvitationCode={invitationCode}
           invitationRouteCode={routeInvitationCode}
-          onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
+          onInvitationAccepted={() => {
+            window.sessionStorage.removeItem('waveable_pending_invitation');
+            navigate('/', { replace: true });
+          }}
+          onInvitationDismissed={() => {
+            window.sessionStorage.removeItem('waveable_pending_invitation');
+            navigate('/', { replace: true });
+          }}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}
           onBaselinePersisted={handleBaselinePersisted}
