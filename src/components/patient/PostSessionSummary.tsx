@@ -2,20 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { protocolDisplayName } from '../../services/protocols';
+import { MOODS } from './sessionMoods';
 import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
 
 interface PostSessionSummaryProps {
   session: SessionRecord;
   onViewProgress: () => void;
 }
-
-export const MOODS: Array<{ value: 1 | 2 | 3 | 4 | 5; label: string; score: string }> = [
-  { value: 1, label: 'Tense', score: '1/5' },
-  { value: 2, label: 'Neutral', score: '2/5' },
-  { value: 3, label: 'Calm', score: '3/5' },
-  { value: 4, label: 'Focused', score: '4/5' },
-  { value: 5, label: 'Flow State', score: '5/5' },
-];
 
 const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
   session,

@@ -12,7 +12,7 @@ import {
 } from './patientMetrics';
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
-import { MOODS } from './PostSessionSummary';
+import { MOODS } from './sessionMoods';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
