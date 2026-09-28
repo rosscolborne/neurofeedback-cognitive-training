@@ -73,6 +73,11 @@ function InZoneTrendChart({ values, firstAverage, recentAverage }: { values: Arr
   );
 }
 
+// Phones show this as its own scrollable column so the pinned patient column stays narrow; desktop keeps it under the name.
+const reportProtocolLabel = (client: ClientProfile) => client.isDemo
+  ? 'Sample record'
+  : getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? 'Protocol unavailable';
+
 const filterButtonStyle: React.CSSProperties = { padding: '6px 12px', fontSize: '13px' };
 
 export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ clients, brand, onSelectClient }) => {
@@ -247,22 +252,23 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
         </div>
         <div className="scroll-x">
           <table className="report-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Sessions', 'Adherence', 'In zone', 'Duration', 'Demo', 'Sample', 'Device', ''].map((label, index) => <th key={label || index} scope="col" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{label || <span className="visually-hidden">Export</span>}</th>)}</tr></thead>
+            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Sessions', 'Adherence', 'In zone', 'Duration', 'Demo', 'Sample', 'Device', 'Protocol', ''].map((label, index) => <th key={label || index} scope="col" className={label === 'Protocol' ? 'report-col-protocol' : undefined} style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{label || <span className="visually-hidden">Export</span>}</th>)}</tr></thead>
             <tbody>
               {analytics.patientRows.map(row => (
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 14px', minWidth: '170px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600, justifyContent: 'flex-start', textAlign: 'left', minHeight: 0 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : getClinicalProtocolTemplate(resolvePatientProtocol(row.client))?.name ?? 'Protocol unavailable'}</div></td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} of ${row.expectedSessions} expected` : ''}</div></td>
-                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>
-                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.deviceRecordedSessions}/${row.sessionCount} sessions` : ''}</div></td>
-                  <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={viewModel.exportDisabled} onClick={() => void exportReport(row.client)}><FileText size={13} /> PDF</button></td>
+                  <td className="report-patient-cell"><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600, justifyContent: 'flex-start', textAlign: 'left', minHeight: 0 }}>{row.client.name}</button><div className="report-patient-protocol">{reportProtocolLabel(row.client)}</div></td>
+                  <td>{available ? row.sessionCount : 'Unavailable'}</td>
+                  <td>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} of ${row.expectedSessions} expected` : ''}</div></td>
+                  <td>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>
+                  <td>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
+                  <td>{available ? row.demoSessionCount : 'Unavailable'}</td>
+                  <td>{available ? row.sampleSessionCount : 'Unavailable'}</td>
+                  <td>{available && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.deviceRecordedSessions}/${row.sessionCount} sessions` : ''}</div></td>
+                  <td className="report-col-protocol">{reportProtocolLabel(row.client)}</td>
+                  <td><button className="btn btn-ghost" disabled={viewModel.exportDisabled} onClick={() => void exportReport(row.client)}><FileText size={13} /> PDF</button></td>
                 </tr>
               ))}
-              {available && analytics.patientRows.length === 0 && <tr><td colSpan={9} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No patients are in this cohort.</td></tr>}
+              {available && analytics.patientRows.length === 0 && <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No patients are in this cohort.</td></tr>}
             </tbody>
           </table>
         </div>

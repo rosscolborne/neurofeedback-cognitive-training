@@ -1232,7 +1232,28 @@ input, select, textarea, button {
 .report-table td,
 .report-table th {
   position: relative;
+  padding: 12px 14px;
   vertical-align: top;
+}
+
+.report-table th {
+  padding-block: 10px;
+}
+
+.report-patient-cell {
+  min-width: 170px;
+}
+
+.report-patient-protocol {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* Desktop shows the protocol under the patient name; phones give it its own column instead. */
+.report-col-protocol {
+  display: none;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field. */
@@ -1281,6 +1302,33 @@ input, select, textarea, button {
     z-index: 1;
     background: #FFFFFF;
     box-shadow: 1px 0 0 var(--border-subtle);
+  }
+
+  /* Phones: the pinned column carries only the name, so Sessions, Adherence and In zone are visible first. */
+  .report-table td,
+  .report-table th {
+    padding: 10px;
+  }
+
+  .report-patient-cell {
+    width: 120px;
+    min-width: 104px;
+    max-width: 132px;
+    padding-left: 12px;
+    overflow-wrap: break-word;
+  }
+
+  .report-patient-cell .btn {
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
+  .report-patient-protocol {
+    display: none;
+  }
+
+  .report-col-protocol {
+    display: table-cell;
   }
 
   .report-table thead th:first-child {
