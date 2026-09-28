@@ -419,6 +419,10 @@ input, select, textarea, button {
   min-width: 0;
 }
 
+.fact-grid > .fact-wide {
+  grid-column: 1 / -1;
+}
+
 .fact-grid dt {
   font-size: 12px;
   line-height: 1.4;
@@ -443,6 +447,37 @@ input, select, textarea, button {
   .card-patient {
     padding: 18px;
   }
+}
+
+/* A row of related figures in one card, separated by hairlines. */
+.stat-strip {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  text-align: center;
+}
+
+.stat-strip > div {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.stat-strip > div + div {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.stat-strip-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.stat-strip-label {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-secondary);
 }
 
 /* Small uppercase heading above a group of cards or rows. */

@@ -209,10 +209,10 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { history = create(<ProgressHistory client={client} />); await Promise.resolve(); });
     expect(repository.getSessions).toHaveBeenCalledWith(client.id);
     expect(text(history)).toContain('Tracking 1 session over time.');
-    expect(text(history)).toContain('Training Demo · Synthetic acquisition');
+    expect(text(history)).toContain('"Training Demo"');
     const sessionCard = history.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')[0];
     await act(async () => { sessionCard.props.onClick(); });
-    expect(text(history)).toContain('Not measured — synthetic Training Demo feedback');
+    expect(text(history)).toContain('Not measured in Demo');
     await act(async () => { history.unmount(); });
 
     engine.isDemoMode = true; // Simulate any stale singleton value before the next ordinary run.

@@ -34,13 +34,14 @@ test('clinician opens the selected stored session and its feedback reaches the p
     const selectedCard = patient.locator('.card-patient').filter({ hasText: 'rhythm lock' }).first();
     await expect(selectedCard).toBeVisible();
     await selectedCard.click();
-    await expect(selectedCard).toContainText('Clinician Feedback: Try the slower rhythm next session.');
+    await expect(selectedCard).toContainText('From your clinician');
+    await expect(selectedCard).toContainText('Try the slower rhythm next session.');
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
     const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'rhythm lock' }).first();
     await reloadedCard.click();
-    await expect(reloadedCard).toContainText('Clinician Feedback: Try the slower rhythm next session.');
+    await expect(reloadedCard).toContainText('Try the slower rhythm next session.');
   } finally {
     await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
   }
@@ -63,13 +64,13 @@ test('patient edits an older session journal and sees the saved note and mood af
     await card.getByLabel('Mood').selectOption('4');
     await card.getByRole('button', { name: 'Save journal' }).click();
     await expect(card.getByRole('button', { name: 'Edit journal' })).toBeVisible();
-    await expect(card).toContainText('Notes: After reviewing the session, I felt calmer.');
+    await expect(card).toContainText('After reviewing the session, I felt calmer.');
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
     const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'skyline drift' }).first();
     await reloadedCard.click();
-    await expect(reloadedCard).toContainText('Notes: After reviewing the session, I felt calmer.');
+    await expect(reloadedCard).toContainText('After reviewing the session, I felt calmer.');
     await expect(reloadedCard).toContainText('Focused · 4/5');
   } finally {
     await context.close();

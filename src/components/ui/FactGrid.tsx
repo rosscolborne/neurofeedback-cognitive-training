@@ -3,6 +3,8 @@ import React from 'react';
 export interface Fact {
   label: string;
   value: React.ReactNode;
+  /** Span the full row, for long values that read badly in a narrow column. */
+  wide?: boolean;
 }
 
 interface FactGridProps {
@@ -20,7 +22,7 @@ export const FactGrid: React.FC<FactGridProps> = ({ facts, minColumnWidth, class
     style={minColumnWidth ? { ...style, ['--fact-min' as string]: `${minColumnWidth}px` } : style}
   >
     {facts.map((fact) => (
-      <div key={fact.label}>
+      <div key={fact.label} className={fact.wide ? 'fact-wide' : undefined}>
         <dt>{fact.label}</dt>
         <dd>{fact.value}</dd>
       </div>

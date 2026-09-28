@@ -52,7 +52,7 @@ test.describe('patient Demo persistence (stateful)', () => {
         await expect(page.getByText(trackingCopy(beforeCount + 1), { exact: true })).toBeVisible({ timeout: 15_000 });
         await page.getByRole('button', { name: 'All Time', exact: true }).click();
         await expect(aggregateSessionCount(page)).toContainText(String(beforeCount + 1));
-        expect(await page.getByText('Training Demo · Synthetic acquisition', { exact: true }).count()).toBeGreaterThan(0);
+        expect(await page.getByText('Training Demo', { exact: true }).count()).toBeGreaterThan(0);
 
         await page.reload();
         await arriveAtPatientDashboard(page);
@@ -60,7 +60,7 @@ test.describe('patient Demo persistence (stateful)', () => {
         expect(reloadedCount).toBe(beforeCount + 1);
         await expect(aggregateSessionCount(page)).toContainText(String(beforeCount + 1));
 
-        const newestDemoProvenance = page.getByText('Training Demo · Synthetic acquisition', { exact: true }).first();
+        const newestDemoProvenance = page.getByText('Training Demo', { exact: true }).first();
         await expect(newestDemoProvenance).toBeVisible();
         await newestDemoProvenance.click();
         await expect(page.getByText(run.runMarker, { exact: true })).toBeVisible();
@@ -73,7 +73,7 @@ test.describe('patient Demo persistence (stateful)', () => {
         await expect(page.getByRole('button', { name: 'Connect Muse Headband', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Try Demo Mode', exact: true })).toBeVisible();
         await expect(page.getByText('Simulator', { exact: true })).toHaveCount(0);
-        await expect(page.getByText('Training Demo · Synthetic acquisition', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('Training Demo', { exact: true })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'End Session & Save', exact: true })).toHaveCount(0);
 
         await page.getByRole('button', { name: 'Cancel & Return to Dashboard', exact: true }).click();
