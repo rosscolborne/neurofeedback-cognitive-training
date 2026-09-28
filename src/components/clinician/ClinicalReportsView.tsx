@@ -239,7 +239,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
       )}
 
       <div className="card-clinician" style={{ padding: 0, overflow: 'hidden', background: '#FFFFFF' }}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px 16px' }}>
           <h2 style={{ fontSize: '15px', margin: 0 }}>Patient interval activity</h2><span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{intervalText}</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -250,8 +250,8 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '12px 14px', minWidth: '170px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600, justifyContent: 'flex-start', textAlign: 'left', minHeight: 0 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : getClinicalProtocolTemplate(resolvePatientProtocol(row.client))?.name ?? 'Protocol unavailable'}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.demoSessionCount > 0 ? 'Included · synthetic provenance' : ''}</div></td>
-                  <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.sampleSessionCount > 0 ? 'Fictional · excluded' : ''}</div></td>
+                  <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}</td>
+                  <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} / ${row.expectedSessions} scheduled` : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>

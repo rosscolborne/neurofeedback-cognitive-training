@@ -1179,6 +1179,22 @@ input, select, textarea, button {
   vertical-align: top;
 }
 
+.patient-nav-label {
+  font-size: 10px;
+}
+
+/* Seven tabs share 320px; a slightly smaller label keeps neighbouring words apart. */
+@media (max-width: 359px) {
+  .patient-nav-label {
+    font-size: 9px;
+  }
+}
+
+/* Metric cells keep value and coverage caption on one line each; the table scrolls instead. */
+.report-table td:not(:first-child) {
+  white-space: nowrap;
+}
+
 @media (max-width: 767px) {
   .report-table th:first-child,
   .report-table td:first-child {

@@ -750,9 +750,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           backgroundColor: 'var(--surface-patient-card)',
           borderTop: '1px solid var(--border-subtle)',
           display: 'flex',
-          justifyContent: 'space-around',
-          padding: '10px 0',
-          paddingBottom: 'max(10px, env(safe-area-inset-bottom, 10px))',
+          padding: '4px 4px',
+          paddingBottom: 'max(4px, env(safe-area-inset-bottom, 4px))',
         }}
       >
         {[
@@ -771,12 +770,18 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               aria-label={tab.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : tab.label}
+              aria-current={isActive ? 'page' : undefined}
               style={{
+                // Each tab fills its share of the bar so the whole column is tappable, not just the label.
+                flex: '1 1 0',
+                minHeight: '48px',
+                padding: '6px 0',
                 background: 'none',
                 border: 'none',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '4px',
                 cursor: 'pointer',
                 color: isActive ? 'var(--brand-primary)' : 'var(--text-tertiary)',
@@ -787,7 +792,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 <Icon size={19} />
                 {tab.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot" />}
               </span>
-              <span style={{ fontSize: '10px', fontWeight: isActive ? 700 : 500 }}>{tab.label}</span>
+              <span className="patient-nav-label" style={{ fontWeight: isActive ? 700 : 500 }}>{tab.label}</span>
             </button>
           );
         })}

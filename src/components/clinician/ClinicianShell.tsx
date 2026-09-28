@@ -351,7 +351,10 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                 if (item.id === 'clients') setSelectedClient(null);
               }}
               aria-label={item.id === 'messages' ? messageCountKnown ? `Messages, ${unreadConversationCount} unread conversations` : 'Messages, unread count unavailable' : item.label}
+              aria-current={isActive ? 'page' : undefined}
               style={{
+                flex: '1 1 0',
+                minHeight: '48px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -361,9 +364,8 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
                 background: 'transparent',
                 color: isActive ? 'var(--brand-primary)' : 'var(--text-secondary)',
                 cursor: 'pointer',
-                padding: '4px 8px',
+                padding: '4px 0',
                 position: 'relative',
-                minWidth: '54px',
               }}
             >
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
