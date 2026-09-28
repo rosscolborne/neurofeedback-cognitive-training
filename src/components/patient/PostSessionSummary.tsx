@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
@@ -16,31 +16,51 @@ const MOODS: Array<{ value: 1 | 2 | 3 | 4 | 5; label: string; score: string }> =
   { value: 5, label: 'Flow State', score: '5/5' },
 ];
 
-export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
+const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
   session,
   onViewProgress,
 }) => {
-  const [selectedMood, setSelectedMood] = useState<1 | 2 | 3 | 4 | 5 | undefined>(undefined);
+  const [selectedMood, setSelectedMood] = useState<1 | 2 | 3 | 4 | 5 | undefined>(session.moodRating);
   const [patientNotes, setPatientNotes] = useState(session.patientNotes || '');
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  const [savedJournal, setSavedJournal] = useState({ moodRating: session.moodRating, patientNotes: session.patientNotes || '' });
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
-  const handleSave = async () => {
+  const hasJournalChanges = selectedMood !== savedJournal.moodRating || patientNotes !== savedJournal.patientNotes;
+
+  const handleSave = async (navigate = false) => {
+    if (pending.current) return;
+    if (!hasJournalChanges) {
+      if (navigate) onViewProgress();
+      else setIsSaved(true);
+      return;
+    }
+    pending.current = true;
+    const savedSessionId = session.id;
     setIsSaving(true);
     setSaveError(null);
     try {
-      await storageEngine.saveSession({
-        ...session,
-        moodRating: selectedMood,
-        patientNotes,
-      });
+      await storageEngine.patchSessionNotes(savedSessionId, { moodRating: selectedMood, patientNotes });
+      if (!mounted.current) return;
+      setSavedJournal({ moodRating: selectedMood, patientNotes });
       setIsSaved(true);
+      if (navigate) onViewProgress();
     } catch (error) {
+      if (!mounted.current) return;
       console.error('Failed to save session notes:', error);
       setSaveError("We couldn't save your notes. Check your connection and try again.");
     } finally {
-      setIsSaving(false);
+      if (mounted.current) {
+        pending.current = false;
+        setIsSaving(false);
+      }
     }
   };
 
@@ -236,7 +256,8 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
           {MOODS.map(m => (
             <button
               key={m.value}
-              onClick={() => setSelectedMood(m.value)}
+              onClick={() => { if (pending.current) return; setSelectedMood(m.value); setIsSaved(false); }}
+              disabled={isSaving}
               style={{
                 background: selectedMood === m.value ? 'var(--brand-primary-subtle)' : 'var(--surface-patient-recessed)',
                 border: selectedMood === m.value ? '1.5px solid var(--brand-primary)' : '1px solid transparent',
@@ -265,7 +286,8 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         </label>
         <textarea
           value={patientNotes}
-          onChange={e => setPatientNotes(e.target.value)}
+          onChange={e => { if (pending.current) return; setPatientNotes(e.target.value); setIsSaved(false); }}
+          disabled={isSaving}
           placeholder="Note any cognitive sensations, focus shifts, or ambient environment details..."
           style={{
             width: '100%',
@@ -297,7 +319,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
         zIndex: 10
       }}>
         <button
-          onClick={handleSave}
+          onClick={() => handleSave()}
           disabled={isSaving}
           className="btn btn-secondary"
           style={{ flex: 1, opacity: isSaving ? 0.7 : 1 }}
@@ -305,7 +327,7 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
           {isSaving ? 'Saving...' : isSaved ? 'Saved ✓' : 'Save Notes'}
         </button>
         <button
-          onClick={onViewProgress}
+          onClick={() => handleSave(true)}
           disabled={isSaving}
           className="btn btn-primary"
           style={{ flex: 1.5, opacity: isSaving ? 0.7 : 1 }}
@@ -329,3 +351,6 @@ export const PostSessionSummary: React.FC<PostSessionSummaryProps> = ({
     </div>
   );
 };
+
+export const PostSessionSummary: React.FC<PostSessionSummaryProps> = (props) =>
+  <PostSessionSummaryContent key={`${props.session.patientId}:${props.session.id}`} {...props} />;

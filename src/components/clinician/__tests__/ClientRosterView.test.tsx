@@ -18,6 +18,20 @@ const blankClient: ClientProfile = {
 };
 
 describe('ClientRosterView blank-profile editing', () => {
+  it('omits capacity on desktop and mobile and keeps the empty table span aligned', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<ClientRosterView clients={[blankClient]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} />); });
+    expect(renderer.root.findAllByType('th').map((cell) => cell.children.join(''))).toEqual([
+      'Client Name', 'Status', 'Condition / Protocol', 'Last Session', 'Sessions', 'Actions',
+    ]);
+    expect(renderer.root.findAllByType('tbody')[0].findAllByType('tr')[0].findAllByType('td')).toHaveLength(6);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('Capacity: unavailable');
+    await act(async () => { renderer.update(<ClientRosterView clients={[]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} />); });
+    expect(renderer.root.findByType('tbody').findByType('td').props.colSpan).toBe(6);
+    await act(async () => { renderer.unmount(); });
+  });
+
   it('changes a condition without replacing the saved protocol and shows it after refresh', async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const customProtocolConfig = {
@@ -166,6 +180,7 @@ describe('ClientRosterView blank-profile editing', () => {
     expect(onUpdateClient).toHaveBeenCalledWith(expect.objectContaining({
       assignedProtocol: 'alpha-enhancement',
       customProtocolConfig: undefined,
+      allowedExperiences: getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences,
     }));
     renderer.unmount();
   });

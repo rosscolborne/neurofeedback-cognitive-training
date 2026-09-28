@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
@@ -7,11 +7,67 @@ import { shouldOfferClinicianDemoWorkspace } from '../../services/clinicianDemoB
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, loginAsDemoClinician } = useAuth();
+  const { login, loginAsDemoClinician, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetView, setResetView] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
+  const resetPendingRef = useRef(false);
+
+  const resetConfirmation = 'If an account uses that email address, we’ll send password reset instructions.';
+
+  const openReset = () => {
+    setError('');
+    setResetError('');
+    setResetSent(false);
+    setResetView(true);
+  };
+
+  const returnToLogin = () => {
+    if (resetPendingRef.current) return;
+    setResetError('');
+    setResetSent(false);
+    setError('');
+    setResetView(false);
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (resetPendingRef.current) return;
+    setResetError('');
+    setResetSent(false);
+    const address = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      setResetError('Please enter a valid email address.');
+      return;
+    }
+    resetPendingRef.current = true;
+    setResetPending(true);
+    try {
+      await requestPasswordReset(address);
+      setResetSent(true);
+    } catch (err: any) {
+      const code = err?.code;
+      if (code === 'auth/user-not-found' || code === 'auth/email-not-found') {
+        setResetSent(true);
+      } else if (code === 'auth/invalid-email') {
+        setResetError('Please enter a valid email address.');
+      } else if (code === 'auth/network-request-failed') {
+        setResetError('Connection problem. Please check your internet connection and try again.');
+      } else if (code === 'auth/too-many-requests') {
+        setResetError('Too many requests. Please wait and try again later.');
+      } else {
+        setResetError('We could not request a password reset. Please try again.');
+      }
+    } finally {
+      resetPendingRef.current = false;
+      setResetPending(false);
+    }
+  };
 
   const getErrorMessage = (err: any): string => {
     const code = err?.code || '';
@@ -29,7 +85,7 @@ export const Login: React.FC = () => {
       return 'Please enter a valid email address.';
     }
     if (code === 'auth/too-many-requests') {
-      return 'Access temporarily locked due to multiple failed login attempts. Please reset your password or try again later.';
+      return 'Access temporarily locked due to multiple failed login attempts. Use Forgot password? below or try again later.';
     }
     if (code === 'auth/network-request-failed') {
       return 'Network connection error. Please verify your internet connection.';
@@ -98,13 +154,13 @@ export const Login: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <BrandLogo size={44} variant="terracotta" />
           <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>Log In</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>{resetView ? 'Reset Password' : 'Log In'}</h1>
             <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>Welcome back to Waveable</p>
           </div>
         </div>
 
-      {error && (
-        <div style={{
+      {(resetView ? resetError : error) && (
+        <div role="alert" style={{
           background: '#FF4C4C15',
           color: '#D32F2F',
           padding: '14px',
@@ -114,19 +170,41 @@ export const Login: React.FC = () => {
           lineHeight: '1.4',
           border: '1px solid rgba(211, 47, 47, 0.2)'
         }}>
-          {error}
+          {resetView ? resetError : error}
         </div>
       )}
 
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {resetView && resetSent && (
+        <div role="status" style={{
+          background: 'var(--surface-patient-card)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-md)',
+          padding: '14px',
+          marginBottom: '16px',
+          fontSize: '14px',
+          lineHeight: 1.4,
+        }}>
+          {resetConfirmation}
+        </div>
+      )}
+
+      <form onSubmit={resetView ? handleReset : handleLogin} noValidate={resetView} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Email</label>
+          <label htmlFor="login-email" style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Email</label>
           <input 
+            id="login-email"
             type="email" 
             value={email}
-            onChange={e => setEmail(e.target.value)}
+            disabled={resetPending}
+            onChange={e => {
+              setEmail(e.target.value);
+              if (resetView) {
+                setResetError('');
+                setResetSent(false);
+              }
+            }}
             placeholder="name@example.com"
-            required
+            required={!resetView}
             style={{
               width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
               background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
@@ -135,9 +213,10 @@ export const Login: React.FC = () => {
           />
         </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Password</label>
+        {!resetView && <div>
+          <label htmlFor="login-password" style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Password</label>
           <input 
+            id="login-password"
             type="password" 
             value={password}
             onChange={e => setPassword(e.target.value)}
@@ -149,11 +228,21 @@ export const Login: React.FC = () => {
               color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
             }}
           />
-        </div>
+        </div>}
+
+        {!resetView && (
+          <button type="button" onClick={openReset} disabled={loading} style={{
+            alignSelf: 'flex-end', background: 'none', border: 'none',
+            color: 'var(--brand-primary)', cursor: 'pointer', padding: 0,
+            fontSize: '14px', fontWeight: 600,
+          }}>
+            Forgot password?
+          </button>
+        )}
 
         <button 
           type="submit" 
-          disabled={loading}
+          disabled={resetView ? resetPending : loading}
           style={{
             background: 'var(--brand-primary)',
             color: 'var(--brand-on-primary)',
@@ -162,16 +251,26 @@ export const Login: React.FC = () => {
             borderRadius: 'var(--radius-md)',
             fontSize: '18px',
             fontWeight: '600',
-            cursor: loading ? 'not-allowed' : 'pointer',
+            cursor: (resetView ? resetPending : loading) ? 'not-allowed' : 'pointer',
             marginTop: '8px',
-            opacity: loading ? 0.7 : 1
+            opacity: (resetView ? resetPending : loading) ? 0.7 : 1
           }}
         >
-          {loading ? 'Logging in...' : 'Log In'}
+          {resetView ? (resetPending ? 'Sending...' : 'Send reset instructions') : (loading ? 'Logging in...' : 'Log In')}
         </button>
       </form>
 
-      {shouldOfferClinicianDemoWorkspace() && (
+      {resetView && (
+        <button type="button" onClick={returnToLogin} disabled={resetPending} style={{
+          background: 'none', border: 'none', color: 'var(--text-secondary)',
+          cursor: resetPending ? 'not-allowed' : 'pointer', padding: '16px 0',
+          fontSize: '14px',
+        }}>
+          Return to login
+        </button>
+      )}
+
+      {!resetView && shouldOfferClinicianDemoWorkspace() && (
         <section aria-label="Sample clinician workspace" style={{ marginTop: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '12px' }}>
             <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />

@@ -70,11 +70,28 @@ browser-derived metrics are substituted.
 
 ```bash
 npm run build
-npm test
+npm test                 # offline Vitest suite
 npm run test:python
 ```
 
-The browser integration tests expect the local service to be running.
+`npm test` excludes the two service-backed Vitest files by name:
+`backendFitE2E.test.ts` and `eegPipelineIntegration.test.ts`. They remain in
+the dedicated BrainFlow integration suite. To run them, start the local service
+in one terminal and request the suite in another:
+
+```bash
+npm run brainflow
+npm run test:brainflow:integration
+```
+
+The dedicated command checks `/health` first and fails with a clear error if
+the service is unavailable; it never silently skips either file. It uses
+`http://127.0.0.1:8000` by default, regardless of `.env` or
+`VITE_BRAINFLOW_SERVICE_URL`. For a service on another local port, set
+`BRAINFLOW_TEST_URL=http://127.0.0.1:<port>` for that command. Only HTTP
+loopback origins are accepted. The simulated BLE test does not use hardware.
+
+Browser integration tests have their own service and environment requirements.
 
 ## BrainFlow service
 

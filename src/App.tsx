@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } from './types';
 import { storageEngine } from './services/storageEngine';
+import { eegEngine } from './services/eegEngine';
+import { getReusableBaselineModel } from './services/dataMappers';
 import { applyBrandToDOM, BRAND_PRESETS } from './services/brandEngine';
 import { clinicSettingsRepository } from './services/clinicSettingsRepository';
 import type { ClinicSettingsSnapshot } from './services/clinicSettingsRepository';
@@ -35,6 +37,7 @@ function InvitationEntryRedirect() {
 
 export function App() {
   const { user, role, loading, logout, isDemoWorkspace } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
   const storedInvitationCode = typeof window === 'undefined'
@@ -50,6 +53,7 @@ export function App() {
   const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
   const [patientProfileReload, setPatientProfileReload] = useState(0);
   const [clinicianRosterError, setClinicianRosterError] = useState<string | null>(null);
+  const [clinicianRosterLoad, setClinicianRosterLoad] = useState<{ key: string; status: 'loading' | 'ready' | 'error' }>({ key: '', status: 'loading' });
   const [clinicianInvitationsError, setClinicianInvitationsError] = useState<string | null>(null);
   const [clinicianRosterReload, setClinicianRosterReload] = useState(0);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
@@ -59,8 +63,12 @@ export function App() {
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
   const accountIdentityRef = useRef(accountIdentity);
   accountIdentityRef.current = accountIdentity;
-  const hasCurrentData = dataIdentity === accountIdentity;
+  const profileRoutePhase = location.pathname === '/hardware-setup' ? 'hardware-setup' : 'app';
+  const profileDataIdentity = `${accountIdentity}:${profileRoutePhase}`;
+  const clinicianRosterLoadKey = `${profileDataIdentity}:${clinicianRosterReload}`;
+  const hasCurrentData = dataIdentity === profileDataIdentity;
   const visibleClients = hasCurrentData ? clients : [];
+  const visibleRosterStatus = hasCurrentData && clinicianRosterLoad.key === clinicianRosterLoadKey ? clinicianRosterLoad.status : 'loading';
   const visibleCurrentClient = hasCurrentData ? currentClient : null;
   const visibleInvitations = hasCurrentData ? patientInvitations : [];
   const visibleBrand = hasCurrentData ? brand : BRAND_PRESETS[0];
@@ -78,12 +86,17 @@ export function App() {
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
-    const isCurrent = () => loadGeneration.current === generation;
-    setDataIdentity(accountIdentity);
+    let active = true;
+    let stopRoster = () => {};
+    let rosterRequest = 0;
+    const isCurrent = () => active && loadGeneration.current === generation && accountIdentityRef.current === accountIdentity;
+    eegEngine.individualBaselineModel = null;
+    setDataIdentity(profileDataIdentity);
     setClients([]);
     setCurrentClient(null);
     setPatientProfileError(null);
     setClinicianRosterError(null);
+    setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'loading' });
     setClinicianInvitationsError(null);
     setPatientInvitations([]);
     setShowRebrandModal(false);
@@ -92,20 +105,43 @@ export function App() {
 
     if (role === 'patient') {
       void storageEngine.getCurrentClient(user)
-        .then((client) => { if (isCurrent()) setCurrentClient(client); })
+        .then((client) => {
+          if (!isCurrent()) return;
+          if (profileRoutePhase !== 'hardware-setup') {
+            eegEngine.individualBaselineModel = getReusableBaselineModel(client?.individualBaselineModel);
+          }
+          setCurrentClient(client);
+        })
         .catch((error) => {
           if (!isCurrent()) return;
           console.warn('Error loading patient profile:', error);
           setPatientProfileError(error instanceof Error ? error.message : 'Your patient profile is unavailable.');
         });
     } else if (role === 'clinician') {
-      void storageEngine.getClients()
-        .then((nextClients) => { if (isCurrent()) setClients(nextClients); })
+      const loadRoster = () => {
+        const request = ++rosterRequest;
+        void storageEngine.getClients().then((nextClients) => {
+          if (!isCurrent() || request !== rosterRequest) return;
+          setClients(nextClients);
+          setClinicianRosterError(null);
+          setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'ready' });
+        })
         .catch((error) => {
-          if (!isCurrent()) return;
+          if (!isCurrent() || request !== rosterRequest) return;
           console.warn('Error loading clinician roster:', error);
+          setClients([]);
           setClinicianRosterError(error instanceof Error ? error.message : 'The patient roster could not be loaded.');
+          setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'error' });
         });
+      };
+      loadRoster();
+      stopRoster = storageEngine.subscribeToClientRoster(loadRoster, (error) => {
+        if (!isCurrent()) return;
+        ++rosterRequest;
+        setClients([]);
+        setClinicianRosterError(error.message);
+        setClinicianRosterLoad({ key: clinicianRosterLoadKey, status: 'error' });
+      });
       void storageEngine.getPatientInvitationsForClinician()
         .then((invitations) => { if (isCurrent()) setPatientInvitations(invitations); })
         .catch((error) => {
@@ -114,7 +150,12 @@ export function App() {
           setClinicianInvitationsError(error instanceof Error ? error.message : 'Pending invitations could not be loaded.');
         });
     }
-  }, [accountIdentity, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, role, user]);
+    return () => {
+      active = false;
+      stopRoster();
+      eegEngine.individualBaselineModel = null;
+    };
+  }, [accountIdentity, clinicianRosterLoadKey, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
 
   useEffect(() => {
     const generation = ++brandGeneration.current;
@@ -171,6 +212,11 @@ export function App() {
     if (accountIdentityRef.current !== accountIdentity) return;
     if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
     setClients((current) => current.map((client) => client.id === updated.id ? updated : client));
+  };
+
+  const handleBaselinePersisted = (patientId: string, model: ClientProfile['individualBaselineModel']) => {
+    if (accountIdentityRef.current !== accountIdentity || !model) return;
+    setCurrentClient((current) => current?.id === patientId ? { ...current, individualBaselineModel: model } : current);
   };
 
   const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
@@ -235,6 +281,18 @@ export function App() {
 
   const renderPrimaryApp = () => {
     if (!role) return <Navigate to="/role-selection" replace />;
+    if (role === 'clinician' && invitationCode) {
+      return (
+        <main style={{ minHeight: '100dvh', display: 'grid', placeContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
+          <h1>Patient invitation</h1>
+          <p>This invitation is for a patient account. Sign in with the invited patient email address to accept it.</p>
+          <button type="button" className="btn btn-primary" onClick={() => {
+            window.sessionStorage.removeItem('waveable_pending_invitation');
+            navigate('/');
+          }}>Return to clinician dashboard</button>
+        </main>
+      );
+    }
     if (role === 'patient') {
       if (!visibleCurrentClient) {
         if (patientProfileError) {
@@ -259,9 +317,19 @@ export function App() {
           brand={visibleBrand}
           client={visibleCurrentClient}
           initialInvitationCode={invitationCode}
-          onInvitationAccepted={() => window.sessionStorage.removeItem('waveable_pending_invitation')}
+          invitationRouteCode={routeInvitationCode}
+          onInvitationAccepted={() => {
+            window.sessionStorage.removeItem('waveable_pending_invitation');
+            navigate('/', { replace: true });
+          }}
+          onInvitationDismissed={() => {
+            window.sessionStorage.removeItem('waveable_pending_invitation');
+            navigate('/', { replace: true });
+          }}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}
+          onBaselinePersisted={handleBaselinePersisted}
+          onRecalibrate={() => navigate('/hardware-setup')}
           onOpenRebrand={() => setShowRebrandModal(true)}
         />
       );
@@ -275,6 +343,7 @@ export function App() {
         clinicianLabel={user?.displayName || user?.email || undefined}
         isDemoWorkspace={isDemoWorkspace}
         clients={visibleClients}
+        rosterStatus={visibleRosterStatus}
         patientInvitations={visibleInvitations}
         onUpdateClient={handleUpdateClient}
         onAppendBrainMap={handleAppendBrainMap}
@@ -308,7 +377,7 @@ export function App() {
           <>
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/role-selection" element={<RoleSelection />} />
-            <Route path="/hardware-setup" element={<HardwareSetup />} />
+            <Route path="/hardware-setup" element={<HardwareSetup key={accountIdentity} />} />
             
             <Route path="/" element={renderPrimaryApp()} />
             <Route path="/connect/:invitationCode" element={renderPrimaryApp()} />

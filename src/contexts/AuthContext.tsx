@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   reauthenticateWithCredential,
+  sendPasswordResetEmail,
   signOut,
   updatePassword,
   updateProfile,
@@ -34,6 +35,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, displayName?: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
   loginAsDemoClinician: () => Promise<void>;
   logout: () => Promise<void>;
@@ -47,6 +49,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   signup: async () => {},
   changePassword: async () => {},
+  requestPasswordReset: async () => {},
   selectRole: async () => {},
   loginAsDemoClinician: async () => {},
   logout: async () => {},
@@ -221,7 +224,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     deactivateClinicianDemoWorkspace();
     setUser(null);
     setRole(null);
-    setLoading(true);
     try {
       // onAuthStateChanged is the single owner of identity/role hydration. A
       // second fetch here could finish after a newer account transition.
@@ -243,6 +245,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
     await updatePassword(user, newPassword);
+  };
+
+  const requestPasswordReset = async (email: string) => {
+    await sendPasswordResetEmail(auth, email.trim());
   };
 
   const loginAsDemoClinician = async () => {
@@ -318,7 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const demoWorkspace = isClinicianDemoWorkspace();
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
       {children}
     </AuthContext.Provider>
   );

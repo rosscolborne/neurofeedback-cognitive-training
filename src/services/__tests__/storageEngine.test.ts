@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionRecord } from '../../types';
+import type { ClientProfile, IndividualBaselineModel, SessionRecord } from '../../types';
 
 const state = vi.hoisted(() => ({
   auth: { currentUser: null as null | { uid: string; email?: string } },
@@ -21,7 +21,9 @@ const firestore = vi.hoisted(() => ({
   writeBatch: vi.fn(() => batchOperations),
   getDoc: vi.fn(),
   getDocs: vi.fn(),
+  getDocsFromServer: vi.fn().mockResolvedValue({ docs: [] }),
   setDoc: vi.fn(),
+  updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   deleteField: vi.fn(() => ({ __deleteField: true })),
   runTransaction: vi.fn(),
@@ -50,8 +52,109 @@ import { BRAND_PRESETS } from '../brandEngine';
 import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
 import { DEFAULT_RATIO_REWARDS } from '../protocols';
 import { resolveProtocolRuntime } from '../adaptiveEngine';
+import { EXPERIENCE_IDS } from '../experienceIds';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
+
+describe('patient account deletion preparation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'old-uid', email: 'same@example.com' };
+  });
+
+  it('clears the live link before cancelling future appointments and preserves pending invitations', async () => {
+    const profile = { ...createBlankProfile('old-uid', 'same@example.com'), clinicianId: 'clinician-1',
+      clinicId: 'clinic-1', linkedClinicianCode: 'clinician-1', acceptedInvitationId: 'OLD-CODE' };
+    firestore.getDoc.mockResolvedValueOnce({ exists: () => true, data: () => profile });
+    const future = Date.now() + 86_400_000;
+    const appt = (id: string, status: string, time: number) => ({ id,
+      ref: { type: 'doc', path: 'appointments', id }, data: () => ({
+        clinicianId: 'clinician-1', patientId: 'old-uid', patientDisplayName: 'Patient', timezone: 'UTC',
+        durationMinutes: 45, type: 'consultation', status, startsAt: new MockTimestamp(time),
+        createdAt: new MockTimestamp(1), updatedAt: new MockTimestamp(1), createdBy: 'clinician-1',
+        revision: 2, schemaVersion: 1,
+      }),
+    });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [
+      appt('future', 'scheduled', future), appt('past', 'scheduled', Date.now() - 86_400_000),
+      appt('cancelled', 'cancelled', future),
+    ] });
+    const deactivated = vi.fn();
+    await storageEngine.preparePatientAccountDeletion('old-uid', deactivated);
+    expect(firestore.updateDoc).toHaveBeenNthCalledWith(1,
+      { type: 'doc', path: 'clients', id: 'old-uid' },
+      expect.objectContaining({ clinicianId: null, clinicId: null, linkedClinicianCode: null,
+        acceptedInvitationId: null, accountDeletionStartedAt: expect.anything() }));
+    expect(deactivated).toHaveBeenCalledWith(expect.objectContaining({ clinicianId: undefined,
+      clinicId: undefined, accountDeletionStartedAt: expect.anything() }));
+    expect(firestore.setDoc).toHaveBeenCalledWith({ type: 'doc', path: 'users', id: 'old-uid' },
+      expect.objectContaining({ role: 'patient', email: null, displayName: null }), { merge: true });
+    expect(firestore.updateDoc).toHaveBeenCalledTimes(2);
+    expect(firestore.updateDoc).toHaveBeenNthCalledWith(2,
+      { type: 'doc', path: 'appointments', id: 'future' },
+      expect.objectContaining({ status: 'cancelled', cancelledBy: 'old-uid', revision: 3 }));
+    expect(firestore.getDocs.mock.calls[0][0]).toMatchObject({ constraints: [{ field: 'patientId', op: '==', value: 'old-uid' }] });
+    expect(firestore.deleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('resumes a marked profile without rewriting its relationship', async () => {
+    firestore.getDoc.mockResolvedValueOnce({ exists: () => true, data: () => ({
+      ...createBlankProfile('old-uid', 'same@example.com'), accountDeletionStartedAt: new MockTimestamp(1),
+    }) });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [] });
+    await storageEngine.preparePatientAccountDeletion('old-uid');
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('retries appointment cleanup after a post-marker read failure without restoring the link', async () => {
+    const marked = { ...createBlankProfile('old-uid', 'same@example.com'),
+      accountDeletionStartedAt: new MockTimestamp(1), clinicianId: null, clinicId: null };
+    firestore.getDoc.mockResolvedValue({ exists: () => true, data: () => marked });
+    firestore.getDocs.mockRejectedValueOnce(new Error('appointments offline')).mockResolvedValueOnce({ docs: [] });
+    await expect(storageEngine.preparePatientAccountDeletion('old-uid')).rejects.toThrow('appointments offline');
+    await expect(storageEngine.preparePatientAccountDeletion('old-uid')).resolves.toBeUndefined();
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops before writing if the signed-in UID changes during the profile read', async () => {
+    let resolveRead!: (value: unknown) => void;
+    firestore.getDoc.mockReturnValueOnce(new Promise((resolve) => { resolveRead = resolve; }));
+    const pending = storageEngine.preparePatientAccountDeletion('old-uid');
+    state.auth.currentUser = { uid: 'other-uid', email: 'other@example.com' };
+    resolveRead({ exists: () => true, data: () => createBlankProfile('old-uid', 'same@example.com') });
+    await expect(pending).rejects.toThrow('signed-in account changed');
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('leaves Auth deletion pending when a future appointment is malformed', async () => {
+    firestore.getDoc.mockResolvedValueOnce({ exists: () => true, data: () => createBlankProfile('old-uid', 'same@example.com') });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [{ data: () => ({
+      patientId: 'old-uid', status: 'scheduled', startsAt: new MockTimestamp(Date.now() + 86_400_000),
+      schemaVersion: 1, revision: 1,
+    }) }] });
+    await expect(storageEngine.preparePatientAccountDeletion('old-uid')).rejects.toThrow('future appointment could not be cancelled');
+    expect(firestore.updateDoc).toHaveBeenCalledTimes(1);
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: 'old-uid' }, expect.objectContaining({ accountDeletionStartedAt: expect.anything() }),
+    );
+  });
+
+  it('omits a retained marked client from the active roster', async () => {
+    state.auth.currentUser = { uid: 'clinician-1' };
+    firestore.getDocs
+      .mockResolvedValueOnce({ docs: [{ id: 'old-uid', data: () => ({
+        ...createBlankProfile('old-uid', 'same@example.com'), clinicianId: 'clinician-1',
+        accountDeletionStartedAt: new MockTimestamp(1),
+      }) }, { id: 'new-uid', data: () => ({
+        ...createBlankProfile('new-uid', 'same@example.com'), clinicianId: 'clinician-1',
+      }) }] })
+      .mockResolvedValueOnce({ docs: [] });
+    await expect(storageEngine.getClients()).resolves.toEqual([expect.objectContaining({ id: 'new-uid' })]);
+  });
+});
 
 const sessionDocument = (id: string, patientId: string) => ({
   id,
@@ -63,6 +166,137 @@ const sessionDocument = (id: string, patientId: string) => ({
     averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
     timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0,
   }),
+});
+
+const measuredBaseline: IndividualBaselineModel = {
+  alphaPeakHz: 10.2, oneOverFSlope: 1.3, lastCalibratedAt: '2026-09-27T07:00:00.000Z',
+  thetaMean: 2.1, thetaStd: 0.2, betaMean: 1.4, betaStd: 0.1, alphaMean: 3.1, alphaStd: 0.3,
+};
+
+describe('individual baseline persistence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'patient-1' };
+  });
+
+  it('does not provision a production profile missing before calibration lookup', async () => {
+    const user = { uid: 'patient-1', displayName: 'Patient One' };
+    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => false });
+
+    await expect(storageEngine.getExistingCurrentClient(user)).resolves.toBeNull();
+
+    expect(firestore.getDoc).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: user.uid });
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not repair an unnamed production profile before writing its baseline', async () => {
+    const user = { uid: 'patient-1', displayName: 'Patient One' };
+    const stored = { id: user.uid, name: '', status: 'completed', notes: 'concurrent care note' };
+    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => true, data: () => stored });
+    firestore.updateDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
+      Object.assign(stored, payload);
+    });
+
+    const client = await storageEngine.getExistingCurrentClient(user);
+    expect(client?.name).toBe('');
+    await storageEngine.saveIndividualBaselineModel(client!.id, measuredBaseline);
+
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: user.uid },
+      { individualBaselineModel: measuredBaseline },
+    );
+    expect(stored).toEqual({ id: user.uid, name: '', status: 'completed', notes: 'concurrent care note',
+      individualBaselineModel: measuredBaseline });
+  });
+
+  it('resolves the current isolated demo profile without a production read', async () => {
+    activateClinicianDemoWorkspace();
+    storageEngine.resetToDefaultSeed();
+
+    const expected = await storageEngine.getCurrentClient();
+    await expect(storageEngine.getExistingCurrentClient({ uid: 'demo-clinician' }))
+      .resolves.toEqual(expected);
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+  });
+
+  it('updates only the baseline field on an existing Firestore profile, preserving concurrent clinical edits', async () => {
+    const stored = { id: 'patient-1', status: 'paused', notes: 'new clinical note', assignedProtocol: 'smr-enhancement' };
+    firestore.updateDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
+      Object.assign(stored, payload);
+    });
+
+    await storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline);
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: 'patient-1' },
+      { individualBaselineModel: measuredBaseline },
+    );
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(stored).toEqual({ id: 'patient-1', status: 'paused', notes: 'new clinical note',
+      assignedProtocol: 'smr-enhancement', individualBaselineModel: measuredBaseline });
+  });
+
+  it('propagates an update failure without creating a missing profile', async () => {
+    firestore.updateDoc.mockRejectedValueOnce(new Error('profile no longer exists'));
+
+    await expect(storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline))
+      .rejects.toThrow('profile no longer exists');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('replaces an older baseline map as one field instead of merging obsolete measurements', async () => {
+    const stored: Record<string, unknown> = {
+      id: 'patient-1', status: 'completed', notes: 'concurrent care update',
+      individualBaselineModel: { alphaPeakHz: 8, obsoleteMeasurement: 99 },
+    };
+    firestore.updateDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
+      Object.assign(stored, payload);
+    });
+
+    await storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline);
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { type: 'doc', path: 'clients', id: 'patient-1' },
+      { individualBaselineModel: measuredBaseline },
+    );
+    expect(stored).toEqual({ id: 'patient-1', status: 'completed', notes: 'concurrent care update',
+      individualBaselineModel: measuredBaseline });
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unauthenticated production save without writing a profile', async () => {
+    state.auth.currentUser = null;
+
+    await expect(storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline))
+      .rejects.toThrow('Sign in to save a patient record');
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it.each(['paused', 'completed'] as const)('patches only the baseline in the %s demo profile', async (status) => {
+    activateClinicianDemoWorkspace();
+    storageEngine.resetToDefaultSeed();
+    const before = (await storageEngine.getCurrentClient())!;
+    await storageEngine.saveClient({ ...before, status, notes: 'new clinical note' });
+
+    await storageEngine.saveIndividualBaselineModel(before.id, measuredBaseline);
+
+    expect(await storageEngine.getCurrentClient()).toEqual({ ...before, status,
+      notes: 'new clinical note', individualBaselineModel: measuredBaseline });
+    expect(firestore.updateDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not create a missing demo profile', async () => {
+    activateClinicianDemoWorkspace();
+    storageEngine.resetToDefaultSeed();
+
+    await expect(storageEngine.saveIndividualBaselineModel('missing-demo-patient', measuredBaseline))
+      .rejects.toThrow('patient profile is unavailable');
+    expect(await storageEngine.getClient('missing-demo-patient')).toBeNull();
+  });
 });
 
 describe('role-aware session repository', () => {
@@ -473,12 +707,13 @@ describe('production and sample workspace separation', () => {
       expect.objectContaining({ id: user.uid, patientId: user.uid }),
     );
     const saved = firestore.setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(saved.assignedProtocol).toBe('theta-beta-ratio');
+    expect(saved.allowedExperiences).toEqual(getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences);
     expect(saved).not.toHaveProperty('avatarUrl');
     expect(saved).not.toHaveProperty('condition');
-    expect(saved).not.toHaveProperty('assignedProtocol');
     expect(saved).not.toHaveProperty('prescribedSessionsPerWeek');
     expect(saved).not.toHaveProperty('brainCapacityScore');
-    expect(saved).not.toHaveProperty('tidalGardenState');
+    expect(saved.tidalGardenState).toEqual({ stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' });
     expect(saved).not.toHaveProperty('skylineBiomesUnlocked');
   });
 
@@ -524,6 +759,31 @@ describe('production and sample workspace separation', () => {
     expect(reloaded?.condition).toBeUndefined();
   });
 
+  it('retains the full-catalogue legacy missing-field save fallback, but preserves an explicit empty list', async () => {
+    const legacy = createBlankProfile('patient-1', 'patient@example.test') as Partial<ClientProfile>;
+    delete legacy.allowedExperiences;
+    await storageEngine.saveClient(legacy as ClientProfile);
+    expect(new Set((firestore.setDoc.mock.calls[0][1] as ClientProfile).allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
+
+    await storageEngine.saveClient({ ...createBlankProfile('patient-2', 'other@example.test'), allowedExperiences: [] });
+    expect((firestore.setDoc.mock.calls[1][1] as ClientProfile).allowedExperiences).toEqual([]);
+  });
+
+  it('saves and reloads a template assignment that excludes NeuroGambit', async () => {
+    const template = getClinicalProtocolTemplate('alpha-enhancement')!;
+    const patient = { ...createBlankProfile('patient-1', 'patient@example.test'),
+      allowedExperiences: [...template.recommendedExperiences] };
+    let persisted!: ClientProfile;
+    firestore.setDoc.mockImplementationOnce(async (_ref: unknown, payload: ClientProfile) => { persisted = payload; });
+    await storageEngine.saveClient(patient);
+    expect(persisted.allowedExperiences).toEqual(template.recommendedExperiences);
+    expect(persisted.allowedExperiences).not.toContain('neuro-gambit');
+    firestore.getDoc.mockResolvedValueOnce({ id: patient.id, exists: () => true, data: () => persisted });
+    const reloaded = await storageEngine.getClient(patient.id);
+    expect(reloaded?.allowedExperiences).toEqual(template.recommendedExperiences);
+    expect(reloaded?.allowedExperiences).not.toContain('neuro-gambit');
+  });
+
   it('deletes a stale custom template when switching protocol and reloads the selected assignment', async () => {
     const switched = {
       ...INITIAL_DEMO_CLIENTS[0],
@@ -565,7 +825,7 @@ describe('production and sample workspace separation', () => {
       exists: () => true,
       data: () => ({ ...createBlankProfile(user.uid, user.email), name: '' }),
     });
-    firestore.setDoc.mockRejectedValueOnce(new Error('profile enrichment unavailable'));
+    firestore.updateDoc.mockRejectedValueOnce(new Error('profile enrichment unavailable'));
     await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile enrichment unavailable');
   });
 
@@ -578,11 +838,21 @@ describe('production and sample workspace separation', () => {
     });
 
     await expect(storageEngine.getCurrentClient(user)).resolves.toMatchObject({ name: 'Patient One' });
-    expect(firestore.setDoc).toHaveBeenCalledWith(
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
       { type: 'doc', path: 'clients', id: user.uid },
       { name: 'Patient One' },
-      { merge: true },
     );
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not recreate a profile deleted while its blank name is being repaired', async () => {
+    const user = { uid: 'patient-1', email: 'patient@example.test', displayName: 'Patient One' };
+    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => true,
+      data: () => ({ id: user.uid, email: user.email, name: '', status: 'active', allowedExperiences: [] }) });
+    firestore.updateDoc.mockRejectedValueOnce(new Error('profile no longer exists'));
+
+    await expect(storageEngine.getCurrentClient(user)).rejects.toThrow('profile no longer exists');
+    expect(firestore.setDoc).not.toHaveBeenCalled();
   });
 
   it('blocks sample resets from a production account', () => {
@@ -681,6 +951,8 @@ describe('authenticated simulator session persistence', () => {
     );
     const session = {
       ...sessionDocument('simulated-session', 'patient-1').data(),
+      experience: 'tidal-garden' as const,
+      timeInZonePercent: 80,
       isDemo: true,
       clinicianId: undefined,
       clinicId: 'self-guided',
@@ -693,6 +965,10 @@ describe('authenticated simulator session persistence', () => {
     expect(writes[0]?.ref).toEqual({ type: 'doc', path: 'sessions', id: 'simulated-session' });
     expect(writes[0]?.payload).toMatchObject({ isDemo: true, patientId: 'patient-1' });
     expect(writes[1]?.payload).toMatchObject({ recentCompletedSessionIds: ['simulated-session'] });
+    expect(writes[1]?.payload).toMatchObject({ tidalGardenState: { stage: 1, growthPoints: 120, plantsUnlocked: [], lastWatered: '' } });
+
+    firestore.getDoc.mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => writes[1].payload });
+    expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(120);
 
     firestore.getDocs.mockResolvedValueOnce({
       docs: [{ id: session.id, data: () => writes[0].payload }],
@@ -730,10 +1006,136 @@ describe('authenticated simulator session persistence', () => {
   });
 });
 
-describe('patient invitation linking', () => {
+describe('Tidal Garden initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'patient-1' };
+  });
+
+  it('starts a blank real profile at stage one', () => {
+    expect(createBlankProfile('patient-1', 'patient@example.com').tidalGardenState).toEqual({
+      stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '',
+    });
+  });
+
+  it('initializes only the missing field in one transaction and leaves existing growth alone', async () => {
+    const stored = { ...createBlankProfile('patient-1', 'patient@example.com'), tidalGardenState: undefined as ClientProfile['tidalGardenState'], notes: 'concurrent note' };
+    const transactionSet = vi.fn((_ref, payload) => Object.assign(stored, payload));
+    firestore.runTransaction.mockImplementation(async (_db, callback) => callback({
+      get: vi.fn(async () => ({ id: 'patient-1', exists: () => true, data: () => ({ ...stored }) })),
+      update: transactionSet,
+    }));
+    const first = await storageEngine.ensureTidalGardenState('patient-1');
+    expect(first.tidalGardenState?.stage).toBe(1);
+    expect(transactionSet).toHaveBeenCalledWith(expect.anything(), { tidalGardenState: first.tidalGardenState });
+    stored.tidalGardenState = { stage: 3, growthPoints: 501, plantsUnlocked: ['existing'], lastWatered: 'date' };
+    const second = await storageEngine.ensureTidalGardenState('patient-1');
+    expect(second.tidalGardenState).toEqual(stored.tidalGardenState);
+    expect(transactionSet).toHaveBeenCalledOnce();
+    expect(stored.notes).toBe('concurrent note');
+  });
+
+  it('fails explicitly for a missing profile or transaction denial', async () => {
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({
+      get: vi.fn().mockResolvedValue({ id: 'patient-1', exists: () => false }), update: vi.fn(),
+    }));
+    await expect(storageEngine.ensureTidalGardenState('patient-1')).rejects.toThrow('profile is unavailable');
+    firestore.runTransaction.mockRejectedValueOnce(new Error('permission-denied'));
+    await expect(storageEngine.ensureTidalGardenState('patient-1')).rejects.toThrow('permission-denied');
+  });
+
+  it('keeps sample initialization entirely in memory', async () => {
+    activateClinicianDemoWorkspace();
+    const sample = INITIAL_DEMO_CLIENTS[0];
+    const first = await storageEngine.ensureTidalGardenState(sample.id);
+    expect(first.tidalGardenState).toEqual(sample.tidalGardenState);
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe('patient invitation linking', () => {
+  const inviteInput = {
+    clinicId: 'clinic-1', clinicianName: 'Dr. Example', patientName: 'Patient One',
+    patientEmail: ' Patient@Example.com ', condition: 'Peak Performance' as const,
+    assignedProtocol: 'theta-beta-ratio' as const, prescribedSessionsPerWeek: 3,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    firestore.getDocsFromServer.mockReset().mockResolvedValue({ docs: [] });
     state.auth.currentUser = { uid: 'clinician-1', email: 'clinician@example.com' };
+  });
+
+  it.each([
+    ['same clinician', { clinicianId: 'clinician-1', clinicId: 'clinic-1' }, 0],
+    ['same clinic colleague', { clinicianId: 'clinician-2', clinicId: 'clinic-1' }, 0],
+    ['same clinician without clinic', { clinicianId: 'clinician-1', clinicId: null }, 1],
+    ['legacy owner without clinic', { clinicianId: null, linkedClinicianCode: 'clinician-1', clinicId: null }, 2],
+  ])('blocks a new invitation for a patient linked to %s', async (_label, link, queryIndex) => {
+    const patient = { email: 'PATIENT@example.com', ...link };
+    const entry = { id: 'patient-1', data: () => patient };
+    firestore.getDocsFromServer.mockImplementation((query: { constraints: Array<{ field: string }> }) =>
+      Promise.resolve({ docs: query.constraints[0]?.field === ['clinicId', 'clinicianId', 'linkedClinicianCode'][queryIndex] ? [entry] : [] })
+    );
+    const get = vi.fn(async (ref: { path: string; id: string }) => {
+      if (ref.path === 'clients' && ref.id === 'patient-1') {
+        return { id: 'patient-1', exists: (): boolean => true, data: () => patient };
+      }
+      if (ref.path === 'patientInvitationClaims/clinician-1/emails' && ref.id === 'patient@example.com') {
+        return { exists: (): boolean => false };
+      }
+      throw new Error(`Unexpected transaction read: ${ref.path}/${ref.id}`);
+    });
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).rejects.toThrow('already connected');
+    expect(get).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(firestore.getDocsFromServer).toHaveBeenCalledTimes(3);
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('allows a formerly linked patient after unlinking', async () => {
+    const get = vi.fn().mockResolvedValue({ exists: () => false });
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).resolves.toMatchObject({ status: 'pending' });
+    expect(set).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the transaction reread when a server result has since become unlinked', async () => {
+    const entry = { id: 'patient-1', data: () => ({
+      email: 'patient@example.com', clinicId: 'clinic-1', clinicianId: 'clinician-1',
+    }) };
+    firestore.getDocsFromServer.mockResolvedValueOnce({ docs: [entry] });
+    const get = vi.fn(async (ref: { path: string; id: string }) => {
+      if (ref.path === 'clients' && ref.id === 'patient-1') {
+        return { id: 'patient-1', exists: (): boolean => true, data: () => ({
+          email: 'patient@example.com', clinicId: 'clinic-1', clinicianId: null,
+        }) };
+      }
+      if (ref.path === 'patientInvitationClaims/clinician-1/emails' && ref.id === 'patient@example.com') {
+        return { exists: (): boolean => false };
+      }
+      throw new Error(`Unexpected transaction read: ${ref.path}/${ref.id}`);
+    });
+    const set = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).resolves.toMatchObject({ status: 'pending' });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(set).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed if the server relationship query fails', async () => {
+    firestore.getDocsFromServer.mockRejectedValueOnce(new Error('relationship query offline'));
+
+    await expect(storageEngine.createPatientInvitation(inviteInput)).rejects.toThrow('relationship query offline');
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
   });
 
   it('creates a pending invitation for the entered patient email instead of a fake client', async () => {
@@ -803,7 +1205,7 @@ describe('patient invitation linking', () => {
       callback({
         get: vi.fn().mockResolvedValueOnce({
           exists: () => true,
-          data: () => ({ invitationId: 'EXPIRED-CODE', expiresAt: Date.now() - 1 }),
+          data: () => ({ invitationId: 'EXPIRED-CODE', expiresAt: Date.now() - 60_000 }),
         }),
         set: vi.fn((...args) => writes.push(args)),
       })
@@ -876,6 +1278,72 @@ describe('patient invitation linking', () => {
     expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1', clinicId: 'clinic-1' }) });
     expect(writes[1]).toMatchObject({ ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' }, payload: expect.objectContaining({ status: 'accepted', patientId: 'patient-1' }) });
     expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
+  });
+
+  it('applies the invited protocol and its exact experience set to a fresh patient', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+    const invitation = { clinicianId: 'clinician-1', clinicId: 'clinic-1', patientEmail: 'patient@example.test',
+      patientName: 'Patient One', assignedProtocol: 'alpha-enhancement', status: 'pending',
+      expiresAt: Date.now() + 86_400_000 };
+    const writes: Array<Record<string, unknown>> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'ABCD-EFGH-JKLM', exists: () => true, data: () => invitation })
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => false }),
+        set: vi.fn((_ref, payload) => writes.push(payload)),
+        delete: vi.fn(),
+      })
+    );
+    const fallback = createBlankProfile('patient-1', 'patient@example.test') as Partial<ClientProfile>;
+    delete fallback.allowedExperiences;
+
+    const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', fallback as ClientProfile);
+    const expected = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
+    expect(linked.assignedProtocol).toBe('alpha-enhancement');
+    expect(linked.allowedExperiences).toEqual(expected);
+    expect(linked.allowedExperiences).not.toContain('neuro-gambit');
+    expect(writes[0].allowedExperiences).toEqual(linked.allowedExperiences);
+  });
+
+  it('replaces a stale assignment on relink while preserving patient-owned progress', async () => {
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+    const previous = {
+      ...createBlankProfile('patient-1', 'patient@example.test'),
+      assignedProtocol: 'theta-beta-ratio' as const,
+      allowedExperiences: ['neuro-gambit'] as ClientProfile['allowedExperiences'],
+      customProtocolConfig: getClinicalProtocolTemplate('theta-beta-ratio'),
+      clinicianId: undefined,
+      clinicId: undefined,
+      acceptedInvitationId: undefined,
+      completedSessionsCount: 7,
+      badges: ['garden-keeper'],
+      tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
+    };
+    const writes: Array<Record<string, unknown>> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'ABCD-EFGH-JKLM', exists: () => true,
+            data: () => ({ clinicianId: 'clinician-1', clinicId: 'clinic-1', patientEmail: previous.email,
+              patientName: previous.name, assignedProtocol: 'alpha-enhancement', status: 'pending',
+              expiresAt: Date.now() + 86_400_000 }) })
+          .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => previous }),
+        set: vi.fn((_ref, payload) => writes.push(payload)),
+        delete: vi.fn(),
+      })
+    );
+
+    const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', previous);
+    const expected = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
+    expect(linked).toMatchObject({
+      assignedProtocol: 'alpha-enhancement', allowedExperiences: expected,
+      completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: previous.tidalGardenState,
+    });
+    expect(linked.allowedExperiences).not.toContain('neuro-gambit');
+    expect(linked.customProtocolConfig).toBeUndefined();
+    expect(writes[0]).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: expected,
+      customProtocolConfig: { __deleteField: true }, tidalGardenState: previous.tidalGardenState });
   });
 
   it('atomically cancels an owned invitation and releases its uniqueness claim', async () => {
@@ -1232,6 +1700,13 @@ describe('write authorization safeguards', () => {
     expect(writes[0]).not.toHaveProperty('clinicianNotes');
   });
 
+  it('rejects a signed-out note patch without reporting success', async () => {
+    state.auth.currentUser = null;
+    await expect(storageEngine.patchSessionNotes('session-1', { patientNotes: 'Draft' }))
+      .rejects.toThrow('Sign in');
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
   it('allows an owning clinician to patch legacy sessions without clinicianId', async () => {
     const writes: Array<Record<string, unknown>> = [];
     const legacySession = sessionDocument('legacy-session', 'patient-1');
@@ -1253,6 +1728,20 @@ describe('write authorization safeguards', () => {
     });
 
     expect(writes[0]).toMatchObject({ clinicianNotes: 'Clinician note' });
+    expect(writes[0]).not.toHaveProperty('patientNotes');
+  });
+
+  it('preserves a clinician feedback clear as null without touching patient fields', async () => {
+    state.auth.currentUser = { uid: 'clinician-1' };
+    const writes: Array<Record<string, unknown>> = [];
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) => callback({
+      get: vi.fn()
+        .mockResolvedValueOnce(sessionDocument('session-1', 'patient-1'))
+        .mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => ({ clinicianId: 'clinician-1' }) }),
+      set: vi.fn((_ref, payload) => writes.push(payload)),
+    }));
+    await storageEngine.patchSessionNotes('session-1', { clinicianNotes: null, patientNotes: 'Cannot alter' });
+    expect(writes[0]).toMatchObject({ clinicianNotes: null });
     expect(writes[0]).not.toHaveProperty('patientNotes');
   });
 });

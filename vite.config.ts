@@ -5,7 +5,15 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   test: {
-    exclude: [...configDefaults.exclude, 'e2e/**', 'tests/firestore-rules/**'],
+    // These two suites require the local BrainFlow service. Run them with
+    // `npm run test:brainflow:integration` instead of the offline default.
+    exclude: [
+      ...configDefaults.exclude,
+      'e2e/**',
+      'tests/firestore-rules/**',
+      'src/services/__tests__/backendFitE2E.test.ts',
+      'src/services/__tests__/eegPipelineIntegration.test.ts',
+    ],
     server: {
       deps: {
         inline: [/@elata-biosciences/],

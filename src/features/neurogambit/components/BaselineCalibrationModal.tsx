@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { EEGDataPoint } from '../../../types';
+import { EEGDataPoint, IndividualBaselineModel } from '../../../types';
 import { NeuroGambitBaseline } from '../types';
-import { eegEngine } from '../../../services/eegEngine';
 import { Brain, ShieldCheck } from 'lucide-react';
 
 interface BaselineCalibrationModalProps {
   eegData: EEGDataPoint | null;
-  onBaselineReady: (baseline: NeuroGambitBaseline) => void;
+  onBaselineReady: (baseline: NeuroGambitBaseline, model: IndividualBaselineModel) => Promise<void>;
   onSkip: () => void;
 }
 
@@ -18,6 +17,10 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
   const durationSeconds = 15;
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [cleanSampleCount, setCleanSampleCount] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingCalibration, setPendingCalibration] = useState<{ baseline: NeuroGambitBaseline; model: IndividualBaselineModel } | null>(null);
 
   const samplesRef = useRef<{ theta: number[]; beta: number[]; alpha: number[] }>({
     theta: [],
@@ -26,7 +29,13 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
   });
 
   useEffect(() => {
-    if (eegData && !eegData.artifacts?.clench) {
+    if (eegData && !eegData.artifacts?.clench
+      && eegData.bandAvailability?.theta === true
+      && eegData.bandAvailability?.beta === true
+      && eegData.bandAvailability?.alpha === true
+      && Number.isFinite(eegData.bands.theta)
+      && Number.isFinite(eegData.bands.beta)
+      && Number.isFinite(eegData.bands.alpha)) {
       samplesRef.current.theta.push(eegData.bands.theta);
       samplesRef.current.beta.push(eegData.bands.beta);
       samplesRef.current.alpha.push(eegData.bands.alpha);
@@ -35,14 +44,40 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
   }, [eegData]);
 
   const onBaselineReadyRef = useRef(onBaselineReady);
-  onBaselineReadyRef.current = onBaselineReady;
+  useEffect(() => { onBaselineReadyRef.current = onBaselineReady; }, [onBaselineReady]);
   const hasFinishedRef = useRef(false);
+  const retryCalibration = () => {
+    samplesRef.current = { theta: [], beta: [], alpha: [] };
+    hasFinishedRef.current = false;
+    setPendingCalibration(null);
+    setCleanSampleCount(0);
+    setSecondsElapsed(0);
+    setSaveError(null);
+    setAttempt((current) => current + 1);
+  };
+
+  const saveCalibration = useCallback(async (calibration: { baseline: NeuroGambitBaseline; model: IndividualBaselineModel }) => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onBaselineReadyRef.current(calibration.baseline, calibration.model);
+      setPendingCalibration(null);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'The calibration could not be saved. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, []);
 
   const finishCalibration = useCallback(() => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
 
     const s = samplesRef.current;
+    if (s.theta.length === 0 || s.beta.length === 0 || s.alpha.length === 0) {
+      setSaveError('No clean EEG samples were captured. Check the headset and try again.');
+      return;
+    }
     const calcMeanStd = (arr: number[]) => {
       if (arr.length === 0) return { mean: 0, std: 0.1 };
       const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -66,9 +101,7 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
       isReady: true,
     };
 
-    eegEngine.individualBaselineModel = {
-      alphaPeakHz: eegEngine.getLatestPeakAlphaHz() || 10.0,
-      oneOverFSlope: 1.0,
+    const model: IndividualBaselineModel = {
       lastCalibratedAt: new Date().toISOString(),
       thetaMean: thetaStat.mean,
       thetaStd: thetaStat.std,
@@ -76,10 +109,13 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
       betaStd: betaStat.std,
       alphaMean: alphaStat.mean,
       alphaStd: alphaStat.std,
+      algorithmVersion: 'neurogambit-15s-v1',
     };
 
-    onBaselineReadyRef.current(baseline);
-  }, []);
+    const calibration = { baseline, model };
+    setPendingCalibration(calibration);
+    void saveCalibration(calibration);
+  }, [saveCalibration]);
 
   useEffect(() => {
     const startTime = Date.now();
@@ -94,7 +130,7 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
     }, 100);
 
     return () => clearInterval(interval);
-  }, [durationSeconds, finishCalibration]);
+  }, [attempt, durationSeconds, finishCalibration]);
 
   const progress = Math.min(1.0, secondsElapsed / durationSeconds);
   const remaining = Math.max(0, Math.ceil(durationSeconds - secondsElapsed));
@@ -189,8 +225,18 @@ export const BaselineCalibrationModal: React.FC<BaselineCalibrationModalProps> =
           <span>Artifact-filtered resting snapshot ({cleanSampleCount} clean frames)</span>
         </div>
 
+        {saving && <div role="status" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Saving calibration…</div>}
+        {saveError && <div role="alert" style={{ fontSize: '13px', color: 'var(--status-alert)' }}>{saveError}</div>}
+        {saveError && pendingCalibration && (
+          <button type="button" onClick={() => void saveCalibration(pendingCalibration)} disabled={saving} className="btn btn-secondary">Retry save</button>
+        )}
+        {saveError && !pendingCalibration && (
+          <button type="button" onClick={retryCalibration} className="btn btn-secondary">Retry calibration</button>
+        )}
+
         <button
           onClick={onSkip}
+          disabled={saving}
           className="btn btn-ghost"
           style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}
         >

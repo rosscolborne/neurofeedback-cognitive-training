@@ -1,5 +1,6 @@
 import {
   ClientProfile,
+  IndividualBaselineModel,
   ClinicProfile,
   ClinicBrandConfig,
   DeviceAssignment,
@@ -16,6 +17,9 @@ import {
   QEEGBrainMap,
 } from '../types';
 import { BRAND_PRESETS } from './brandEngine';
+import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
+import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
+import { DEFAULT_PROTOCOL } from './protocols';
 import { auth, db } from './firebase';
 import {
   collection,
@@ -24,11 +28,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
+  updateDoc,
   Timestamp,
   where,
   writeBatch,
@@ -78,6 +84,14 @@ const CANONICAL_APPOINTMENT_KEYS = new Set([
   'clinicianId', 'patientId', 'patientDisplayName', 'clinicianDisplayName', 'startsAt', 'timezone',
   'durationMinutes', 'type', 'status', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'revision', 'schemaVersion',
 ]);
+const REQUIRED_CANONICAL_APPOINTMENT_KEYS = [
+  'clinicianId', 'patientId', 'patientDisplayName', 'startsAt', 'timezone',
+  'durationMinutes', 'type', 'status', 'createdAt', 'updatedAt',
+  'createdBy', 'revision', 'schemaVersion',
+];
+const CANONICAL_APPOINTMENT_TYPES = new Set([
+  'remote-training', 'in-clinic-evaluation', 'qeeg-mapping', 'protocol-review', 'consultation',
+]);
 
 const isBoundedText = (value: unknown, maxLength: number, allowEmpty: boolean) =>
   typeof value === 'string' && value.length <= maxLength && (value === '' ? allowEmpty : value.trim() === value);
@@ -94,7 +108,13 @@ function isCancellableFutureAppointment(data: Record<string, unknown>, now: numb
     && Number.isInteger(data.revision)
     && data.schemaVersion === 1
     && data.createdAt instanceof Timestamp
+    && REQUIRED_CANONICAL_APPOINTMENT_KEYS.every((key) => key in data)
     && Object.keys(data).every((key) => CANONICAL_APPOINTMENT_KEYS.has(key))
+    && typeof data.clinicianId === 'string'
+    && typeof data.patientId === 'string' && data.patientId.length > 0 && data.patientId.length <= 128
+    && typeof data.createdBy === 'string'
+    && Number.isInteger(data.durationMinutes) && (data.durationMinutes as number) >= 15 && (data.durationMinutes as number) <= 240
+    && CANONICAL_APPOINTMENT_TYPES.has(data.type as string)
     && isBoundedText(data.patientDisplayName, 160, false)
     && isBoundedText(data.timezone, 100, false)
     && (!('clinicianDisplayName' in data) || isBoundedText(data.clinicianDisplayName, 160, false))
@@ -217,6 +237,8 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
 ];
 
 export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
+  const defaultTemplate = getClinicalProtocolTemplate(DEFAULT_PROTOCOL);
+  if (!defaultTemplate) throw new Error('The default clinical protocol is unavailable');
   const name = displayName?.trim() || '';
   const cleanName = name
     .replace(/[._]/g, ' ')
@@ -227,25 +249,13 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     name: cleanName,
     email: email,
     status: 'active',
-    allowedExperiences: [
-      'immersive-3d',
-      'generative-music',
-      'narrative-story',
-      'skyline-drift',
-      'tidal-garden',
-      'breath-weave',
-      'signal-sort',
-      'rhythm-lock',
-      'media-mode',
-      'soundscape-mode',
-      'mandala',
-      'eeg-mandala',
-      'neuro-gambit'
-    ],
+    assignedProtocol: DEFAULT_PROTOCOL,
+    allowedExperiences: [...defaultTemplate.recommendedExperiences],
     completedSessionsCount: 0,
     currentStreak: 0,
     brainMaps: [],
     badges: [],
+    tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' },
     isDemo: false,
   };
 };
@@ -813,6 +823,7 @@ class StorageEngine {
     if (!auth.currentUser) return null;
     const snap = await getDoc(doc(db, 'clients', id));
     if (snap.exists()) {
+      if (snap.data().accountDeletionStartedAt && auth.currentUser.uid !== id) return null;
       return readClientProfile(snap.data(), snap.id);
     }
     return null;
@@ -831,7 +842,7 @@ class StorageEngine {
     );
     canonical.docs.forEach((entry) => {
       const profile = readClientProfile(entry.data(), entry.id);
-      if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+      if (!profile.accountDeletionStartedAt && getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
     });
 
     // Firestore rules are not post-query filters. The explicit null constraint
@@ -847,7 +858,7 @@ class StorageEngine {
       ));
       legacy.docs.forEach((entry) => {
         const profile = readClientProfile(entry.data(), entry.id);
-        if (getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
+        if (!profile.accountDeletionStartedAt && getPatientClinicianId(profile) === activeClinicianId) owned.set(profile.id, profile);
       });
     } catch (error) {
       // The canonical query is complete for current records. Some deployments
@@ -856,6 +867,22 @@ class StorageEngine {
       if ((error as { code?: string })?.code !== 'permission-denied') throw error;
     }
     return [...owned.values()];
+  }
+
+  /** Notify an open clinician roster when either current or legacy links change. */
+  public subscribeToClientRoster(onChange: () => void, onError: (error: Error) => void): () => void {
+    const clinicianId = auth.currentUser?.uid;
+    if (!clinicianId || this.isDemoWorkspace()) return () => {};
+    const canonical = onSnapshot(
+      query(collection(db, 'clients'), where('clinicianId', '==', clinicianId)),
+      onChange, onError,
+    );
+    const legacy = onSnapshot(
+      query(collection(db, 'clients'), where('linkedClinicianCode', '==', clinicianId), where('clinicianId', '==', null)),
+      onChange,
+      (error) => { if (error.code !== 'permission-denied') onError(error); },
+    );
+    return () => { canonical(); legacy(); };
   }
 
   public async createPatientInvitation(input: PatientInvitationInput): Promise<PatientInvitation> {
@@ -879,6 +906,26 @@ class StorageEngine {
     if (!Number.isInteger(input.prescribedSessionsPerWeek) || input.prescribedSessionsPerWeek < 1) {
       throw new Error('Weekly sessions must be a positive whole number');
     }
+
+    // Query the relationships this clinician may read. Use the server so an
+    // offline cache cannot miss a newly linked patient. The owner queries
+    // cover older profiles that have no clinic assignment. Email comparison is
+    // local because legacy profiles may contain mixed-case addresses.
+    const [clinicPatients, clinicianPatients, legacyPatients] = await Promise.all([
+      getDocsFromServer(query(collection(db, 'clients'), where('clinicId', '==', clinicId))),
+      getDocsFromServer(query(collection(db, 'clients'), where('clinicianId', '==', clinician.uid))),
+      getDocsFromServer(query(
+        collection(db, 'clients'),
+        where('linkedClinicianCode', '==', clinician.uid),
+        where('clinicianId', '==', null),
+      )),
+    ]);
+    const matchingPatientIds = new Set(
+      [clinicPatients, clinicianPatients, legacyPatients]
+        .flatMap((snapshot) => snapshot.docs)
+        .filter((entry) => normalizeEmail(readClientProfile(entry.data(), entry.id).email || '') === patientEmail)
+        .map((entry) => entry.id),
+    );
 
     const now = Date.now();
     const uniquenessClaimId = patientEmail;
@@ -905,6 +952,19 @@ class StorageEngine {
     const invitationRef = doc(db, 'patientInvitations', invitation.id);
     const claimRef = getInvitationClaimRef(clinician.uid, uniquenessClaimId);
     await runTransaction(db, async (transaction) => {
+      // Reread matches before writing so a concurrent unlink or link is
+      // reflected in the decision. A revoked read fails the transaction.
+      for (const patientId of matchingPatientIds) {
+        const patientSnapshot = await transaction.get(doc(db, 'clients', patientId));
+        if (!patientSnapshot.exists()) continue;
+        const patient = readClientProfile(patientSnapshot.data(), patientSnapshot.id);
+        if (normalizeEmail(patient.email || '') !== patientEmail) continue;
+        const currentClinicianId = getPatientClinicianId(patient);
+        if (!currentClinicianId) continue;
+        if (patient.clinicId === clinicId) throw new Error('This patient is already connected to your clinic.');
+        if (currentClinicianId === clinician.uid) throw new Error('This patient is already connected to you.');
+      }
+
       const claimSnapshot = await transaction.get(claimRef);
       if (claimSnapshot.exists()) {
         const claim = claimSnapshot.data() as { invitationId?: string; expiresAt?: unknown };
@@ -963,6 +1023,64 @@ class StorageEngine {
         transaction.delete(getInvitationClaimRef(invitation.clinicianId, invitation.uniquenessClaimId));
       }
     });
+  }
+
+  /** Resumable bounded cleanup. Auth deletion is deliberately the caller's last step. */
+  public async preparePatientAccountDeletion(expectedUid: string, onDeactivated?: (client: ClientProfile) => void): Promise<void> {
+    if (this.isDemoWorkspace()) throw new Error('Account deletion is unavailable in the sample workspace');
+    const uid = expectedUid;
+    const ensureIdentity = () => {
+      if (auth.currentUser?.uid !== uid) throw new Error('Your signed-in account changed. Restart account deletion.');
+    };
+    ensureIdentity();
+    const clientRef = doc(db, 'clients', uid);
+    const clientSnapshot = await getDoc(clientRef);
+    ensureIdentity();
+    if (!clientSnapshot.exists()) throw new Error('Your patient profile is unavailable. Please contact support.');
+    const client = readClientProfile(clientSnapshot.data(), uid);
+    if (!client.accountDeletionStartedAt) {
+      ensureIdentity();
+      await updateDoc(clientRef, {
+        accountDeletionStartedAt: serverTimestamp(),
+        clinicianId: null,
+        linkedClinicianCode: null,
+        clinicId: null,
+        acceptedInvitationId: null,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    ensureIdentity();
+    onDeactivated?.({ ...client, accountDeletionStartedAt: client.accountDeletionStartedAt ?? new Date(),
+      clinicianId: undefined, linkedClinicianCode: undefined, clinicId: undefined, acceptedInvitationId: undefined });
+
+    // Keep the patient role until Auth deletion succeeds. A failed Auth delete
+    // can then reload this route and resume without resurrecting the link.
+    ensureIdentity();
+    await setDoc(doc(db, 'users', uid), {
+      role: 'patient', email: null, displayName: null, accountDeletionStartedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // Cancel every future canonical appointment for this UID, including ones
+    // created by a former clinician. Pending email invitations remain usable by
+    // a new UID, so they and their claims are intentionally untouched.
+    ensureIdentity();
+    const appointments = await getDocs(query(collection(db, 'appointments'), where('patientId', '==', uid)));
+    ensureIdentity();
+    const now = Date.now();
+    for (const entry of appointments.docs) {
+      const data = entry.data() as Record<string, unknown>;
+      const startsAt = data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null;
+      if (data.status === 'scheduled' && startsAt !== null && startsAt > now && !isCancellableFutureAppointment(data, now)) {
+        throw new Error('A future appointment could not be cancelled automatically. Your clinic connection is removed; contact support to finish account deletion.');
+      }
+      if (!isCancellableFutureAppointment(data, now)) continue;
+      ensureIdentity();
+      await updateDoc(entry.ref, {
+        status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: uid,
+        cancellationRequestId: `cancel_${crypto.randomUUID().replace(/-/g, '')}`,
+        updatedAt: serverTimestamp(), revision: data.revision + 1,
+      });
+    }
   }
 
   public async unlinkPatient(patientId: string): Promise<void> {
@@ -1086,6 +1204,10 @@ class StorageEngine {
         if (currentClinicianId && currentClinicianId !== invitation.clinicianId) {
           throw new Error('Disconnect from your current clinician before accepting another invitation');
         }
+        const assignedTemplate = getClinicalProtocolTemplate(invitation.assignedProtocol);
+        if (!assignedTemplate) {
+          throw new Error('This invitation has no supported protocol. Ask your clinician for a new invitation');
+        }
         const linkedClient: ClientProfile = {
           ...current,
           id: patient.uid,
@@ -1097,12 +1219,17 @@ class StorageEngine {
           acceptedInvitationId: invitation.id,
           condition: invitation.condition,
           assignedProtocol: invitation.assignedProtocol,
+          customProtocolConfig: undefined,
+          allowedExperiences: [...assignedTemplate.recommendedExperiences],
           prescribedSessionsPerWeek: invitation.prescribedSessionsPerWeek,
           notes: invitation.notes ?? current.notes,
         };
         const timestamp = serverTimestamp();
 
-        transaction.set(clientRef, removeUndefined({ ...linkedClient, updatedAt: timestamp }), { merge: true });
+        transaction.set(clientRef, {
+          ...removeUndefined({ ...linkedClient, updatedAt: timestamp }),
+          ...(clientSnapshot.exists() ? { customProtocolConfig: deleteField() } : {}),
+        }, { merge: true });
         transaction.set(
           invitationRef,
           {
@@ -1140,6 +1267,10 @@ class StorageEngine {
     if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
     const payload = removeUndefined(client) as unknown as Record<string, unknown>;
+    // saveClient can also create via setDoc(..., { merge: true }). Never create
+    // a current profile without an explicit experience assignment field.
+    payload.allowedExperiences = Array.isArray(client.allowedExperiences)
+      ? client.allowedExperiences : [...DEFAULT_ALLOWED_EXPERIENCES];
     for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
       if (client[field] === undefined) payload[field] = deleteField();
     }
@@ -1149,6 +1280,18 @@ class StorageEngine {
       (payload.customProtocolConfig as Record<string, unknown>).ratioReward = deleteField();
     }
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
+  }
+
+  public async saveIndividualBaselineModel(patientId: string, baselineModel: IndividualBaselineModel): Promise<void> {
+    if (this.isDemoWorkspace()) {
+      const index = this.demoClients.findIndex((client) => client.id === patientId);
+      if (index < 0) throw new Error('Your patient profile is unavailable.');
+      this.demoClients[index] = { ...this.demoClients[index], individualBaselineModel: baselineModel };
+      return;
+    }
+
+    if (!auth.currentUser) throw new Error('Sign in to save a patient record');
+    await updateDoc(doc(db, 'clients', patientId), { individualBaselineModel: baselineModel });
   }
 
   public async getBrainMaps(patientId: string): Promise<QEEGBrainMap[]> {
@@ -1263,12 +1406,14 @@ class StorageEngine {
       const snap = await getDoc(clientRef);
       if (snap.exists()) {
         const existing = readClientProfile(snap.data(), snap.id);
-        if (!existing.name && user.displayName) {
+        if (!existing.accountDeletionStartedAt && !existing.name && user.displayName) {
           const name = user.displayName
             .trim()
             .replace(/[._]/g, ' ')
             .replace(/\b\w/g, (c) => c.toUpperCase());
-          await setDoc(clientRef, { name }, { merge: true });
+          // An existing profile may be deleted after the read. Do not let a
+          // display-name repair recreate a partial clients/{uid} document.
+          await updateDoc(clientRef, { name });
           existing.name = name;
         }
         return existing;
@@ -1283,6 +1428,39 @@ class StorageEngine {
     }
 
     return null;
+  }
+
+  /** Read an existing patient for calibration without creating or enriching its profile. */
+  public async getExistingCurrentClient(user?: { uid: string } | null): Promise<ClientProfile | null> {
+    if (this.isDemoWorkspace()) return this.demoClients[0] ?? null;
+    if (!user?.uid) return null;
+
+    const snapshot = await getDoc(doc(db, 'clients', user.uid));
+    return snapshot.exists() ? readClientProfile(snapshot.data(), snapshot.id) : null;
+  }
+
+  /** Initialize only a missing garden field; the transaction preserves concurrent growth and care fields. */
+  public async ensureTidalGardenState(patientId: string): Promise<ClientProfile> {
+    if (this.isDemoWorkspace()) {
+      const index = this.demoClients.findIndex((client) => client.id === patientId);
+      if (index < 0) throw new Error('Patient profile is unavailable. Try again.');
+      const current = this.demoClients[index];
+      if (current.tidalGardenState) return current;
+      const updated = { ...current, tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' } };
+      this.demoClients[index] = updated;
+      return updated;
+    }
+    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to open Tidal Garden.');
+    const clientRef = doc(db, 'clients', patientId);
+    return runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(clientRef);
+      if (!snapshot.exists()) throw new Error('Patient profile is unavailable. Try again.');
+      const current = readClientProfile(snapshot.data(), snapshot.id);
+      if (current.tidalGardenState) return current;
+      const tidalGardenState = { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' };
+      transaction.update(clientRef, { tidalGardenState });
+      return { ...current, tidalGardenState };
+    });
   }
 
   public setCurrentClientId(id: string) {
@@ -1499,7 +1677,7 @@ class StorageEngine {
       return;
     }
     if (this.isDemoWorkspace()) throw new Error(`Sample session ${sessionId} does not exist`);
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) throw new Error('Sign in to update session notes');
 
     const sessionRef = doc(db, 'sessions', sessionId);
     await runTransaction(db, async (transaction) => {

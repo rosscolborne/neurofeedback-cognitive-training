@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ClientProfile, EEGDataPoint, ExperienceType, SessionPhase, SessionRecord } from '../../types';
+import { ClientProfile, EEGDataPoint, ExperienceType, IndividualBaselineModel, SessionPhase, SessionRecord } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
 import {
   AdaptiveDifficultyEngine,
@@ -16,6 +16,7 @@ import {
 } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
+import { getTidalGardenSessionXp } from '../../services/dataMappers';
 import { describeActiveReward, describeBrainFlowScore } from './trainingTelemetry';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
 import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
@@ -126,6 +127,7 @@ const RECENT_IN_ZONE_WINDOW_SECONDS = 10;
 const HARDWARE_SOURCE_MAX_AGE_MS = 2_000;
 interface SessionRunnerProps {
   client: ClientProfile;
+  onBaselinePersisted?: (model: IndividualBaselineModel) => void;
   selectedExperience: ExperienceType;
   onComplete: (summary: SessionRecord) => Promise<void>;
   onCancel: () => void;
@@ -143,6 +145,7 @@ export const resolveSessionCareProvenance = (client: ClientProfile): Pick<Sessio
 
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
+  onBaselinePersisted,
   selectedExperience,
   onComplete,
   onCancel,
@@ -168,6 +171,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isSavingSession, setIsSavingSession] = useState(false);
+  const [isSessionCompleted, setIsSessionCompleted] = useState(false);
+  const completedSummaryRef = useRef<SessionRecord | null>(null);
+  const savePendingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [acquisitionError, setAcquisitionError] = useState<string | null>(null);
   const [isFitAccepted, setIsFitAccepted] = useState(false);
@@ -188,6 +194,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const totalSecondsElapsedRef = useRef(0);
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
   const [inZoneMeasuredSeconds, setInZoneMeasuredSeconds] = useState(0);
+  const inZoneSecondsRef = useRef(0);
+  const inZoneMeasuredSecondsRef = useRef(0);
 
   const [adaptiveEngine] = useState<AdaptiveDifficultyEngine | null>(() => runtimeConfig
     ? new AdaptiveDifficultyEngine(runtimeConfig.protocol, runtimeConfig.initialThreshold, runtimeConfig)
@@ -241,19 +249,40 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   }, [onCancel]);
 
   const finishSession = React.useCallback(async (completedDurationSeconds?: number) => {
-    if (isSavingSession) return;
+    if (isSavingSession || savePendingRef.current) return;
     setSaveError(null);
+    const persistSummary = async (summary: SessionRecord) => {
+      savePendingRef.current = true;
+      setIsSavingSession(true);
+      try {
+        await onComplete(summary);
+        eegEngine.isDemoMode = false;
+        setIsDemoSession(false);
+        audioEngine.playChime('complete');
+      } catch (error) {
+        console.error('Failed to save completed session:', error);
+        setSaveError("We couldn't confirm this session was saved. Retry with the same session or check History after returning.");
+        savePendingRef.current = false;
+        setIsSavingSession(false);
+      }
+    };
+    if (completedSummaryRef.current) {
+      await persistSummary(completedSummaryRef.current);
+      return;
+    }
     if (!runtimeConfig || !adaptiveEngine) {
       setSaveError('A valid clinician-assigned protocol is required before this session can be saved.');
       return;
     }
 
     const completedDuration = getCompletedSessionDuration(completedDurationSeconds, totalSecondsElapsedRef.current);
+    const completedInZoneSeconds = Math.max(0, Math.min(inZoneSecondsRef.current, completedDuration, runtimeConfig.durationSeconds));
+    const completedMeasuredSeconds = inZoneMeasuredSecondsRef.current;
     const sourceState = eegEngine.getHardwareSourceState();
     const readiness = assessSessionCompletionReadiness({
       isDemo: isDemoSession,
       elapsedSeconds: completedDuration,
-      verifiedSeconds: inZoneMeasuredSeconds,
+      verifiedSeconds: completedMeasuredSeconds,
       verifiedBandSamples: bandAccumulatorRef.current.sampleCount,
       hardwareConnected: eegEngine.isHardwareConnected,
       sourceFresh: isDemoSession || (
@@ -272,10 +301,9 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       return;
     }
 
-    setIsSavingSession(true);
-
-    const totalTrainTime = Math.max(1, inZoneMeasuredSeconds);
-    const timeInZonePercent = Math.min(100, Math.round((inZoneSeconds / totalTrainTime) * 100));
+    const totalTrainTime = Math.max(1, completedMeasuredSeconds);
+    const timeInZonePercent = completedMeasuredSeconds > 0
+      ? Math.min(100, Math.round((inZoneSecondsRef.current / totalTrainTime) * 100)) : 0;
     const bandSummary = summarizeVerifiedBands(bandAccumulatorRef.current);
     const careProvenance = resolveSessionCareProvenance(client);
 
@@ -291,6 +319,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       experience: selectedExperience,
       durationSeconds: completedDuration,
       timeInZonePercent,
+      inZoneSeconds: completedInZoneSeconds,
+      configuredDurationSeconds: runtimeConfig.durationSeconds,
       averageCoherence: coherenceAccumulatorRef.current.count > 0
         ? Math.round(coherenceAccumulatorRef.current.total / coherenceAccumulatorRef.current.count)
         : null,
@@ -311,17 +341,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         : undefined,
     };
 
-    try {
-      await onComplete(summary);
-      eegEngine.isDemoMode = false;
-      setIsDemoSession(false);
-      audioEngine.playChime('complete');
-    } catch (error) {
-      console.error('Failed to save completed session:', error);
-      setSaveError("We couldn't save this session. Check your connection and try again.");
-      setIsSavingSession(false);
-    }
-  }, [adaptiveEngine, client, completionIdentity, inZoneMeasuredSeconds, inZoneSeconds, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
+    // Freeze evidence before invoking storage. An ambiguous save response must
+    // retry the identical record and the clock must not change its XP.
+    completedSummaryRef.current = summary;
+    setIsSessionCompleted(true);
+    setShowEndConfirm(true);
+    await persistSummary(summary);
+  }, [adaptiveEngine, client, completionIdentity, isDemoSession, isSavingSession, onComplete, runtimeConfig, selectedExperience]);
 
   // Subscribe to high-frequency EEG data stream (10 Hz)
   useEffect(() => {
@@ -417,9 +443,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   // Main session timer interval
   useEffect(() => {
-    if (isPaused || !isSessionStarted || !runtimeConfig) return;
+    if (isPaused || !isSessionStarted || !runtimeConfig || isSessionCompleted) return;
 
     const interval = window.setInterval(() => {
+      if (completedSummaryRef.current) return;
       const currentData = eegDataRef.current;
       const bandProvenance = eegEngine.getBandPowerProvenance();
       const sourceState = eegEngine.getHardwareSourceState();
@@ -449,9 +476,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       const tick = advanceSessionClock(totalSecondsElapsedRef.current, sessionTotalDuration, isDemoSession);
       totalSecondsElapsedRef.current = tick.elapsed;
       setTotalSecondsElapsed(tick.elapsed);
-      if (tick.phase === 'complete') {
-        void finishSession(tick.elapsed);
-      } else if (tick.phase !== phaseRef.current) {
+      if (tick.phase !== 'complete' && tick.phase !== phaseRef.current) {
         if (tick.phase === 'warmup') audioEngine.playChime('success');
         setPhase(tick.phase);
       }
@@ -472,15 +497,19 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       // soon as a session begins. Calibration is real EEG data too; only an
       // unavailable protocol metric should keep this value indeterminate.
       if (currentData?.inZoneAvailable) {
-        setInZoneMeasuredSeconds(seconds => seconds + 1);
+        inZoneMeasuredSecondsRef.current += 1;
+        setInZoneMeasuredSeconds(inZoneMeasuredSecondsRef.current);
         if (currentData.inZone) {
-          setInZoneSeconds(seconds => seconds + 1);
+          inZoneSecondsRef.current += 1;
+          setInZoneSeconds(inZoneSecondsRef.current);
         }
       }
+      // Read the final tick from refs after counting it; state updates are asynchronous.
+      if (tick.phase === 'complete') void finishSession(tick.elapsed);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [finishSession, isDemoSession, isFitAccepted, isPaused, isSessionStarted, runtimeConfig, sessionTotalDuration]);
+  }, [finishSession, isDemoSession, isFitAccepted, isPaused, isSessionCompleted, isSessionStarted, runtimeConfig, sessionTotalDuration]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -572,7 +601,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   }
 
   // Connection Gate Screen
-  if (!eegEngine.isHardwareConnected && !isDemoSession) {
+  if (!eegEngine.isHardwareConnected && !isDemoSession && !isSessionCompleted) {
     return (
       <div
         style={{
@@ -894,7 +923,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <TidalGardenCanvas 
               eegData={eegData} 
               stage={client.tidalGardenState.stage} 
-              growthPoints={client.tidalGardenState.growthPoints + Math.floor(inZoneSeconds * 10)} 
+              growthPoints={client.tidalGardenState.growthPoints + getTidalGardenSessionXp(inZoneSeconds, sessionTotalDuration, totalSecondsElapsed)}
               inZonePercent={inZonePercent ?? undefined}
               isPaused={isPaused} 
             />
@@ -939,7 +968,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             <NarrativeTherapyMode eegData={eegData} />
           )}
           {selectedExperience === 'neuro-gambit' && (
-            <NeuroGambitExperience eegData={eegData} isPaused={isPaused} />
+            <NeuroGambitExperience eegData={eegData} isPaused={isPaused} isDemoSession={isDemoSession} patientId={client.id} savedBaselineModel={client.individualBaselineModel} onBaselinePersisted={onBaselinePersisted ?? (() => {})} />
           )}
         </div>
 
@@ -1189,21 +1218,23 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               >
                 {isSavingSession ? 'Saving Session...' : 'Yes, Save Progress & View Summary'}
               </button>
-              <button
-                onClick={() => setShowEndConfirm(false)}
-                disabled={isSavingSession}
-                className="btn btn-secondary"
-                style={{ width: '100%' }}
-              >
-                Continue Training
-              </button>
+              {!isSessionCompleted && (
+                <button
+                  onClick={() => setShowEndConfirm(false)}
+                  disabled={isSavingSession}
+                  className="btn btn-secondary"
+                  style={{ width: '100%' }}
+                >
+                  Continue Training
+                </button>
+              )}
               <button
                 onClick={cancelSession}
                 disabled={isSavingSession}
                 className="btn btn-ghost"
                 style={{ width: '100%', color: '#D32F2F' }}
               >
-                Exit Without Saving
+                {isSessionCompleted ? 'Return to Dashboard' : 'Exit Without Saving'}
               </button>
               {saveError && (
                 <div

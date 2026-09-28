@@ -40,6 +40,16 @@ export async function probeMessageThreadRead(patientId: string, clinicianId: str
     return outcome(() => getDoc(doc(db, 'messageThreads', patientId, 'relationships', clinicianId)));
 }
 
+/** New UID must not inherit reads of the deleted UID's retained history. */
+export async function probeDeletedPatientHistory(oldUid: string, clinicianId: string): Promise<string[]> {
+    await auth.authStateReady();
+    return Promise.all([
+        () => getDoc(doc(db, 'clients', oldUid)),
+        () => getDoc(doc(db, 'sessions', `lifecycle-${oldUid}`)),
+        () => getDoc(doc(db, 'messageThreads', oldUid, 'relationships', clinicianId)),
+    ].map(outcome));
+}
+
 export async function probeUnrelatedClinicianReads(patientId: string, ownerClinicianId: string): Promise<string[]> {
     await auth.authStateReady();
     return Promise.all([

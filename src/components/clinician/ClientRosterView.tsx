@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
+import { timestampToMillis } from '../../services/dataMappers';
 import { resolvePatientProtocol } from '../../services/protocols';
 import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemplates';
 import { PatientAvatar } from './PatientAvatar';
+import { formatLastSessionDate } from './formatLastSessionDate';
 import {
   Search,
   Plus,
@@ -28,6 +30,26 @@ interface ClientRosterViewProps {
   onScheduleClient?: (clientId: string) => void;
   onMessageClient?: (clientId: string) => void;
 }
+
+const invitationUrl = (id: string) => `${window.location.origin}/#/connect/${id}`;
+const currentTime = () => Date.now();
+
+const invitationMillis = (value: PatientInvitation['expiresAt']): number | null => {
+  try {
+    const millis = timestampToMillis(value);
+    return millis != null && !Number.isNaN(new Date(millis).getTime()) ? millis : null;
+  } catch {
+    return null;
+  }
+};
+
+const invitationDate = (value: PatientInvitation['expiresAt']): string | null => {
+  const millis = invitationMillis(value);
+  if (millis == null) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  }).format(new Date(millis));
+};
 
 export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   clients,
@@ -61,6 +83,53 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [showHistory, setShowHistory] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{ id: string; error: boolean } | null>(null);
+  const effectiveNow = Math.max(clockNow, currentTime());
+
+  useEffect(() => {
+    const refreshClock = () => setClockNow(currentTime());
+    if (typeof window !== 'undefined') window.addEventListener?.('focus', refreshClock);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', refreshClock);
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener?.('focus', refreshClock);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', refreshClock);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextExpiry = invitations
+      .filter((invitation) => invitation.status === 'pending')
+      .map((invitation) => invitationMillis(invitation.expiresAt))
+      .filter((expiry): expiry is number => expiry != null && expiry > effectiveNow)
+      .reduce((soonest, expiry) => Math.min(soonest, expiry), Number.POSITIVE_INFINITY);
+    if (!Number.isFinite(nextExpiry)) return;
+    const timer = setTimeout(() => setClockNow(currentTime()), Math.min(Math.max(nextExpiry - currentTime(), 0), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [invitations, effectiveNow]);
+
+  const invitationStatus = (invitation: PatientInvitation) =>
+    invitation.status === 'pending' && (invitationMillis(invitation.expiresAt) ?? Number.POSITIVE_INFINITY) <= effectiveNow
+      ? 'expired' : invitation.status;
+  const pendingInvitations = invitations.filter((invitation) => invitationStatus(invitation) === 'pending');
+  const historicalInvitations = invitations
+    .filter((invitation) => invitationStatus(invitation) !== 'pending')
+    .sort((a, b) => (invitationMillis(b.createdAt) ?? 0) - (invitationMillis(a.createdAt) ?? 0));
+
+  const handleCopyInvitation = async (invitation: PatientInvitation) => {
+    if (invitationStatus(invitation) !== 'pending' ||
+      (invitationMillis(invitation.expiresAt) ?? Number.POSITIVE_INFINITY) <= currentTime()) {
+      setClockNow(currentTime());
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(invitationUrl(invitation.id));
+      setCopyFeedback({ id: invitation.id, error: false });
+    } catch {
+      setCopyFeedback({ id: invitation.id, error: true });
+    }
+  };
 
   const filteredClients = clients.filter((c) => {
     const matchesSearch =
@@ -116,6 +185,12 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
+    const invitation = invitations.find((candidate) => candidate.id === invitationId);
+    if (!invitation || invitationStatus(invitation) !== 'pending' ||
+      (invitationMillis(invitation.expiresAt) ?? Number.POSITIVE_INFINITY) <= currentTime()) {
+      setClockNow(currentTime());
+      return;
+    }
     setActionError(null);
     setPendingActionId(invitationId);
     try {
@@ -138,15 +213,22 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
     setFormError(null);
     try {
       if (editingClient && onUpdateClient) {
+        const protocolChanged = formProtocol !== editingClient.assignedProtocol;
+        const assignedTemplate = protocolChanged
+          ? getClinicalProtocolTemplate(formProtocol ?? 'theta-beta-ratio')
+          : undefined;
+        if (protocolChanged && !assignedTemplate) throw new Error('The selected clinical protocol is unsupported.');
         await onUpdateClient({
           ...editingClient,
           name: formName,
           email: formEmail || editingClient.email,
           condition: formCondition,
           assignedProtocol: formProtocol,
-          customProtocolConfig: formProtocol === editingClient.assignedProtocol
+          customProtocolConfig: !protocolChanged
             ? editingClient.customProtocolConfig
             : undefined,
+          allowedExperiences: assignedTemplate
+            ? [...assignedTemplate.recommendedExperiences] : editingClient.allowedExperiences,
           status: formStatus,
           prescribedSessionsPerWeek: formSessionsPerWeek === '' ? undefined : Number(formSessionsPerWeek),
           notes: formNotes,
@@ -194,25 +276,55 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
       {actionError && <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '12px' }}>{actionError}</div>}
 
-      {invitations.some((invitation) => invitation.status === 'pending') && (
+      {pendingInvitations.length > 0 && (
         <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700 }}>
             <Clock3 size={16} color="var(--brand-primary)" /> Pending invitations
           </div>
-          {invitations.filter((invitation) => invitation.status === 'pending').map((invitation) => (
-            <div key={invitation.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 600 }}>{invitation.patientName}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{invitation.patientEmail}</div>
-                <div className="font-mono" style={{ marginTop: '3px', fontSize: '11px', color: 'var(--brand-primary)' }}>{invitation.id}</div>
+          {pendingInvitations.map((invitation) => {
+            const expiry = invitationDate(invitation.expiresAt);
+            return (
+              <div key={invitation.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{invitation.patientName}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{invitation.patientEmail}</div>
+                  <div className="font-mono" style={{ marginTop: '3px', fontSize: '11px', color: 'var(--brand-primary)' }}>{invitation.id}</div>
+                  <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {expiry ? `Expires ${expiry}` : 'Expiry unavailable'}
+                  </div>
+                  {copyFeedback?.id === invitation.id && copyFeedback.error && <div role="alert" style={{ marginTop: '4px', fontSize: '12px', color: 'var(--status-alert)' }}>Copy was blocked by your browser. Select the code above and copy it manually.</div>}
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => void handleCopyInvitation(invitation)} className="btn btn-secondary" style={{ fontSize: '12px' }}>
+                    <Copy size={14} /> {copyFeedback?.id === invitation.id && !copyFeedback.error ? 'Link copied' : 'Copy link'}
+                  </button>
+                  <button onClick={() => void handleCancelInvitation(invitation.id)} disabled={pendingActionId === invitation.id} className="btn btn-ghost" style={{ fontSize: '12px' }}>
+                    {pendingActionId === invitation.id ? 'Cancelling…' : 'Cancel'}
+                  </button>
+                </div>
               </div>
-              <button onClick={() => void handleCancelInvitation(invitation.id)} disabled={pendingActionId === invitation.id} className="btn btn-ghost" style={{ fontSize: '12px', flexShrink: 0 }}>
-                {pendingActionId === invitation.id ? 'Cancelling…' : 'Cancel'}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
+
+      <section className="card-clinician" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <button type="button" onClick={() => setShowHistory(!showHistory)} aria-expanded={showHistory} className="btn btn-ghost" style={{ alignSelf: 'flex-start', fontSize: '13px', fontWeight: 700 }}>
+          Invitation history ({historicalInvitations.length})
+        </button>
+        {showHistory && historicalInvitations.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No past invitations yet.</div>}
+        {showHistory && historicalInvitations.map((invitation) => {
+          const status = invitationStatus(invitation);
+          const date = status === 'accepted' ? invitation.acceptedAt : invitation.expiresAt;
+          const label = status === 'accepted' ? 'Accepted' : status === 'cancelled' ? 'Cancelled' : 'Expired';
+          const dateLabel = status === 'cancelled' ? 'Cancellation date unavailable' : invitationDate(date) ?? 'Date unavailable';
+          return <div key={invitation.id} style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)', fontSize: '12px' }}>
+            <div style={{ fontWeight: 600 }}>{invitation.patientName}</div>
+            <div style={{ color: 'var(--text-secondary)' }}>{invitation.patientEmail}</div>
+            <div style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>{label} · {dateLabel}</div>
+          </div>;
+        })}
+      </section>
 
       {/* Search & Filter Bar */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -290,7 +402,6 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Status</th>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Condition / Protocol</th>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Last Session</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Capacity Score</th>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Sessions</th>
               <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
             </tr>
@@ -298,7 +409,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
           <tbody>
             {filteredClients.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
                   No patients match the selected filter.
                 </td>
               </tr>
@@ -340,14 +451,14 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
-                    {client.lastSessionDate || 'No recorded session'}
+                    {formatLastSessionDate(client.lastSessionDate)}
                   </td>
-                  <td style={{ padding: '14px 16px', color: 'var(--text-tertiary)' }}>Unavailable</td>
                   <td style={{ padding: '14px 16px', fontWeight: 600 }}>
                     {client.completedSessionsCount ?? 0}
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                      {onMessageClient && <button type="button" onClick={(e) => { e.stopPropagation(); onMessageClient(client.id); }} className="btn btn-ghost" style={{ padding: '4px 6px', fontSize: '11px' }} aria-label={`Message ${client.name}`} title={`Message ${client.name}`}><MessageSquare size={14} /></button>}
                       <button
                         onClick={(e) => handleOpenEdit(client, e)}
                         className="btn btn-ghost"
@@ -419,17 +530,19 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
               <div>
-                <span style={{ color: 'var(--text-tertiary)' }}>Capacity: unavailable</span>
-                <span style={{ color: 'var(--text-tertiary)', marginLeft: '12px' }}>Sessions: </span>
+                <span style={{ color: 'var(--text-tertiary)' }}>Sessions: </span>
                 <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
               </div>
-              <button
-                onClick={(e) => handleOpenEdit(client, e)}
-                className="btn btn-ghost"
-                style={{ padding: '4px 8px', fontSize: '11px' }}
-              >
-                <Edit size={12} /> Edit
-              </button>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {onMessageClient && <button type="button" onClick={(e) => { e.stopPropagation(); onMessageClient(client.id); }} className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '11px' }} aria-label={`Message ${client.name}`}><MessageSquare size={12} /> Message</button>}
+                <button
+                  onClick={(e) => handleOpenEdit(client, e)}
+                  className="btn btn-ghost"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                >
+                  <Edit size={12} /> Edit
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -476,8 +589,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   type="button"
                   onClick={async () => {
                     try {
-                      const invitationUrl = `${window.location.origin}/connect/${createdInvitation.id}`;
-                      await navigator.clipboard.writeText(invitationUrl);
+                      await navigator.clipboard.writeText(invitationUrl(createdInvitation.id));
                       setCopiedCode(true);
                     } catch {
                       setFormError('Copy was blocked by your browser. Select the code above and copy it manually.');

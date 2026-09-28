@@ -61,8 +61,10 @@ export async function loginThroughUi(page: Page, credentials: Credentials): Prom
 
 /** Uses the normal UI only when a newly configured patient is shown headset setup. */
 export async function skipHeadsetSetupIfPresent(page: Page): Promise<void> {
-    const skipToDashboard = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
-    if (await skipToDashboard.isVisible().catch(() => false)) {
+  const skipToDashboard = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
+  await skipToDashboard.or(page.getByText('Training Session', { exact: true })).first()
+    .waitFor({ state: 'visible', timeout: 15_000 });
+  if (await skipToDashboard.isVisible().catch(() => false)) {
         await skipToDashboard.click();
     }
 }

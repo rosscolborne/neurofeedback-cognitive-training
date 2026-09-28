@@ -19,7 +19,8 @@ describe('relationship enrollment UI wiring', () => {
   });
 
   it('gives clinicians an expiring shareable invitation link', () => {
-    expect(rosterSource).toContain('/connect/${createdInvitation.id}');
+    expect(rosterSource).toContain('/#/connect/${id}');
+    expect(rosterSource).toContain('invitationUrl(createdInvitation.id)');
     expect(rosterSource).toContain('The invitation expires after 14 days.');
     expect(rosterSource).toContain('Copy invitation link');
   });

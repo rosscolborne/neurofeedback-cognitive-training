@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
+import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi, startPatientTrainingInDemoMode } from './helpers/auth';
 import { seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
@@ -43,6 +45,104 @@ function detailValue(dialog: ReturnType<Page['getByRole']>, label: string) {
 function telemetryCell(page: Page, label: RegExp | string) {
   return page.locator('.card-patient-recessed > div').filter({ has: page.getByText(label, { exact: typeof label === 'string' }) }).first();
 }
+
+test('fresh patient signup shows the default TBR protocol and only its assigned Home and Train experiences', async ({ browser }) => {
+  const page = await browser.newPage();
+  const email = `fresh-tbr-${randomUUID().slice(0, 12)}@example.test`;
+  const expectedIds = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
+  const expectedNames = [
+    'Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode', 'Generative Mandala',
+    'Generative XR', 'Generative Music', 'Contemplative Reading', 'NeuroGambit',
+  ];
+  const excludedNames = ['Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing'];
+  try {
+    await page.goto('/#/signup');
+    await page.getByPlaceholder('How should we call you?').fill('Fresh TBR Patient');
+    await page.getByPlaceholder('you@example.com').fill(email);
+    await page.getByPlaceholder('At least 6 characters').fill('LocalEmulator!123');
+    await page.getByRole('button', { name: 'Create Account' }).click();
+    await page.getByRole('button', { name: /Train my brain/ }).click();
+    await arriveAtPatientDashboard(page);
+
+    const assignment = await page.evaluate(async () => {
+      const { auth } = await import('/src/services/firebase.ts');
+      const { storageEngine } = await import('/src/services/storageEngine.ts');
+      if (!auth.currentUser) throw new Error('Expected a signed-in patient');
+      const profile = await storageEngine.getClient(auth.currentUser.uid);
+      return { protocol: profile?.assignedProtocol, allowed: profile?.allowedExperiences };
+    });
+    expect(assignment).toEqual({ protocol: 'theta-beta-ratio', allowed: expectedIds });
+    await expect(page.locator('main')).toContainText('Lubar Theta/Beta Ratio Protocol');
+    for (const name of expectedNames) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(1);
+    for (const name of excludedNames) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Train', exact: true }).click();
+    const cards = page.locator('main .card-patient');
+    await expect(cards).toHaveCount(expectedIds.length);
+    for (const name of expectedNames) await expect(cards.getByText(name, { exact: true })).toHaveCount(1);
+    for (const name of excludedNames) await expect(cards.getByText(name, { exact: true })).toHaveCount(0);
+    await page.reload();
+    await arriveAtPatientDashboard(page);
+    await expect(page.locator('main')).toContainText('Lubar Theta/Beta Ratio Protocol');
+    await page.getByRole('button', { name: 'Train', exact: true }).click();
+    await expect(page.locator('main .card-patient')).toHaveCount(expectedIds.length);
+    for (const name of expectedNames) await expect(page.locator('main .card-patient').getByText(name, { exact: true })).toHaveCount(1);
+    for (const name of excludedNames) await expect(page.locator('main .card-patient').getByText(name, { exact: true })).toHaveCount(0);
+  } finally {
+    await page.close();
+  }
+});
+
+test('clinician protocol change updates patient Home and Train without losing Garden progress', async ({ browser }) => {
+  const theta = getClinicalProtocolTemplate('theta-beta-ratio')!;
+  const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
+  const fixture = await seedLinkedPatient({
+    assignedProtocol: theta.protocolType,
+    allowedExperiences: theta.recommendedExperiences,
+    tidalGardenState: { stage: 3, growthPoints: 601, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
+  });
+  const clinicianContext = await browser.newContext();
+  const patientContext = await browser.newContext();
+  try {
+    const clinician = await clinicianContext.newPage();
+    const patient = await patientContext.newPage();
+    await loginThroughUi(patient, fixture.patient);
+    await arriveAtPatientDashboard(patient);
+    await patient.getByRole('button', { name: 'Progress', exact: true }).click();
+    await expect(patient.getByText('Garden Keeper', { exact: true })).toBeVisible();
+
+    await clinicianDetail(clinician, fixture);
+    await openBuilder(clinician);
+    await clinician.getByRole('button', { name: /Hardt Alpha Synchrony Protocol/ }).click();
+    await saveBuilder(clinician);
+
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
+    await expect(patient.locator('main')).toContainText('Hardt Alpha Synchrony Protocol');
+    for (const name of ['Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing']) {
+      await expect(patient.getByRole('button', { name, exact: true })).toHaveCount(1);
+    }
+    for (const name of ['Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode', 'NeuroGambit']) {
+      await expect(patient.getByRole('button', { name, exact: true })).toHaveCount(0);
+    }
+    await patient.getByRole('button', { name: 'Train', exact: true }).click();
+    const cards = patient.locator('main .card-patient');
+    await expect(cards).toHaveCount(alpha.recommendedExperiences.length);
+    for (const name of ['Generative XR', 'Generative Music', 'Contemplative Reading', 'Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing', 'Generative Mandala']) {
+      await expect(cards.getByText(name, { exact: true })).toHaveCount(1);
+    }
+    for (const name of ['Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode', 'NeuroGambit']) {
+      await expect(cards.getByText(name, { exact: true })).toHaveCount(0);
+    }
+    await patient.getByRole('button', { name: 'Progress', exact: true }).click();
+    await expect(patient.getByText('Garden Keeper', { exact: true })).toBeVisible();
+    await patient.getByRole('button', { name: 'Home', exact: true }).click();
+    await startPatientTrainingInDemoMode(patient, 'Tidal Garden');
+    await expect(patient.getByText('Tidal Garden: Stage 3 (601 XP)')).toBeVisible();
+  } finally {
+    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+  }
+});
 
 async function inZoneTrend(page: Page): Promise<number | null> {
   const text = await telemetryCell(page, 'In-Zone (10s)').innerText();

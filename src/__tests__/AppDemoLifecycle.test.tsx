@@ -8,13 +8,17 @@ const authState = vi.hoisted(() => ({
 const storage = vi.hoisted(() => ({
   getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
   getClients: vi.fn(), getPatientInvitationsForClinician: vi.fn(), getCurrentClient: vi.fn(),
+  subscribeToClientRoster: vi.fn((_onChange: () => void, _onError: (error: Error) => void) => vi.fn()),
   getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(), cancelPatientInvitation: vi.fn(),
   saveClient: vi.fn(),
 }));
 const settings = vi.hoisted(() => ({ load: vi.fn() }));
+const baselineEngine = vi.hoisted(() => ({ individualBaselineModel: null as unknown }));
+const routeState = vi.hoisted(() => ({ pathname: '/' }));
 
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState.value }));
 vi.mock('../services/storageEngine', () => ({ storageEngine: storage }));
+vi.mock('../services/eegEngine', () => ({ eegEngine: baselineEngine }));
 vi.mock('../services/brandEngine', () => ({
   applyBrandToDOM: vi.fn(),
   BRAND_PRESETS: [{ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }],
@@ -40,7 +44,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
     Routes: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     Route: ({ path, element }: { path: string; element: React.ReactNode }) => path === '/' ? element : null,
     Navigate: () => null,
-    useLocation: () => ({ pathname: '/' }), useNavigate: () => vi.fn(), useParams: () => ({}),
+    useLocation: () => ({ pathname: routeState.pathname }), useNavigate: () => vi.fn(), useParams: () => ({}),
   };
 });
 
@@ -59,6 +63,105 @@ describe('mounted App account/workspace lifecycle', () => {
     storage.getPatientInvitationsForClinician.mockResolvedValue([]);
     storage.saveClient.mockResolvedValue(undefined);
     settings.load.mockResolvedValue({ clinicId: 'clinic-1', clinic: { id: 'clinic-1' }, practitioner: { id: 'clinician-1' }, brand: null });
+    baselineEngine.individualBaselineModel = null;
+    routeState.pathname = '/';
+  });
+
+  it('reloads the saved calibration after returning from hardware setup', async () => {
+    const original = { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z' };
+    const recalibrated = { ...original, alphaPeakHz: 11 };
+    authState.value = { user: { uid: 'patient-a' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: original });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    routeState.pathname = '/hardware-setup';
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: original });
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+    baselineEngine.individualBaselineModel = recalibrated;
+    routeState.pathname = '/';
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: recalibrated });
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBe(recalibrated);
+    expect(patientShell(renderer).props.client.individualBaselineModel).toBe(recalibrated);
+    renderer.unmount();
+  });
+
+  it('initializes a signed-in patient profile on a direct hardware setup route without hydrating an old baseline', async () => {
+    authState.value = { user: { uid: 'new-patient' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    routeState.pathname = '/hardware-setup';
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'new-patient', individualBaselineModel: { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z' } });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(storage.getCurrentClient).toHaveBeenCalledWith(authState.value.user);
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+    renderer.unmount();
+  });
+
+  it('hydrates the current patient before shell mount and clears across sign-out, roles, and workspaces', async () => {
+    const saved = { alphaPeakHz: 10, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z', thetaMean: 3, betaMean: 5 };
+    authState.value = { user: { uid: 'patient-a' }, role: 'patient', loading: false, isDemoWorkspace: true, logout: vi.fn() };
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: saved });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBe(saved);
+    expect(patientShell(renderer).props.client.individualBaselineModel).toBe(saved);
+
+    const recalibrated = { ...saved, thetaMean: 8 };
+    act(() => patientShell(renderer).props.onBaselinePersisted('patient-a', recalibrated));
+    expect(patientShell(renderer).props.client.individualBaselineModel).toBe(recalibrated);
+    const staleBaselineCallback = patientShell(renderer).props.onBaselinePersisted;
+
+    authState.value = { user: null, role: null, loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    act(() => { renderer.update(<App />); });
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+
+    authState.value = { user: { uid: 'patient-b' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let resolveB!: (value: unknown) => void;
+    storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveB = resolve; }));
+    act(() => { renderer.update(<App />); });
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+    await act(async () => { resolveB({ id: 'patient-b' }); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+    act(() => staleBaselineCallback('patient-a', saved));
+    expect(patientShell(renderer).props.client.individualBaselineModel).toBeUndefined();
+    renderer.unmount();
+  });
+
+  it('rejects a late patient load after an account switch and isolates demo from production', async () => {
+    const saved = { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z' };
+    let resolveDemo!: (value: unknown) => void;
+    authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: true, logout: vi.fn() };
+    storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveDemo = resolve; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'production', individualBaselineModel: saved });
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBe(saved);
+    await act(async () => { resolveDemo({ id: 'demo', individualBaselineModel: { ...saved, alphaPeakHz: 7 } }); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBe(saved);
+    expect(patientShell(renderer).props.client.id).toBe('production');
+    renderer.unmount();
+  });
+
+  it('clears a production calibration before opening the sample workspace', async () => {
+    const saved = { alphaPeakHz: 9.5, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-27T08:00:00Z' };
+    authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'production', individualBaselineModel: saved });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(baselineEngine.individualBaselineModel).toBe(saved);
+
+    authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: true, logout: vi.fn() };
+    let resolveDemo!: (value: unknown) => void;
+    storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveDemo = resolve; }));
+    act(() => { renderer.update(<App />); });
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+    await act(async () => { resolveDemo({ id: 'demo' }); await flush(); });
+    expect(patientShell(renderer).props.client.id).toBe('demo');
+    expect(baselineEngine.individualBaselineModel).toBeNull();
+    renderer.unmount();
   });
 
   it('clears demo state immediately and keeps independent successful loads after a real-account read fails', async () => {
@@ -80,6 +183,35 @@ describe('mounted App account/workspace lifecycle', () => {
     renderer.unmount();
   });
 
+  it('distinguishes pending, failed, retried and loaded-empty clinician rosters across accounts', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let rejectFirst!: (error: Error) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectFirst = reject; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    expect(shell(renderer).props.rosterStatus).toBe('loading');
+    await act(async () => { rejectFirst(new Error('roster offline')); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('error');
+
+    let resolveRetry!: (clients: unknown[]) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveRetry = resolve; }));
+    const retry = renderer.root.findAllByType('button').find((item) => item.children.join('') === 'Retry')!;
+    await act(async () => { retry.props.onClick(); });
+    expect(shell(renderer).props.rosterStatus).toBe('loading');
+    await act(async () => { resolveRetry([]); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    expect(shell(renderer).props.clients).toEqual([]);
+
+    authState.value = { user: { uid: 'clinician-two' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let resolveSecond!: (clients: unknown[]) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+    await act(async () => { renderer.update(<App />); });
+    expect(shell(renderer).props.rosterStatus).toBe('loading');
+    await act(async () => { resolveSecond([]); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    renderer.unmount();
+  });
+
   it('rejects stale async and subscription results from the prior workspace generation', async () => {
     let resolveDemoRoster!: (value: unknown[]) => void;
     storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveDemoRoster = resolve; }));
@@ -92,6 +224,58 @@ describe('mounted App account/workspace lifecycle', () => {
     act(() => { renderer.update(<App />); });
     await act(async () => { resolveDemoRoster([{ id: 'late-sample-patient' }]); await flush(); });
     expect(shell(renderer).props.clients).toEqual([]);
+    renderer.unmount();
+  });
+
+  it('refreshes an open roster, clears stale rows on error, and disposes account-scoped listeners', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let change!: () => void;
+    let fail!: (error: Error) => void;
+    const stop = vi.fn();
+    storage.subscribeToClientRoster.mockImplementationOnce((onChange, onError) => {
+      change = onChange; fail = onError; return stop;
+    });
+    storage.getClients.mockResolvedValueOnce([{ id: 'old-patient' }]);
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([{ id: 'old-patient' }]);
+
+    storage.getClients.mockResolvedValueOnce([]);
+    await act(async () => { change(); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([]);
+    await act(async () => { fail(new Error('roster listener offline')); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('error');
+    expect(shell(renderer).props.clients).toEqual([]);
+    storage.getClients.mockResolvedValueOnce([{ id: 'new-patient' }]);
+    await act(async () => { change(); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    expect(shell(renderer).props.clients).toEqual([{ id: 'new-patient' }]);
+
+    authState.value = { user: { uid: 'clinician-two' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    storage.getClients.mockResolvedValueOnce([]);
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(stop).toHaveBeenCalledTimes(1);
+    await act(async () => { change(); fail(new Error('stale listener')); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([]);
+    expect(shell(renderer).props.rosterStatus).toBe('ready');
+    renderer.unmount();
+  });
+
+  it('does not repopulate a roster from a read that completes after a listener error', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let fail!: (error: Error) => void;
+    storage.subscribeToClientRoster.mockImplementationOnce((_change, onError) => {
+      fail = onError; return vi.fn();
+    });
+    let resolveRoster!: (rows: unknown[]) => void;
+    storage.getClients.mockReturnValueOnce(new Promise((resolve) => { resolveRoster = resolve; }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    await act(async () => { fail(new Error('listener offline')); await flush(); });
+    expect(shell(renderer).props.rosterStatus).toBe('error');
+    await act(async () => { resolveRoster([{ id: 'stale-patient' }]); await flush(); });
+    expect(shell(renderer).props.clients).toEqual([]);
+    expect(shell(renderer).props.rosterStatus).toBe('error');
     renderer.unmount();
   });
 

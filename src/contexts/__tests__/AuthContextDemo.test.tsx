@@ -6,6 +6,7 @@ const firebaseAuth = vi.hoisted(() => ({
   callback: null as null | ((user: unknown) => Promise<void>),
   signOut: vi.fn(),
   signIn: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
 }));
 const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), setDoc: vi.fn() }));
 
@@ -14,6 +15,7 @@ vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
   signOut: firebaseAuth.signOut,
   signInWithEmailAndPassword: firebaseAuth.signIn, createUserWithEmailAndPassword: vi.fn(), updateProfile: vi.fn(),
+  sendPasswordResetEmail: firebaseAuth.sendPasswordResetEmail,
 }));
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, collection: string, id: string) => ({ collection, id }),
@@ -21,6 +23,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import { AuthProvider, useAuth } from '../AuthContext';
+import { auth as configuredAuth } from '../../services/firebase';
 import {
   DEMO_AUTH_STORAGE_KEY,
   deactivateClinicianDemoWorkspace,
@@ -204,6 +207,35 @@ describe('mounted AuthProvider clinician demo lifecycle', () => {
     });
     expect(firestore.getDoc).toHaveBeenCalledOnce();
     expect(observedAuth.role).toBe('clinician');
+    renderer.unmount();
+  });
+
+  it('requests a reset from Firebase Auth with a trimmed address and no account transition', async () => {
+    firebaseAuth.sendPasswordResetEmail.mockResolvedValueOnce(undefined);
+    const renderer = await mountProvider();
+    await act(async () => { await observedAuth.requestPasswordReset(' person@example.test '); });
+
+    expect(firebaseAuth.sendPasswordResetEmail).toHaveBeenCalledOnce();
+    expect(firebaseAuth.sendPasswordResetEmail.mock.calls[0][0]).toBe(configuredAuth);
+    expect(firebaseAuth.sendPasswordResetEmail.mock.calls[0][1]).toBe('person@example.test');
+    expect(firebaseAuth.signIn).not.toHaveBeenCalled();
+    expect(firebaseAuth.signOut).not.toHaveBeenCalled();
+    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(isClinicianDemoWorkspace()).toBe(false);
+    expect(observedAuth.user).toBeNull();
+    renderer.unmount();
+  });
+
+  it('passes a reset failure to the login form without changing auth state', async () => {
+    const failure = { code: 'auth/network-request-failed' };
+    firebaseAuth.sendPasswordResetEmail.mockRejectedValueOnce(failure);
+    const renderer = await mountProvider();
+    await expect(observedAuth.requestPasswordReset('person@example.test')).rejects.toBe(failure);
+    expect(firebaseAuth.signIn).not.toHaveBeenCalled();
+    expect(firebaseAuth.signOut).not.toHaveBeenCalled();
+    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(observedAuth.user).toBeNull();
     renderer.unmount();
   });
 });

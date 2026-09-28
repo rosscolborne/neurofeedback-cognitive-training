@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { signOut } from 'firebase/auth';
-import { auth, db } from '../../services/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { EmailAuthProvider, reauthenticateWithCredential, signOut } from 'firebase/auth';
+import { auth } from '../../services/firebase';
+import { ClientProfile, ClinicBrandConfig, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
+import { getCalibrationDisplayState } from '../../services/dataMappers';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
 import { OnboardingFlow } from './OnboardingFlow';
@@ -16,10 +16,12 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Mountain, Waves, Wind, Target, Music, Tv, Headphones, Box, CircleDot, Flower2, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, Crown, MessageSquare, CalendarDays } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays } from 'lucide-react';
+import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { resolvePatientProtocol } from '../../services/protocols';
+import { exportPatientSessionCsv } from './patientSessionCsv';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
@@ -31,9 +33,13 @@ interface PatientShellProps {
   onUpdateClient: (updated: ClientProfile) => Promise<void>;
   /** Update local UI for data already persisted by an atomic repository operation. */
   onClientPersistedElsewhere: (updated: ClientProfile) => void;
+  onBaselinePersisted?: (patientId: string, model: IndividualBaselineModel) => void;
+  onRecalibrate?: () => void;
   onOpenRebrand: () => void;
   initialInvitationCode?: string;
+  invitationRouteCode?: string;
   onInvitationAccepted?: () => void;
+  onInvitationDismissed?: () => void;
 }
 
 export const PatientShell: React.FC<PatientShellProps> = ({
@@ -41,28 +47,69 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   client,
   onUpdateClient,
   onClientPersistedElsewhere,
+  onBaselinePersisted,
+  onRecalibrate,
   initialInvitationCode,
+  invitationRouteCode,
   onInvitationAccepted,
+  onInvitationDismissed,
 }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
+  const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
+  const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
+  const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
+  const [gardenOpeningOwnerId, setGardenOpeningOwnerId] = useState<string | null>(null);
+  const [gardenOpeningError, setGardenOpeningError] = useState<string | null>(null);
+  const gardenRequestSequence = useRef(0);
+  const currentClientId = useRef(client.id);
+  const currentClient = useRef(client);
+  const currentAllowedExperiences = useRef(client.allowedExperiences);
+  useLayoutEffect(() => { currentClient.current = client; }, [client]);
+  useLayoutEffect(() => { currentAllowedExperiences.current = client.allowedExperiences; }, [client.allowedExperiences]);
+  useEffect(() => {
+    currentClientId.current = client.id;
+  }, [client.id]);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
   const [showClinicianLink, setShowClinicianLink] = useState(!!initialInvitationCode);
   const [invitationCode, setInvitationCode] = useState(initialInvitationCode || '');
+  useEffect(() => {
+    if (!initialInvitationCode) return;
+    setInvitationCode(initialInvitationCode);
+    setShowClinicianLink(true);
+    setActiveTab('home');
+  }, [initialInvitationCode]);
+  useEffect(() => {
+    if (!invitationRouteCode) return;
+    setInvitationCode(invitationRouteCode);
+    setShowClinicianLink(true);
+    setActiveTab('home');
+  }, [invitationRouteCode]);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
   const resolvedProtocol = resolvePatientProtocol(client);
   const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
   const protocolAlias = client.customProtocolConfig
     ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
+  const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
+  const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString();
+  const imprintLabel = imprintState.status === 'valid' ? 'Current'
+    : imprintState.status === 'expired' ? 'Expired'
+      : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
+  const measuredAlphaPeakHz = client.individualBaselineModel?.algorithmVersion === 'neurogambit-15s-v1'
+    ? undefined : client.individualBaselineModel?.alphaPeakHz;
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
   const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
   const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
@@ -90,21 +137,109 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   const handleDeleteAccount = async () => {
-    if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-      if (auth.currentUser) {
-        try {
-          await deleteDoc(doc(db, 'users', auth.currentUser.uid));
-          await auth.currentUser.delete();
-          window.location.href = '/welcome';
-        } catch (err) {
-          alert('Failed to delete account. Please log out and log back in to verify your identity, then try again.');
-        }
-      }
+    if (isDeletingAccount || !deletePassword) return;
+    const user = auth.currentUser;
+    if (!user?.email || user.uid !== client.id) {
+      setAccountDeletionError('Your signed-in account changed. Restart account deletion.');
+      return;
+    }
+    setIsDeletingAccount(true);
+    setAccountDeletionError(null);
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, deletePassword));
+      if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
+      await storageEngine.preparePatientAccountDeletion(user.uid, onClientPersistedElsewhere);
+      if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
+      await user.delete();
+      window.location.href = '/welcome';
+    } catch (err) {
+      setAccountDeletionError(err instanceof Error ? err.message : 'Account deletion could not finish. Please try again.');
+    } finally {
+      setDeletePassword('');
+      setIsDeletingAccount(false);
     }
   };
 
-  const handleStartSession = (exp: ExperienceType) => {
-    setActiveSessionExp(exp);
+  const openAccountDeletion = () => {
+    if (!client.accountDeletionStartedAt && !window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) return;
+    setAccountDeletionError(null);
+    setShowDeletePassword(true);
+  };
+
+  const deletionPasswordForm = showDeletePassword && (
+    <form
+      className="account-deletion-confirmation"
+      onSubmit={(event) => { event.preventDefault(); void handleDeleteAccount(); }}
+      aria-busy={isDeletingAccount}
+    >
+      <label className="account-deletion-label" htmlFor="account-deletion-password">
+        Enter your password to confirm account deletion
+        <input
+          className="account-deletion-password"
+          id="account-deletion-password"
+          type="password"
+          autoComplete="current-password"
+          value={deletePassword}
+          onChange={(event) => setDeletePassword(event.target.value)}
+          disabled={isDeletingAccount}
+          aria-invalid={!!accountDeletionError}
+          aria-describedby={accountDeletionError ? 'account-deletion-error' : undefined}
+        />
+      </label>
+      {accountDeletionError && <p className="account-deletion-error" id="account-deletion-error" role="alert">{accountDeletionError}</p>}
+      <button className="btn account-deletion-submit" type="submit" disabled={isDeletingAccount || !deletePassword}>
+        {isDeletingAccount ? 'Finishing…' : 'Confirm account deletion'}
+      </button>
+    </form>
+  );
+
+  const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
+    if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
+    if (exp !== 'tidal-garden' || client.tidalGardenState) {
+      setSessionClient(null);
+      setSessionOwnerId(client.id);
+      setActiveSessionExp(exp);
+      return;
+    }
+    setGardenOpeningOwnerId(client.id);
+    setGardenOpening('pending');
+    setGardenOpeningError(null);
+    const requestSequence = ++gardenRequestSequence.current;
+    return (async () => {
+      try {
+        const ensured = await storageEngine.ensureTidalGardenState(client.id);
+        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
+        const latestClient = currentClient.current;
+        if (!canStartAssignedExperience(latestClient.allowedExperiences, exp)) {
+          setGardenOpening('idle');
+          return;
+        }
+        const assignmentChangedSinceRequest = latestClient.allowedExperiences.length !== client.allowedExperiences.length
+          || latestClient.allowedExperiences.some((id, index) => id !== client.allowedExperiences[index]);
+        const resolvedClient = latestClient === client
+          ? ensured
+          : {
+            ...latestClient,
+            allowedExperiences: assignmentChangedSinceRequest
+              ? latestClient.allowedExperiences : ensured.allowedExperiences,
+            tidalGardenState: latestClient.tidalGardenState ?? ensured.tidalGardenState,
+          };
+        onClientPersistedElsewhere(resolvedClient);
+        setGardenOpening('idle');
+        if (!canStartAssignedExperience(ensured.allowedExperiences, exp)) return;
+        setSessionClient(resolvedClient);
+        setSessionOwnerId(client.id);
+        setActiveSessionExp(exp);
+      } catch (error) {
+        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
+        if (!canStartAssignedExperience(currentClient.current.allowedExperiences, exp)) {
+          setGardenOpening('idle');
+          return;
+        }
+        setGardenOpeningError(error instanceof Error ? error.message : 'Tidal Garden could not be opened.');
+        setGardenOpening('error');
+      }
+    })();
   };
 
   const handleSessionComplete = async (session: SessionRecord) => {
@@ -176,64 +311,42 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       alert('No session data to export.');
       return;
     }
-    const headers = ['Date', 'Protocol', 'Experience', 'Duration (s)', 'Time In Zone %', 'Coherence %', 'Peak Score', 'Mood'];
-    const rows = allSessions.map(s => [
-      s.date,
-      s.protocol,
-      s.experience,
-      s.durationSeconds,
-      s.timeInZonePercent,
-      s.averageCoherence,
-      s.peakFocusScore,
-      s.moodRating || 'N/A',
-    ]);
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const filename = `waveable_progress_${new Date().toISOString().split('T')[0]}.csv`;
-
-    if (navigator.share && navigator.canShare) {
-      const file = new File([blob], filename, { type: 'text/csv' });
-      if (navigator.canShare({ files: [file] })) {
-        navigator.share({
-          files: [file],
-          title: 'Session Progress',
-        }).then(() => {
-          setExportStatus('done');
-          setTimeout(() => setExportStatus('idle'), 3000);
-        }).catch(() => {
-          setExportStatus('idle');
-        });
-        return;
-      }
-    }
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 200);
-    setExportStatus('done');
-    setTimeout(() => setExportStatus('idle'), 3000);
+    exportPatientSessionCsv(allSessions, setExportStatus);
   };
 
-  if (activeSessionExp) {
+  if (activeSessionExp && sessionOwnerId === client.id) {
     return (
       <SessionRunner
-        client={client}
+        client={sessionClient?.id === client.id ? sessionClient : client}
+        onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
-        onCancel={() => setActiveSessionExp(null)}
+        onCancel={() => { setActiveSessionExp(null); setSessionClient(null); }}
       />
     );
   }
 
-  if (completedSession) {
+  if (gardenOpening !== 'idle' && gardenOpeningOwnerId === client.id) {
+    return <div style={{ padding: '24px' }}>
+      {gardenOpening === 'pending' ? <p>Opening Tidal Garden…</p> : <>
+        <p role="alert">{gardenOpeningError}</p>
+        <button className="btn btn-primary" onClick={() => void handleStartSession('tidal-garden')}>Retry</button>
+        <button className="btn btn-ghost" onClick={() => setGardenOpening('idle')}>Back</button>
+      </>}
+    </div>;
+  }
+
+  if (client.accountDeletionStartedAt) {
+    return <div className="account-deletion-recovery" role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
+      <h1>Finish deleting your account</h1>
+      <p>Your clinic connection has been removed. Confirm your password to finish deleting your sign-in.</p>
+      <button className="btn btn-secondary account-deletion-trigger account-deletion-finish" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
+      {deletionPasswordForm}
+      <button className="btn btn-secondary" type="button" onClick={() => void handleLogout()}>Log Out</button>
+    </div>;
+  }
+
+  if (completedSession && completedSession.patientId === client.id) {
     return (
       <PostSessionSummary
         session={completedSession}
@@ -250,7 +363,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <OnboardingFlow
         client={client}
         onFinish={async updated => {
-          await onUpdateClient({ ...client, ...updated });
+          const nextProtocol = updated.assignedProtocol;
+          const template = !isClinicianLinked && nextProtocol
+            ? getClinicalProtocolTemplate(nextProtocol) : undefined;
+          if (!isClinicianLinked && nextProtocol && !template) {
+            throw new Error('The selected clinical protocol is unavailable');
+          }
+          await onUpdateClient({
+            ...client, ...updated,
+            allowedExperiences: template ? [...template.recommendedExperiences] : client.allowedExperiences,
+            customProtocolConfig: template ? undefined : client.customProtocolConfig,
+          });
           setShowOnboarding(false);
         }}
       />
@@ -306,6 +429,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
       {/* Main Tab Content */}
       <main style={{ flex: 1, padding: '20px' }}>
+        {activeTab === 'home' && isClinicianLinked && initialInvitationCode && (
+          <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px' }}>
+            <p role="alert">You're already connected to a clinician. Disconnect before accepting another invitation.</p>
+            <p>Invitation code: <span className="font-mono">{initialInvitationCode}</span></p>
+            <button type="button" className="btn btn-secondary" onClick={onInvitationDismissed}>Dismiss invitation</button>
+          </section>
+        )}
         {activeTab === 'home' && !isClinicianLinked && (
           <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div>
@@ -335,26 +465,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '6px' }}>
-              {[
-                { id: 'neuro-gambit', title: 'NeuroGambit', icon: Crown, desc: 'Chess tactical calculation, impulse gating & tilt reset', badge: 'NEW • Chess', gradient: 'linear-gradient(135deg, rgba(232, 150, 122, 0.25), rgba(92, 140, 70, 0.25))', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
-                { id: 'immersive-3d', title: 'Generative XR', icon: Box, desc: 'Subtle atmospheric WebXR experience', badge: 'VR', gradient: 'linear-gradient(135deg, #7B68AE22, #E8967A22)', researchUrl: 'https://doi.org/10.3389/fnhum.2019.00210' },
-                { id: 'generative-music', title: 'Generative Music', icon: Music, desc: 'Brain-generated melody, synth & rhythm', badge: 'Music', gradient: 'linear-gradient(135deg, #4A90D922, #5C8C4622)', researchUrl: 'https://doi.org/10.1016/s0031-9384(97)00436-8' },
-                { id: 'narrative-story', title: 'Graphic Novel', icon: BookOpen, desc: 'Biometric driven narrative therapy', badge: 'Narrative', gradient: 'linear-gradient(135deg, #E8967A22, #C4A35A22)', researchUrl: 'https://doi.org/10.1145/1978942.1978958' },
-                { id: 'skyline-drift', title: 'Skyline Drift', icon: Mountain, desc: 'Focus-driven glider flight across procedural landscapes', badge: 'Focus', gradient: 'linear-gradient(135deg, #E8967A22, #E4B87C22)', researchUrl: 'https://doi.org/10.1109/TNSRE.2016.2626989' },
-                { id: 'tidal-garden', title: 'Tidal Garden', icon: Waves, desc: 'Grow a marine garden powered by Alpha calm waves', badge: 'Calm', gradient: 'linear-gradient(135deg, #7B68AE22, #4A90D922)', researchUrl: 'https://doi.org/10.1007/s10484-013-9216-0' },
-                { id: 'breath-weave', title: 'Breath Weave', icon: Wind, desc: 'Harmonic tapestry woven with guided breathing', badge: 'Breathing', gradient: 'linear-gradient(135deg, #5C8C4622, #C4A35A22)', researchUrl: 'https://doi.org/10.1007/s10484-015-9276-4' },
-                { id: 'signal-sort', title: 'Signal Sort', icon: Target, desc: 'Stillness gating for motor control and focus', badge: 'SMR', gradient: 'linear-gradient(135deg, #C4A35A22, #E8967A22)', researchUrl: 'https://doi.org/10.1007/s10484-015-9304-4' },
-                { id: 'rhythm-lock', title: 'Rhythm Lock', icon: Music, desc: 'Polyrhythmic ambient synthesizer with real-time feedback', badge: 'Attention', gradient: 'linear-gradient(135deg, #4A90D922, #7B68AE22)', researchUrl: 'https://doi.org/10.3389/fnhum.2020.00310' },
-                { id: 'media-mode', title: 'Media Mode', icon: Tv, desc: 'Watch videos with neuro-luminosity modulation', badge: 'Streaming', gradient: 'linear-gradient(135deg, #E4B87C22, #C4A35A22)', researchUrl: 'https://doi.org/10.1007/s10484-016-9324-4' },
-                { id: 'soundscape-mode', title: 'Soundscape Mode', icon: Headphones, desc: 'Audio-only binaural soundscapes for eyes-closed training', badge: 'Audio', gradient: 'linear-gradient(135deg, #5C8C4622, #7B68AE22)', researchUrl: 'https://doi.org/10.1016/j.clinph.2016.10.015' },
-                { id: 'mandala', title: 'Mandala Breathing', icon: CircleDot, desc: 'Concentric breathing circles with live amplitude feedback', badge: 'Classic', gradient: 'linear-gradient(135deg, #E8967A22, #7B68AE22)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
-                { id: 'eeg-mandala', title: 'Generative Mandella', icon: Flower2, desc: 'A growing ornamental record of your neurofeedback session', badge: 'Visual', gradient: 'linear-gradient(135deg, #8B9D8333, #C66B3D33)', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' },
-              ].map(exp => {
+              {getAssignedExperienceIds(client.allowedExperiences).map(id => {
+                const exp = EXPERIENCE_CATALOGUE[id];
                 const Icon = exp.icon;
                 return (
                   <div
                     key={exp.id}
-                    onClick={() => handleStartSession(exp.id as any)}
+                    onClick={() => handleStartSession(exp.id)}
                     className="card-patient"
                     style={{
                       cursor: 'pointer',
@@ -387,14 +504,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                       <Icon size={24} />
                     </div>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                      {exp.title}
+                      {exp.name}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-                      {exp.desc}
+                      {exp.description}
                     </div>
-                    {(exp as any).researchUrl && (
+                    {exp.researchUrl && (
                       <a 
-                        href={(exp as any).researchUrl}
+                        href={exp.researchUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -442,6 +559,15 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
+            <section className="card-patient" aria-label="Neural Imprint" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h2 style={{ fontSize: '17px', margin: 0 }}>Neural Imprint</h2>
+              <div><strong>Status:</strong> {imprintLabel}</div>
+              {imprintDate && <div><strong>Calibrated:</strong> <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time></div>}
+              {imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
+                && <div><strong>Alpha peak:</strong> {measuredAlphaPeakHz.toFixed(1)} Hz</div>}
+              {imprintState.expiresAt != null && <div><strong>Expires:</strong> <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString()}</time></div>}
+              <button type="button" className="btn btn-secondary" onClick={onRecalibrate}>Recalibrate</button>
+            </section>
             {/* Profile Info Card */}
             <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -632,21 +758,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   <LogOut size={15} /> Log Out
                 </button>
 
-                <button
-                  onClick={handleDeleteAccount}
-                  className="btn btn-secondary"
-                  style={{
-                    width: '100%',
-                    color: 'var(--status-alert)',
-                    borderColor: 'var(--status-alert)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <Trash2 size={15} /> Delete Account
-                </button>
+                <div className="account-deletion-section">
+                  <button
+                    onClick={openAccountDeletion}
+                    disabled={isDeletingAccount}
+                    className="btn btn-secondary account-deletion-trigger"
+                    type="button"
+                  >
+                    <Trash2 size={15} /> Delete Account
+                  </button>
+                  {deletionPasswordForm}
+                </div>
               </div>
             </div>
 

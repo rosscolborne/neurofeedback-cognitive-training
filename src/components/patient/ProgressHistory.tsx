@@ -10,12 +10,14 @@ import {
   getTimeInZonePercent,
   ProgressPeriod,
 } from './patientMetrics';
+import { exportPatientSessionCsv } from './patientSessionCsv';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
+const VISIBLE_BADGE_IDS = new Set(['first-light', 'steady-state', 'deep-focus', 'garden-keeper']);
 
 const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
   Award,
@@ -39,12 +41,18 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     sessions: SessionRecord[];
   }>({ clientId: client.id, status: 'loading', sessions: [] });
   const [nowMs] = useState(() => Date.now());
-  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [expandedSession, setExpandedSession] = useState<{ clientId: string; sessionId: string } | null>(null);
+  const [journal, setJournal] = useState<{ clientId: string; sessionId: string; generation: number; patientNotes: string; moodRating: SessionRecord['moodRating']; pending: boolean; error: boolean } | null>(null);
+  const journalPending = React.useRef(new Set<string>());
+  const journalGeneration = React.useRef(0);
+  const [journalSwitchMessage, setJournalSwitchMessage] = useState(false);
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
   const sessionStatus = sessionState.clientId === client.id ? sessionState.status : 'loading';
   const allSessions = sessionState.clientId === client.id ? sessionState.sessions : EMPTY_SESSIONS;
 
   useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active) { setJournal(null); setJournalSwitchMessage(false); } });
     let isMounted = true;
     storageEngine.getSessions(client.id)
       .then((sessions) => {
@@ -55,6 +63,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
         if (isMounted) setSessionState({ clientId: client.id, status: 'error', sessions: [] });
       });
     return () => {
+      active = false;
       isMounted = false;
     };
   }, [client.id]);
@@ -64,7 +73,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     nowMs,
     chartWidth: 360,
     chartHeight: 120,
-  }), [sessionStatus, allSessions, period, nowMs]);
+    gardenStage: client.tidalGardenState?.stage,
+  }), [sessionStatus, allSessions, period, nowMs, client.tidalGardenState?.stage]);
   const historySessions = useMemo(
     () => [...progressDisplay.periodSessions].reverse(),
     [progressDisplay.periodSessions],
@@ -75,50 +85,29 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
 
   const exportCSV = () => {
     if (exportAvailability !== 'ready') return;
-    const headers = ['Date', 'Protocol', 'Experience', 'Duration (s)', 'Time In Zone %', 'Coherence %', 'Peak Score', 'Mood'];
-    const rows = progressDisplay.validSessions.map(s => [
-      s.date,
-      s.protocol,
-      s.experience,
-      s.durationSeconds,
-      s.timeInZonePercent,
-      s.averageCoherence,
-      s.peakFocusScore,
-      s.moodRating || 'N/A',
-    ]);
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const filename = `waveable_progress_${new Date().toISOString().split('T')[0]}.csv`;
+    exportPatientSessionCsv(progressDisplay.validSessions, setExportStatus);
+  };
 
-    if (navigator.share && navigator.canShare) {
-      const file = new File([blob], filename, { type: 'text/csv' });
-      if (navigator.canShare({ files: [file] })) {
-        navigator.share({
-          files: [file],
-          title: 'Session Progress',
-        }).then(() => {
-          setExportStatus('done');
-          setTimeout(() => setExportStatus('idle'), 3000);
-        }).catch(() => {
-          setExportStatus('idle');
-        });
-        return;
-      }
+  const saveJournal = async () => {
+    if (!journal || journal.clientId !== client.id || journal.pending || journalPending.current.has(`${client.id}:${journal.sessionId}`)) return;
+    const edited = journal;
+    const key = `${edited.clientId}:${edited.sessionId}`;
+    journalPending.current.add(key);
+    setJournal((current) => current?.generation === edited.generation ? { ...current, pending: true, error: false } : current);
+    try {
+      await storageEngine.patchSessionNotes(edited.sessionId, { patientNotes: edited.patientNotes, moodRating: edited.moodRating ?? null });
+      setSessionState((current) => current.clientId === edited.clientId ? {
+        ...current,
+        sessions: current.sessions.map((entry) => entry.id === edited.sessionId ? { ...entry, patientNotes: edited.patientNotes, moodRating: edited.moodRating } : entry),
+      } : current);
+      setJournal((current) => current?.clientId === edited.clientId && current.sessionId === edited.sessionId
+        ? current.generation === edited.generation ? null : { ...current, pending: false }
+        : current);
+    } catch {
+      setJournal((current) => current?.clientId === edited.clientId && current.sessionId === edited.sessionId ? { ...current, pending: false, error: true } : current);
+    } finally {
+      journalPending.current.delete(key);
     }
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 200);
-    setExportStatus('done');
-    setTimeout(() => setExportStatus('idle'), 3000);
   };
 
   return (
@@ -152,7 +141,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
         {(['week', 'month', 'all'] as const).map(p => (
           <button
             key={p}
-            onClick={() => setPeriod(p)}
+            onClick={() => { if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } setPeriod(p); }}
             style={{
               flex: 1,
               background: period === p ? 'var(--brand-primary)' : 'transparent',
@@ -292,6 +281,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
         <h2 className="font-display" style={{ fontSize: '20px', color: 'var(--text-primary)' }}>
           Session History
         </h2>
+        {journalSwitchMessage && journal?.clientId === client.id && <p role="status">Save or cancel the current journal before opening another session or range.</p>}
 
         {historySessions.length === 0 ? (
           <div className="card-patient" style={{ padding: '32px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
@@ -313,7 +303,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
           </div>
         ) : (
           historySessions.map(s => {
-            const isExpanded = expandedSessionId === s.id;
+            const isExpanded = expandedSession?.clientId === client.id && expandedSession.sessionId === s.id;
             const timestamp = getSessionTimestamp(s);
             const timeInZone = getTimeInZonePercent(s);
             const durationSeconds = getDurationSeconds(s);
@@ -331,7 +321,13 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   flexDirection: 'column',
                   gap: '12px',
                 }}
-                onClick={() => setExpandedSessionId(isExpanded ? null : s.id)}
+                onClick={() => {
+                  if (journal?.clientId === client.id) {
+                    if (journal.sessionId !== s.id) setJournalSwitchMessage(true);
+                    return;
+                  }
+                  setExpandedSession(isExpanded ? null : { clientId: client.id, sessionId: s.id });
+                }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
@@ -411,6 +407,16 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                     )}
                     {s.patientNotes && <div style={{ marginTop: '4px' }}><strong>Notes:</strong> {s.patientNotes}</div>}
                     {s.clinicianNotes && <div style={{ marginTop: '4px', color: 'var(--brand-primary)' }}><strong>Clinician Feedback:</strong> {s.clinicianNotes}</div>}
+                    {journal?.clientId === client.id && journal.sessionId === s.id ? <div onClick={(event) => event.stopPropagation()} style={{ marginTop: '10px' }}>
+                      <label htmlFor={`journal-${s.id}`}>Personal journal</label>
+                      <textarea id={`journal-${s.id}`} value={journal.patientNotes} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, patientNotes: event.target.value } : current)} style={{ display: 'block', width: '100%', minHeight: '64px' }} />
+                      <label htmlFor={`mood-${s.id}`}>Mood</label>
+                      <select id={`mood-${s.id}`} value={journal.moodRating ?? ''} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, moodRating: event.target.value ? Number(event.target.value) as SessionRecord['moodRating'] : undefined } : current)}>
+                        <option value="">Not recorded</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}/5</option>)}
+                      </select>
+                      <div><button type="button" disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
+                      {journal.error && <p role="alert">Journal could not be saved. Your changes are still here; try again.</p>}
+                    </div> : <button type="button" onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}>Edit journal</button>}
                   </div>
                 )}
               </div>
@@ -436,7 +442,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-          {INITIAL_BADGES.map(badge => {
+          {INITIAL_BADGES.filter(badge => VISIBLE_BADGE_IDS.has(badge.id)).map(badge => {
             const isUnlocked = progressDisplay.earnedBadgeIds?.has(badge.id) === true;
             const Icon = BADGE_ICONS[badge.iconName] || Trophy;
             return (

@@ -155,8 +155,10 @@ export interface EEGDataPoint {
 }
 
 export interface IndividualBaselineModel {
-  alphaPeakHz: number;
-  oneOverFSlope: number;
+  /** Present only when this calibration measured a peak alpha frequency. */
+  alphaPeakHz?: number;
+  /** Present only when this calibration measured a spectral slope. */
+  oneOverFSlope?: number;
   lastCalibratedAt: string;
   thetaMean?: number;
   thetaStd?: number;
@@ -367,6 +369,10 @@ export interface SessionRecord {
   experience: ExperienceType;
   durationSeconds: number;
   timeInZonePercent: number;
+  /** Successful measured seconds; optional on sessions saved before time-based Garden XP. */
+  inZoneSeconds?: number;
+  /** Prescribed runtime used to normalize Garden XP, including early completions. */
+  configuredDurationSeconds?: number;
   /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
   averageCoherence: number | null;
   peakFocusScore?: number;
@@ -479,6 +485,8 @@ export interface ClientProfile {
   linkedClinicianCode?: string;
   clinicianId?: string;
   acceptedInvitationId?: string;
+  /** Set once account deletion starts. Retained profiles can never be linked again. */
+  accountDeletionStartedAt?: PersistedTimestamp;
   patientId?: string;
   isDemo?: boolean;
   notes?: string;

@@ -1,10 +1,12 @@
 import type {
   ClientProfile,
+  IndividualBaselineModel,
   PatientInvitation,
   PersistedTimestamp,
   SessionRecord,
 } from '../types';
 import { inferProtocolTypeForTemplate } from './protocols';
+import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 
 const LEGACY_EXPERIENCE_RENAMES: Record<string, string> = {
   'spatial-audio': 'generative-music',
@@ -33,19 +35,57 @@ export function timestampToIso(value: PersistedTimestamp | null | undefined): st
   return millis == null ? null : new Date(millis).toISOString();
 }
 
+export type CalibrationDisplayState = {
+  status: 'valid' | 'expired' | 'invalid' | 'not-calibrated';
+  calibratedAt: number | null;
+  expiresAt: number | null;
+};
+
+/** Inspect legacy and current records without changing the saved calibration. */
+export function getCalibrationDisplayState(model: unknown, now = Date.now()): CalibrationDisplayState {
+  if (model == null) return { status: 'not-calibrated', calibratedAt: null, expiresAt: null };
+  if (typeof model !== 'object' || Array.isArray(model)) return { status: 'invalid', calibratedAt: null, expiresAt: null };
+  const value = model as Record<string, unknown>;
+  const calibratedAt = typeof value.lastCalibratedAt === 'string'
+    ? timestampToMillis(value.lastCalibratedAt) : null;
+  let expiresAt: number | null = null;
+  if (value.expiresAt != null) {
+    try { expiresAt = timestampToMillis(value.expiresAt as PersistedTimestamp); } catch { /* Malformed legacy timestamp. */ }
+  }
+  const isNeuroGambitCalibration = value.algorithmVersion === 'neurogambit-15s-v1';
+  const numericValuesAreValid = isNeuroGambitCalibration
+    ? Number.isFinite(value.thetaMean) && Number.isFinite(value.betaMean) && Number.isFinite(value.alphaMean)
+      && (value.thetaStd == null || Number.isFinite(value.thetaStd))
+      && (value.betaStd == null || Number.isFinite(value.betaStd))
+      && (value.alphaStd == null || Number.isFinite(value.alphaStd))
+    : Number.isFinite(value.alphaPeakHz)
+      && Number.isFinite(value.oneOverFSlope)
+      && (value.alphaPeakHz as number) > 0
+      && (value.oneOverFSlope as number) > 0;
+  const validStatus = value.status == null || value.status === 'valid';
+  if (value.status === 'expired' || (expiresAt != null && expiresAt <= now)) {
+    return { status: 'expired', calibratedAt, expiresAt };
+  }
+  if (!validStatus || !numericValuesAreValid || calibratedAt == null || (value.expiresAt != null && expiresAt == null)) {
+    return { status: 'invalid', calibratedAt, expiresAt };
+  }
+  return { status: 'valid', calibratedAt, expiresAt };
+}
+
+export function getReusableBaselineModel(model: unknown, now = Date.now()): IndividualBaselineModel | null {
+  return getCalibrationDisplayState(model, now).status === 'valid' ? model as IndividualBaselineModel : null;
+}
+
 /** Read both current and legacy client documents without mutating Firestore data. */
 export function readClientProfile(data: unknown, documentId?: string): ClientProfile {
   const raw = { ...(data as Record<string, unknown>) } as unknown as ClientProfile;
+  // A missing legacy field retains the former open catalogue. A present empty
+  // list is an intentional assignment of no experiences.
   const allowed = Array.isArray(raw.allowedExperiences)
     ? raw.allowedExperiences.map((experience) =>
         (LEGACY_EXPERIENCE_RENAMES[experience] ?? experience) as ClientProfile['allowedExperiences'][number]
       )
-    : [];
-
-  // Preserve the pre-foundation compatibility behavior for existing accounts.
-  if (raw.allowedExperiences && !allowed.includes('neuro-gambit')) {
-    allowed.push('neuro-gambit');
-  }
+    : Object.prototype.hasOwnProperty.call(raw, 'allowedExperiences') ? [] : [...DEFAULT_ALLOWED_EXPERIENCES];
 
   // Custom protocol IDs were historically generated as `custom-*`, so older
   // saves could incorrectly persist Theta/Beta as the broad training mode.
@@ -149,6 +189,18 @@ export function removeUndefined<T>(value: T): T {
   ) as T;
 }
 
+/** Whole Garden XP earned from verified time against the prescribed runtime. */
+export function getTidalGardenSessionXp(
+  inZoneSeconds: number,
+  configuredDurationSeconds: number,
+  elapsedSeconds: number,
+): number {
+  if (!Number.isFinite(inZoneSeconds) || !Number.isFinite(configuredDurationSeconds)
+    || !Number.isFinite(elapsedSeconds) || configuredDurationSeconds <= 0) return 0;
+  const rewardableSeconds = Math.max(0, Math.min(inZoneSeconds, configuredDurationSeconds, elapsedSeconds));
+  return Math.floor((150 * rewardableSeconds) / configuredDurationSeconds);
+}
+
 /** Legacy aggregate behavior, made pure so it can be applied atomically and tested. */
 export function applySessionCompletionToClient(
   current: ClientProfile,
@@ -188,7 +240,13 @@ export function applySessionCompletionToClient(
   ) addBadge('still-waters');
 
   if (client.tidalGardenState && (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement')) {
-    client.tidalGardenState.growthPoints += Math.round(session.timeInZonePercent * 1.5);
+    const earnedXp = session.inZoneSeconds !== undefined && session.configuredDurationSeconds !== undefined
+      ? getTidalGardenSessionXp(session.inZoneSeconds, session.configuredDurationSeconds, session.durationSeconds)
+      : session.inZoneSeconds === undefined && session.configuredDurationSeconds === undefined
+        ? Math.round((typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent)
+          ? Math.max(0, Math.min(100, session.timeInZonePercent)) : 0) * 1.5)
+        : 0;
+    client.tidalGardenState.growthPoints += earnedXp;
     if (client.tidalGardenState.growthPoints > 300 && client.tidalGardenState.stage < 2) {
       client.tidalGardenState.stage = 2;
     }

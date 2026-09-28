@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../types';
 import {
   applySessionCompletionToClient,
+  getTidalGardenSessionXp,
+  getCalibrationDisplayState,
+  getReusableBaselineModel,
   getPatientClinicianId,
   isPatientInvitationExpired,
   readClientProfile,
@@ -59,6 +62,30 @@ const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord =
 });
 
 describe('production data migration readers', () => {
+  it('restores only finite, unexpired calibrations across legacy timestamp shapes', () => {
+    const now = Date.parse('2026-09-27T12:00:00Z');
+    const model = { alphaPeakHz: 10.2, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z', thetaMean: 2, betaMean: 4 };
+    expect(getReusableBaselineModel(model, now)).toBe(model);
+    for (const expiresAt of [now + 1, new Date(now + 1).toISOString(), { seconds: (now + 1000) / 1000 }, { toDate: () => new Date(now + 1) }]) {
+      expect(getReusableBaselineModel({ ...model, status: 'valid', expiresAt }, now)).toMatchObject(model);
+    }
+    for (const expiresAt of [now, now - 1, 'bad-date']) {
+      expect(getReusableBaselineModel({ ...model, status: 'valid', expiresAt }, now)).toBeNull();
+    }
+    for (const status of ['invalid', 'collecting', 'expired', 'unknown']) {
+      expect(getReusableBaselineModel({ ...model, status }, now)).toBeNull();
+    }
+    expect(getReusableBaselineModel({ ...model, alphaPeakHz: Infinity }, now)).toBeNull();
+    expect(getReusableBaselineModel({ ...model, oneOverFSlope: NaN }, now)).toBeNull();
+    expect(getReusableBaselineModel({ ...model, lastCalibratedAt: 'bad-date' }, now)).toBeNull();
+    const gambit = { algorithmVersion: 'neurogambit-15s-v1', lastCalibratedAt: model.lastCalibratedAt, thetaMean: 0, betaMean: 4, alphaMean: 6 };
+    expect(getReusableBaselineModel(gambit, now)).toBe(gambit);
+    expect(getCalibrationDisplayState(gambit, now).status).toBe('valid');
+    expect(getReusableBaselineModel({ ...gambit, thetaMean: NaN }, now)).toBeNull();
+    expect(getReusableBaselineModel({ ...gambit, algorithmVersion: 'unknown' }, now)).toBeNull();
+    expect(getCalibrationDisplayState(undefined, now)).toMatchObject({ status: 'not-calibrated', calibratedAt: null });
+    expect(getCalibrationDisplayState({ ...model, expiresAt: now }, now)).toMatchObject({ status: 'expired', calibratedAt: Date.parse(model.lastCalibratedAt) });
+  });
   it('removes ratio residue from merged default and single-band assignments on read', () => {
     const ratioReward = DEFAULT_RATIO_REWARDS['theta-beta-ratio']!;
     for (const protocol of ['smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
@@ -99,7 +126,7 @@ describe('production data migration readers', () => {
     const migrated = readClientProfile(legacy, 'document-patient');
 
     expect(migrated.id).toBe('document-patient');
-    expect(migrated.allowedExperiences).toEqual(['generative-music', 'neuro-gambit']);
+    expect(migrated.allowedExperiences).toEqual(['generative-music']);
     expect(legacy.allowedExperiences).toEqual(['spatial-audio']);
     expect(migrated.schemaVersion).toBe(1);
   });
@@ -195,6 +222,71 @@ describe('production data migration readers', () => {
 });
 
 describe('session aggregate migration behavior', () => {
+  it('normalizes verified Garden time to each configured duration and caps it at elapsed time', () => {
+    for (const duration of [60, 600, 1_500, 10_800]) {
+      expect(getTidalGardenSessionXp(duration, duration, duration)).toBe(150);
+      expect(getTidalGardenSessionXp(duration / 2, duration, duration)).toBe(75);
+      expect(getTidalGardenSessionXp(duration, duration, duration / 2)).toBe(75);
+      expect(getTidalGardenSessionXp(duration + 100, duration, duration + 100)).toBe(150);
+    }
+    expect(getTidalGardenSessionXp(5, 600, 5)).toBe(1);
+    expect(getTidalGardenSessionXp(4, 600, 20)).toBe(1); // Out-of-zone time does not subtract XP.
+    expect(getTidalGardenSessionXp(22, 60, 22)).toBe(55);
+    expect(getTidalGardenSessionXp(44, 60, 44)).toBe(110);
+    for (const invalid of [Number.NaN, Infinity, -1]) {
+      expect(getTidalGardenSessionXp(invalid, 600, 600)).toBe(0);
+    }
+    expect(getTidalGardenSessionXp(600, 0, 600)).toBe(0);
+  });
+
+  it('awards normalized XP from new session evidence, including Demo, while retaining legacy records', () => {
+    const current = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement',
+      durationSeconds: 300, configuredDurationSeconds: 600, inZoneSeconds: 240, timeInZonePercent: 100 });
+    expect(applySessionCompletionToClient(clientFixture(), current).tidalGardenState?.growthPoints).toBe(60);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, isDemo: true }).tidalGardenState?.growthPoints).toBe(60);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: 0 }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: 9999 }).tidalGardenState?.growthPoints).toBe(75);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current,
+      durationSeconds: 75, configuredDurationSeconds: 60, inZoneSeconds: 75 }).tidalGardenState?.growthPoints).toBe(150);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: Number.NaN }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, configuredDurationSeconds: 0 }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: undefined,
+      configuredDurationSeconds: undefined, timeInZonePercent: 80 }).tidalGardenState?.growthPoints).toBe(120);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: undefined }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, configuredDurationSeconds: undefined }).tidalGardenState?.growthPoints).toBe(0);
+    expect(applySessionCompletionToClient(clientFixture(), { ...current, inZoneSeconds: null as unknown as number,
+      configuredDurationSeconds: undefined }).tidalGardenState?.growthPoints).toBe(0);
+  });
+
+  it('keeps strict Garden stage thresholds with at most 150 XP per perfect session', () => {
+    const perfect = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement',
+      durationSeconds: 600, configuredDurationSeconds: 600, inZoneSeconds: 600 });
+    let profile = clientFixture();
+    for (const [sessionCount, points, stage] of [
+      [1, 150, 1], [2, 300, 1], [3, 450, 2], [4, 600, 3], [5, 750, 3], [6, 900, 4],
+    ] as const) {
+      profile = applySessionCompletionToClient(profile, { ...perfect, id: `perfect-${sessionCount}` });
+      expect(profile.tidalGardenState).toMatchObject({ growthPoints: points, stage });
+    }
+  });
+
+  it('grows only from finite completed measurements and crosses the existing strict stage thresholds', () => {
+    const gardenSession = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement', timeInZonePercent: 1 });
+    for (const [points, expectedStage, expectedBadge] of [
+      [300, 1, false], [301, 2, false], [500, 2, false], [501, 3, true], [800, 3, true], [801, 4, true],
+    ] as const) {
+      const start = { ...clientFixture(), tidalGardenState: { stage: 1, growthPoints: points - 2, plantsUnlocked: [], lastWatered: '' } };
+      const updated = applySessionCompletionToClient(start, gardenSession);
+      expect(updated.tidalGardenState?.growthPoints).toBe(points);
+      expect(updated.tidalGardenState?.stage).toBe(expectedStage);
+      expect(updated.badges.includes('garden-keeper')).toBe(expectedBadge);
+    }
+    for (const invalid of [0, Number.NaN, Infinity, undefined]) {
+      const updated = applySessionCompletionToClient(clientFixture(), { ...gardenSession, timeInZonePercent: invalid as number });
+      expect(updated.tidalGardenState?.growthPoints).toBe(0);
+    }
+    expect(applySessionCompletionToClient(clientFixture(), { ...gardenSession, isDemo: true }).tidalGardenState?.growthPoints).toBe(2);
+  });
   it('returns a new profile and leaves the source profile untouched', () => {
     const client = clientFixture();
     const updated = applySessionCompletionToClient(client, sessionFixture());

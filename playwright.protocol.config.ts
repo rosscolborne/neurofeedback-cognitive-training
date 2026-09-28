@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 // Entirely separate from the shared-account E2E projects and .env.e2e.
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /(?:protocol|messaging|persistence)\.local\.spec\.ts/,
+  testMatch: /(?:protocol|messaging|persistence|lifecycle|invitation-handoffs|session-handoffs|auth-handoffs)\.local\.spec\.ts/,
   workers: 1,
   timeout: 90_000,
   use: {

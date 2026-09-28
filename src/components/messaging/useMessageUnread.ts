@@ -38,6 +38,7 @@ export function useMessageUnread(patientIds: string[], repository: MessageReposi
   return {
     byPatient: current.byPatient,
     error: enabled ? activeIds.map((id) => current.errors[id]).find(Boolean) ?? null : null,
+    isComplete: enabled && activeIds.every((id) => Boolean(current.byPatient[id]) && !current.errors[id]),
   };
 }
 
