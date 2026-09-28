@@ -62,8 +62,8 @@ export function buildPracticeReportText(
     metrics: [
       `Selected cohort: ${analytics.clients.length} patient profiles`,
       `Persisted sessions: ${analytics.totalSessions}`,
-      `Training Demo completions: ${analytics.demoSessionCount} (included in aggregates; synthetic provenance)`,
-      `Sample workspace records: ${analytics.sampleSessionCount} (fictional; excluded from persisted-session aggregates)`,
+      `Training Demo completions: ${analytics.demoSessionCount} (simulated; included in aggregates)`,
+      `Sample workspace records: ${analytics.sampleSessionCount} (fictional; excluded from aggregates)`,
       `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
       `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
       `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'no weekly target' : `${analytics.totalSessions} of ${analytics.expectedSessions} expected sessions`})`,
@@ -74,7 +74,7 @@ export function buildPracticeReportText(
     ],
     notes: [
       `Adherence formula: recorded sessions, including Training Demo sessions, divided by expected sessions (weekly target × ${analytics.interval.dayCount}/7 days), capped at 100%.`,
-      'Intentional training Demo sessions are included in aggregates and labeled as synthetic. Fictional sample-workspace records are counted separately and excluded.',
+      'Training Demo sessions are simulated; they are included in aggregates and labeled Demo. Fictional sample-workspace records are counted separately and excluded.',
       'In-zone values and their change are descriptive session measurements, not diagnoses, benchmark comparisons, treatment outcomes, or statistical significance claims.',
       'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
       'Unavailable values are not replaced with cohort defaults or zero.',
@@ -141,8 +141,8 @@ export function buildPatientReportText(
       ]
     : [
         `Persisted sessions: ${row?.sessionCount ?? 0}`,
-        `Training Demo completions: ${row?.demoSessionCount ?? 0} (included in aggregates; synthetic provenance)`,
-        `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from persisted-session aggregates)`,
+        `Training Demo completions: ${row?.demoSessionCount ?? 0} (simulated; included in aggregates)`,
+        `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from aggregates)`,
         `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
         scope === 'interval'
           ? `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'no weekly target' : `${row.sessionCount} of ${row.expectedSessions} expected sessions`})`
@@ -167,7 +167,7 @@ export function buildPatientReportText(
       scope === 'interval'
         ? `Adherence formula: recorded sessions, including Training Demo sessions, divided by expected sessions (weekly target × ${analytics.interval.dayCount}/7 days), capped at 100%.`
         : 'Adherence is calculated in interval reports from the Reports view, where the scheduling window is defined.',
-      'Intentional training Demo sessions are included and labeled as synthetic. Fictional sample-workspace records are separate and excluded.',
+      'Training Demo sessions are simulated; they are included and labeled Demo. Fictional sample-workspace records are separate and excluded.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
       'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
     ],
@@ -179,7 +179,7 @@ export function buildPatientReportText(
       const inZone = typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100
         ? `${session.timeInZonePercent}%`
         : 'Unavailable';
-      const source = session.isDemo === true ? 'Training Demo (synthetic)' : 'Non-Demo';
+      const source = session.isDemo === true ? 'Training Demo (simulated)' : 'Non-Demo';
       return `${formatSessionWhen(session, timeZone)} | ${source} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
     }),
   };

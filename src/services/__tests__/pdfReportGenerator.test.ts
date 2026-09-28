@@ -53,10 +53,10 @@ describe('deterministic PDF report text', () => {
     ], interval);
     const content = buildPatientReportText(client, analytics, brand, generatedAt);
     expect(content.metrics).toContain('Persisted sessions: 2');
-    expect(content.metrics).toContain('Training Demo completions: 1 (included in aggregates; synthetic provenance)');
+    expect(content.metrics).toContain('Training Demo completions: 1 (simulated; included in aggregates)');
     expect(content.metrics).toContain('Average in-zone time: 50% (2/2 eligible sessions recorded)');
-    expect(content.tableRows).toContain('Sep 19, 2026, 10:00 AM | Training Demo (synthetic) | 10 min | 100% | Synthetic Headset');
-    expect(content.notes.join(' ')).toContain('Intentional training Demo sessions are included and labeled as synthetic');
+    expect(content.tableRows).toContain('Sep 19, 2026, 10:00 AM | Training Demo (simulated) | 10 min | 100% | Synthetic Headset');
+    expect(content.notes.join(' ')).toContain('Training Demo sessions are simulated; they are included and labeled Demo');
   });
 
   it('retains explicit legacy selections with an invalid timestamp and renders date unavailable', () => {
