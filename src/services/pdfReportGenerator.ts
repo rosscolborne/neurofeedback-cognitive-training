@@ -147,35 +147,117 @@ export function buildPatientReportText(
   };
 }
 
+const PAGE = { left: 15, right: 195, top: 18, bottom: 282 };
+const INK = { primary: [26, 26, 26], secondary: [107, 101, 96], rule: [220, 217, 211], band: [242, 241, 238] } as const;
+
+/** Lays out the report text as labelled facts, notes and a column table; the wording is unchanged. */
 function renderReport(content: ReportTextContent): jsPDF {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  let y = 18;
-  const write = (text: string, options: { bold?: boolean; size?: number; indent?: number } = {}) => {
-    doc.setFont('helvetica', options.bold ? 'bold' : 'normal');
-    doc.setFontSize(options.size ?? 9);
-    const lines = doc.splitTextToSize(text, 180 - (options.indent ?? 0));
-    if (y + lines.length * 5 > 282) {
-      doc.addPage();
-      y = 18;
+  const width = PAGE.right - PAGE.left;
+  let y = PAGE.top;
+  const font = (size: number, bold = false, color: readonly number[] = INK.primary) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+  };
+  const ensureSpace = (height: number) => {
+    if (y + height <= PAGE.bottom) return false;
+    doc.addPage();
+    y = PAGE.top;
+    return true;
+  };
+  const rule = (color: readonly number[] = INK.rule) => {
+    doc.setDrawColor(color[0], color[1], color[2]);
+    doc.setLineWidth(0.2);
+    doc.line(PAGE.left, y, PAGE.right, y);
+  };
+  const heading = (text: string) => {
+    ensureSpace(14);
+    y += 5;
+    font(11, true);
+    doc.text(text, PAGE.left, y);
+    y += 2;
+    rule();
+    y += 5;
+  };
+  /** "Label: value" lines become a two-column list; other lines span the full width. */
+  const facts = (lines: string[]) => {
+    const labelWidth = 48;
+    lines.forEach((line) => {
+      const split = line.indexOf(': ');
+      const label = split > 0 && split < 40 ? line.slice(0, split) : null;
+      const value = label ? line.slice(split + 2) : line;
+      font(9);
+      const valueLines = doc.splitTextToSize(value, label ? width - labelWidth : width);
+      ensureSpace(valueLines.length * 4.4 + 1);
+      if (label) {
+        font(8.5, false, INK.secondary);
+        doc.text(label, PAGE.left, y);
+        font(9);
+      }
+      doc.text(valueLines, PAGE.left + (label ? labelWidth : 0), y);
+      y += valueLines.length * 4.4 + 1;
+    });
+  };
+  const notes = (lines: string[]) => {
+    lines.forEach((line) => {
+      font(8.5, false, INK.secondary);
+      const wrapped = doc.splitTextToSize(line, width - 4);
+      ensureSpace(wrapped.length * 4 + 1.5);
+      doc.text('•', PAGE.left, y);
+      doc.text(wrapped, PAGE.left + 4, y);
+      y += wrapped.length * 4 + 1.5;
+    });
+  };
+  const table = (header: string, rows: string[]) => {
+    const headerCells = header.split(' | ');
+    const rowCells = rows.map((row) => row.split(' | '));
+    font(8);
+    // Headers may wrap between words but never inside one.
+    const natural = headerCells.map((cell, column) => Math.max(
+      doc.getTextWidth(cell) * 0.75,
+      ...cell.split(' ').map((word) => doc.getTextWidth(word) + 1),
+      ...rowCells.map((cells) => doc.getTextWidth(cells[column] ?? '')),
+      12,
+    ));
+    const scale = width / natural.reduce((sum, value) => sum + value + 3, 0);
+    const columns = natural.map((value) => (value + 3) * scale);
+    const drawRow = (cells: string[], bold: boolean) => {
+      font(8, bold, bold ? INK.secondary : INK.primary);
+      const wrapped = columns.map((columnWidth, column) => doc.splitTextToSize(cells[column] ?? '', columnWidth - 2));
+      const height = Math.max(...wrapped.map((lines) => lines.length)) * 3.6 + 2.6;
+      if (ensureSpace(height) && !bold) drawRow(headerCells, true);
+      if (bold) {
+        doc.setFillColor(INK.band[0], INK.band[1], INK.band[2]);
+        doc.rect(PAGE.left, y - 3.6, width, height, 'F');
+      }
+      font(8, bold, bold ? INK.secondary : INK.primary);
+      let x = PAGE.left + 1.5;
+      wrapped.forEach((lines, column) => { doc.text(lines, x, y); x += columns[column]; });
+      y += height;
+      if (!bold) { y -= 3.1; rule(); y += 3.1; }
+    };
+    drawRow(headerCells, true);
+    if (rows.length === 0) {
+      font(8, false, INK.secondary);
+      doc.text('No eligible sessions in the selected interval.', PAGE.left + 1.5, y);
+      y += 5;
     }
-    doc.text(lines, 15 + (options.indent ?? 0), y);
-    y += lines.length * 5;
+    rowCells.forEach((cells) => drawRow(cells, false));
   };
 
-  write(content.title, { bold: true, size: 16 });
-  y += 2;
-  content.metadata.forEach(line => write(line));
+  font(17, true);
+  doc.text(content.title, PAGE.left, y);
   y += 4;
-  write('Summary', { bold: true, size: 11 });
-  content.metrics.forEach(line => write(line, { indent: 2 }));
-  y += 4;
-  write('Data interpretation', { bold: true, size: 11 });
-  content.notes.forEach(line => write(line, { indent: 2 }));
-  y += 4;
-  write('Session detail', { bold: true, size: 11 });
-  write(content.tableHeader, { bold: true, size: 8 });
-  if (content.tableRows.length === 0) write('No eligible sessions in the selected interval.', { size: 8 });
-  content.tableRows.forEach(line => write(line, { size: 8 }));
+  rule(INK.primary);
+  y += 7;
+  facts(content.metadata);
+  heading('Summary');
+  facts(content.metrics);
+  heading('Session detail');
+  table(content.tableHeader, content.tableRows);
+  heading('Data interpretation');
+  notes(content.notes);
   return doc;
 }
 
