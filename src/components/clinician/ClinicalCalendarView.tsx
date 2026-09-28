@@ -4,7 +4,7 @@ import type { CalendarAppointment, ClientProfile, AppointmentType } from '../../
 import { appointmentRepository, createAppointmentRequestId, createCancellationRequestId, type AppointmentRepository } from '../../features/appointments/appointmentRepository';
 import { formatAppointmentDateTime, getDefaultTimezone, getLocalAppointmentParts } from '../../features/appointments/appointmentTime';
 import { isCanonicalAppointment, type AppointmentDraft, type AppointmentRecord, type AppointmentTimeDisambiguation, type ProductionAppointment } from '../../features/appointments/appointmentTypes';
-import { applyConfirmedAppointment, resolveAppointmentSurfaceState } from '../../features/appointments/appointmentViewState';
+import { applyConfirmedAppointment, groupAppointmentsForDisplay, resolveAppointmentSurfaceState } from '../../features/appointments/appointmentViewState';
 
 interface ClinicalCalendarViewProps {
   clients: ClientProfile[];
@@ -43,11 +43,14 @@ const APPOINTMENT_STATUS_TAG: Record<string, string> = {
 };
 
 /** Weekday, day and month in the appointment's own timezone, for the date tile. */
-function appointmentDateParts(millis: number, timeZone: string) {
+function appointmentDateParts(millis: number, timeZone: string, nowMs: number) {
   try {
-    const parts = new Intl.DateTimeFormat(undefined, { timeZone, weekday: 'short', day: 'numeric', month: 'short' }).formatToParts(new Date(millis));
+    const parts = new Intl.DateTimeFormat(undefined, { timeZone, weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).formatToParts(new Date(millis));
     const part = (type: string) => parts.find((item) => item.type === type)?.value ?? '';
-    return { weekday: part('weekday'), day: part('day'), month: part('month') };
+    const currentYear = new Intl.DateTimeFormat(undefined, { timeZone, year: 'numeric' }).format(new Date(nowMs));
+    const time = new Intl.DateTimeFormat(undefined, { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(millis));
+    // The tile carries the date, so the row headline only needs the time; another year is shown on the tile.
+    return { weekday: part('weekday'), day: part('day'), month: part('year') === currentYear ? part('month') : `${part('month')} ${part('year')}`, time };
   } catch {
     return null;
   }
@@ -151,12 +154,8 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({ clie
     }
   };
 
-  // Upcoming and past appointments as separate groups, each in the repository's order.
-  const isUpcoming = (appointment: AppointmentRecord) => isCanonicalAppointment(appointment) && appointment.startsAtMillis >= nowMs;
-  const appointmentGroups = [
-    { title: 'Upcoming', items: appointments.filter(isUpcoming) },
-    { title: 'Past', items: appointments.filter((appointment) => !isUpcoming(appointment)) },
-  ];
+  // Actionable upcoming appointments first; cancelled ones never sit under Upcoming.
+  const appointmentGroups = groupAppointmentsForDisplay(appointments, nowMs);
   const surface = resolveAppointmentSurfaceState(loadState, appointments, loadError);
   if (surface.kind === 'loading') return <div className="card-clinician" role="status" style={{ padding: 32, textAlign: 'center' }}>Loading appointments…</div>;
   if (surface.kind === 'error') return <div className="card-clinician" role="alert" style={{ padding: 32, textAlign: 'center' }}><AlertCircle size={28} style={{ margin: '0 auto 8px' }} /><div>Appointments could not be loaded.</div><div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>{surface.message}</div><button className="btn btn-dense" onClick={() => void load()} style={{ marginTop: 12 }}><RefreshCw size={14} /> Retry</button></div>;
@@ -165,12 +164,12 @@ export const ClinicalCalendarView: React.FC<ClinicalCalendarViewProps> = ({ clie
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><div><h1 style={{ margin: 0, fontSize: 22 }}>Clinical appointments</h1><p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 12 }}>Times are shown in each appointment’s timezone.</p></div><button className="btn btn-dense" onClick={openCreate} disabled={linkedClients.length === 0}><Plus size={16} /> Schedule appointment</button></div>
     {actionError && !showForm && <div role="alert" className="card-clinician" style={{ padding: 12, color: 'var(--status-alert)' }}><AlertCircle size={14} /> {actionError}</div>}
     {appointments.length === 0 ? <div className="card-clinician" style={{ padding: 36, textAlign: 'center' }}><Calendar size={34} style={{ opacity: 0.45, margin: '0 auto 8px' }} /><div style={{ fontWeight: 600 }}>No appointments scheduled</div><div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>{linkedClients.length ? 'Schedule the first appointment when you are ready.' : 'Link a patient before scheduling an appointment.'}</div></div> : <>
-      {appointmentGroups.map((group) => group.items.length > 0 && <section key={group.title} aria-label={`${group.title} appointments`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {appointmentGroups.map((group) => <section key={group.key} aria-label={`${group.title} appointments`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <h2 className="section-label" style={{ margin: '4px 0 0' }}>{group.title}</h2>
-        {group.items.map((appointment) => { const linkedClient = linkedClients.find((client) => client.id === appointment.patientId); const tile = isCanonicalAppointment(appointment) ? appointmentDateParts(appointment.startsAtMillis, appointment.timezone) : null; return <article key={appointment.id} className="card-clinician appt-row" style={{ opacity: appointment.status === 'cancelled' ? 0.72 : 1 }}>
+        {group.items.map((appointment) => { const linkedClient = linkedClients.find((client) => client.id === appointment.patientId); const tile = isCanonicalAppointment(appointment) ? appointmentDateParts(appointment.startsAtMillis, appointment.timezone, nowMs) : null; return <article key={appointment.id} className="card-clinician appt-row" style={{ opacity: appointment.status === 'cancelled' ? 0.72 : 1 }}>
           {tile ? <div className="appt-date" aria-hidden="true"><span>{tile.weekday}</span><strong>{tile.day}</strong><span>{tile.month}</span></div> : <div className="appt-date" aria-hidden="true"><Clock size={18} /></div>}
           <div className="appt-main">
-            {isCanonicalAppointment(appointment) ? <div className="appt-when"><Clock size={13} aria-hidden="true" /> {formatAppointmentDateTime(appointment.startsAtMillis, appointment.timezone)} · {appointment.durationMinutes} min</div> : <div className="appt-when"><Clock size={13} aria-hidden="true" /> {appointment.legacyDate} {appointment.legacyTime}{appointment.durationMinutes ? ` · ${appointment.durationMinutes} min` : ''}</div>}
+            {isCanonicalAppointment(appointment) ? <div className="appt-when"><Clock size={13} aria-hidden="true" /> {tile ? <><span className="visually-hidden">{formatAppointmentDateTime(appointment.startsAtMillis, appointment.timezone)}</span><span aria-hidden="true">{tile.time}</span></> : formatAppointmentDateTime(appointment.startsAtMillis, appointment.timezone)} · {appointment.durationMinutes} min</div> : <div className="appt-when"><Clock size={13} aria-hidden="true" /> {appointment.legacyDate} {appointment.legacyTime}{appointment.durationMinutes ? ` · ${appointment.durationMinutes} min` : ''}</div>}
             <div className="appt-name">{linkedClient && onSelectClient ? <button type="button" className="appt-name-link" aria-label={`Open ${linkedClient.name} chart`} onClick={() => onSelectClient(linkedClient)}>{linkedClient.name}</button> : linkedClient?.name ?? appointment.patientDisplayName}</div>
             <div className="appt-meta">
               <span className={`status-tag ${APPOINTMENT_STATUS_TAG[appointment.status] ?? ''}`} style={{ padding: '2px 8px', fontSize: 11, textTransform: 'capitalize' }}>{appointment.status}</span>

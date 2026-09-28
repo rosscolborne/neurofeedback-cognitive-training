@@ -942,6 +942,7 @@ input, select, textarea, button {
 }
 
 .appt-when {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
