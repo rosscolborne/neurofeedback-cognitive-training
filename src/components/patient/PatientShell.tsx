@@ -29,6 +29,9 @@ import {
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
 
+// Same day-month-year style as session history, so dates read alike across Profile and Progress.
+const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+
 const IMPRINT_TAG: Record<'valid' | 'expired' | 'invalid' | 'not-calibrated', string> = {
   valid: 'status-tag-active',
   expired: 'status-tag-paused',
@@ -113,7 +116,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
     : undefined;
   const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
-  const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString();
+  const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString(undefined, SHORT_DATE);
   const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
   const imprintLabel = imprintState.status === 'valid' ? 'Current'
     : imprintState.status === 'expired' ? 'Expired'
@@ -124,7 +127,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     ...(imprintDate ? [{ label: 'Calibrated', value: <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time> }] : []),
     ...(imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
       ? [{ label: 'Alpha peak', value: `${measuredAlphaPeakHz.toFixed(1)} Hz` }] : []),
-    ...(imprintState.expiresAt != null ? [{ label: 'Expires', value: <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString()}</time> }] : []),
+    ...(imprintState.expiresAt != null ? [{ label: 'Expires', value: <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString(undefined, SHORT_DATE)}</time> }] : []),
   ];
   const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
   // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.

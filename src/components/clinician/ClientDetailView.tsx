@@ -256,7 +256,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               <span className="detail-chip"><Settings2 size={12} aria-hidden="true" /> {evidenceProtocolName}</span>
               <span className={`detail-chip detail-chip-${imprintState.status}`}>
                 Neural Imprint: {imprintLabel}
-                {imprintState.calibratedAt != null && <> · <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString()}</time></>}
+                {imprintState.calibratedAt != null && <> · <time dateTime={new Date(imprintState.calibratedAt).toISOString()}>{new Date(imprintState.calibratedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</time></>}
               </span>
               {assignedDeviceName && <span className="detail-chip">Assigned device: {assignedDeviceName}</span>}
             </div>
