@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowLeft, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ClipboardList, RefreshCw, Search } from 'lucide-react';
 import type { MessageThread } from '../../types';
 import { messageRepository, type MessageRepository } from '../../services/messageRepository';
 import { formatMessageTime, type MessageUnreadStatus, type ProductionMessage } from '../../services/messageMappers';
@@ -67,7 +67,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
       </div>
     </section>
     {currentActivePatientId && <section style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 10 }}>{isMobile && <button type="button" className="btn btn-ghost" aria-label="Back to conversations" onClick={() => setActivePatientId(null)}><ArrowLeft size={18} /></button>}<PatientAvatar avatarUrl={activeParticipant?.avatarUrl} size={36} /><div><strong>{activeName}</strong><div style={{ fontSize: 11 }}>Private care-team conversation</div></div>{onOpenChart && activeParticipant && <button type="button" className="btn btn-ghost" style={{ marginLeft: 'auto' }} aria-label={`Open ${activeName} chart`} onClick={() => onOpenChart(activeParticipant.patientId)}>View chart</button>}</header>
+        <header style={{ padding: isMobile ? '8px 12px' : '12px 16px', minHeight: '56px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 10 }}>{isMobile && <button type="button" className="btn btn-ghost" style={{ padding: '8px', minHeight: '40px', flexShrink: 0 }} aria-label="Back to conversations" onClick={() => setActivePatientId(null)}><ArrowLeft size={18} /></button>}{!isMobile && <PatientAvatar avatarUrl={activeParticipant?.avatarUrl} size={36} />}<div style={{ minWidth: 0, flex: 1 }}><strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: isMobile ? 15 : 14 }}>{activeName}</strong>{!isMobile && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Private care-team conversation</div>}</div>{onOpenChart && activeParticipant && <button type="button" className="btn btn-ghost" style={{ flexShrink: 0, padding: '6px 10px', fontSize: 13, border: '1px solid var(--border-default)', color: 'var(--text-primary)', minHeight: isMobile ? '36px' : undefined }} aria-label={`Open ${activeName} chart`} onClick={() => onOpenChart(activeParticipant.patientId)}><ClipboardList size={14} aria-hidden="true" />{isMobile ? 'Chart' : 'View chart'}</button>}</header>
         <div aria-live="polite" style={{ flex: 1, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {conversation.cursor && <button type="button" className="btn btn-ghost" disabled={conversation.isLoadingOlder} onClick={() => void conversation.loadOlder()}>{conversation.isLoadingOlder ? 'Loading…' : 'Load older messages'}</button>}
           {conversation.loadState === 'loading' && <StatusNotice text="Loading messages…" />}
@@ -76,9 +76,9 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
           {conversation.messages.map((message) => <MessageBubble key={`${message.source}:${message.id}`} message={message} ownRole="clinician" />)}<div ref={endRef} />
         </div>
         {readError && <div role="alert" style={{ padding: '8px 16px', color: 'var(--status-alert)', fontSize: 12 }}>Could not update message notification: {readError}</div>}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-default)', background: 'var(--surface-clinician-base)' }}>
+        <div style={{ padding: isMobile ? '10px 12px' : '12px 16px', borderTop: '1px solid var(--border-default)', background: 'var(--surface-clinician-base)' }}>
           <div style={{ marginBottom: 8, color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600 }}>Suggested messages</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 8 }}>
+          <div className="messaging-suggestions">
             {QUICK_TEMPLATES.map((template) => <button key={template} type="button" className="messaging-suggestion" aria-pressed={conversation.draft === template} onClick={() => conversation.setDraft(template)}>{template}</button>)}
           </div>
         </div>

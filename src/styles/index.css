@@ -360,6 +360,34 @@ input, select, textarea, button {
   cursor: pointer;
 }
 
+.messaging-suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 8px;
+}
+
+/* Phones: one scrollable row of suggestions instead of three stacked cards above the composer. */
+@media (max-width: 767px) {
+  .messaging-suggestions {
+    display: flex;
+    overflow-x: auto;
+    margin: 0 -12px;
+    padding: 0 12px 2px;
+    scrollbar-width: none;
+  }
+
+  .messaging-suggestions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .messaging-suggestions .messaging-suggestion {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 36px;
+    white-space: nowrap;
+  }
+}
+
 .messaging-suggestion:hover {
   border-color: var(--text-tertiary);
   background: var(--surface-patient-recessed);
@@ -875,6 +903,123 @@ input, select, textarea, button {
 .psd-table th:first-child {
   text-align: left;
   font-weight: 500;
+}
+
+/* Clinician calendar rows: a date tile anchors each appointment. */
+.appt-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+}
+
+.appt-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  width: 56px;
+  min-height: 60px;
+  padding: 6px 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-clinician-sidebar);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.appt-date strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.appt-main {
+  min-width: 0;
+}
+
+.appt-when {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.appt-name {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.appt-name-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: 500 13px/1.4 var(--font-body);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--border-default);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.appt-name-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.appt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.appt-notes {
+  max-width: 72ch;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.appt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.appt-actions .btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  .appt-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .appt-date {
+    width: 48px;
+  }
+
+  .appt-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+  }
 }
 
 /* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
