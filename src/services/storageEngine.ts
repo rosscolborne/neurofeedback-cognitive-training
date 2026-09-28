@@ -20,6 +20,12 @@ import { BRAND_PRESETS } from './brandEngine';
 import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 import { DEFAULT_PROTOCOL } from './protocols';
+import {
+  buildSelfDirectedTrainingSetup,
+  ClinicianManagedTrainingError,
+  hasActiveClinicianRelationship,
+  type SelfDirectedTrainingSetup,
+} from './patientTrainingAuthority';
 import { auth, db } from './firebase';
 import {
   collection,
@@ -79,6 +85,9 @@ const INVITATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 const INVITATION_CODE_PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 const getInvitationClaimRef = (clinicianId: string, normalizedEmail: string) =>
   doc(db, 'patientInvitationClaims', clinicianId, 'emails', normalizedEmail);
+/** Code-free marker that this clinician has a pending invitation for the email; it lives and ends with the claim. */
+const getInvitationNoticeRef = (clinicianId: string, normalizedEmail: string) =>
+  doc(db, 'patientInvitationNotices', normalizedEmail, 'clinicians', clinicianId);
 
 const CANONICAL_APPOINTMENT_KEYS = new Set([
   'clinicianId', 'patientId', 'patientDisplayName', 'clinicianDisplayName', 'startsAt', 'timezone',
@@ -989,6 +998,7 @@ class StorageEngine {
         expiresAt,
         createdAt: serverTimestamp(),
       });
+      transaction.set(getInvitationNoticeRef(clinician.uid, uniquenessClaimId), { expiresAt, updatedAt: serverTimestamp() });
     });
     return invitation;
   }
@@ -1021,6 +1031,7 @@ class StorageEngine {
       transaction.set(invitationRef, { status: 'cancelled', updatedAt: serverTimestamp() }, { merge: true });
       if (invitation.uniquenessClaimId) {
         transaction.delete(getInvitationClaimRef(invitation.clinicianId, invitation.uniquenessClaimId));
+        transaction.delete(getInvitationNoticeRef(invitation.clinicianId, invitation.uniquenessClaimId));
       }
     });
   }
@@ -1138,12 +1149,71 @@ class StorageEngine {
       const claimHolder = claimId ? claims.get(claimId) : undefined;
       if (claimHolder !== undefined && claimHolder !== invitation.id) continue;
       batch.update(entry.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
-      if (claimId && claimHolder === invitation.id) batch.delete(getInvitationClaimRef(clinicianId, claimId));
+      if (claimId && claimHolder === invitation.id) {
+        batch.delete(getInvitationClaimRef(clinicianId, claimId));
+        batch.delete(getInvitationNoticeRef(clinicianId, claimId));
+      }
     }
     batch.update(patientRef, {
       clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
     });
     await batch.commit();
+  }
+
+  /**
+   * The patient ends their own clinician relationship. Like unlinkPatient, only the
+   * relationship fields change, so the last assignment stays as the self-directed
+   * starting point, and that clinician's future scheduled appointments are cancelled
+   * with it. Past appointments, sessions and messages are left untouched.
+   */
+  public async disconnectFromClinician(patientId: string): Promise<ClientProfile> {
+    if (this.isDemoWorkspace()) throw new Error('Clinician connections are unavailable in the sample workspace');
+    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to disconnect from your clinician.');
+    const clientRef = doc(db, 'clients', patientId);
+    const appointments = await getDocs(query(collection(db, 'appointments'), where('patientId', '==', patientId)));
+    return runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(clientRef);
+      if (!snapshot.exists()) throw new Error('Your patient profile is unavailable. Try again.');
+      const current = readClientProfile(snapshot.data(), snapshot.id);
+      if (current.accountDeletionStartedAt) throw new Error('Your account is being deleted.');
+      const clinicianId = getPatientClinicianId(current);
+      if (!clinicianId) return current;
+      const now = Date.now();
+      const cancellations = [];
+      for (const entry of appointments.docs) {
+        if (entry.data().clinicianId !== clinicianId) continue;
+        const latest = await transaction.get(entry.ref);
+        const data = latest.data() as Record<string, unknown> | undefined;
+        if (data && isCancellableFutureAppointment(data, now)) cancellations.push({ ref: entry.ref, revision: data.revision });
+      }
+      for (const { ref, revision } of cancellations) {
+        transaction.update(ref, {
+          status: 'cancelled',
+          cancelledAt: serverTimestamp(),
+          cancelledBy: patientId,
+          cancellationRequestId: `cancel_${crypto.randomUUID().replace(/-/g, '')}`,
+          updatedAt: serverTimestamp(),
+          revision: revision + 1,
+        });
+      }
+      transaction.update(clientRef, {
+        clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
+      });
+      return { ...current, clinicianId: undefined, linkedClinicianCode: undefined, clinicId: undefined, acceptedInvitationId: undefined };
+    });
+  }
+
+  /**
+   * Whether any clinician has an unexpired pending invitation for the signed-in email.
+   * Only code-free notices are read, so this cannot reveal a code or accept anything.
+   */
+  public async hasPendingInvitationNotice(): Promise<boolean> {
+    if (this.isDemoWorkspace()) return false;
+    const email = normalizeEmail(auth.currentUser?.email || '');
+    if (!email || email.includes('/')) return false;
+    const notices = await getDocs(collection(db, 'patientInvitationNotices', email, 'clinicians'));
+    const now = Date.now();
+    return notices.docs.some((entry) => (timestampToMillis(entry.data().expiresAt) ?? 0) > now);
   }
 
   public async acceptPatientInvitation(invitationCode: string, fallbackClient: ClientProfile): Promise<ClientProfile> {
@@ -1242,6 +1312,7 @@ class StorageEngine {
         );
         if (invitation.uniquenessClaimId) {
           transaction.delete(getInvitationClaimRef(invitation.clinicianId, invitation.uniquenessClaimId));
+          transaction.delete(getInvitationNoticeRef(invitation.clinicianId, invitation.uniquenessClaimId));
         }
         return linkedClient;
       });
@@ -1280,6 +1351,42 @@ class StorageEngine {
       (payload.customProtocolConfig as Record<string, unknown>).ratioReward = deleteField();
     }
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
+  }
+
+  /**
+   * Replace an unlinked patient's own training assignment. The transaction
+   * re-reads the relationship so a stale screen can never overwrite an
+   * assignment that a clinician took over in the meantime, and it writes only
+   * the assignment fields so concurrent progress and history stay intact.
+   */
+  public async saveSelfDirectedTrainingSetup(patientId: string, setup: SelfDirectedTrainingSetup): Promise<ClientProfile> {
+    const { assignedProtocol, allowedExperiences } = buildSelfDirectedTrainingSetup(setup.assignedProtocol, setup.allowedExperiences);
+    const apply = (current: ClientProfile): ClientProfile => {
+      if (current.accountDeletionStartedAt) throw new Error('Training setup is unavailable while account deletion is in progress.');
+      if (hasActiveClinicianRelationship(current)) throw new ClinicianManagedTrainingError(current);
+      return { ...current, assignedProtocol, allowedExperiences: [...allowedExperiences], customProtocolConfig: undefined };
+    };
+    if (this.isDemoWorkspace()) {
+      const index = this.demoClients.findIndex((client) => client.id === patientId);
+      if (index < 0) throw new Error('Your patient profile is unavailable.');
+      const updated = apply(this.demoClients[index]);
+      this.demoClients[index] = updated;
+      return updated;
+    }
+    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to change your training setup.');
+    const clientRef = doc(db, 'clients', patientId);
+    return runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(clientRef);
+      if (!snapshot.exists()) throw new Error('Your patient profile is unavailable. Try again.');
+      const updated = apply(readClientProfile(snapshot.data(), snapshot.id));
+      transaction.update(clientRef, {
+        assignedProtocol,
+        allowedExperiences,
+        customProtocolConfig: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+      return updated;
+    });
   }
 
   public async saveIndividualBaselineModel(patientId: string, baselineModel: IndividualBaselineModel): Promise<void> {

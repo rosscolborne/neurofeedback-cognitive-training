@@ -175,6 +175,50 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // A code-free notice that a clinician has a pending invitation for this email.
+    // It tells the addressed account to show Connect to Clinician; accepting
+    // still needs the invitation code, which only the invitation itself holds.
+    match /patientInvitationNotices/{emailKey}/clinicians/{clinicianId} {
+      function claimPath() {
+        return /databases/$(database)/documents/patientInvitationClaims/$(clinicianId)/emails/$(emailKey);
+      }
+
+      function mirrorsPendingInvitation() {
+        let claim = getAfter(claimPath()).data;
+        let invitation = getAfter(/databases/$(database)/documents/patientInvitations/$(claim.invitationId)).data;
+        return claim.get('status', null) == 'pending' &&
+          claim.get('expiresAt', null) == request.resource.data.expiresAt &&
+          invitation.get('status', null) == 'pending' &&
+          invitation.get('clinicianId', null) == clinicianId &&
+          invitation.get('patientEmail', null) == emailKey &&
+          invitation.get('expiresAt', null) == request.resource.data.expiresAt;
+      }
+
+      function noPendingInvitationRemains() {
+        return !existsAfter(claimPath()) ||
+          getAfter(/databases/$(database)/documents/patientInvitations/$(getAfter(claimPath()).data.invitationId))
+            .data.get('status', null) != 'pending';
+      }
+
+      // Path-scoped: an account can only read the notices under its own email.
+      allow read: if isAuthenticated() && (
+        clinicianId == request.auth.uid ||
+        (request.auth.token.email != null && emailKey == request.auth.token.email.lower())
+      );
+      allow create, update: if isClinician() &&
+        clinicianId == request.auth.uid &&
+        request.resource.data.keys().hasOnly(['expiresAt', 'updatedAt']) &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.updatedAt == request.time &&
+        existsAfter(claimPath()) &&
+        mirrorsPendingInvitation();
+      allow delete: if isAuthenticated() && (
+          clinicianId == request.auth.uid ||
+          (request.auth.token.email != null && emailKey == request.auth.token.email.lower())
+        ) &&
+        noPendingInvitationRemains();
+    }
+
     // One live claim exists for each clinician + normalized patient email.
     // It is created atomically with an invitation and released on cancel/accept.
     match /patientInvitationClaims/{clinicianId}/emails/{emailKey} {
@@ -309,6 +353,21 @@ service cloud.firestore {
           request.resource.data.get('acceptedInvitationId', null) == null;
       }
 
+      // The patient may end their own active relationship; like a clinician
+      // unlink it clears only the relationship fields and carries no other edits.
+      function patientEndsOwnRelationship() {
+        return (
+            resource.data.get('clinicianId', null) != null ||
+            resource.data.get('linkedClinicianCode', null) != null
+          ) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['clinicId', 'clinicianId', 'linkedClinicianCode', 'acceptedInvitationId', 'updatedAt']) &&
+          request.resource.data.get('clinicId', null) == null &&
+          request.resource.data.get('clinicianId', null) == null &&
+          request.resource.data.get('linkedClinicianCode', null) == null &&
+          request.resource.data.get('acceptedInvitationId', null) == null;
+      }
+
       allow read: if isAuthenticated() && (
         request.auth.uid == clientId ||
         isCanonicalPatientClinician(resource.data) ||
@@ -335,7 +394,7 @@ service cloud.firestore {
             (
               request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
               relationshipUnchanged()
-            ) || acceptsValidInvitation()
+            ) || acceptsValidInvitation() || patientEndsOwnRelationship()
           )
         ) ||
         (
@@ -706,10 +765,23 @@ service cloud.firestore {
       }
 
       function patientCancelsForAccountDeletion() {
+        return patientCancelsOwnFutureAppointment() &&
+          get(/databases/$(database)/documents/clients/$(request.auth.uid))
+            .data.get('accountDeletionStartedAt', null) is timestamp;
+      }
+
+      // Only in the write that ends the patient's relationship with this appointment's clinician.
+      function patientCancelsForDisconnect() {
+        let clientPath = /databases/$(database)/documents/clients/$(request.auth.uid);
+        return patientCancelsOwnFutureAppointment() &&
+          isCanonicalPatientClinicianId(get(clientPath).data, resource.data.clinicianId) &&
+          getAfter(clientPath).data.get('clinicianId', null) == null &&
+          getAfter(clientPath).data.get('linkedClinicianCode', null) == null;
+      }
+
+      function patientCancelsOwnFutureAppointment() {
         return isCanonicalAppointment() &&
           resource.data.patientId == request.auth.uid &&
-          get(/databases/$(database)/documents/clients/$(request.auth.uid))
-            .data.get('accountDeletionStartedAt', null) is timestamp &&
           resource.data.status == 'scheduled' &&
           resource.data.startsAt is timestamp &&
           resource.data.startsAt > request.time &&
@@ -779,7 +851,7 @@ service cloud.firestore {
         request.resource.data.updatedAt == request.time &&
         request.resource.data.revision == 1 &&
         validScheduledAppointment();
-      allow update: if patientCancelsForAccountDeletion() || (isClinician() &&
+      allow update: if patientCancelsForAccountDeletion() || patientCancelsForDisconnect() || (isClinician() &&
         isCanonicalAppointment() &&
         resource.data.clinicianId == request.auth.uid &&
         isPatientClinician(resource.data.patientId) &&

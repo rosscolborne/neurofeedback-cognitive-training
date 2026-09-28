@@ -13,6 +13,9 @@ describe('relationship enrollment UI wiring', () => {
 
   it('offers invitation acceptance on the patient home and profile surfaces', () => {
     expect(patientSource).toContain('Have an invitation from your clinician?');
+    // Offered only with a real invitation: a code-free pending notice or a carried invitation link.
+    expect(patientSource).toContain('hasPendingInvitationNotice()');
+    expect(patientSource).toContain("activeTab === 'home' && canConnectToClinician");
     expect(patientSource).toContain('Accept Invitation');
     expect(patientSource).toContain('role="alert"');
     expect(patientSource).toContain('client.clinicianId || client.linkedClinicianCode');

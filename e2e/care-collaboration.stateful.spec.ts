@@ -109,7 +109,8 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
 
             await patient.page.reload();
             await arriveAtPatientDashboard(patient.page);
-            await expect(patient.page.getByRole('button', { name: 'Connect to Clinician', exact: true })).toBeVisible();
+            // WB-102: without an invitation link there is no Connect control.
+            await expect(patient.page.getByRole('button', { name: 'Connect to Clinician', exact: true })).toHaveCount(0);
 
             await clinician.page.getByRole('button', { name: 'Invite Patient', exact: true }).click();
             const invitePanel = clinician.page.getByRole('heading', { name: 'Invite Patient', exact: true }).locator('..');
@@ -125,9 +126,13 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             expect(invitationCode).toMatch(/^[A-Za-z0-9_-]+$/);
             await createdPanel.getByRole('button', { name: 'Done', exact: true }).click();
 
+            // The new pending invitation is what makes Connect available again.
+            await patient.page.reload();
+            await arriveAtPatientDashboard(patient.page);
             await patient.page.getByRole('button', { name: 'Connect to Clinician', exact: true }).click();
             await patient.page.getByLabel('Invitation code', { exact: true }).fill(invitationCode);
             await patient.page.getByRole('button', { name: 'Accept Invitation', exact: true }).click();
+            await patient.page.getByRole('button', { name: 'Profile', exact: true }).click();
             await expect(patient.page.getByText('Connected to your clinician', { exact: true })).toBeVisible({ timeout: 15_000 });
             await expectInvitationAcceptedPersisted(run, patient.page, clinician.page, invitationCode);
 

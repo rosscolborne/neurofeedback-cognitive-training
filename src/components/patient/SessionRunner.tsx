@@ -16,6 +16,7 @@ import {
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
 import { getTidalGardenSessionXp } from '../../services/dataMappers';
+import { resolveTrainingAuthority } from '../../services/patientTrainingAuthority';
 import { describeActiveReward, describeBrainFlowScore } from './trainingTelemetry';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
 import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
@@ -284,7 +285,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       return;
     }
     if (!runtimeConfig || !adaptiveEngine) {
-      setSaveError('A valid clinician-assigned protocol is required before this session can be saved.');
+      setSaveError(`A valid ${resolveTrainingAuthority(client) === 'clinician' ? 'clinician-assigned' : 'training'} protocol is required before this session can be saved.`);
       return;
     }
 
@@ -602,7 +603,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
         <h1 style={{ fontSize: '22px' }}>Protocol unavailable</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
-          Your training settings can’t be used right now. Please ask your clinician to review your protocol.
+          Your training settings can’t be used right now. {resolveTrainingAuthority(client) === 'clinician' ? 'Please ask your clinician to review your protocol.' : 'Choose a protocol again in your training setup.'}
         </p>
         <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
       </div>
@@ -915,7 +916,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           )}
           {selectedExperience === 'tidal-garden' && !client.tidalGardenState && (
             <div role="status" style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', padding: '24px', textAlign: 'center' }}>
-              Garden progress is unavailable for this account. Return to the dashboard and ask your clinician to review the training assignment.
+              Garden progress is unavailable for this account. Return to the dashboard and {resolveTrainingAuthority(client) === 'clinician' ? 'ask your clinician to review the training assignment' : 'try opening Tidal Garden again'}.
             </div>
           )}
           {selectedExperience === 'breath-weave' && (

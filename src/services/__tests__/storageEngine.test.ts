@@ -53,6 +53,7 @@ import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
 import { DEFAULT_RATIO_REWARDS } from '../protocols';
 import { resolveProtocolRuntime } from '../adaptiveEngine';
 import { EXPERIENCE_IDS } from '../experienceIds';
+import { ClinicianManagedTrainingError } from '../patientTrainingAuthority';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
@@ -1104,7 +1105,8 @@ describe('patient invitation linking', () => {
     firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({ get, set }));
 
     await expect(storageEngine.createPatientInvitation(inviteInput)).resolves.toMatchObject({ status: 'pending' });
-    expect(set).toHaveBeenCalledTimes(2);
+    // Invitation, claim, and the code-free notice.
+    expect(set).toHaveBeenCalledTimes(3);
   });
 
   it('uses the transaction reread when a server result has since become unlinked', async () => {
@@ -1128,7 +1130,7 @@ describe('patient invitation linking', () => {
 
     await expect(storageEngine.createPatientInvitation(inviteInput)).resolves.toMatchObject({ status: 'pending' });
     expect(get).toHaveBeenCalledTimes(2);
-    expect(set).toHaveBeenCalledTimes(2);
+    expect(set).toHaveBeenCalledTimes(3);
   });
 
   it('fails closed if the server relationship query fails', async () => {
@@ -1216,7 +1218,11 @@ describe('patient invitation linking', () => {
       clinicianName: 'Dr. Example', patientName: 'Patient', patientEmail: 'patient@example.com',
       condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
     })).resolves.toMatchObject({ status: 'pending' });
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(3);
+    // The notice tells the patient an invitation exists without carrying its code.
+    const [noticeRef, notice] = writes[2] as [unknown, object];
+    expect(noticeRef).toMatchObject({ path: 'patientInvitationNotices/patient@example.com/clinicians' });
+    expect(Object.keys(notice).sort()).toEqual(['expiresAt', 'updatedAt']);
   });
 
   it('isolates claim paths for clinician/email pairs that collide under flat delimiter concatenation', async () => {
@@ -1277,7 +1283,10 @@ describe('patient invitation linking', () => {
     expect(linked).toMatchObject({ id: 'patient-1', clinicianId: 'clinician-1', clinicId: 'clinic-1', acceptedInvitationId: 'ABCD-EFGH-JKLM' });
     expect(writes[0]).toMatchObject({ ref: { type: 'doc', path: 'clients', id: 'patient-1' }, payload: expect.objectContaining({ clinicianId: 'clinician-1', clinicId: 'clinic-1' }) });
     expect(writes[1]).toMatchObject({ ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' }, payload: expect.objectContaining({ status: 'accepted', patientId: 'patient-1' }) });
-    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
+    expect(deletes).toEqual([
+      { type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' },
+      { type: 'doc', path: 'patientInvitationNotices/claim-1/clinicians', id: 'clinician-1' },
+    ]);
   });
 
   it('applies the invited protocol and its exact experience set to a fresh patient', async () => {
@@ -1365,7 +1374,10 @@ describe('patient invitation linking', () => {
       ref: { type: 'doc', path: 'patientInvitations', id: 'ABCD-EFGH-JKLM' },
       payload: expect.objectContaining({ status: 'cancelled' }),
     });
-    expect(deletes).toEqual([{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' }]);
+    expect(deletes).toEqual([
+      { type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'claim-1' },
+      { type: 'doc', path: 'patientInvitationNotices/claim-1/clinicians', id: 'clinician-1' },
+    ]);
   });
 
   it('refuses an invitation addressed to a different account email', async () => {
@@ -1599,9 +1611,10 @@ describe('patient invitation linking', () => {
       { type: 'doc', path: 'clients', id: 'patient-1' },
       expect.objectContaining({ clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null }),
     );
-    expect(batchOperations.delete.mock.calls).toEqual([[{
-      type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'a@example.com',
-    }]]);
+    expect(batchOperations.delete.mock.calls).toEqual([
+      [{ type: 'doc', path: 'patientInvitationClaims/clinician-1/emails', id: 'a@example.com' }],
+      [{ type: 'doc', path: 'patientInvitationNotices/a@example.com/clinicians', id: 'clinician-1' }],
+    ]);
     expect(batchOperations.commit).toHaveBeenCalledTimes(1);
   });
 
@@ -1743,5 +1756,195 @@ describe('write authorization safeguards', () => {
     await storageEngine.patchSessionNotes('session-1', { clinicianNotes: null, patientNotes: 'Cannot alter' });
     expect(writes[0]).toMatchObject({ clinicianNotes: null });
     expect(writes[0]).not.toHaveProperty('patientNotes');
+  });
+});
+
+describe('self-directed training setup', () => {
+  const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
+  const unlinked = () => ({
+    ...createBlankProfile('patient-1', 'patient@example.test'),
+    customProtocolConfig: { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Former clinician rule' },
+    completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: garden,
+  });
+  const transaction = (stored: Record<string, unknown> | null) => {
+    const update = vi.fn();
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
+      callback({
+        get: vi.fn().mockResolvedValueOnce(stored
+          ? { id: 'patient-1', exists: () => true, data: () => stored }
+          : { exists: () => false }),
+        update,
+      }));
+    return update;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+  });
+
+  it('writes only the assignment fields and keeps patient-owned progress', async () => {
+    const update = transaction(unlinked());
+    const alpha = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
+    const saved = await storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
+    expect(update).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' }, {
+      assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha,
+      customProtocolConfig: { __deleteField: true }, updatedAt: { __serverTimestamp: true },
+    });
+    expect(saved).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha,
+      completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: garden });
+    expect(saved.customProtocolConfig).toBeUndefined();
+  });
+
+  it('persists an exact customized list in catalogue order', async () => {
+    const update = transaction(unlinked());
+    await storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'smr-enhancement', allowedExperiences: ['tidal-garden', 'neuro-gambit', 'tidal-garden'] });
+    expect(update.mock.calls[0][1]).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit', 'tidal-garden'] });
+  });
+
+  it.each([
+    ['canonical link', { clinicianId: 'clinician-1', clinicId: 'clinic-1' }],
+    ['legacy link', { linkedClinicianCode: 'clinician-1' }],
+  ])('refuses to overwrite a clinician-managed assignment (%s) and returns the current profile', async (_label, link) => {
+    const clinicianAssigned = { ...unlinked(), ...link, assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'], customProtocolConfig: undefined };
+    const update = transaction(clinicianAssigned);
+    const attempt = storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['tidal-garden'] });
+    await expect(attempt).rejects.toBeInstanceOf(ClinicianManagedTrainingError);
+    await attempt.catch((error: ClinicianManagedTrainingError) => {
+      expect(error.current).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'] });
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('validates before any read and refuses another account, deletion, and missing profiles', async () => {
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: [] }))
+      .rejects.toThrow('Choose at least one training experience.');
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'individualized-upper-alpha', allowedExperiences: ['mandala'] }))
+      .rejects.toThrow('not available for self-directed training');
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('other-patient', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }))
+      .rejects.toThrow('Sign in as this patient');
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+
+    const deletingUpdate = transaction({ ...unlinked(), accountDeletionStartedAt: new Date() });
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }))
+      .rejects.toThrow('account deletion');
+    expect(deletingUpdate).not.toHaveBeenCalled();
+    transaction(null);
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }))
+      .rejects.toThrow('profile is unavailable');
+  });
+});
+
+describe('patient-initiated clinician disconnect', () => {
+  const linked = (): ClientProfile => ({
+    ...createBlankProfile('patient-1', 'patient@example.test'), clinicianId: 'clinician-1', clinicId: 'clinic-1',
+    acceptedInvitationId: 'CODE-AAAA-AAAA', assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'],
+    completedSessionsCount: 4, badges: ['garden-keeper'],
+  });
+  const appointment = (id: string, clinicianId: string, startsAt: number, status = 'scheduled') => ({
+    clinicianId, patientId: 'patient-1', patientDisplayName: 'Patient', timezone: 'UTC',
+    durationMinutes: 45, type: 'consultation', status, startsAt: new MockTimestamp(startsAt),
+    createdAt: new MockTimestamp(1), updatedAt: new MockTimestamp(1), createdBy: clinicianId,
+    revision: 3, schemaVersion: 1, id,
+  });
+  const run = (client: ClientProfile | null, appointments: ReturnType<typeof appointment>[]) => {
+    const update = vi.fn();
+    const byId = new Map(appointments.map((entry) => [entry.id, entry]));
+    firestore.getDocs.mockResolvedValueOnce({ docs: appointments.map(({ id, ...data }) => ({
+      id, ref: { type: 'doc', path: 'appointments', id }, data: () => data,
+    })) });
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) => callback({
+      get: vi.fn(async (ref: { path: string; id: string }): Promise<{ id?: string; exists: () => boolean; data?: () => unknown }> => {
+        if (ref.path === 'clients') return client ? { id: client.id, exists: () => true, data: () => client } : { exists: () => false };
+        const { id: _id, ...data } = byId.get(ref.id)!;
+        return { id: ref.id, exists: () => true, data: () => data };
+      }),
+      update,
+    }));
+    return update;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+  });
+
+  it('clears only the relationship fields and cancels that clinician’s future scheduled visits', async () => {
+    const future = Date.now() + 86_400_000;
+    const update = run(linked(), [
+      appointment('future-own', 'clinician-1', future),
+      appointment('past-own', 'clinician-1', Date.now() - 86_400_000),
+      appointment('cancelled-own', 'clinician-1', future, 'cancelled'),
+      appointment('future-other', 'clinician-2', future),
+    ]);
+    const result = await storageEngine.disconnectFromClinician('patient-1');
+    expect(firestore.getDocs).toHaveBeenCalledWith({ source: { type: 'collection', path: 'appointments' }, constraints: [{ field: 'patientId', op: '==', value: 'patient-1' }] });
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledWith({ type: 'doc', path: 'appointments', id: 'future-own' }, expect.objectContaining({
+      status: 'cancelled', cancelledBy: 'patient-1', revision: 4, cancellationRequestId: expect.stringMatching(/^cancel_[A-Za-z0-9]{20,}$/),
+    }));
+    expect(update).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' }, {
+      clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: { __serverTimestamp: true },
+    });
+    // The last clinician assignment stays as the self-directed starting point; history is untouched.
+    expect(result).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'], completedSessionsCount: 4, badges: ['garden-keeper'] });
+    expect(result.clinicianId).toBeUndefined();
+    expect(result.clinicId).toBeUndefined();
+    expect(result.acceptedInvitationId).toBeUndefined();
+  });
+
+  it('disconnects a legacy code link and is a no-op when already self-directed', async () => {
+    const legacyUpdate = run({ ...createBlankProfile('patient-1', 'patient@example.test'), linkedClinicianCode: 'clinician-1' }, []);
+    await storageEngine.disconnectFromClinician('patient-1');
+    expect(legacyUpdate).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' }, expect.objectContaining({ linkedClinicianCode: null }));
+
+    const unlinked = createBlankProfile('patient-1', 'patient@example.test');
+    const noopUpdate = run(unlinked, []);
+    await expect(storageEngine.disconnectFromClinician('patient-1')).resolves.toMatchObject({ id: 'patient-1' });
+    expect(noopUpdate).not.toHaveBeenCalled();
+  });
+
+  it('refuses another account, the sample workspace, deletion in progress, and a missing profile', async () => {
+    await expect(storageEngine.disconnectFromClinician('other-patient')).rejects.toThrow('Sign in as this patient');
+    activateClinicianDemoWorkspace();
+    await expect(storageEngine.disconnectFromClinician('patient-1')).rejects.toThrow('sample workspace');
+    deactivateClinicianDemoWorkspace();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    const deleting = run({ ...linked(), accountDeletionStartedAt: new Date() }, []);
+    await expect(storageEngine.disconnectFromClinician('patient-1')).rejects.toThrow('being deleted');
+    expect(deleting).not.toHaveBeenCalled();
+    run(null, []);
+    await expect(storageEngine.disconnectFromClinician('patient-1')).rejects.toThrow('profile is unavailable');
+  });
+});
+
+describe('pending invitation notice check', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deactivateClinicianDemoWorkspace();
+    state.auth.currentUser = { uid: 'patient-1', email: 'Patient@Example.test' };
+  });
+
+  it('reads only the notices under the signed-in email and ignores expired ones', async () => {
+    const notice = (millis: number) => ({ data: () => ({ expiresAt: { toDate: () => new Date(millis) }, updatedAt: { toDate: () => new Date(1) } }) });
+    firestore.getDocs.mockResolvedValueOnce({ docs: [notice(Date.now() - 1_000)] });
+    await expect(storageEngine.hasPendingInvitationNotice()).resolves.toBe(false);
+    expect(firestore.getDocs).toHaveBeenCalledWith({ type: 'collection', path: 'patientInvitationNotices/patient@example.test/clinicians' });
+
+    firestore.getDocs.mockResolvedValueOnce({ docs: [notice(Date.now() - 1_000), notice(Date.now() + 86_400_000)] });
+    await expect(storageEngine.hasPendingInvitationNotice()).resolves.toBe(true);
+    firestore.getDocs.mockResolvedValueOnce({ docs: [] });
+    await expect(storageEngine.hasPendingInvitationNotice()).resolves.toBe(false);
+  });
+
+  it('reports none without a signed-in email or in the sample workspace', async () => {
+    state.auth.currentUser = { uid: 'patient-1' };
+    await expect(storageEngine.hasPendingInvitationNotice()).resolves.toBe(false);
+    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
+    activateClinicianDemoWorkspace();
+    await expect(storageEngine.hasPendingInvitationNotice()).resolves.toBe(false);
+    expect(firestore.getDocs).not.toHaveBeenCalled();
   });
 });

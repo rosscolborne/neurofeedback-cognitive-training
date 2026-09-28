@@ -10,7 +10,7 @@ import { ProtocolDetailsModal } from '../ProtocolDetailsModal';
 
 const template = getClinicalProtocolTemplate('beta-downtraining')!;
 const assigned = (customRewardEnabled: boolean): ClientProfile => ({
-  id: 'patient-1', name: 'Patient', email: 'patient@example.com', status: 'active',
+  id: 'patient-1', name: 'Patient', email: 'patient@example.com', status: 'active', clinicianId: 'clinician-1',
   assignedProtocol: 'beta-downtraining', allowedExperiences: [], brainMaps: [], badges: [],
   completedSessionsCount: 0, currentStreak: 0,
   customProtocolConfig: { ...template, alias: 'Test 123', customRewardEnabled },

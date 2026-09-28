@@ -4,7 +4,7 @@ import {
     type Firestore,
 } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { as, clinicA, closeEnvironment, emailOf, future, ids, past, resetWorld, seedDocuments, seededAppointmentId } from './fixture';
+import { as, clinicA, clinicB, closeEnvironment, emailOf, future, ids, past, resetWorld, seedDocuments, seededAppointmentId } from './fixture';
 
 // Replays the app's real transactions, including their reads of documents that
 // may not exist yet, so rules that only pass batch-shaped writes cannot hide a
@@ -17,6 +17,7 @@ afterAll(closeEnvironment);
 const code = 'INVU-TXNX-TXNX';
 const invitedEmail = emailOf(ids.unlinked);
 const claimPath = `patientInvitationClaims/${ids.clinicianA}/emails/${invitedEmail}`;
+const noticePath = `patientInvitationNotices/${invitedEmail}/clinicians/${ids.clinicianA}`;
 
 /** storageEngine.createPatientInvitation */
 function createInvitation(database: Firestore, clinicianId: string = ids.clinicianA, clinicId: string = clinicA) {
@@ -32,6 +33,7 @@ function createInvitation(database: Firestore, clinicianId: string = ids.clinici
         transaction.set(claim, {
             clinicianId, clinicId, patientEmail: invitedEmail, invitationId: code, status: 'pending', expiresAt, createdAt: serverTimestamp(),
         });
+        transaction.set(doc(database, `patientInvitationNotices/${invitedEmail}/clinicians/${clinicianId}`), { expiresAt, updatedAt: serverTimestamp() });
     });
 }
 
@@ -49,6 +51,7 @@ function acceptInvitation(database: Firestore, patientId: string = ids.unlinked)
             status: 'accepted', patientId, acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
         }, { merge: true });
         transaction.delete(doc(database, claimPath));
+        transaction.delete(doc(database, noticePath));
     });
 }
 
@@ -58,6 +61,7 @@ function cancelInvitation(database: Firestore) {
         await transaction.get(doc(database, `patientInvitations/${code}`));
         transaction.set(doc(database, `patientInvitations/${code}`), { status: 'cancelled', updatedAt: serverTimestamp() }, { merge: true });
         transaction.delete(doc(database, claimPath));
+        transaction.delete(doc(database, noticePath));
     });
 }
 
@@ -86,6 +90,29 @@ describe('invitation transactions', () => {
         await assertFails(getDoc(doc(await as(ids.unlinked), claimPath)));
     });
 });
+
+/** storageEngine.disconnectFromClinician, as the signed-in patient */
+function disconnectFromClinician(
+    database: Firestore, patientId: string, appointmentIds: string[] = [],
+    appointmentExtra: Record<string, unknown> = {}, profileExtra: Record<string, unknown> = {},
+) {
+    return runTransaction(database, async (transaction) => {
+        const client = await transaction.get(doc(database, `clients/${patientId}`));
+        const appointments = await Promise.all(appointmentIds.map((id) => transaction.get(doc(database, `appointments/${id}`))));
+        for (const appointment of appointments) {
+            transaction.update(appointment.ref, {
+                status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: client.id,
+                cancellationRequestId: 'cancel_dddddddddddddddddddddddd', updatedAt: serverTimestamp(),
+                revision: (appointment.get('revision') as number) + 1,
+                ...appointmentExtra,
+            });
+        }
+        transaction.update(client.ref, {
+            clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
+            ...profileExtra,
+        });
+    });
+}
 
 describe('relationship transactions', () => {
     it('storageEngine.unlinkPatient lets the canonical clinician clear the relationship', async () => {
@@ -139,6 +166,7 @@ describe('relationship transactions', () => {
         }
         batch.update(doc(clinicianA, `patientInvitations/${reinvite}`), { status: 'cancelled', updatedAt: serverTimestamp() });
         batch.delete(doc(clinicianA, reinviteClaim));
+        batch.delete(doc(clinicianA, `patientInvitationNotices/${patientEmail}/clinicians/${ids.clinicianA}`));
         // Missing claim: cancel the invitation without a claim delete.
         batch.update(doc(clinicianA, `patientInvitations/${legacyInvite}`), { status: 'cancelled', updatedAt: serverTimestamp() });
         batch.update(doc(clinicianA, `clients/${ids.patientA}`), {
@@ -154,6 +182,100 @@ describe('relationship transactions', () => {
         const invitation = await getDoc(doc(patientA, `patientInvitations/${reinvite}`));
         expect(invitation.get('status')).toBe('cancelled');
         expect((await getDoc(doc(clinicianA, reinviteClaim))).exists()).toBe(false);
+    });
+
+    it('storageEngine.disconnectFromClinician lets the patient end their own relationship and cancel that clinician’s future appointments', async () => {
+        const patientA = await as(ids.patientA);
+        const appointments = await assertSucceeds(getDocs(query(collection(patientA, 'appointments'), where('patientId', '==', ids.patientA))));
+        expect(appointments.docs.map((entry) => entry.id)).toContain(seededAppointmentId);
+        await assertSucceeds(disconnectFromClinician(patientA, ids.patientA, [seededAppointmentId]));
+
+        const clinicianA = await as(ids.clinicianA);
+        await assertFails(getDoc(doc(clinicianA, `clients/${ids.patientA}`)));
+        await assertFails(getDoc(doc(clinicianA, 'sessions/session-a')));
+        await assertFails(getDoc(doc(clinicianA, `messageThreads/${ids.patientA}/relationships/${ids.clinicianA}`)));
+        await assertFails(getDoc(doc(clinicianA, `appointments/${seededAppointmentId}`)));
+        await assertFails(updateDoc(doc(clinicianA, `clients/${ids.patientA}`), { notes: 'new care' }));
+        const profile = await assertSucceeds(getDoc(doc(patientA, `clients/${ids.patientA}`)));
+        expect(profile.get('clinicianId')).toBeNull();
+        expect(profile.get('assignedProtocol')).toBe('theta-beta-ratio');
+        await assertSucceeds(getDoc(doc(patientA, 'sessions/session-a')));
+        const appointment = await getDoc(doc(patientA, `appointments/${seededAppointmentId}`));
+        expect(appointment.get('status')).toBe('cancelled');
+        expect(appointment.get('cancelledBy')).toBe(ids.patientA);
+        // The accepted invitation is consumed, so the relationship cannot be replayed.
+        await assertFails(updateDoc(doc(patientA, `clients/${ids.patientA}`), {
+            clinicianId: ids.clinicianA, clinicId: clinicA, acceptedInvitationId: 'INVA-AAAA-AAAA', updatedAt: serverTimestamp(),
+        }));
+    });
+
+    it('lets a patient linked only through the legacy code disconnect', async () => {
+        await assertSucceeds(disconnectFromClinician(await as(ids.legacyPatient), ids.legacyPatient));
+    });
+
+    it('a patient disconnect cannot carry other edits, relink elsewhere, or touch another patient', async () => {
+        const patientA = await as(ids.patientA);
+        const clientRef = doc(patientA, `clients/${ids.patientA}`);
+        const cleared = { clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp() };
+        await assertFails(updateDoc(clientRef, { ...cleared, name: 'Renamed' }));
+        await assertFails(updateDoc(clientRef, { ...cleared, clinicianId: ids.clinicianB, clinicId: clinicB }));
+        await assertFails(updateDoc(doc(await as(ids.patientB), `clients/${ids.patientA}`), cleared));
+    });
+
+    it.each([
+        ['notes', { notes: 'changed during disconnect' }],
+        ['startsAt', { startsAt: Timestamp.fromMillis(Date.now() + 14 * 24 * 60 * 60 * 1000) }],
+        ['patientId', { patientId: ids.patientB }],
+        ['clinicianId', { clinicianId: ids.clinicianB }],
+        ['cancelledBy', { cancelledBy: ids.clinicianA }],
+    ])('a disconnect cannot also change the appointment’s %s', async (_field, appointmentExtra) => {
+        const patientA = await as(ids.patientA);
+        await assertFails(disconnectFromClinician(patientA, ids.patientA, [seededAppointmentId], appointmentExtra));
+        // The canonical cancellation alone, in the same disconnect, is still allowed.
+        await assertSucceeds(disconnectFromClinician(patientA, ids.patientA, [seededAppointmentId]));
+        const appointment = await getDoc(doc(patientA, `appointments/${seededAppointmentId}`));
+        expect(appointment.get('status')).toBe('cancelled');
+        expect(appointment.get('notes')).toBe('seeded');
+        expect(appointment.get('patientId')).toBe(ids.patientA);
+        expect(appointment.get('clinicianId')).toBe(ids.clinicianA);
+        expect(appointment.get('cancelledBy')).toBe(ids.patientA);
+    });
+
+    it.each([
+        ['keeping clinicId', { clinicId: clinicA }],
+        ['clearing only clinicianId', { clinicId: clinicA, acceptedInvitationId: 'INVA-AAAA-AAAA' }],
+        ['relinking through linkedClinicianCode', { linkedClinicianCode: ids.clinicianB }],
+        ['changing the assignment', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }],
+        ['changing the custom protocol config', { customProtocolConfig: { id: 'custom', name: 'Patient-made rule' } }],
+    ])('a disconnect write refuses %s', async (_label, profileExtra) => {
+        const patientA = await as(ids.patientA);
+        await assertFails(disconnectFromClinician(patientA, ids.patientA, [], {}, profileExtra));
+        const profile = await getDoc(doc(patientA, `clients/${ids.patientA}`));
+        expect(profile.get('clinicianId')).toBe(ids.clinicianA);
+        expect(profile.get('assignedProtocol')).toBe('theta-beta-ratio');
+    });
+
+    it('a patient cancels a clinician’s appointment only in the write that disconnects from that clinician', async () => {
+        const patientA = await as(ids.patientA);
+        const cancel = {
+            status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: ids.patientA,
+            cancellationRequestId: 'cancel_pppppppppppppppppppppppp', updatedAt: serverTimestamp(), revision: 2,
+        };
+        // Still linked: cancelling alone is not a disconnect.
+        await assertFails(updateDoc(doc(patientA, `appointments/${seededAppointmentId}`), cancel));
+        // Another clinician's appointment cannot ride along with this disconnect.
+        const otherId = 'appt_oooooooooooooooooooooooo';
+        await seedDocuments({
+            [`appointments/${otherId}`]: {
+                clinicianId: ids.clinicianB, patientId: ids.patientA, patientDisplayName: `Name ${ids.patientA}`,
+                startsAt: future(), timezone: 'UTC', durationMinutes: 45, type: 'consultation', status: 'scheduled',
+                createdAt: past, updatedAt: past, createdBy: ids.clinicianB, revision: 1, schemaVersion: 1,
+            },
+        });
+        await assertFails(disconnectFromClinician(patientA, ids.patientA, [otherId]));
+        // Once disconnected, a later cancellation on its own is refused.
+        await assertSucceeds(disconnectFromClinician(patientA, ids.patientA));
+        await assertFails(updateDoc(doc(patientA, `appointments/${seededAppointmentId}`), cancel));
     });
 
     it('an unrelated clinician cannot cancel another clinician’s appointment, even alone', async () => {
