@@ -683,7 +683,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   // Goal and weekly target are care-team fields: shown only while a clinician manages the plan (values are kept on unlink).
                   ...(isClinicianLinked ? [{ label: 'Goal', value: client.condition || 'Unavailable' }] : []),
                   { label: 'Protocol', value: protocolAlias ? `${protocolAlias} · ${protocolName}` : protocolName },
-                  { label: 'Training setup', value: TRAINING_AUTHORITY_LABEL[trainingAuthority] },
+                  // A linked patient sees "Connected to your clinician" just below instead.
+                  ...(isClinicianLinked ? [] : [{ label: 'Training setup', value: TRAINING_AUTHORITY_LABEL[trainingAuthority] }]),
                   ...(isClinicianLinked
                     ? [{ label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' }] : []),
                   { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },

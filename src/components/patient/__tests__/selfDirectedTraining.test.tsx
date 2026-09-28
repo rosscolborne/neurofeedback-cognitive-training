@@ -47,6 +47,7 @@ const tab = (renderer: ReactTestRenderer, label: string) => act(() => {
 });
 const hasText = (node: ReactTestInstance, value: string) => node.findAll((child) => child.children.some((entry) => typeof entry === 'string' && entry.includes(value))).length > 0;
 const button = (renderer: ReactTestRenderer, value: string) => renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === value || hasText(node, value));
+const factLabels = (renderer: ReactTestRenderer) => renderer.root.findAllByType('dt').map((node) => node.children.join(''));
 const trainCards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function');
 const sessionRunners = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'session-runner');
 
@@ -75,8 +76,9 @@ describe('self-directed patient shell', () => {
     expect(trainCards(renderer)).toHaveLength(tbr.length);
     tab(renderer, 'Profile');
     expect(button(renderer, 'Change Training Setup')).toBeDefined();
-    expect(text(renderer)).not.toContain('Goal:');
-    expect(text(renderer)).not.toContain('Weekly Target:');
+    expect(factLabels(renderer)).toContain('Training setup');
+    expect(factLabels(renderer)).not.toContain('Goal');
+    expect(factLabels(renderer)).not.toContain('Weekly target');
     expect(text(renderer)).not.toContain('Unavailable');
     await act(async () => { renderer.unmount(); });
   });
@@ -89,6 +91,9 @@ describe('self-directed patient shell', () => {
     expect(button(renderer, 'Change training setup')).toBeUndefined();
     tab(renderer, 'Profile');
     expect(button(renderer, 'Change Training Setup')).toBeUndefined();
+    expect(factLabels(renderer)).toEqual(expect.arrayContaining(['Goal', 'Weekly target']));
+    expect(factLabels(renderer)).not.toContain('Training setup');
+    expect(text(renderer)).toContain('Connected to your clinician');
     tab(renderer, 'Messages');
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-messages')).toHaveLength(1);
 
@@ -104,8 +109,8 @@ describe('self-directed patient shell', () => {
     // The former clinician's goal and weekly target are kept but no longer presented as care-team facts.
     tab(renderer, 'Profile');
     expect(text(renderer)).toContain('Self-directed');
-    expect(text(renderer)).not.toContain('Goal:');
-    expect(text(renderer)).not.toContain('Weekly Target:');
+    expect(factLabels(renderer)).not.toContain('Goal');
+    expect(factLabels(renderer)).not.toContain('Weekly target');
 
     await act(async () => { renderer.update(shell(linked())); });
     expect(navLabels(renderer)).toContain('Messages');
@@ -171,7 +176,7 @@ describe('self-directed patient shell', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(customized)); });
     tab(renderer, 'Profile');
-    act(() => button(renderer, 'Re-run Assessment & Headband Setup')!.props.onClick());
+    act(() => button(renderer, 'Redo Setup')!.props.onClick());
     await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'theta-beta-ratio' }); });
     expect(state.saveSelfDirectedTrainingSetup).not.toHaveBeenCalled();
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'onboarding-flow')).toHaveLength(0);

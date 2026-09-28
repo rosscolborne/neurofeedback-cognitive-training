@@ -28,13 +28,25 @@ async function expectNavigation(page: Page, linked: boolean) {
   }
 }
 
+/** A Profile fact: its label and value sit together in one FactGrid entry. */
+function profileFact(page: Page, label: string) {
+  return page.getByText(label, { exact: true }).locator('..');
+}
+
 async function expectAuthority(page: Page, authority: 'Self-directed' | 'Clinician-managed', protocolName: string) {
   await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await expect(page.getByText(`Protocol: ${protocolName}`)).toBeVisible();
+  await expect(page.getByRole('button', { name: `Protocol: ${protocolName}. View protocol details`, exact: true })).toBeVisible();
   await expect(page.getByText(`${authority} protocol`)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Change training setup', exact: true })).toHaveCount(authority === 'Self-directed' ? 1 : 0);
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
-  await expect(page.getByText(`Training setup: ${authority}`)).toBeVisible();
+  if (authority === 'Self-directed') {
+    await expect(profileFact(page, 'Training setup')).toContainText(authority);
+    await expect(page.getByText('Connected to your clinician', { exact: true })).toHaveCount(0);
+  } else {
+    // Profile states a clinician-managed plan through the connection status, not a second fact.
+    await expect(page.getByText('Training setup', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Connected to your clinician', { exact: true })).toBeVisible();
+  }
   await expect(page.getByRole('button', { name: 'Change Training Setup', exact: true })).toHaveCount(authority === 'Self-directed' ? 1 : 0);
 }
 
@@ -68,7 +80,7 @@ async function inviteFromClinician(page: Page, email: string, name: string, prot
   await page.getByPlaceholder('patient@example.com').fill(email);
   await page.locator('form select').nth(0).selectOption('Peak Performance');
   await page.locator('form select').nth(1).selectOption(protocol);
-  await page.getByPlaceholder('Unavailable').fill('3');
+  await page.getByPlaceholder('e.g. 3').fill('3');
   await page.getByRole('button', { name: 'Create Invitation' }).click();
   await expect(page.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
@@ -97,8 +109,8 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     const uid = await authenticatedUserId(patient);
     await expectNavigation(patient, false);
     await expectAuthority(patient, 'Self-directed', 'Lubar Theta/Beta Ratio Protocol');
-    await expect(patient.getByText('Goal:')).toHaveCount(0);
-    await expect(patient.getByText('Weekly Target:')).toHaveCount(0);
+    await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
+    await expect(patient.getByText('Weekly target', { exact: true })).toHaveCount(0);
     await expectTrainCatalogue(patient, defaults('theta-beta-ratio'));
     const { sessionId, garden } = await seedSelfDirectedHistory(uid);
     await reloadPatient(patient);
@@ -142,7 +154,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     expect(saved.allowedExperiences).toHaveLength(custom.length);
     await startPatientTrainingInDemoMode(patient, 'Signal Sort');
     // Session start honors the customized list: the Signal Sort game itself is running.
-    await expect(patient.getByText(/SMR Motor Stillness/)).toBeVisible();
+    await expect(patient.getByRole('meter', { name: 'Stillness' })).toBeVisible();
     await expect(patient.getByRole('button', { name: 'End Session & Save' })).toBeVisible();
     await reloadPatient(patient);
 
@@ -159,7 +171,8 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expectNavigation(patient, true);
     await expectAuthority(patient, 'Clinician-managed', 'Sterman SMR Stillness Protocol');
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
-    await expect(patient.getByText('Goal: Peak Performance')).toBeVisible();
+    await expect(profileFact(patient, 'Goal')).toContainText('Peak Performance');
+    await expect(profileFact(patient, 'Weekly target')).toContainText('3 sessions / week');
     await expectTrainCatalogue(patient, smr);
     await reloadPatient(patient);
     await expectNavigation(patient, true);
@@ -185,7 +198,8 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expectNavigation(patient, false);
     // Existing unlink contract: the last clinician assignment stays as the self-directed starting point.
     await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
-    await expect(patient.getByText('Goal:')).toHaveCount(0);
+    await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
+    await expect(patient.getByText('Weekly target', { exact: true })).toHaveCount(0);
     await expect(patient.getByText('Connect to Clinician')).toBeVisible();
     await expectTrainCatalogue(patient, smr);
     await expectHistory(patient, uid, sessionId);

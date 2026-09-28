@@ -603,7 +603,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
         <h1 style={{ fontSize: '22px' }}>Protocol unavailable</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
-          Your training settings can’t be used right now. Please ask your clinician to review your protocol.
+          Your training settings can’t be used right now. {resolveTrainingAuthority(client) === 'clinician' ? 'Please ask your clinician to review your protocol.' : 'Choose a protocol again in your training setup.'}
         </p>
         <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
       </div>

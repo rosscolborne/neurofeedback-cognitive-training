@@ -87,7 +87,7 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
         aria-describedby="training-setup-intro"
         style={{
           width: 'min(560px, 100%)', maxHeight: 'min(840px, calc(100dvh - 32px))', overflowY: 'auto',
-          borderRadius: '28px', background: 'var(--surface-patient-card)', border: '1px solid var(--border-subtle)',
+          borderRadius: '24px', background: 'var(--surface-patient-card)', border: '1px solid var(--border-subtle)',
           boxShadow: '0 24px 70px rgba(58, 49, 43, 0.2)',
         }}
       >
@@ -116,7 +116,7 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
           </p>
 
           <fieldset style={{ border: 0, margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <legend style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Protocol</legend>
+            <legend className="section-label" style={{ paddingLeft: 0 }}>Protocol</legend>
             {SELF_DIRECTED_PROTOCOL_CHOICES.map((option) => {
               const selected = option.protocol === protocol;
               return (
