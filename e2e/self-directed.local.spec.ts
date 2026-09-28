@@ -6,7 +6,8 @@ import {
   arriveAtClinicianDashboard, arriveAtPatientDashboard, authenticatedUserId, loginThroughUi, startPatientTrainingInDemoMode,
 } from './helpers/auth';
 import {
-  findPendingLifecycleInvitation, readPatientTrainingRecord, removePatientFields, seedLinkedPatient, seedSelfDirectedHistory,
+  findPendingLifecycleInvitation, readInvitationNoticeClinicians, readPatientRelationship, readPatientTrainingRecord,
+  removePatientFields, seedFutureLifecycleAppointment, seedLinkedPatient, seedPendingInvitation, seedSelfDirectedHistory,
 } from './helpers/localEmulator';
 
 const EXPERIENCE_NAMES: Record<string, string> = {
@@ -69,6 +70,16 @@ async function expectHistory(page: Page, uid: string, sessionId: string) {
   await expect(page.locator('.card-patient').filter({ hasText: 'breath weave' }).first()).toBeVisible();
 }
 
+/** Without an invitation link a self-directed patient has nothing to connect with, on Home or Profile. */
+async function expectNoClinicianConnection(page: Page) {
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Clinician invitation' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Accept Invitation' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Profile', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Connect to Clinician/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Disconnect from Clinician' })).toHaveCount(0);
+}
+
 async function reloadPatient(page: Page) {
   await page.reload();
   await arriveAtPatientDashboard(page);
@@ -112,6 +123,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
     await expect(patient.getByText('Weekly target', { exact: true })).toHaveCount(0);
     await expectTrainCatalogue(patient, defaults('theta-beta-ratio'));
+    await expectNoClinicianConnection(patient);
     const { sessionId, garden } = await seedSelfDirectedHistory(uid);
     await reloadPatient(patient);
     await expectNavigation(patient, false);
@@ -164,10 +176,16 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await arriveAtClinicianDashboard(clinician);
     await inviteFromClinician(clinician, email, name, 'smr-enhancement');
     const code = await findPendingLifecycleInvitation(clinicianAccount.uid, email);
-    await patient.getByRole('button', { name: 'Home', exact: true }).click();
+    // The pending invitation (not a link) makes Connect available; the patient types the code.
+    expect(await readInvitationNoticeClinicians(email)).toEqual([clinicianAccount.uid]);
+    await reloadPatient(patient);
+    await expect(patient.getByText('Self-directed protocol')).toBeVisible();
+    await expectNavigation(patient, false);
     await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
     await patient.getByLabel('Invitation code').fill(code);
     await patient.getByRole('button', { name: 'Accept Invitation' }).click();
+    await expect(patient.getByRole('region', { name: 'Clinician invitation' })).toHaveCount(0);
+    expect(await readInvitationNoticeClinicians(email)).toEqual([]);
     await expectNavigation(patient, true);
     await expectAuthority(patient, 'Clinician-managed', 'Sterman SMR Stillness Protocol');
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
@@ -200,7 +218,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
     await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
     await expect(patient.getByText('Weekly target', { exact: true })).toHaveCount(0);
-    await expect(patient.getByText('Connect to Clinician')).toBeVisible();
+    await expectNoClinicianConnection(patient);
     await expectTrainCatalogue(patient, smr);
     await expectHistory(patient, uid, sessionId);
     await patient.getByRole('button', { name: 'Home', exact: true }).click();
@@ -218,6 +236,185 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     });
   } finally {
     await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+  }
+});
+
+test('Connect appears only for a pending invitation, survives another clinician cancelling, and needs the code', async ({ browser, permissionErrorGuard }) => {
+  test.setTimeout(180_000);
+  const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
+  const { clinician: otherClinician } = await seedLinkedPatient({ clinicianId: null, clinicId: null });
+  const email = fixture.patient.email;
+  const patientContext = await browser.newContext();
+  const clinicianContext = await browser.newContext();
+  try {
+    // A. No pending invitation: nothing to connect with.
+    const patient = await patientContext.newPage();
+    await loginThroughUi(patient, fixture.patient);
+    await arriveAtPatientDashboard(patient);
+    await expectNoClinicianConnection(patient);
+
+    // An expired invitation is not a pending one.
+    await seedPendingInvitation(fixture.clinician.uid, email, fixture.name, { expiresInMs: -60_000 });
+    await reloadPatient(patient);
+    await expectNoClinicianConnection(patient);
+
+    // B. Two clinicians invite this email; a normal login offers Connect with manual code entry.
+    const codeA = await seedPendingInvitation(fixture.clinician.uid, email, fixture.name);
+    const codeB = await seedPendingInvitation(otherClinician.uid, email, fixture.name, { assignedProtocol: 'alpha-enhancement' });
+    expect(await readInvitationNoticeClinicians(email)).toEqual([fixture.clinician.uid, otherClinician.uid].sort());
+    await reloadPatient(patient);
+    await expectNavigation(patient, false);
+    const card = patient.getByRole('region', { name: 'Clinician invitation' });
+    await expect(card.getByRole('button', { name: 'Connect to Clinician' })).toBeVisible();
+    await expect(patient.getByLabel('Invitation code')).toHaveCount(0);
+
+    // Knowing an invitation exists is not enough: a code that is not this patient's is refused.
+    permissionErrorGuard.expectDenialsIn(patientContext);
+    await card.getByRole('button', { name: 'Connect to Clinician' }).click();
+    await patient.getByLabel('Invitation code').fill('ZZZZ-ZZZZ-ZZZZ');
+    await patient.getByRole('button', { name: 'Accept Invitation' }).click();
+    await expect(card.getByRole('alert')).toContainText('Invitation not found for this signed-in email');
+    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: null });
+
+    // Cancelling one clinician's invitation keeps the other's Connect path.
+    const clinician = await clinicianContext.newPage();
+    await loginThroughUi(clinician, fixture.clinician);
+    await arriveAtClinicianDashboard(clinician);
+    const pending = clinician.locator('.card-clinician').filter({ hasText: 'Pending invitations' });
+    await pending.getByRole('button', { name: 'Cancel' }).click();
+    await expect(pending.getByText(codeA, { exact: true })).toHaveCount(0);
+    expect(await readInvitationNoticeClinicians(email)).toEqual([otherClinician.uid]);
+    await reloadPatient(patient);
+    await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
+    await patient.getByLabel('Invitation code').fill(codeB);
+    await patient.getByRole('button', { name: 'Accept Invitation' }).click();
+    await expectNavigation(patient, true);
+    await expectAuthority(patient, 'Clinician-managed', 'Hardt Alpha Synchrony Protocol');
+    expect(await readInvitationNoticeClinicians(email)).toEqual([]);
+    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: otherClinician.uid, acceptedInvitationId: codeB });
+  } finally {
+    await Promise.allSettled([patientContext.close(), clinicianContext.close()]);
+  }
+});
+
+test('an invitation link opened while signed out pre-fills the same Connect flow after sign-in', async ({ browser }) => {
+  const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
+  const code = await seedPendingInvitation(fixture.clinician.uid, fixture.patient.email, fixture.name, { assignedProtocol: 'alpha-enhancement' });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    // C. Same flow as B, with the code filled in from the link.
+    await page.goto(`/#/connect/${code}`);
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByPlaceholder('name@example.com', { exact: true }).fill(fixture.patient.email);
+    await page.getByPlaceholder('Your password', { exact: true }).fill(fixture.patient.password);
+    await page.getByRole('button', { name: 'Log In', exact: true }).click();
+    await arriveAtPatientDashboard(page);
+    await expect(page.getByLabel('Invitation code')).toHaveValue(code);
+    await expectNavigation(page, false);
+    await expect(page.getByText('Self-directed protocol')).toBeVisible();
+    await page.getByRole('button', { name: 'Accept Invitation' }).click();
+    await expectNavigation(page, true);
+    await expectAuthority(page, 'Clinician-managed', 'Hardt Alpha Synchrony Protocol');
+    expect(await readInvitationNoticeClinicians(fixture.patient.email)).toEqual([]);
+    await reloadPatient(page);
+    await expectNavigation(page, true);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a linked patient disconnects after confirming, keeps history and the last assignment, and stays disconnected', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const smr = defaults('smr-enhancement');
+  const alpha = defaults('alpha-enhancement');
+  const fixture = await seedLinkedPatient({ condition: 'Peak Performance', assignedProtocol: 'smr-enhancement', allowedExperiences: smr });
+  const uid = fixture.patient.uid;
+  const { sessionId, garden } = await seedSelfDirectedHistory(uid);
+  await seedFutureLifecycleAppointment(fixture);
+  const patientContext = await browser.newContext();
+  const clinicianContext = await browser.newContext();
+  try {
+    const patient = await patientContext.newPage();
+    await loginThroughUi(patient, fixture.patient);
+    await arriveAtPatientDashboard(patient);
+    await expectNavigation(patient, true);
+    await expectAuthority(patient, 'Clinician-managed', 'Sterman SMR Stillness Protocol');
+
+    // The action sits with account settings on Profile and always asks first.
+    const account = patient.getByRole('heading', { name: 'Account', exact: true }).locator('..');
+    await expect(account.getByRole('button', { name: 'Disconnect from Clinician' })).toBeVisible();
+    await account.getByRole('button', { name: 'Disconnect from Clinician' }).click();
+    const confirm = patient.getByRole('alertdialog', { name: 'Disconnect from your clinician?' });
+    await expect(confirm).toContainText('Your connection with your clinician ends.');
+    await expect(confirm).toContainText('Your sessions, progress and journal stay in your account.');
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expectNavigation(patient, true);
+    expect(await readPatientRelationship(uid)).toMatchObject({ clinicianId: fixture.clinician.uid, appointmentStatuses: ['scheduled'] });
+
+    await patient.getByRole('button', { name: 'Disconnect from Clinician' }).click();
+    await confirm.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await expect(confirm).toHaveCount(0);
+    await expectNavigation(patient, false);
+    await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
+    await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
+    await expectNoClinicianConnection(patient);
+    await expectTrainCatalogue(patient, smr);
+    await expectHistory(patient, uid, sessionId);
+
+    // Nothing recreates the relationship on reload, and the clinician's access has ended.
+    await reloadPatient(patient);
+    await expectNavigation(patient, false);
+    await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
+    expect(await readPatientRelationship(uid)).toEqual({
+      clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null, appointmentStatuses: ['cancelled'],
+    });
+    expect(await readPatientTrainingRecord(uid)).toMatchObject({
+      assignedProtocol: 'smr-enhancement', allowedExperiences: smr, tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'],
+    });
+    const clinician = await clinicianContext.newPage();
+    await loginThroughUi(clinician, fixture.clinician);
+    await arriveAtClinicianDashboard(clinician);
+    await expect(clinician.getByRole('row').filter({ hasText: fixture.name })).toHaveCount(0);
+
+    // A self-directed save now works normally: no clinician authority is left to refuse it.
+    await patient.getByRole('button', { name: 'Home', exact: true }).click();
+    await patient.getByRole('button', { name: 'Change training setup', exact: true }).click();
+    const setup = patient.getByRole('dialog', { name: 'Training setup' });
+    await setup.getByRole('radio', { name: /Hardt Alpha Synchrony Protocol/ }).check();
+    await setup.getByRole('button', { name: 'Save setup' }).click();
+    await expect(setup).toHaveCount(0);
+    await reloadPatient(patient);
+    await expectAuthority(patient, 'Self-directed', 'Hardt Alpha Synchrony Protocol');
+    await expectTrainCatalogue(patient, alpha);
+    expect(await readPatientTrainingRecord(uid)).toMatchObject({ clinicianId: null, assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
+  } finally {
+    await Promise.allSettled([patientContext.close(), clinicianContext.close()]);
+  }
+});
+
+test('a clinician can end the relationship from the phone roster without deleting the patient', async ({ browser }) => {
+  const fixture = await seedLinkedPatient({ assignedProtocol: 'smr-enhancement', allowedExperiences: defaults('smr-enhancement') });
+  await seedSelfDirectedHistory(fixture.patient.uid);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  try {
+    const clinician = await context.newPage();
+    await loginThroughUi(clinician, fixture.clinician);
+    await arriveAtClinicianDashboard(clinician);
+    const remove = clinician.getByRole('button', { name: `Remove ${fixture.name}`, exact: true });
+    await expect(remove).toBeVisible();
+    clinician.once('dialog', (dialog) => { void dialog.accept(); });
+    await remove.click();
+    await expect(remove).toHaveCount(0);
+    // The roster listener drops the card on the local write; the server commit can land a moment later.
+    await expect.poll(async () => readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: null, clinicId: null });
+    // Only the relationship ends: the patient's profile and history remain.
+    expect(await readPatientTrainingRecord(fixture.patient.uid)).toMatchObject({
+      assignedProtocol: 'smr-enhancement', completedSessionsCount: 1, badges: ['garden-keeper'],
+    });
+  } finally {
+    await context.close();
   }
 });
 

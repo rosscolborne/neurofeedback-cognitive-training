@@ -20,7 +20,7 @@ vi.mock('firebase/auth', () => ({ signOut: vi.fn(), reauthenticateWithCredential
   EmailAuthProvider: { credential: (email: string, password: string) => ({ email, password }) } }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, ensureTidalGardenState: state.ensureGarden, preparePatientAccountDeletion: state.prepareDeletion } }));
+vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, ensureTidalGardenState: state.ensureGarden, preparePatientAccountDeletion: state.prepareDeletion, hasPendingInvitationNotice: async () => false } }));
 vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
 vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));

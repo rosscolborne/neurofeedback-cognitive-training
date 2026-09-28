@@ -528,8 +528,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
               <span className="detail-chip"><Settings2 size={12} aria-hidden="true" /> {getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? protocolDisplayName(resolvePatientProtocol(client))}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
-              <div style={{ color: 'var(--text-secondary)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '6px 8px', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
+              <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{client.completedSessionsCount ?? 0}</span> {(client.completedSessionsCount ?? 0) === 1 ? 'session' : 'sessions'}
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
@@ -541,6 +541,18 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 >
                   <Edit size={12} /> Edit
                 </button>
+                {onDeleteClient && (
+                  <button
+                    type="button"
+                    onClick={(e) => void handleDelete(client.id, e)}
+                    disabled={pendingActionId === client.id}
+                    className="btn btn-ghost"
+                    style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--status-alert)' }}
+                    aria-label={`Remove ${client.name}`}
+                  >
+                    {pendingActionId === client.id ? 'Removing…' : <><Trash2 size={12} aria-hidden="true" /> Remove</>}
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -104,26 +104,39 @@ export async function seedPersistenceRecords(fixture: LocalPatientFixture, marke
 
 /** Legacy pending email invitation deliberately coexists with the old link. */
 export async function seedPendingLifecycleInvitation(fixture: LocalPatientFixture): Promise<string> {
+  const code = await seedPendingInvitation(fixture.clinician.uid, fixture.patient.email, fixture.name);
+  await seedFutureLifecycleAppointment(fixture);
+  return code;
+}
+
+/** A pending invitation as storageEngine.createPatientInvitation writes it: invitation, claim and code-free notice. */
+export async function seedPendingInvitation(clinicianUid: string, email: string, patientName: string,
+  options: { assignedProtocol?: string; expiresInMs?: number } = {}): Promise<string> {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const code = 'LIFE-' + Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]).join('') + '-REEN';
   const now = Timestamp.now();
-  const expiresAt = Timestamp.fromMillis(Date.now() + 7 * 86_400_000);
-  const email = fixture.patient.email;
+  const expiresAt = Timestamp.fromMillis(Date.now() + (options.expiresInMs ?? 7 * 86_400_000));
   await Promise.all([
     adminDb.doc(`patientInvitations/${code}`).set({
-      id: code, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
-      clinicianName: 'Local Clinician', patientEmail: email, patientName: fixture.name,
-      condition: 'ADHD (Inattentive)', assignedProtocol: 'theta-beta-ratio',
+      id: code, clinicianId: clinicianUid, clinicId: clinicianUid,
+      clinicianName: 'Local Clinician', patientEmail: email, patientName,
+      condition: 'ADHD (Inattentive)', assignedProtocol: options.assignedProtocol ?? 'theta-beta-ratio',
       prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: email,
       schemaVersion: 1, createdAt: now, updatedAt: now, expiresAt,
     }),
-    adminDb.doc(`patientInvitationClaims/${fixture.clinician.uid}/emails/${email}`).set({
-      clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+    adminDb.doc(`patientInvitationClaims/${clinicianUid}/emails/${email}`).set({
+      clinicianId: clinicianUid, clinicId: clinicianUid,
       patientEmail: email, invitationId: code, status: 'pending', expiresAt, createdAt: now,
     }),
+    adminDb.doc(`patientInvitationNotices/${email}/clinicians/${clinicianUid}`).set({ expiresAt, updatedAt: now }),
   ]);
-  await seedFutureLifecycleAppointment(fixture);
   return code;
+}
+
+/** Which clinicians have a pending-invitation notice for this email. */
+export async function readInvitationNoticeClinicians(email: string): Promise<string[]> {
+  const notices = await adminDb.collection(`patientInvitationNotices/${email}/clinicians`).get();
+  return notices.docs.map((entry) => entry.id).sort();
 }
 
 export async function seedFutureLifecycleAppointment(fixture: LocalPatientFixture): Promise<void> {
@@ -240,4 +253,20 @@ export async function readPatientTrainingRecord(patientUid: string) {
 /** Recreate a legacy profile written before these fields existed. */
 export async function removePatientFields(patientUid: string, fields: string[]) {
   await adminDb.doc(`clients/${patientUid}`).update(Object.fromEntries(fields.map((field) => [field, FieldValue.delete()])));
+}
+
+/** The live relationship fields and the patient's appointment statuses, read with admin rights. */
+export async function readPatientRelationship(patientUid: string) {
+  const [client, appointments] = await Promise.all([
+    adminDb.doc(`clients/${patientUid}`).get(),
+    adminDb.collection('appointments').where('patientId', '==', patientUid).get(),
+  ]);
+  const data = client.data() ?? {};
+  return {
+    clinicianId: (data.clinicianId ?? null) as string | null,
+    clinicId: (data.clinicId ?? null) as string | null,
+    linkedClinicianCode: (data.linkedClinicianCode ?? null) as string | null,
+    acceptedInvitationId: (data.acceptedInvitationId ?? null) as string | null,
+    appointmentStatuses: appointments.docs.map((entry) => entry.data().status as string),
+  };
 }

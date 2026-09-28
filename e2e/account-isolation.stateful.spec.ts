@@ -182,7 +182,7 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             await expect(patientPage.getByRole('button', { name: 'Messages', exact: true })).toHaveCount(0);
 
             await patientPage.getByRole('button', { name: 'Profile', exact: true }).click();
-            await expect(patientPage.getByRole('button', { name: 'Connect to Clinician', exact: true })).toBeVisible();
+            await expect(patientPage.getByRole('button', { name: 'Connect to Clinician', exact: true })).toHaveCount(0);
             await expect(patientPage.getByText('Training setup', { exact: true }).locator('..')).toContainText('Self-directed');
             await expect(patientPage.getByText('Goal', { exact: true })).toHaveCount(0);
             await expect(patientPage.getByText('Protocol:', { exact: true }).locator('..')).toContainText('Assignment required');
