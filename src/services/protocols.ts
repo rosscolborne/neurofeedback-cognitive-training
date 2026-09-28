@@ -39,6 +39,12 @@ export const protocolDefinitions: readonly ProtocolDefinition[] = [
   { value: 'individualized-upper-alpha', label: 'Individualized Upper Alpha', defaultThreshold: 11 },
 ];
 
+/** Human-readable protocol name; unknown stored identifiers are title-cased rather than shown raw. */
+export function protocolDisplayName(protocol: ProtocolType | string): string {
+  return protocolDefinitions.find((definition) => definition.value === protocol)?.label
+    ?? protocol.split(/[-_\s]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(' ');
+}
+
 export function getDefaultProtocolThreshold(protocol: ProtocolType): number {
   return protocolDefinitions.find((definition) => definition.value === protocol)?.defaultThreshold ?? 1.85;
 }

@@ -49,7 +49,7 @@ describe('clinician detail optional metric surfaces', () => {
     expect(nodeText(view.root)).toContain('Delta 1');
     expect(labels(view)).toContain('Session Logs (1)');
     await act(async () => { view.root.findAllByType('button').find((button) => nodeText(button).includes('Session Logs (1)'))!.props.onClick(); });
-    expect(nodeText(view.root)).toContain('Open session-1');
+    expect(view.root.findAllByType('button').some((button) => button.props['aria-label'] === 'Open session-1')).toBe(true);
     await act(async () => { view.unmount(); });
   });
 

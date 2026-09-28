@@ -5,6 +5,7 @@ import { Share } from '@capacitor/share';
 import type { ClientProfile, ClinicBrandConfig, SessionRecord } from '../types';
 import type { ClinicalReportAnalytics } from '../components/clinician/clinicalReportAnalytics';
 import { buildClinicalReportAnalytics, formatMetric } from '../components/clinician/clinicalReportAnalytics';
+import { protocolDisplayName } from './protocols';
 
 export interface ReportTextContent {
   title: string;
@@ -105,7 +106,7 @@ export function buildPatientReportText(
       `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
       `Patient: ${client.name || 'Unavailable'}${client.isDemo ? ' (Sample record)' : ''}`,
       `Configured indication: ${client.condition || 'Unavailable'}`,
-      `Configured protocol: ${client.assignedProtocol?.replace(/-/g, ' ') || 'Unavailable'}`,
+      `Configured protocol: ${client.assignedProtocol ? protocolDisplayName(client.assignedProtocol) : 'Unavailable'}`,
       `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
       `Reporting interval: ${reportInterval(analytics)}`,
       `Reporting timezone: ${analytics.interval.timeZone}`,

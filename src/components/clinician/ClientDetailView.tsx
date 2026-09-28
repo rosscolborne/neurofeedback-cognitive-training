@@ -11,6 +11,7 @@ import { BrainMapUploadModal } from './BrainMapUploadModal';
 import { PatientAvatar } from './PatientAvatar';
 import { ClinicianSessionDetail } from './ClinicianSessionDetail';
 import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
+import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
 import {
   assessQeegRecord,
   deriveLearningScorePoints,
@@ -633,23 +634,24 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                     backgroundColor: 'var(--surface-patient-base)',
                   }}
                 >
-                  <div>
+                  <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '13px' }}>
-                      {s.date || 'Date unavailable'} • {s.experience ? s.experience.replace(/-/g, ' ').toUpperCase() : 'EXPERIENCE UNAVAILABLE'}
+                      {s.experience ? experienceDisplayName(s.experience) : 'Experience unavailable'}
+                      <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}> · {s.date || 'Date unavailable'}</span>
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} | In-Zone: {finiteMetric(s.timeInZonePercent, '%')} | Coherence: {finiteMetric(s.averageCoherence, '%')}
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Duration: {typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : 'Unavailable'} · In-zone: {finiteMetric(s.timeInZonePercent, '%')} · Coherence: {finiteMetric(s.averageCoherence, '%')}
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Protocol: {s.protocol ? s.protocol.replace(/-/g, ' ') : 'Not recorded'} · Mood: {s.moodRating == null ? 'Not recorded' : `${s.moodRating}/5`} · Reflection: {s.patientNotes ? 'Recorded' : 'Not recorded'}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Protocol: {s.protocol ? protocolDisplayName(s.protocol) : 'Not recorded'} · Mood: {s.moodRating == null ? 'Not recorded' : `${s.moodRating}/5`} · Reflection: {s.patientNotes ? 'Recorded' : 'Not recorded'}</div>
                     {s.clinicianNotes && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', fontStyle: 'italic' }}>
                         Clinician: {s.clinicianNotes}
                       </div>
                     )}
                   </div>
-                  <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }}>Open {s.id}</button>
-                  <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <FileText size={12} /> PDF
+                  <button type="button" onClick={() => { setOpenedSessions((current) => ({ ...current, [client.id]: [...new Set([...(current[client.id] || []), s.id])] })); setSelectedSession({ clientId: client.id, sessionId: s.id }); }} aria-label={`Open ${s.id}`} className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 14px' }}>Open</button>
+                  <button onClick={() => { void handleDownloadPDF(s); }} disabled={pdfExportDisabled} className="btn btn-ghost" style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <FileText size={13} /> PDF
                   </button>
                 </div>
                 {openedSessions[client.id]?.includes(s.id) && <div style={{ display: openedSession?.id === s.id ? 'block' : 'none' }}><ClinicianSessionDetail key={`${client.id}-${s.id}`} session={s} onSaved={handleFeedbackSaved} /></div>}

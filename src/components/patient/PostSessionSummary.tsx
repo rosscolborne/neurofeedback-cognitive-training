@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
+import { protocolDisplayName } from '../../services/protocols';
 import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
 
 interface PostSessionSummaryProps {
@@ -224,7 +225,7 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
           <span>Session Summary</span>
         </div>
         <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-          • Trained for {Math.round(session.durationSeconds / 60)} minutes using {session.protocol.replace(/-/g, ' ')} protocol.<br />
+          • Trained for {Math.round(session.durationSeconds / 60)} minutes using the {protocolDisplayName(session.protocol)} protocol.<br />
           • Spent {session.timeInZonePercent}% of active training time in the {session.isDemo ? 'simulated target zone' : 'target neural zone'}.<br />
           {session.isDemo ? (
             <>• Measured average band powers: unavailable in Training Demo.<br /></>

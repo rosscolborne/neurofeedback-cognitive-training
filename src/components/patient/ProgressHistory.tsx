@@ -11,6 +11,7 @@ import {
   ProgressPeriod,
 } from './patientMetrics';
 import { exportPatientSessionCsv } from './patientSessionCsv';
+import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
@@ -32,6 +33,10 @@ const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
 const formatBandPower = (value: unknown): string => (
   typeof value === 'number' && Number.isFinite(value) ? `${value}µV` : 'Unavailable'
 );
+
+const journalLabelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' };
+const journalFieldStyle: React.CSSProperties = { padding: '8px 10px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-patient-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: '13px' };
+const journalButtonStyle: React.CSSProperties = { padding: '7px 16px', fontSize: '13px' };
 
 export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
   const [period, setPeriod] = useState<ProgressPeriod>('month');
@@ -329,18 +334,18 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   setExpandedSession(isExpanded ? null : { clientId: client.id, sessionId: s.id });
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {displayDate}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      Duration: {durationSeconds == null ? 'Unavailable' : `${Math.round(durationSeconds / 60)} mins`}
-                      {' • '}{s.experience ? s.experience.replace(/-/g, ' ') : 'Experience unavailable'}
+                      {s.experience ? experienceDisplayName(s.experience) : 'Experience unavailable'}
+                      {' · '}{durationSeconds == null ? 'Duration unavailable' : `${Math.round(durationSeconds / 60)} min`}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
                       <span className="status-tag status-tag-active" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                        {s.protocol ? s.protocol.replace(/-/g, ' ') : 'Protocol unavailable'}
+                        {s.protocol ? protocolDisplayName(s.protocol) : 'Protocol unavailable'}
                       </span>
                       {s.isDemo && (
                         <span className="status-tag" style={{ fontSize: '11px', padding: '2px 8px' }}>
@@ -348,7 +353,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                         </span>
                       )}
                       {s.moodRating && (
-                        <span className="font-mono" style={{ fontSize: '11px', background: 'var(--surface-patient-recessed)', padding: '2px 6px', borderRadius: '4px' }}>
+                        <span className="status-tag" style={{ fontSize: '11px', padding: '2px 8px', background: 'var(--surface-patient-recessed)', color: 'var(--text-secondary)' }}>
                           State {s.moodRating}/5
                         </span>
                       )}
@@ -356,7 +361,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   </div>
 
                   {/* Circular Score Mini-Gauge */}
-                  <div style={{ position: 'relative', width: '54px', height: '54px' }}>
+                  <div style={{ position: 'relative', flexShrink: 0, width: '54px', height: '54px' }}>
                     <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
                       <path
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -393,30 +398,30 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
 
                 {/* Expandable Session Detail */}
                 {isExpanded && (
-                  <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {s.isDemo ? (
                       <div><strong>Average Band Powers:</strong> Not measured — synthetic Training Demo feedback</div>
                     ) : s.averageBands ? (
                       <div>
                         <strong>Average Band Powers:</strong> Theta {formatBandPower(s.averageBands.theta)}
-                        {' | '}Alpha {formatBandPower(s.averageBands.alpha)}
-                        {' | '}Beta {formatBandPower(s.averageBands.beta)}
+                        {' · '}Alpha {formatBandPower(s.averageBands.alpha)}
+                        {' · '}Beta {formatBandPower(s.averageBands.beta)}
                       </div>
                     ) : (
                       <div><strong>Average Band Powers:</strong> Unavailable</div>
                     )}
-                    {s.patientNotes && <div style={{ marginTop: '4px' }}><strong>Notes:</strong> {s.patientNotes}</div>}
-                    {s.clinicianNotes && <div style={{ marginTop: '4px', color: 'var(--brand-primary)' }}><strong>Clinician Feedback:</strong> {s.clinicianNotes}</div>}
-                    {journal?.clientId === client.id && journal.sessionId === s.id ? <div onClick={(event) => event.stopPropagation()} style={{ marginTop: '10px' }}>
-                      <label htmlFor={`journal-${s.id}`}>Personal journal</label>
-                      <textarea id={`journal-${s.id}`} value={journal.patientNotes} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, patientNotes: event.target.value } : current)} style={{ display: 'block', width: '100%', minHeight: '64px' }} />
-                      <label htmlFor={`mood-${s.id}`}>Mood</label>
-                      <select id={`mood-${s.id}`} value={journal.moodRating ?? ''} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, moodRating: event.target.value ? Number(event.target.value) as SessionRecord['moodRating'] : undefined } : current)}>
+                    {s.patientNotes && <div><strong>Notes:</strong> {s.patientNotes}</div>}
+                    {s.clinicianNotes && <div style={{ color: 'var(--brand-primary)' }}><strong>Clinician Feedback:</strong> {s.clinicianNotes}</div>}
+                    {journal?.clientId === client.id && journal.sessionId === s.id ? <div onClick={(event) => event.stopPropagation()} style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label htmlFor={`journal-${s.id}`} style={journalLabelStyle}>Personal journal</label>
+                      <textarea id={`journal-${s.id}`} value={journal.patientNotes} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, patientNotes: event.target.value } : current)} style={{ ...journalFieldStyle, display: 'block', width: '100%', minHeight: '72px', resize: 'vertical' }} />
+                      <label htmlFor={`mood-${s.id}`} style={journalLabelStyle}>Mood</label>
+                      <select id={`mood-${s.id}`} style={{ ...journalFieldStyle, alignSelf: 'flex-start', minWidth: '140px' }} value={journal.moodRating ?? ''} disabled={journal.pending} onChange={(event) => setJournal((current) => current ? { ...current, moodRating: event.target.value ? Number(event.target.value) as SessionRecord['moodRating'] : undefined } : current)}>
                         <option value="">Not recorded</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}/5</option>)}
                       </select>
-                      <div><button type="button" disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
-                      {journal.error && <p role="alert">Journal could not be saved. Your changes are still here; try again.</p>}
-                    </div> : <button type="button" onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}>Edit journal</button>}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}><button type="button" className="btn btn-primary" style={journalButtonStyle} disabled={journal.pending} onClick={saveJournal}>Save journal</button><button type="button" className="btn btn-ghost" style={journalButtonStyle} disabled={journal.pending} onClick={() => { setJournal(null); setJournalSwitchMessage(false); }}>Cancel</button></div>
+                      {journal.error && <p role="alert" style={{ color: 'var(--status-alert)' }}>Journal could not be saved. Your changes are still here; try again.</p>}
+                    </div> : <button type="button" className="btn btn-secondary" style={{ ...journalButtonStyle, alignSelf: 'flex-start', marginTop: '6px' }} onClick={(event) => { event.stopPropagation(); if (journal?.clientId === client.id) { setJournalSwitchMessage(true); return; } const key = `${client.id}:${s.id}`; setJournal({ clientId: client.id, sessionId: s.id, generation: ++journalGeneration.current, patientNotes: s.patientNotes || '', moodRating: s.moodRating, pending: journalPending.current.has(key), error: false }); setJournalSwitchMessage(false); }}>Edit journal</button>}
                   </div>
                 )}
               </div>

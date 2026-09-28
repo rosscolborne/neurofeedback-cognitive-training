@@ -16,7 +16,7 @@ const session = (id: string, patientId = 'a'): SessionRecord => ({ id, patientId
 const props = { brand: { name: 'Clinic' } as ClinicBrandConfig, onBack: vi.fn(), onUpdateClient: vi.fn(), onSendMessage: vi.fn() };
 const text = (r: ReactTestRenderer) => JSON.stringify(r.toJSON());
 const click = async (r: ReactTestRenderer, label: string) => {
-  const button = r.root.findAllByType('button').find((b) => b.children.filter((child): child is string => typeof child === 'string').join('').includes(label));
+  const button = r.root.findAllByType('button').find((b) => b.props['aria-label']?.includes(label) || b.children.filter((child): child is string => typeof child === 'string').join('').includes(label));
   if (!button) throw new Error(`Missing ${label}`);
   await act(async () => { await button.props.onClick(); });
 };
