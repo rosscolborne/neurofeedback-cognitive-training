@@ -57,7 +57,7 @@ export function buildPracticeReportText(
       `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
       `Reporting interval: ${reportInterval(analytics)}`,
       `Reporting timezone: ${analytics.interval.timeZone}`,
-      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
+      'Source: stored session records (time, duration, in-zone measurement, device details); sample records are labeled.',
     ],
     metrics: [
       `Selected cohort: ${analytics.clients.length} patient profiles`,
@@ -66,28 +66,29 @@ export function buildPracticeReportText(
       `Sample workspace records: ${analytics.sampleSessionCount} (fictional; excluded from persisted-session aggregates)`,
       `Total recorded duration: ${formatMetric(analytics.totalDurationMinutes, ' minutes')}`,
       `Average session duration: ${formatMetric(analytics.averageDurationMinutes.value, ' minutes')} (${coverage(analytics.averageDurationMinutes.recordedSessions, analytics.averageDurationMinutes.eligibleSessions)})`,
-      `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'schedule unavailable' : `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions`})`,
+      `Interval adherence: ${formatMetric(analytics.adherencePercent, '%')} (${analytics.expectedSessions == null ? 'no weekly target' : `${analytics.totalSessions} of ${analytics.expectedSessions} expected sessions`})`,
       `Average in-zone time: ${formatMetric(analytics.averageInZonePercent.value, '%')} (${coverage(analytics.averageInZonePercent.recordedSessions, analytics.averageInZonePercent.eligibleSessions)})`,
       `Device snapshot coverage: ${formatMetric(analytics.deviceCoverage.value, '%')} (${coverage(analytics.deviceCoverage.recordedSessions, analytics.deviceCoverage.eligibleSessions)})`,
       `Recorded device models: ${deviceModels}`,
       trend,
     ],
     notes: [
-      `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      `Adherence formula: recorded sessions, including Training Demo sessions, divided by expected sessions (weekly target × ${analytics.interval.dayCount}/7 days), capped at 100%.`,
       'Intentional training Demo sessions are included in aggregates and labeled as synthetic. Fictional sample-workspace records are counted separately and excluded.',
       'In-zone values and their change are descriptive session measurements, not diagnoses, benchmark comparisons, treatment outcomes, or statistical significance claims.',
       'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
       'Unavailable values are not replaced with cohort defaults or zero.',
     ],
-    tableHeader: 'Patient | Sessions | Demo | Sample | Duration | Adherence | In-zone | Device',
+    // Same column priority as the on-screen report table.
+    tableHeader: 'Patient | Sessions | Adherence | In-zone | Duration | Demo | Sample | Device',
     tableRows: analytics.patientRows.map(row => [
       `${row.client.name}${row.client.isDemo ? ' (Sample record)' : ''}`,
       row.sessionCount,
-      row.demoSessionCount,
-      row.sampleSessionCount,
-      formatMetric(row.durationMinutes, ' min'),
       formatMetric(row.adherencePercent, '%'),
       `${formatMetric(row.averageInZonePercent, '%')} (${row.inZoneRecordedSessions}/${row.sessionCount})`,
+      formatMetric(row.durationMinutes, ' min'),
+      row.demoSessionCount,
+      row.sampleSessionCount,
       row.sessionCount === 0 ? 'Unavailable' : `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}% (${row.deviceRecordedSessions}/${row.sessionCount})`,
     ].join(' | ')),
   };
@@ -144,7 +145,7 @@ export function buildPatientReportText(
         `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from persisted-session aggregates)`,
         `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
         scope === 'interval'
-          ? `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`
+          ? `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'no weekly target' : `${row.sessionCount} of ${row.expectedSessions} expected sessions`})`
           : `Adherence: Not calculated for an all-sessions export (${prescription})`,
         `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
         `Device snapshot coverage: ${deviceCoverage}`,
@@ -159,12 +160,12 @@ export function buildPatientReportText(
       `Generated: ${generatedLabel(generatedAt, timeZone)}`,
       ...scopeMetadata,
       `Reporting timezone: ${timeZone}`,
-      'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
+      'Source: stored session records (time, duration, in-zone measurement, device details); sample records are labeled.',
     ],
     metrics,
     notes: [
       scope === 'interval'
-        ? `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`
+        ? `Adherence formula: recorded sessions, including Training Demo sessions, divided by expected sessions (weekly target × ${analytics.interval.dayCount}/7 days), capped at 100%.`
         : 'Adherence is calculated in interval reports from the Reports view, where the scheduling window is defined.',
       'Intentional training Demo sessions are included and labeled as synthetic. Fictional sample-workspace records are separate and excluded.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',

@@ -22,7 +22,7 @@ describe('deterministic PDF report text', () => {
     expect(content.metadata).toContain('Reporting interval: Aug 21, 2026 – Sep 19, 2026');
     expect(content.metrics).toContain('Average in-zone time: Unavailable (0/0 eligible sessions recorded)');
     expect(content.metrics).toContain('Device snapshot coverage: Unavailable (0/0 eligible sessions recorded)');
-    expect(content.tableRows).toEqual(['Patient One | 0 | 0 | 0 | Unavailable | 0% | Unavailable (0/0) | Unavailable']);
+    expect(content.tableRows).toEqual(['Patient One | 0 | 0% | Unavailable (0/0) | Unavailable | 0 | 0 | Unavailable']);
     expect([...content.metadata, ...content.metrics, ...content.notes].join(' ')).not.toMatch(/significant|recommend continuing|Muse S Athena|Brain Capacity/i);
   });
 
@@ -30,7 +30,7 @@ describe('deterministic PDF report text', () => {
     const analytics = buildClinicalReportAnalytics([client], [session()], interval);
     const content = buildPatientReportText(client, analytics, brand, generatedAt);
     expect(content.metadata).toContain('Reporting timezone: UTC');
-    expect(content.metadata).toContain('Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.');
+    expect(content.metadata).toContain('Source: stored session records (time, duration, in-zone measurement, device details); sample records are labeled.');
     expect(content.metrics).toContain('Average in-zone time: 0% (1/1 eligible sessions recorded)');
     expect(content.tableRows).toEqual(['Sep 19, 2026, 10:00 AM | Non-Demo | 10 min | 0% | Muse 2']);
   });

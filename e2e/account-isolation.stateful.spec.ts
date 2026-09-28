@@ -223,7 +223,7 @@ test.describe('fresh-account truthfulness and cross-account isolation (stateful)
             await expect(reportMetric(clinicianPage, 'Patients in cohort')).toContainText('0');
             await expect(reportMetric(clinicianPage, 'Sessions recorded')).toContainText('0');
             await expect(reportMetric(clinicianPage, 'Average in-zone time')).toContainText('Unavailable');
-            await expect(reportCoverage(clinicianPage, 'Training Demo sessions')).toContainText('0');
+            await expect(reportCoverage(clinicianPage, 'Demo sessions')).toContainText('0');
             await expect(reportCoverage(clinicianPage, 'Sample records')).toContainText('0');
             await expect(reportCoverage(clinicianPage, 'Device snapshots')).toContainText('Unavailable');
             await expect(reportCoverage(clinicianPage, 'Device models')).toContainText('Not recorded');

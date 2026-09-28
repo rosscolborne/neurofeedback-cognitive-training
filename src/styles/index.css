@@ -1161,10 +1161,41 @@ input, select, textarea, button {
   transform: translate(-50%, -50%);
 }
 
+/* Many sessions: smaller markers so neighbours don't merge on phones. */
+.trend-chart.is-dense .trend-marker {
+  width: 5px;
+  height: 5px;
+  border-width: 1px;
+}
+
+/* Training Demo values are simulated: hollow markers keep them identifiable in the trend. */
+.trend-marker.is-demo {
+  width: 6px;
+  height: 6px;
+  border: 2px solid var(--brand-primary);
+  background: #FFFFFF;
+}
+
+.trend-legend-demo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 6px 0 38px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.trend-legend-demo .trend-marker {
+  position: static;
+  display: inline-block;
+  transform: none;
+}
+
 .trend-foot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
   margin: 8px 6px 0 38px;
   color: var(--text-secondary);
   font-size: 12px;

@@ -37,13 +37,14 @@ function StatTile({ label, value, detail, icon }: { label: string; value: string
  * Per-session in-zone values in report order, with each half's average drawn over its half.
  * Lines scale with the container; labels and markers are HTML so text stays readable at any width.
  */
-function InZoneTrendChart({ values, firstAverage, recentAverage }: { values: Array<{ value: number; label: string }>; firstAverage: number; recentAverage: number }) {
+function InZoneTrendChart({ values, firstAverage, recentAverage }: { values: Array<{ value: number; label: string; demo: boolean }>; firstAverage: number; recentAverage: number }) {
+  const hasDemo = values.some((point) => point.demo);
   const x = (index: number) => (values.length === 1 ? 50 : (index / (values.length - 1)) * 100);
   const y = (percent: number) => 100 - percent;
   const half = Math.floor(values.length / 2);
   const line = values.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(2)},${y(point.value).toFixed(2)}`).join(' ');
   return (
-    <div className="trend-chart" role="img" aria-label={`In-zone time for ${values.length} sessions: first-half average ${firstAverage}%, recent-half average ${recentAverage}%`}>
+    <div className={`trend-chart${values.length > 30 ? ' is-dense' : ''}`} role="img" aria-label={`In-zone time for ${values.length} sessions: first-half average ${firstAverage}%, recent-half average ${recentAverage}%`}>
       <div className="trend-plot">
         {[100, 50, 0].map((tick) => <span key={tick} className="trend-tick" style={{ top: `${y(tick)}%` }}>{tick}%</span>)}
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -58,7 +59,7 @@ function InZoneTrendChart({ values, firstAverage, recentAverage }: { values: Arr
           <path d={line} fill="none" stroke="var(--brand-primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
         {values.length <= 60 && values.map((point, index) => (
-          <span key={index} className="trend-marker" style={{ left: `${x(index)}%`, top: `${y(point.value)}%` }} title={`${point.label}: ${point.value}% in zone`} />
+          <span key={index} className={`trend-marker${point.demo ? ' is-demo' : ''}`} style={{ left: `${x(index)}%`, top: `${y(point.value)}%` }} title={`${point.label}: ${point.value}% in zone${point.demo ? ' (Demo, simulated)' : ''}`} />
         ))}
       </div>
       {half > 0 && (
@@ -67,6 +68,7 @@ function InZoneTrendChart({ values, firstAverage, recentAverage }: { values: Arr
           <span>Recent half · avg {recentAverage}%</span>
         </div>
       )}
+      {hasDemo && values.length <= 60 && <div className="trend-legend-demo"><span className="trend-marker is-demo" aria-hidden="true" /> Demo session (simulated)</div>}
     </div>
   );
 }
@@ -135,6 +137,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
     .filter((session) => typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100)
     .map((session) => ({
       value: session.timeInZonePercent,
+      demo: session.isDemo === true,
       label: typeof session.timestamp === 'number' && Number.isFinite(session.timestamp)
         ? new Date(session.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: interval.timeZone })
         : 'Session',
@@ -179,7 +182,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
             <ul>
               <li>Source: authenticated session repository fields.</li>
               <li>Intentional training Demo sessions remain included and are labeled by provenance; fictional sample-workspace records are counted separately and excluded.</li>
-              <li>Adherence: persisted interval sessions ÷ scheduled sessions (weekly prescription × {interval.dayCount}/7), capped at 100%.</li>
+              <li>Adherence: recorded sessions ÷ expected sessions, capped at 100%. Expected sessions come from each patient’s weekly target × {interval.dayCount}/7 days, so they grow with the selected window.</li>
               <li>Unavailable values are not replaced with defaults or zero.</li>
             </ul>
           </details>
@@ -197,8 +200,8 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
 
       <div className="report-stats">
         <StatTile label="Sessions recorded" value={available ? `${analytics.totalSessions}` : 'Unavailable'} detail={available ? `${metric(analytics.averageDurationMinutes.value, ' min')} average · ${analytics.averageDurationMinutes.recordedSessions}/${analytics.averageDurationMinutes.eligibleSessions} durations recorded` : 'Unavailable'} icon={<Activity size={16} aria-hidden="true" />} />
-        <StatTile label="Adherence" value={metric(analytics.adherencePercent, '%')} detail={available && analytics.expectedSessions != null ? `${analytics.totalSessions} of ${analytics.expectedSessions} scheduled sessions` : 'Schedule unavailable'} icon={<CheckCircle2 size={16} aria-hidden="true" />} />
-        <StatTile label="Average in-zone time" value={metric(analytics.averageInZonePercent.value, '%')} detail={available ? `${analytics.averageInZonePercent.recordedSessions}/${analytics.averageInZonePercent.eligibleSessions} sessions measured` : 'Coverage unavailable'} icon={<Target size={16} aria-hidden="true" />} />
+        <StatTile label="Adherence" value={metric(analytics.adherencePercent, '%')} detail={available && analytics.expectedSessions != null ? `${analytics.totalSessions} of ${analytics.expectedSessions} expected sessions` : 'Needs a weekly target for every patient'} icon={<CheckCircle2 size={16} aria-hidden="true" />} />
+        <StatTile label="Average in-zone time" value={metric(analytics.averageInZonePercent.value, '%')} detail={available ? `${analytics.averageInZonePercent.recordedSessions}/${analytics.averageInZonePercent.eligibleSessions} sessions measured${analytics.demoSessionCount > 0 ? ` · includes ${analytics.demoSessionCount} Demo` : ''}` : 'Coverage unavailable'} icon={<Target size={16} aria-hidden="true" />} />
         <StatTile label="Patients in cohort" value={available ? `${analytics.clients.length}` : 'Unavailable'} detail={filterCohort === 'real' ? 'Enrolled patients' : filterCohort === 'demo' ? 'Sample records only' : 'Enrolled and sample'} icon={<Users size={16} aria-hidden="true" />} />
       </div>
 
@@ -213,10 +216,10 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
               <ArrowRight size={18} aria-hidden="true" color="var(--text-tertiary)" />
               <div><div className="trend-label">Recent half</div><div className="trend-value">{analytics.timeInZoneTrend.recentAverage}%</div></div>
               <div className="trend-change">
-                <div className="trend-label">Change</div>
+                <div className="trend-label">Change (% points)</div>
                 <div className="trend-value" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {analytics.timeInZoneTrend.change > 0 ? <TrendingUp size={18} aria-hidden="true" /> : analytics.timeInZoneTrend.change < 0 ? <TrendingDown size={18} aria-hidden="true" /> : <Minus size={18} aria-hidden="true" />}
-                  {analytics.timeInZoneTrend.change > 0 ? '+' : ''}{analytics.timeInZoneTrend.change} pts
+                  {analytics.timeInZoneTrend.change > 0 ? '+' : ''}{analytics.timeInZoneTrend.change}
                 </div>
               </div>
               <div><div className="trend-label">Sessions</div><div className="trend-value">{analytics.timeInZoneTrend.recordedSessions}</div></div>
@@ -231,9 +234,9 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
 
       {available && (
         <div className="card-clinician report-coverage" aria-label="Data coverage">
-          <div><span className="report-coverage-label">Training Demo sessions</span><strong>{analytics.demoSessionCount}</strong><span>Included, labeled synthetic</span></div>
-          <div><span className="report-coverage-label">Sample records</span><strong>{analytics.sampleSessionCount}</strong><span>Fictional, excluded</span></div>
-          <div><span className="report-coverage-label">Device snapshots</span><strong>{metric(analytics.deviceCoverage.value, '%')}</strong><span>{analytics.deviceCoverage.recordedSessions}/{analytics.deviceCoverage.eligibleSessions} sessions</span></div>
+          <div><span className="report-coverage-label">Demo sessions</span><strong>{analytics.demoSessionCount}</strong><span>Simulated, included in metrics</span></div>
+          <div><span className="report-coverage-label">Sample records</span><strong>{analytics.sampleSessionCount}</strong><span>Fictional, excluded from metrics</span></div>
+          <div><span className="report-coverage-label">Device snapshots</span><strong>{metric(analytics.deviceCoverage.value, '%')}</strong><span>{analytics.deviceCoverage.recordedSessions}/{analytics.deviceCoverage.eligibleSessions} sessions with device details</span></div>
           <div><span className="report-coverage-label">Device models</span><strong style={{ fontSize: '13px' }}>{analytics.deviceModels.length ? analytics.deviceModels.map(item => `${item.model} (${item.sessions})`).join(', ') : 'Not recorded'}</strong></div>
         </div>
       )}
@@ -242,19 +245,19 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px 16px' }}>
           <h2 style={{ fontSize: '15px', margin: 0 }}>Patient interval activity</h2><span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{intervalText}</span>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="scroll-x">
           <table className="report-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Sessions', 'Training Demo', 'Sample', 'Duration', 'Adherence', 'In zone', 'Device', ''].map((label, index) => <th key={label || index} scope="col" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{label || <span className="visually-hidden">Export</span>}</th>)}</tr></thead>
+            <thead><tr style={{ background: 'var(--surface-clinician-sidebar)' }}>{['Patient', 'Sessions', 'Adherence', 'In zone', 'Duration', 'Demo', 'Sample', 'Device', ''].map((label, index) => <th key={label || index} scope="col" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{label || <span className="visually-hidden">Export</span>}</th>)}</tr></thead>
             <tbody>
               {analytics.patientRows.map(row => (
                 <tr key={row.client.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '12px 14px', minWidth: '170px' }}><button className="btn btn-ghost" disabled={!onSelectClient} onClick={() => onSelectClient?.(row.client)} style={{ padding: 0, fontWeight: 600, justifyContent: 'flex-start', textAlign: 'left', minHeight: 0 }}>{row.client.name}</button><div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{row.client.isDemo ? 'Sample record' : getClinicalProtocolTemplate(resolvePatientProtocol(row.client))?.name ?? 'Protocol unavailable'}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sessionCount : 'Unavailable'}</td>
+                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} of ${row.expectedSessions} expected` : ''}</div></td>
+                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>
+                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.demoSessionCount : 'Unavailable'}</td>
                   <td style={{ padding: '12px 14px' }}>{available ? row.sampleSessionCount : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.durationMinutes, ' min') : 'Unavailable'}</td>
-                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.adherencePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available && row.expectedSessions != null ? `${row.sessionCount} / ${row.expectedSessions} scheduled` : ''}</div></td>
-                  <td style={{ padding: '12px 14px' }}>{available ? formatMetric(row.averageInZonePercent, '%') : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.inZoneRecordedSessions}/${row.sessionCount} recorded` : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}>{available && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'}<div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{available ? `${row.deviceRecordedSessions}/${row.sessionCount} sessions` : ''}</div></td>
                   <td style={{ padding: '12px 14px' }}><button className="btn btn-ghost" disabled={viewModel.exportDisabled} onClick={() => void exportReport(row.client)}><FileText size={13} /> PDF</button></td>
                 </tr>
