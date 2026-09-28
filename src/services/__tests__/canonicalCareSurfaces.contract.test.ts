@@ -21,12 +21,13 @@ describe('canonical messaging and appointment surface wiring', () => {
     expect(clinicianShellSource).not.toContain('appointments={appointments}');
   });
 
-  it('exposes linked-patient messaging and appointments with honest unlinked guidance', () => {
+  it('exposes linked-patient messaging and appointments only while a clinician relationship is active', () => {
     expect(patientShellSource).toContain('<PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread');
     expect(patientShellSource).toContain('notificationError={messageUnread.error}');
     expect(patientShellSource).toContain('<PatientAppointmentsView />');
-    expect(patientShellSource).toContain('<UnlinkedCareFeature feature="messages" />');
-    expect(patientShellSource).toContain('<UnlinkedCareFeature feature="appointments" />');
-    expect(patientShellSource).toContain('Connect your account with a clinician before using');
+    // WB-102: unlinked patients get no dead-end Messages/Visits destinations.
+    expect(patientShellSource).toContain('isPatientTabAvailable(requestedTab, trainingAuthority)');
+    expect(patientShellSource).toContain('.filter(tab => isPatientTabAvailable(tab.id, trainingAuthority))');
+    expect(patientShellSource).not.toContain('UnlinkedCareFeature');
   });
 });

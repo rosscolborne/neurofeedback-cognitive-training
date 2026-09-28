@@ -10,6 +10,7 @@ import {
 } from '../../services/clinicalProtocolTemplates';
 import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
 import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
+import { resolveTrainingAuthority } from '../../services/patientTrainingAuthority';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -55,7 +56,9 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
     : undefined;
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
   const runtime = resolveProtocolRuntime(client);
-  const clinicianNotes = getClinicianAuthoredNotes(client, protocol);
+  const isSelfDirected = resolveTrainingAuthority(client) === 'self-directed';
+  // Without a clinician there are no clinician notes to show.
+  const clinicianNotes = isSelfDirected ? null : getClinicianAuthoredNotes(client, protocol);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -113,7 +116,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
         >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--brand-primary)', fontSize: '12px', fontWeight: 700 }}>
-              <Brain size={16} /> Your assigned protocol
+              <Brain size={16} /> {isSelfDirected ? 'Your self-directed protocol' : 'Your assigned protocol'}
             </div>
             <h2 id="protocol-details-title" className="font-display" style={{ margin: '5px 0 0', fontSize: '25px', lineHeight: 1.15 }}>
               Protocol details
@@ -147,7 +150,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
             </div>
           ) : (
             <div role="alert" style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '13px', lineHeight: 1.5 }}>
-              <strong>Training unavailable.</strong> This protocol can’t run as configured. Please contact your clinician.
+              <strong>Training unavailable.</strong> This protocol can’t run as configured. {isSelfDirected ? 'Choose a protocol again in your training setup.' : 'Please contact your clinician.'}
             </div>
           )}
 

@@ -16,6 +16,7 @@ import {
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
 import { getTidalGardenSessionXp } from '../../services/dataMappers';
+import { resolveTrainingAuthority } from '../../services/patientTrainingAuthority';
 import { describeActiveReward, describeBrainFlowScore } from './trainingTelemetry';
 import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
 import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
@@ -284,7 +285,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       return;
     }
     if (!runtimeConfig || !adaptiveEngine) {
-      setSaveError('A valid clinician-assigned protocol is required before this session can be saved.');
+      setSaveError(`A valid ${resolveTrainingAuthority(client) === 'clinician' ? 'clinician-assigned' : 'training'} protocol is required before this session can be saved.`);
       return;
     }
 
@@ -915,7 +916,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           )}
           {selectedExperience === 'tidal-garden' && !client.tidalGardenState && (
             <div role="status" style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', padding: '24px', textAlign: 'center' }}>
-              Garden progress is unavailable for this account. Return to the dashboard and ask your clinician to review the training assignment.
+              Garden progress is unavailable for this account. Return to the dashboard and {resolveTrainingAuthority(client) === 'clinician' ? 'ask your clinician to review the training assignment' : 'try opening Tidal Garden again'}.
             </div>
           )}
           {selectedExperience === 'breath-weave' && (

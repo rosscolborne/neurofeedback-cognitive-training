@@ -9,6 +9,7 @@ import { OnboardingFlow } from './OnboardingFlow';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
+import { SelfDirectedSetupModal } from './SelfDirectedSetupModal';
 import { EducationHub } from './EducationHub';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { PatientMessagingView } from './PatientMessagingView';
@@ -16,13 +17,21 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 import { FactGrid, type Fact } from '../ui/FactGrid';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
 import { clearPendingInvitation } from '../../services/pendingInvitation';
+import {
+  buildSelfDirectedTrainingSetup,
+  ClinicianManagedTrainingError,
+  isPatientTabAvailable,
+  resolveTrainingAuthority,
+  TRAINING_AUTHORITY_LABEL,
+  type SelfDirectedTrainingSetup,
+} from '../../services/patientTrainingAuthority';
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import {
   getClinicalProtocolTemplate,
@@ -66,7 +75,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationAccepted,
   onInvitationDismissed,
 }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
   const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
@@ -103,6 +112,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [showProtocolDetails, setShowProtocolDetails] = useState(false);
+  const [showTrainingSetup, setShowTrainingSetup] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -129,7 +139,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       ? [{ label: 'Alpha peak', value: `${measuredAlphaPeakHz.toFixed(1)} Hz` }] : []),
     ...(imprintState.expiresAt != null ? [{ label: 'Expires', value: <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString(undefined, SHORT_DATE)}</time> }] : []),
   ];
-  const isClinicianLinked = !!(client.clinicianId || client.linkedClinicianCode);
+  const trainingAuthority = resolveTrainingAuthority(client);
+  const isClinicianLinked = trainingAuthority === 'clinician';
+  // Clinician-dependent destinations follow the live relationship; a hidden tab falls back to Home.
+  const activeTab = isPatientTabAvailable(requestedTab, trainingAuthority) ? requestedTab : 'home';
   // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
   const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
     && client.acceptedInvitationId.toUpperCase() === initialInvitationCode.toUpperCase();
@@ -159,6 +172,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       setLinkError(error instanceof Error ? error.message : 'Could not accept this invitation.');
     } finally {
       setIsLinking(false);
+    }
+  };
+
+  const handleSaveTrainingSetup = async (setup: SelfDirectedTrainingSetup) => {
+    try {
+      onClientPersistedElsewhere(await storageEngine.saveSelfDirectedTrainingSetup(client.id, setup));
+      setShowTrainingSetup(false);
+    } catch (error) {
+      // A clinician linked this account elsewhere: show their plan and explain why nothing was saved.
+      if (error instanceof ClinicianManagedTrainingError) onClientPersistedElsewhere(error.current);
+      throw error;
     }
   };
 
@@ -392,16 +416,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         client={client}
         onFinish={async updated => {
           const nextProtocol = updated.assignedProtocol;
-          const template = !isClinicianLinked && nextProtocol
-            ? getClinicalProtocolTemplate(nextProtocol) : undefined;
-          if (!isClinicianLinked && nextProtocol && !template) {
-            throw new Error('The selected clinical protocol is unavailable');
+          if (!isClinicianLinked && nextProtocol) {
+            await handleSaveTrainingSetup(buildSelfDirectedTrainingSetup(nextProtocol));
+          } else {
+            await onUpdateClient({ ...client, ...updated });
           }
-          await onUpdateClient({
-            ...client, ...updated,
-            allowedExperiences: template ? [...template.recommendedExperiences] : client.allowedExperiences,
-            customProtocolConfig: template ? undefined : client.customProtocolConfig,
-          });
           setShowOnboarding(false);
         }}
       />
@@ -479,6 +498,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             onStartSession={handleStartSession}
             onNavigateTab={setActiveTab}
             onOpenProtocolDetails={() => setShowProtocolDetails(true)}
+            onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
           />
         )}
 
@@ -538,13 +558,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
-        {activeTab === 'messages' && (isClinicianLinked
-          ? <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
-          : <UnlinkedCareFeature feature="messages" />)}
+        {activeTab === 'messages' && (
+          <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
+        )}
 
-        {activeTab === 'appointments' && (isClinicianLinked
-          ? <PatientAppointmentsView />
-          : <UnlinkedCareFeature feature="appointments" />)}
+        {activeTab === 'appointments' && <PatientAppointmentsView />}
 
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
@@ -661,9 +679,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <FactGrid
                 style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}
                 facts={[
-                  { label: 'Goal', value: client.condition || 'Unavailable' },
+                  // Goal and weekly target are care-team fields; a self-directed patient without them is not missing anything.
+                  ...(isClinicianLinked || client.condition ? [{ label: 'Goal', value: client.condition || 'Unavailable' }] : []),
                   { label: 'Protocol', value: protocolAlias ? `${protocolAlias} · ${protocolName}` : protocolName },
-                  { label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' },
+                  { label: 'Training setup', value: TRAINING_AUTHORITY_LABEL[trainingAuthority] },
+                  ...(isClinicianLinked || client.prescribedSessionsPerWeek != null
+                    ? [{ label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' }] : []),
                   { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
                 ]}
               />
@@ -688,6 +709,16 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <div>
               <h2 className="section-label">Training</h2>
               <div className="list-group">
+                {!isClinicianLinked && (
+                  <button type="button" className="list-row" onClick={() => setShowTrainingSetup(true)} aria-label="Change Training Setup">
+                    <SlidersHorizontal size={18} className="list-row-icon" aria-hidden="true" />
+                    <span className="list-row-label">
+                      Change Training Setup
+                      <span className="list-row-hint">Protocol and experiences</span>
+                    </span>
+                    <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
+                  </button>
+                )}
                 <button type="button" className="list-row" onClick={() => setShowProtocolDetails(true)} aria-label="View Protocol Details">
                   <ClipboardList size={18} className="list-row-icon" aria-hidden="true" />
                   <span className="list-row-label">Protocol Details</span>
@@ -745,6 +776,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         <ProtocolDetailsModal client={client} onClose={() => setShowProtocolDetails(false)} />
       )}
 
+      {showTrainingSetup && (
+        <SelfDirectedSetupModal client={client} onSave={handleSaveTrainingSetup} onClose={() => setShowTrainingSetup(false)} />
+      )}
+
       {/* Patient Mobile Bottom Tab Bar */}
       <nav
         className="patient-bottom-nav"
@@ -767,7 +802,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           { id: 'messages', label: 'Messages', icon: MessageSquare },
           { id: 'appointments', label: 'Visits', icon: CalendarDays },
           { id: 'profile', label: 'Profile', icon: User },
-        ].map(tab => {
+        ].filter(tab => isPatientTabAvailable(tab.id, trainingAuthority)).map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
@@ -805,12 +840,3 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </div>
   );
 };
-
-const UnlinkedCareFeature: React.FC<{ feature: 'messages' | 'appointments' }> = ({ feature }) => (
-  <section className="card-patient" role="status" style={{ padding: '28px 22px', textAlign: 'center' }}>
-    <h1 style={{ margin: 0, fontSize: '22px', textTransform: 'capitalize' }}>{feature}</h1>
-    <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.5 }}>
-      Connect your account with a clinician before using {feature}. You can enter an invitation code from Home or Profile.
-    </p>
-  </section>
-);

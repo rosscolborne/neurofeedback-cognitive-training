@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
 import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
+import { resolveTrainingAuthority, TRAINING_AUTHORITY_LABEL } from '../../services/patientTrainingAuthority';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
@@ -18,6 +19,8 @@ interface HomeScreenProps {
   onStartSession: (exp: ExperienceType) => void;
   onNavigateTab: (tab: 'home' | 'sessions' | 'education' | 'progress' | 'profile') => void;
   onOpenProtocolDetails?: () => void;
+  /** Present only while the patient owns their training setup (no active clinician). */
+  onOpenTrainingSetup?: () => void;
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
@@ -34,6 +37,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onStartSession,
   onNavigateTab,
   onOpenProtocolDetails,
+  onOpenTrainingSetup,
 }) => {
   const assignmentKey = client.allowedExperiences.join('|');
   const [selection, setSelection] = useState<{ assignmentKey: string; experience: ExperienceType | undefined }>({
@@ -96,20 +100,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         >
           {getGreeting()}{client.name ? `, ${client.name.split(' ')[0]}.` : '.'}
         </h1>
-        <button
-          type="button"
-          className="protocol-chip"
-          onClick={onOpenProtocolDetails}
-          disabled={!onOpenProtocolDetails}
-          aria-label={`Protocol: ${protocolAlias ? `${protocolAlias}, ` : ''}${protocolName}. View protocol details`}
-        >
-          <Brain size={15} color="var(--brand-primary)" aria-hidden="true" style={{ flexShrink: 0 }} />
-          <span>
-            {protocolAlias && <>{protocolAlias}<span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}> · </span></>}
-            {protocolName}
-          </span>
-          {onOpenProtocolDetails && <ChevronRight size={14} color="var(--text-tertiary)" aria-hidden="true" style={{ flexShrink: 0 }} />}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', maxWidth: '100%' }}>
+          <button
+            type="button"
+            className="protocol-chip"
+            onClick={onOpenProtocolDetails}
+            disabled={!onOpenProtocolDetails}
+            aria-label={`Protocol: ${protocolAlias ? `${protocolAlias}, ` : ''}${protocolName}. View protocol details`}
+          >
+            <Brain size={15} color="var(--brand-primary)" aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span>
+              {protocolAlias && <>{protocolAlias}<span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}> · </span></>}
+              {protocolName}
+            </span>
+            {onOpenProtocolDetails && <ChevronRight size={14} color="var(--text-tertiary)" aria-hidden="true" style={{ flexShrink: 0 }} />}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <span>{TRAINING_AUTHORITY_LABEL[resolveTrainingAuthority(client)]} protocol</span>
+            {onOpenTrainingSetup && <>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                onClick={onOpenTrainingSetup}
+                aria-label="Change training setup"
+                style={{ background: 'none', border: 0, padding: '6px 2px', margin: '-6px 0', font: 'inherit', fontWeight: 600, color: 'var(--brand-primary)', cursor: 'pointer' }}
+              >
+                Change
+              </button>
+            </>}
+          </div>
+        </div>
       </div>
 
       {/* Today's Prescribed Session Card */}
