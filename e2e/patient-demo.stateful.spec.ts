@@ -39,10 +39,11 @@ test.describe('patient Demo persistence (stateful)', () => {
         await expect(page.getByRole('heading', { name: 'Session Complete', exact: true })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText('Training Demo — these results are simulated, not measured EEG.', { exact: true })).toBeVisible();
         await expect(page.getByText('Synthetic time in target zone', { exact: true })).toBeVisible();
-        await expect(page.getByText(/Measured average band powers: unavailable in Training Demo\./)).toBeVisible();
+        await page.getByText('Session details', { exact: true }).click();
+        await expect(page.getByText('Not measured in Demo', { exact: true })).toBeVisible();
 
         // The run marker in the session note is the cleanup evidence for this session.
-        await page.getByPlaceholder('Note any cognitive sensations, focus shifts, or ambient environment details...', { exact: true }).fill(run.runMarker);
+        await page.getByPlaceholder('How did the session feel? Anything that helped or distracted you?', { exact: true }).fill(run.runMarker);
         await page.getByRole('button', { name: /Focused/ }).click();
         await page.getByRole('button', { name: 'Save Notes', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Saved ✓', exact: true })).toBeVisible({ timeout: 15_000 });
@@ -64,7 +65,7 @@ test.describe('patient Demo persistence (stateful)', () => {
         await expect(newestDemoProvenance).toBeVisible();
         await newestDemoProvenance.click();
         await expect(page.getByText(run.runMarker, { exact: true })).toBeVisible();
-        await expect(page.getByText(/Not measured — synthetic Training Demo feedback/)).toBeVisible();
+        await expect(page.getByText('Not measured in Demo', { exact: true })).toBeVisible();
 
         await page.getByRole('button', { name: 'Home', exact: true }).click();
         await page.getByRole('button', { name: 'Begin Session', exact: true }).click();

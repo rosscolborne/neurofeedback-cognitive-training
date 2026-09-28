@@ -187,8 +187,8 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await expect(interval).toContainText('Last 90 days');
             await yearToDate.click();
             await expect(interval).toContainText('Year to date');
-            await expect(clinician.page.getByText('This is not a clinical outcome or significance claim.', { exact: false }).or(
-                clinician.page.getByText('Unavailable — at least two sessions with recorded in-zone measurements are required.', { exact: true }),
+            await expect(clinician.page.getByText('not a clinical outcome or significance claim.', { exact: false }).or(
+                clinician.page.getByText('Needs at least two sessions with a recorded in-zone measurement.', { exact: true }),
             )).toBeVisible();
 
             await clinician.page.getByRole('button', { name: 'Settings', exact: true }).click();

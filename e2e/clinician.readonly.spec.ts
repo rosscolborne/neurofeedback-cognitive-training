@@ -55,7 +55,7 @@ test('linked patient detail shows honest telemetry and QEEG evidence states', as
     await page.getByRole('button', { name: /^Session Logs/ }).click();
     await expect(page.getByText('Loading session logs…', { exact: true })).toBeHidden();
     await expect(page.getByText('No training sessions recorded yet for this patient.', { exact: true })
-        .or(page.getByText(/Duration: (?:\d+ min|Unavailable) \| In-Zone:/).first())).toBeVisible();
+        .or(page.getByRole('list', { name: 'Session logs' }).getByRole('listitem').first())).toBeVisible();
 });
 
 test('Settings reloads the saved clinic identity without editing it', async ({ page }) => {
