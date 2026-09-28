@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Brain, X } from 'lucide-react';
 import { FactGrid } from '../ui/FactGrid';
+import { describeProtocolRule } from '../protocolRuleFacts';
 import type { ClientProfile, ProtocolTemplate } from '../../types';
 import {
   CLINICAL_PROTOCOL_TEMPLATES,
@@ -8,8 +9,7 @@ import {
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
 import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
-import { resolveProtocolRuntime, type ProtocolRuntimeConfig } from '../../services/adaptiveEngine';
-import { getRuntimeRewardDefinition } from '../../services/rewardDefinition';
+import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -22,20 +22,6 @@ const formatIdentifier = (value?: string) =>
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ') : 'Unavailable';
-
-function describeTrainingRule(config: ProtocolRuntimeConfig): string {
-  const definition = getRuntimeRewardDefinition(config);
-  return `${config.lowerIsBetter ? 'Below' : 'Above'} ${config.initialThreshold}${definition?.unit ?? ''}`;
-}
-
-const formatRange = (band: { freqMin: number; freqMax: number }) => `${band.freqMin}–${band.freqMax} Hz`;
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.round(seconds % 60);
-  if (remainder === 0) return `${minutes} minutes`;
-  return minutes > 0 ? `${minutes} min ${remainder} s` : `${remainder} seconds`;
-}
 
 function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
   const resolvedProtocol = resolvePatientProtocol(client);
@@ -69,7 +55,6 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
     : undefined;
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
   const runtime = resolveProtocolRuntime(client);
-  const reward = runtime.ok ? getRuntimeRewardDefinition(runtime.config) : null;
   const clinicianNotes = getClinicianAuthoredNotes(client, protocol);
 
   useEffect(() => {
@@ -154,19 +139,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '18px', borderTop: '1px solid var(--border-subtle)' }}>
               <FactGrid
                 minColumnWidth={120}
-                facts={[
-                  ...(reward?.kind === 'ratio'
-                    ? [
-                        { label: reward.numeratorName, value: formatRange(reward.numerator) },
-                        { label: reward.denominatorName, value: formatRange(reward.denominator) },
-                        { label: 'Reward when', value: `${reward.numeratorName}/${reward.denominatorName} ${reward.condition === 'below' ? 'below' : 'above'} ${runtime.config.initialThreshold}` },
-                      ]
-                    : [
-                        ...(reward?.kind === 'amplitude' ? [{ label: 'Training band', value: formatRange(reward.band) }] : []),
-                        { label: 'Reward when', value: describeTrainingRule(runtime.config) },
-                      ]),
-                  { label: 'Session length', value: formatDuration(runtime.config.durationSeconds) },
-                ]}
+                facts={describeProtocolRule(runtime.config)}
               />
               <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
                 Your target can adjust as you train.

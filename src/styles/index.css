@@ -851,6 +851,32 @@ input, select, textarea, button {
   }
 }
 
+.psd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.psd-table th,
+.psd-table td {
+  padding: 5px 10px;
+  border-top: 1px solid var(--border-subtle);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.psd-table thead th {
+  border-top: 0;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.psd-table th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
 /* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
 .train-grid {
   display: grid;

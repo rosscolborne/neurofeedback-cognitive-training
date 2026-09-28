@@ -46,7 +46,7 @@ describe('clinician detail optional metric surfaces', () => {
     expect(output).not.toContain('Self-Regulation Learning Curve');
     expect(output).not.toContain('Assigned device');
     expect(output).toContain('Spectral Power Distribution');
-    expect(nodeText(view.root)).toContain('Delta 1');
+    expect(view.root.findAllByType('td').map(nodeText)).toEqual(['1', '2', '3', '4']);
     expect(labels(view)).toContain('Session Logs (1)');
     await act(async () => { view.root.findAllByType('button').find((button) => nodeText(button).includes('Session Logs (1)'))!.props.onClick(); });
     expect(view.root.findAllByType('button').some((button) => button.props['aria-label'] === 'Open session-1')).toBe(true);

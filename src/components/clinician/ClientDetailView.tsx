@@ -12,6 +12,8 @@ import { PatientAvatar } from './PatientAvatar';
 import { ClinicianSessionDetail } from './ClinicianSessionDetail';
 import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
 import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
+import { FactGrid } from '../ui/FactGrid';
+import { describeProtocolRule } from '../protocolRuleFacts';
 import {
   assessQeegRecord,
   deriveLearningScorePoints,
@@ -181,6 +183,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   const assignedProtocol = resolvePatientProtocol(client);
   const evidenceProtocolName = getClinicalProtocolTemplate(assignedProtocol)?.name ?? assignedProtocol.replace(/-/g, ' ').toUpperCase();
   const persistedBrainMaps = persistedBrainMapsByPatient[client.id] ?? [];
+  const protocolRuntime = resolveProtocolRuntime(client);
   const brainMapLoadState = brainMapLoadResult?.clientId === client.id ? brainMapLoadResult.state : 'loading';
   const persistedIds = new Set(persistedBrainMaps.map((map) => map.id));
   const profileBrainMaps: unknown[] = Array.isArray(client.brainMaps) ? client.brainMaps : [];
@@ -318,12 +321,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   Spectral Power Distribution (µV²) Across Sessions
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Comparable BrainFlow Welch band powers. These overview bands are fixed; the active reward frequencies are shown in Protocol Settings.
+                  BrainFlow Welch band power per session, in fixed overview bands. Reward bands are in Protocol Settings.
                 </p>
               </div>
 
               {/* Chart Legend */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11px' }}>
+              {psdGroups.length > 0 && <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-delta)' }} />
                   <span>Delta ({STANDARD_EEG_BANDS_HZ.delta.min}–{STANDARD_EEG_BANDS_HZ.delta.max} Hz)</span>
@@ -340,7 +343,7 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--chart-beta)' }} />
                   <span>Beta ({STANDARD_EEG_BANDS_HZ.beta.min}–{STANDARD_EEG_BANDS_HZ.beta.max} Hz)</span>
                 </div>
-              </div>
+              </div>}
             </div>
 
             {sessionContentState === 'loading' ? (
@@ -382,16 +385,22 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
               </svg>
             </div>}
             {psdGroups.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
-                {psdGroups.map((row) => (
-                  <div key={`values-${row.id}`}>
-                    <strong>{row.label}:</strong> Delta {row.bands!.delta} · Theta {row.bands!.theta} · Alpha {row.bands!.alpha} · Beta {row.bands!.beta} µV²
-                  </div>
-                ))}
+              <div style={{ overflowX: 'auto', marginTop: '10px' }}>
+                <table className="psd-table">
+                  <thead><tr><th scope="col">Session</th><th scope="col">Delta</th><th scope="col">Theta</th><th scope="col">Alpha</th><th scope="col">Beta</th></tr></thead>
+                  <tbody>
+                    {psdGroups.map((row) => (
+                      <tr key={`values-${row.id}`}>
+                        <th scope="row">{row.label}</th><td>{row.bands!.delta}</td><td>{row.bands!.theta}</td><td>{row.bands!.alpha}</td><td>{row.bands!.beta}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-secondary)' }}>Values in µV².</div>
               </div>
             )}
             {invalidPsdRows.length > 0 && sessionsState === 'ready' && (
-              <div role="status" style={{ marginTop: '8px', color: 'var(--status-alert)', fontSize: '11px' }}>
+              <div role="status" style={{ marginTop: '10px', color: 'var(--text-secondary)', fontSize: '12px' }}>
                 {invalidPsdRows.length} session{invalidPsdRows.length === 1 ? '' : 's'} omitted because comparable BrainFlow Welch band power is unavailable or incomplete.
               </div>
             )}
@@ -454,26 +463,50 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
 
       {/* TAB 2: PROTOCOL SETTINGS */}
       {activeTab === 'protocol' && (
-        <div className="card-clinician" style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#FFFFFF' }}>
+        <div className="card-clinician" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px', backgroundColor: '#FFFFFF' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                Active Protocol: {client.customProtocolConfig
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Active protocol</div>
+              <h3 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: '2px 0 0' }}>
+                {client.customProtocolConfig
                   ? (assignedProtocol ? getProtocolAssignmentAlias(client.customProtocolConfig, assignedProtocol) : undefined) || client.customProtocolConfig.name || 'Unavailable'
                   : evidenceProtocolName}
               </h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                {client.customProtocolConfig && <>Evidence-Based Protocol: <strong>{client.customProtocolConfig.name}</strong> • </>}
-                10-20 Site: <strong>{client.customProtocolConfig?.montageSite || 'Unavailable'}</strong> • Channel mapping: <strong>{client.customProtocolConfig?.museChannelMapping || 'Unavailable'}</strong>
-              </p>
+              {client.customProtocolConfig && (
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Based on {client.customProtocolConfig.name}</div>
+              )}
             </div>
-            <button onClick={() => setShowProtocolBuilder(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '6px 12px' }}>
+            <button onClick={() => setShowProtocolBuilder(true)} className="btn btn-dense" style={{ fontSize: '12px', padding: '7px 14px' }}>
               Edit Protocol
             </button>
           </div>
 
-          <div className="card-patient-recessed" style={{ fontSize: '13px', lineHeight: 1.5, padding: '12px 14px' }}>
-            <strong>Clinical notes:</strong> {client.customProtocolConfig?.clinicalNotes || 'Unavailable — no notes are stored with this assignment.'}
+          {protocolRuntime.ok ? (
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Training rule</div>
+              <FactGrid facts={describeProtocolRule(protocolRuntime.config)} minColumnWidth={130} />
+            </div>
+          ) : (
+            <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '13px' }}>
+              <strong>Training unavailable:</strong> {protocolRuntime.error}
+            </div>
+          )}
+
+          <div style={{ paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Documentation</div>
+            <FactGrid
+              minColumnWidth={160}
+              facts={[
+                { label: '10–20 site', value: client.customProtocolConfig?.montageSite || 'Not set' },
+                { label: 'Channel mapping', value: client.customProtocolConfig?.museChannelMapping || 'Not set' },
+              ]}
+            />
+            <div style={{ marginTop: '14px', padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-clinician-sidebar)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Clinical notes</div>
+              <p style={{ margin: '4px 0 0', maxWidth: '72ch', fontSize: '13px', lineHeight: 1.55, color: client.customProtocolConfig?.clinicalNotes ? 'var(--text-primary)' : 'var(--text-secondary)', whiteSpace: 'pre-line' }}>
+                {client.customProtocolConfig?.clinicalNotes || 'No notes are stored with this assignment.'}
+              </p>
+            </div>
           </div>
         </div>
       )}
