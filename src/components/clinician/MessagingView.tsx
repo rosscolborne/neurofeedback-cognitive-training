@@ -8,6 +8,7 @@ import { useMessageConversation } from '../messaging/useMessageConversation';
 import { MessageComposer } from '../messaging/MessageComposer';
 import { useMarkVisibleMessageRead } from '../messaging/useMessageUnread';
 import { PatientAvatar } from './PatientAvatar';
+import { useScrollEdges } from '../ui/useScrollEdges';
 
 export interface MessagingParticipant { patientId: string; name: string; avatarUrl?: string; }
 interface MessagingViewProps {
@@ -35,6 +36,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
   const participantIds = useMemo(() => new Set<string>(JSON.parse(participantIdsKey)), [participantIdsKey]);
   const currentActivePatientId = activePatientId && participantIds.has(activePatientId) ? activePatientId : null;
   const conversation = useMessageConversation(currentActivePatientId, repository);
+  const suggestionsRef = useScrollEdges<HTMLDivElement>();
   const sendView = getMessageSendViewState(conversation.draft, conversation.isSending, conversation.failedAttempt, conversation.sendError);
   const unreadMessageId = currentActivePatientId && unreadByPatient[currentActivePatientId]?.unread ? unreadByPatient[currentActivePatientId].latestIncomingMessageId : null;
   const readError = useMarkVisibleMessageRead(conversation.relationship, conversation.messages, conversation.loadState, unreadMessageId, repository);
@@ -78,7 +80,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({ participants = [],
         {readError && <div role="alert" style={{ padding: '8px 16px', color: 'var(--status-alert)', fontSize: 12 }}>Could not update message notification: {readError}</div>}
         <div style={{ padding: isMobile ? '10px 12px' : '12px 16px', borderTop: '1px solid var(--border-default)', background: 'var(--surface-clinician-base)' }}>
           <div style={{ marginBottom: 8, color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600 }}>Suggested messages</div>
-          <div className="messaging-suggestions">
+          <div className="messaging-suggestions" ref={suggestionsRef}>
             {QUICK_TEMPLATES.map((template) => <button key={template} type="button" className="messaging-suggestion" aria-pressed={conversation.draft === template} onClick={() => conversation.setDraft(template)}>{template}</button>)}
           </div>
         </div>

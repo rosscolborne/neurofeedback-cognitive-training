@@ -8,6 +8,7 @@ import {
 } from '../../services/clinicalProtocolTemplates';
 import { Play, ChevronRight, BookOpen, Brain } from 'lucide-react';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
+import { useScrollEdges } from '../ui/useScrollEdges';
 import {
   buildPatientProgressDisplayModel,
 } from './patientMetrics';
@@ -76,6 +77,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const activeExperience = effectiveSelectedExp ? EXPERIENCE_CATALOGUE[effectiveSelectedExp] : undefined;
   const ActiveIcon = activeExperience?.icon;
   const latestAllowed = useRef(client.allowedExperiences);
+  const pillScrollerRef = useScrollEdges<HTMLDivElement>();
   useLayoutEffect(() => { latestAllowed.current = client.allowedExperiences; }, [client.allowedExperiences]);
   const resolvedProtocol = resolvePatientProtocol(client);
   const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
@@ -142,7 +144,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </p>
 
         {/* Experience pills scroll edge to edge; the next pill peeks and fades at the card edge. */}
-        <div className="pill-scroller" role="group" aria-label="Assigned experiences">
+        <div className="pill-scroller" role="group" aria-label="Assigned experiences" ref={pillScrollerRef}>
           {allowedIds.map(exp => {
             const Icon = EXPERIENCE_CATALOGUE[exp].icon;
             const isSelected = effectiveSelectedExp === exp;

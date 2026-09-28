@@ -377,8 +377,25 @@ input, select, textarea, button {
     scroll-padding-inline: 12px;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+    /* Edges fade only while more suggestions lie beyond them (see useScrollEdges). */
+    --fade-start: 0px;
+    --fade-end: 32px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+  }
+
+  .messaging-suggestions[data-scroll-start='false'] {
+    --fade-start: 24px;
+  }
+
+  .messaging-suggestions[data-scroll-end='true'] {
+    --fade-end: 0px;
+  }
+
+  /* Trailing space after the last card, which some WebKit versions drop from padding-inline-end. */
+  .messaging-suggestions::after {
+    content: '';
+    flex: 0 0 4px;
   }
 
   .messaging-suggestions::-webkit-scrollbar {
@@ -1256,10 +1273,11 @@ input, select, textarea, button {
   font-size: 12px;
 }
 
-/* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field. */
+/* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field.
+   !important is required: the patient bar sets display inline and the clinician bar forces display: flex !important. */
 @media (max-width: 767px) {
   body:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'])):focus) :is(.patient-bottom-nav, .clinician-mobile-bottom-nav) {
-    display: none;
+    display: none !important;
   }
 }
 
@@ -1590,8 +1608,14 @@ input, select, textarea, button {
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - 36px), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - 36px), transparent 100%);
+  --pill-fade-end: 36px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - var(--pill-fade-end)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - var(--pill-fade-end)), transparent 100%);
+}
+
+/* At the end, fade only the padding so the last pill lands un-faded. */
+.pill-scroller[data-scroll-end='true'] {
+  --pill-fade-end: var(--pill-bleed);
 }
 
 .pill-scroller::-webkit-scrollbar {
