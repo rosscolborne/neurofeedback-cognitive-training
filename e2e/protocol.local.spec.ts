@@ -145,7 +145,7 @@ test('clinician protocol change updates patient Home and Train without losing Ga
 });
 
 async function inZoneTrend(page: Page): Promise<number | null> {
-  const text = await telemetryCell(page, 'In-Zone (10s)').innerText();
+  const text = await telemetryCell(page, 'In zone · last 10s').innerText();
   const value = text.match(/(\d+)%/);
   return value ? Number(value[1]) : null;
 }
@@ -292,8 +292,7 @@ test('custom single-band and ratio rules survive reload and drive the visible re
 
   let patientPage = await browser.newPage();
   let dialog = await patientDetails(patientPage, fixture);
-  await expect(detailValue(dialog, 'Min Frequency')).toContainText('18 Hz');
-  await expect(detailValue(dialog, 'Max Frequency')).toContainText('24 Hz');
+  await expect(detailValue(dialog, 'Training band')).toContainText('18–24 Hz');
   await expect(detailValue(dialog, 'Reward when')).toContainText('Above 999 µV');
   await returnHome(patientPage);
   await startPatientTrainingInDemoMode(patientPage);
@@ -345,12 +344,9 @@ test('custom single-band and ratio rules survive reload and drive the visible re
 
   patientPage = await browser.newPage();
   dialog = await patientDetails(patientPage, fixture);
-  await expect(detailValue(dialog, 'Theta Min Frequency')).toContainText('5 Hz');
-  await expect(detailValue(dialog, 'Theta Max Frequency')).toContainText('9 Hz');
-  await expect(detailValue(dialog, 'Beta Min Frequency')).toContainText('15 Hz');
-  await expect(detailValue(dialog, 'Beta Max Frequency')).toContainText('29 Hz');
-  await expect(detailValue(dialog, 'Reward condition')).toContainText('Below');
-  await expect(detailValue(dialog, 'Reward threshold')).toContainText('999');
+  await expect(detailValue(dialog, 'Theta')).toContainText('5–9 Hz');
+  await expect(detailValue(dialog, 'Beta')).toContainText('15–29 Hz');
+  await expect(detailValue(dialog, 'Reward when')).toContainText('Theta/Beta below 999');
   await returnHome(patientPage);
   await startPatientTrainingInDemoMode(patientPage);
   await expect(pageReward(patientPage, /THETA\/BETA \(5–9 \/ 15–29 Hz\)/)).not.toContainText('µV');
