@@ -10,7 +10,6 @@ import {
   createSessionCompletionId,
   createVerifiedBandAccumulator,
   getCompletedSessionDuration,
-  PROTOCOL_RUNTIME_LIMITATIONS,
   resolveProtocolRuntime,
   summarizeVerifiedBands,
 } from '../../services/adaptiveEngine';
@@ -32,14 +31,15 @@ import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
 import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { NeuroGambitExperience } from '../experiences/NeuroGambitExperience';
 import { HeadsetFitModal } from './HeadsetFitModal';
-import { Play, Pause, Wifi, Volume2, VolumeX, ShieldCheck, Activity, BookOpen, Target, Brain } from 'lucide-react';
+import { Play, Pause, Wifi, Volume2, VolumeX, Activity, Brain } from 'lucide-react';
+import { EXPERIENCE_CATALOGUE } from './experienceCatalogue';
 
 const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism: string; benefit: string; instructions: string }> = {
   'skyline-drift': {
     title: 'Skyline Drift',
     mechanism: 'Uses SMR (12-15Hz) neurofeedback to control horizontal movement.',
     benefit: 'Trains the brain to sustain attention while maintaining physical relaxation, heavily prescribed for ADHD and motor control.',
-    instructions: 'Keep your body perfectly still and maintain soft focus on the center. As your SMR increases, the path will straighten.',
+    instructions: 'Keep your body still and hold a soft focus on the center. The path straightens as you settle into your target state.',
   },
   'tidal-garden': {
     title: 'Tidal Garden',
@@ -143,14 +143,6 @@ export const resolveSessionCareProvenance = (client: ClientProfile): Pick<Sessio
   };
 };
 
-/** Which protocol settings drive feedback at runtime; collapsed so it does not crowd the session. */
-const ProtocolRuntimeNote: React.FC<{ style?: React.CSSProperties }> = ({ style }) => (
-  <details style={{ fontSize: '11px', lineHeight: 1.4, color: 'var(--text-tertiary)', ...style }}>
-    <summary style={{ cursor: 'pointer', width: 'fit-content' }}>About protocol settings</summary>
-    <p style={{ margin: '4px 0 0', fontSize: '10px' }}>{PROTOCOL_RUNTIME_LIMITATIONS}</p>
-  </details>
-);
-
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
   onBaselinePersisted,
@@ -195,6 +187,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const runtimeResolution = React.useMemo(() => resolveProtocolRuntime(client), [client]);
   const runtimeConfig = runtimeResolution.ok ? runtimeResolution.config : null;
   const activeReward = runtimeConfig ? describeActiveReward(runtimeConfig, eegData) : null;
+  const mindfulness = describeBrainFlowScore(eegData, 'mindfulnessScore', isDemoSession);
+  const restfulness = describeBrainFlowScore(eegData, 'restfulnessScore', isDemoSession);
+  // Scores exist only from BrainFlow analysis (or simulated in Demo); a permanently empty slot adds noise.
+  const showScore = (value: string) => isDemoSession || value !== 'Unavailable';
 
   // Timers (in seconds)
   const sessionTotalDuration = runtimeConfig?.durationSeconds ?? 0;
@@ -589,9 +585,8 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     return (
       <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
         <h1 style={{ fontSize: '22px' }}>Protocol unavailable</h1>
-        <p>{runtimeResolution.error}</p>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-          {PROTOCOL_RUNTIME_LIMITATIONS}
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
+          Your training settings can’t be used right now. Please ask your clinician to review your protocol.
         </p>
         <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
       </div>
@@ -676,7 +671,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
           {isSessionStarted && (
             <div role="alert" style={{ color: '#B91C1C', fontSize: '13px', lineHeight: 1.5 }}>
-              Headset connection was lost. This real-EEG session is paused; Demo data cannot replace it.
+              Headset connection lost. Your session is paused — reconnect the headband to continue.
             </div>
           )}
 
@@ -689,11 +684,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-tertiary)', fontSize: '11px' }}>
-          <ShieldCheck size={14} />
-          <span>Runs 100% in your browser. No server downloads required.</span>
-        </div>
-        <ProtocolRuntimeNote />
       </div>
     );
   }
@@ -757,53 +747,27 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               backgroundColor: 'var(--surface-patient-card)',
               borderRadius: 'var(--radius-lg)',
               boxShadow: '0 24px 60px rgba(0,0,0,0.1)',
-              padding: '32px',
+              padding: '28px 24px',
               width: '100%',
               maxWidth: '400px',
               border: '1px solid var(--border-subtle)'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: 'var(--brand-primary-subtle)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Brain size={24} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '12px', backgroundColor: 'var(--brand-primary-subtle)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Brain size={22} aria-hidden="true" />
               </div>
-              <h2 className="font-display" style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {MODALITY_BRIEFING_DATA[selectedExperience]?.title || 'Session Briefing'}
+              <h2 className="font-display" style={{ fontSize: '24px', fontWeight: 400, lineHeight: 1.2, color: 'var(--text-primary)' }}>
+                {EXPERIENCE_CATALOGUE[selectedExperience]?.name ?? 'Your session'}
               </h2>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-primary)', marginBottom: '4px', fontWeight: 500, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <Activity size={14} /> Mechanism
-                </div>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
-                  {MODALITY_BRIEFING_DATA[selectedExperience]?.mechanism || 'Uses real-time EEG biofeedback.'}
-                </p>
-              </div>
-              
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-primary)', marginBottom: '4px', fontWeight: 500, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <BookOpen size={14} /> Clinical Benefit
-                </div>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
-                  {MODALITY_BRIEFING_DATA[selectedExperience]?.benefit || 'Trains brain resilience.'}
-                </p>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-primary)', marginBottom: '4px', fontWeight: 500, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <Target size={14} /> Instructions
-                </div>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
-                  {MODALITY_BRIEFING_DATA[selectedExperience]?.instructions || 'Follow the on-screen prompts.'}
-                </p>
-              </div>
-            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.6, margin: 0 }}>
+              {MODALITY_BRIEFING_DATA[selectedExperience]?.instructions || 'Follow the on-screen prompts.'}
+            </p>
 
             <button
               className="btn btn-primary"
-              style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: 600, marginTop: '32px' }}
+              style={{ width: '100%', padding: '15px', fontSize: '16px', fontWeight: 600, marginTop: '28px' }}
               onClick={() => setIsSessionStarted(true)}
             >
               Begin Training
@@ -836,11 +800,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
             }}
           />
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-              Phase: <strong style={{ color: 'var(--text-primary)' }}>{phase}</strong> ({formatTime(totalSecondsElapsed)})
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+              {phase}
             </div>
-            <div className="font-mono" style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>
-              {formatTime(remainingSeconds)} <span style={{ fontSize: '10px', fontWeight: 400, color: 'var(--text-tertiary)' }}>remaining</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', lineHeight: 1.1 }}>
+              <span className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>{formatTime(remainingSeconds)}</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>left</span>
             </div>
           </div>
         </div>
@@ -874,8 +839,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         </div>
       </header>
 
-      <ProtocolRuntimeNote style={{ padding: '4px 14px 0' }} />
-
       {acquisitionError && (
         <div role="alert" style={{ padding: '8px 14px', color: '#B91C1C', background: '#FEE2E2', fontSize: '12px', lineHeight: 1.4 }}>
           {acquisitionError}
@@ -904,10 +867,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         >
           <Brain size={18} color="var(--brand-primary)" />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Adaptive Engine: Target {adjustmentNotice.direction}
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Target adjusted
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{adjustmentNotice.reason}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {adjustmentNotice.direction === 'tightened' ? 'A little more challenging now.' : adjustmentNotice.direction === 'eased' ? 'A little easier now.' : 'Holding steady.'}
+            </div>
           </div>
         </div>
       )}
@@ -1016,127 +981,64 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
           </section>
         )}
 
-        {/* Live Monospace EEG Telemetry Panel */}
+        {/* Live feedback values: the active reward measurement and recent time in zone. */}
         <div
-          className="card-patient-recessed"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-around',
-            alignItems: 'center',
-            padding: '8px 12px',
-            flexShrink: 0,
-          }}
+          className="card-patient-recessed session-telemetry"
+          style={{ padding: '8px 6px', flexShrink: 0 }}
         >
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{activeReward?.label}</div>
-            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {activeReward?.value}
-            </div>
+          <div>
+            <div className="session-telemetry-label">{activeReward?.label}</div>
+            <div className="session-telemetry-value font-mono">{activeReward?.value}</div>
             {activeReward?.value !== 'Unavailable' && eegData?.inZoneAvailable && (
-              <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>
-                {eegData.inZone ? 'In zone now' : 'Out of zone now'}
-              </div>
+              <div className="session-telemetry-note">{eegData.inZone ? 'In zone now' : 'Out of zone now'}</div>
             )}
           </div>
-          <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Mindfulness</div>
-            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#7B68AE' }}>
-              {describeBrainFlowScore(eegData, 'mindfulnessScore', isDemoSession)}
+          {showScore(mindfulness) && (
+            <div>
+              <div className="session-telemetry-label">Mindfulness</div>
+              <div className="session-telemetry-value font-mono">{mindfulness}</div>
+              {isDemoSession && <div className="session-telemetry-note">Simulated</div>}
             </div>
-            {isDemoSession && <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>Simulated</div>}
-          </div>
-          <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Restfulness</div>
-            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chart-smr)' }}>
-              {describeBrainFlowScore(eegData, 'restfulnessScore', isDemoSession)}
+          )}
+          {showScore(restfulness) && (
+            <div>
+              <div className="session-telemetry-label">Restfulness</div>
+              <div className="session-telemetry-value font-mono">{restfulness}</div>
+              {isDemoSession && <div className="session-telemetry-note">Simulated</div>}
             </div>
-            {isDemoSession && <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>Simulated</div>}
-          </div>
-          <div style={{ width: '1px', height: '20px', background: 'var(--border-default)' }} />
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In-Zone ({RECENT_IN_ZONE_WINDOW_SECONDS}s)</div>
-            <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-primary)' }}>
+          )}
+          <div>
+            <div className="session-telemetry-label">In zone · last {RECENT_IN_ZONE_WINDOW_SECONDS}s</div>
+            <div className="session-telemetry-value font-mono" style={{ color: 'var(--brand-primary)' }}>
               {recentInZonePercent != null ? `${recentInZonePercent}%` : (eegData?.inZoneAvailable ? (eegData.inZone ? '100%' : '0%') : '--')}
             </div>
           </div>
         </div>
 
-        {/* Valence / Arousal + Emotion Label */}
-        {eegData?.brainflowScores?.emotionLabel && (
-          <div
-            className="card-patient-recessed"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '6px 12px',
-              flexShrink: 0,
-            }}
+        {/* Current state and headset signal in one quiet row; opens the fit check. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '0 4px', flexShrink: 0, minHeight: '32px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {eegData?.brainflowScores?.emotionLabel && (
+              <>
+                <span aria-hidden="true" style={{ width: '7px', height: '7px', flexShrink: 0, borderRadius: '50%', background: (eegData.brainflowScores.valence ?? 0) > 0 ? '#10B981' : '#F59E0B' }} />
+                <span style={{ textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{eegData.brainflowScores.emotionLabel}</span>
+              </>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowFitModal(true)}
+            aria-label={`Headset signal: ${worstQuality}. Check headset fit`}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '32px', padding: '4px 8px', border: 0, borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '8px', height: '8px', borderRadius: '50%',
-                background: (eegData.brainflowScores.valence ?? 0) > 0 ? '#10B981' : '#F59E0B',
-              }} />
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                {eegData.brainflowScores.emotionLabel}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                V: <span className="font-mono" style={{ fontWeight: 600 }}>{(eegData.brainflowScores.valence ?? 0).toFixed(2)}</span>
-              </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                A: <span className="font-mono" style={{ fontWeight: 600 }}>{(eegData.brainflowScores.arousal ?? 0).toFixed(2)}</span>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* 4-Channel Real-Time Mini Status Pills */}
-        <div
-          style={{
-            background: 'var(--surface-patient-card)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '6px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Sensors:</span>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {[
-              { label: 'TP9 (L-Ear)', key: 'tp9' as const },
-              { label: 'AF7 (L-Forehead)', key: 'af7' as const },
-              { label: 'AF8 (R-Forehead)', key: 'af8' as const },
-              { label: 'TP10 (R-Ear)', key: 'tp10' as const },
-            ].map(item => {
-              const st = eegData?.channelQuality[item.key] || 'good';
-              const dotColor = st === 'good' ? '#10B981' : st === 'fair' ? '#F59E0B' : '#EF4444';
-              return (
-                <div
-                  key={item.key}
-                  onClick={() => setShowFitModal(true)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '10px',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: dotColor }} />
-                  <span>{item.label.split(' ')[0]}</span>
-                </div>
-              );
-            })}
-          </div>
+            Signal
+            <span aria-hidden="true" style={{ display: 'flex', gap: '3px' }}>
+              {(['tp9', 'af7', 'af8', 'tp10'] as const).map((key) => {
+                const quality = eegData?.channelQuality[key] || 'good';
+                return <span key={key} style={{ width: '6px', height: '6px', borderRadius: '50%', background: quality === 'good' ? '#10B981' : quality === 'fair' ? '#F59E0B' : '#EF4444' }} />;
+              })}
+            </span>
+          </button>
         </div>
       </main>
 
@@ -1207,11 +1109,11 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
               textAlign: 'center',
             }}
           >
-            <h3 className="font-display" style={{ fontSize: '20px', marginBottom: '8px' }}>
-              Complete Training Session?
+            <h3 className="font-display" style={{ fontSize: '22px', fontWeight: 400, marginBottom: '8px' }}>
+              End this session?
             </h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              You have trained for {formatTime(totalSecondsElapsed)} with {Math.floor(inZoneSeconds)}s in optimal neural zone.
+            <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              You trained for {formatTime(totalSecondsElapsed)}, with {Math.floor(inZoneSeconds)}s in your target zone.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
@@ -1220,7 +1122,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
                 className="btn btn-primary"
                 style={{ width: '100%', opacity: isSavingSession ? 0.7 : 1 }}
               >
-                {isSavingSession ? 'Saving Session...' : 'Yes, Save Progress & View Summary'}
+                {isSavingSession ? 'Saving Session...' : 'Save & View Summary'}
               </button>
               {!isSessionCompleted && (
                 <button

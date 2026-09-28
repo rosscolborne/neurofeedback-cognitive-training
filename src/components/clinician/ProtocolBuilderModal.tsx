@@ -8,7 +8,7 @@ import {
   hasCanonicalRewardDefinition,
 } from '../../services/clinicalProtocolTemplates';
 import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS, getProtocolTypeForTemplate } from '../../services/protocols';
-import { validateCustomRatioReward, validateCustomRewardBand } from '../../services/adaptiveEngine';
+import { PROTOCOL_RUNTIME_LIMITATIONS, validateCustomRatioReward, validateCustomRewardBand } from '../../services/adaptiveEngine';
 
 interface ProtocolBuilderModalProps {
   assignedProtocol?: ProtocolType;
@@ -299,9 +299,10 @@ export const ProtocolBuilderModal: React.FC<ProtocolBuilderModalProps> = ({
               />
             </div>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-            Site, channel mapping, and clinical notes document this assignment; they do not change training feedback.
-          </div>
+          <details style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <summary style={{ cursor: 'pointer', width: 'fit-content' }}>Which settings change training feedback?</summary>
+            <p style={{ margin: '6px 0 0', lineHeight: 1.5 }}>{PROTOCOL_RUNTIME_LIMITATIONS}</p>
+          </details>
 
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             {selectedRatio

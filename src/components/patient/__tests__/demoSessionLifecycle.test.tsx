@@ -194,7 +194,7 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
     expect(engine.isDemoMode).toBe(true);
     await act(async () => { button(runner, 'End Session & Save').props.onClick(); });
-    await act(async () => { await button(runner, 'Yes, Save Progress').props.onClick(); });
+    await act(async () => { await button(runner, 'Save & View Summary').props.onClick(); });
     expect(repository.createSession).toHaveBeenCalledOnce();
     expect(saved.sessions[0]).toMatchObject({
       patientId: client.id,
@@ -289,13 +289,13 @@ describe('mounted patient Demo session lifecycle', () => {
       });
     }
     expect(onComplete).toHaveBeenCalledOnce();
-    expect(button(runner, 'Yes, Save Progress').props.disabled).toBe(false);
+    expect(button(runner, 'Save & View Summary').props.disabled).toBe(false);
     expect(text(runner)).toContain("We couldn't confirm this session was saved");
     engine.isHardwareConnected = false;
     await act(async () => { runner.update(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
-    expect(button(runner, 'Yes, Save Progress').props.disabled).toBe(false);
+    expect(button(runner, 'Save & View Summary').props.disabled).toBe(false);
     expect(text(runner)).not.toContain('Connect Muse Headband');
-    await act(async () => { await button(runner, 'Yes, Save Progress').props.onClick(); });
+    await act(async () => { await button(runner, 'Save & View Summary').props.onClick(); });
     expect(attempts[1]).toBe(attempts[0]);
     expect(attempts[1]).toMatchObject({ durationSeconds: 60, inZoneSeconds: 60, configuredDurationSeconds: 60 });
     await act(async () => { runner.unmount(); });
@@ -319,7 +319,7 @@ describe('mounted patient Demo session lifecycle', () => {
     });
     await act(async () => { button(renderer, 'Begin Training').props.onClick(); });
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
-    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    await act(async () => { await button(renderer, 'Save & View Summary').props.onClick(); });
     expect(onComplete).not.toHaveBeenCalled();
     expect(text(renderer)).toContain('Live EEG data has stopped');
     expect(button(renderer, 'Continue Training').props.disabled).toBe(false);
@@ -342,7 +342,7 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => {
       renderer.update(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
     });
-    expect(text(renderer)).toContain('This real-EEG session is paused; Demo data cannot replace it.');
+    expect(text(renderer)).toContain('Your session is paused — reconnect the headband to continue.');
     expect(text(renderer)).not.toContain('Try Demo Mode');
     expect(onComplete).not.toHaveBeenCalled();
     await act(async () => { renderer.unmount(); });
@@ -382,7 +382,7 @@ describe('mounted patient Demo session lifecycle', () => {
 
     await act(async () => { vi.advanceTimersByTime(2_001); });
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
-    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    await act(async () => { await button(renderer, 'Save & View Summary').props.onClick(); });
     expect(text(renderer)).toContain('Live EEG data has stopped');
     expect(onComplete).not.toHaveBeenCalled();
     await act(async () => { renderer.unmount(); });
@@ -419,14 +419,14 @@ describe('mounted patient Demo session lifecycle', () => {
     const garden = renderer.root.find((node) => (node.type as unknown) === 'experience-view');
     expect(garden.props.growthPoints).toBe(75);
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
-    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    await act(async () => { await button(renderer, 'Save & View Summary').props.onClick(); });
     expect(text(renderer)).toContain("We couldn't confirm this session was saved");
     expect(text(renderer)).toContain('Retry with the same session');
     expect(() => button(renderer, 'Continue Training')).toThrow();
     expect(button(renderer, 'Return to Dashboard').props.disabled).toBe(false);
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(garden.props.growthPoints).toBe(75);
-    await act(async () => { await button(renderer, 'Yes, Save Progress').props.onClick(); });
+    await act(async () => { await button(renderer, 'Save & View Summary').props.onClick(); });
     expect(onComplete).toHaveBeenCalledTimes(2);
     expect(attempts[0].id).toMatch(/^sess-[0-9a-f-]{36}$/i);
     expect(attempts[1]).toBe(attempts[0]);

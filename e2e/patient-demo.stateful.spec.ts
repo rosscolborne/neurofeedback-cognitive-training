@@ -29,11 +29,12 @@ test.describe('patient Demo persistence (stateful)', () => {
         await startPatientTrainingInDemoMode(page);
 
         await expect(page.getByText('Simulator', { exact: true })).toBeVisible();
-        await expect(page.getByText(/Runtime controls: canonical protocol mode/)).toBeVisible();
-        await expect(page.getByText(/Phase: training/)).toBeVisible();
+        // Protocol implementation notes are clinician documentation, not patient session content.
+        await expect(page.getByText(/Runtime controls/)).toHaveCount(0);
+        await expect(page.getByRole('banner').getByText('training', { exact: true })).toBeVisible();
         await page.getByRole('button', { name: 'End Session & Save', exact: true }).click();
-        await expect(page.getByRole('heading', { name: 'Complete Training Session?', exact: true })).toBeVisible();
-        await page.getByRole('button', { name: 'Yes, Save Progress & View Summary', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'End this session?', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Save & View Summary', exact: true }).click();
 
         await expect(page.getByRole('heading', { name: 'Session Complete', exact: true })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText('Training Demo · Synthetic acquisition. Feedback below is simulated, not measured EEG.', { exact: true })).toBeVisible();

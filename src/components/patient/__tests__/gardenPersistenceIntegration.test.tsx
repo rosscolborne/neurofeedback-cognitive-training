@@ -101,7 +101,7 @@ it('opens a legacy garden, completes verified non-Demo training through the real
   });
   expect(canvas.props.growthPoints).toBe(10);
   await act(async () => { button(view, 'End Session & Save').props.onClick(); });
-  await act(async () => { await button(view, 'Yes, Save Progress').props.onClick(); });
+  await act(async () => { await button(view, 'Save & View Summary').props.onClick(); });
   expect(memory.sessions).toHaveLength(1);
   expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false, experience: 'tidal-garden',
     durationSeconds: 5, configuredDurationSeconds: 60, inZoneSeconds: 4, timeInZonePercent: 80 });
