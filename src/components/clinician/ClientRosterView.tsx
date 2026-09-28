@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ClientProfile, PatientInvitation, ProtocolType } from '../../types';
 import { timestampToMillis } from '../../services/dataMappers';
-import { resolvePatientProtocol } from '../../services/protocols';
+import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
 import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemplates';
 import { PatientAvatar } from './PatientAvatar';
 import { formatLastSessionDate } from './formatLastSessionDate';
@@ -442,8 +442,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span className={`status-tag status-tag-${client.status}`}>
-                      ● {client.status.toUpperCase()}
+                    <span className={`status-tag status-tag-${client.status}`} style={{ textTransform: 'capitalize' }}>
+                      {client.status}
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
@@ -509,31 +509,26 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <PatientAvatar avatarUrl={client.avatarUrl} size={42} />
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>{client.name}</span>
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{client.email}</div>
                 </div>
               </div>
-              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '10px', padding: '3px 8px' }}>
-                ● {client.status.toUpperCase()}
+              <span className={`status-tag status-tag-${client.status}`} style={{ fontSize: '11px', padding: '3px 8px', textTransform: 'capitalize', flexShrink: 0 }}>
+                {client.status}
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
-              <span style={{ background: 'var(--surface-clinician-sidebar)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
-                {client.condition || 'Condition unavailable'}
-              </span>
-              <span style={{ color: 'var(--text-secondary)' }}>
-                Protocol: <strong>{getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? resolvePatientProtocol(client).replace(/-/g, ' ')}</strong>
-              </span>
+            <div className="detail-chips" style={{ marginTop: 0 }}>
+              <span className="detail-chip">{client.condition || 'Condition unavailable'}</span>
+              <span className="detail-chip">{getClinicalProtocolTemplate(resolvePatientProtocol(client))?.name ?? protocolDisplayName(resolvePatientProtocol(client))}</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
-              <div>
-                <span style={{ color: 'var(--text-tertiary)' }}>Sessions: </span>
-                <span style={{ fontWeight: 600 }}>{client.completedSessionsCount ?? 0}</span>
+              <div style={{ color: 'var(--text-secondary)' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{client.completedSessionsCount ?? 0}</span> {(client.completedSessionsCount ?? 0) === 1 ? 'session' : 'sessions'}
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {onMessageClient && <button type="button" onClick={(e) => { e.stopPropagation(); onMessageClient(client.id); }} className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '11px' }} aria-label={`Message ${client.name}`}><MessageSquare size={12} /> Message</button>}
