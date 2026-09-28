@@ -6,6 +6,7 @@ import type { ClientProfile, ClinicBrandConfig, SessionRecord } from '../types';
 import type { ClinicalReportAnalytics } from '../components/clinician/clinicalReportAnalytics';
 import { buildClinicalReportAnalytics, formatMetric } from '../components/clinician/clinicalReportAnalytics';
 import { protocolDisplayName } from './protocols';
+import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 
 export interface ReportTextContent {
   title: string;
@@ -78,7 +79,7 @@ export function buildPracticeReportText(
       'Spectral-band, QEEG, recommendation, and clinical outcome claims are not included because this report has no validated source contract for those claims.',
       'Unavailable values are not replaced with cohort defaults or zero.',
     ],
-    tableHeader: 'Patient | Persisted sessions | Training Demo | Sample workspace | Duration | Adherence | In-zone | Device snapshots',
+    tableHeader: 'Patient | Sessions | Demo | Sample | Duration | Adherence | In-zone | Device',
     tableRows: analytics.patientRows.map(row => [
       `${row.client.name}${row.client.isDemo ? ' (Sample record)' : ''}`,
       row.sessionCount,
@@ -92,49 +93,85 @@ export function buildPracticeReportText(
   };
 }
 
+/**
+ * What a patient PDF covers. Interval reports come from the Reports view and compute adherence;
+ * patient-detail exports cover every recorded session or one selected session and do not.
+ */
+export type PatientReportScope = 'interval' | 'all-sessions' | 'selected-session';
+
+function formatSessionWhen(session: SessionRecord, timeZone: string): string {
+  return typeof session.timestamp === 'number' && Number.isFinite(session.timestamp) && session.timestamp > 0
+    ? new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      }).format(new Date(session.timestamp))
+    : 'Unavailable';
+}
+
 export function buildPatientReportText(
   client: ClientProfile,
   analytics: ClinicalReportAnalytics,
   brand: ClinicBrandConfig,
   generatedAt = Date.now(),
+  scope: PatientReportScope = 'interval',
 ): ReportTextContent {
   const row = analytics.patientRows.find(item => item.client.id === client.id);
   const sessions = row?.sessions ?? [];
+  const timeZone = analytics.interval.timeZone;
+  const prescription = client.prescribedSessionsPerWeek != null
+    ? `weekly prescription: ${client.prescribedSessionsPerWeek} ${client.prescribedSessionsPerWeek === 1 ? 'session' : 'sessions'}`
+    : 'no weekly prescription set';
+  const deviceCoverage = `${row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'} (${coverage(row?.deviceRecordedSessions ?? 0, row?.sessionCount ?? 0)})`;
+  const scopeMetadata = scope === 'selected-session'
+    ? [
+        `Report scope: 1 selected session (other sessions are not included)`,
+        `Session recorded: ${sessions[0] ? formatSessionWhen(sessions[0], timeZone) : 'Unavailable'}`,
+      ]
+    : scope === 'all-sessions'
+      ? [`Report scope: All recorded sessions (${row?.sessionCount ?? 0})`, `Period covered: ${reportInterval(analytics)}`]
+      : [`Reporting interval: ${reportInterval(analytics)}`];
+  const metrics = scope === 'selected-session'
+    ? [
+        `Sessions in this report: ${row?.sessionCount ?? 0} (selected session only)`,
+        `Session duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
+        `In-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')}`,
+        `Adherence: Not calculated for a single-session report (${prescription})`,
+        `Device snapshot coverage: ${deviceCoverage}`,
+      ]
+    : [
+        `Persisted sessions: ${row?.sessionCount ?? 0}`,
+        `Training Demo completions: ${row?.demoSessionCount ?? 0} (included in aggregates; synthetic provenance)`,
+        `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from persisted-session aggregates)`,
+        `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
+        scope === 'interval'
+          ? `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`
+          : `Adherence: Not calculated for an all-sessions export (${prescription})`,
+        `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
+        `Device snapshot coverage: ${deviceCoverage}`,
+      ];
   return {
-    title: 'Patient Session Activity Report',
+    title: scope === 'selected-session' ? 'Selected Session Report' : 'Patient Session Activity Report',
     metadata: [
       `Clinic: ${brand?.name?.trim() || 'Unavailable'}`,
       `Patient: ${client.name || 'Unavailable'}${client.isDemo ? ' (Sample record)' : ''}`,
       `Configured indication: ${client.condition || 'Unavailable'}`,
-      `Configured protocol: ${client.assignedProtocol ? protocolDisplayName(client.assignedProtocol) : 'Unavailable'}`,
-      `Generated: ${generatedLabel(generatedAt, analytics.interval.timeZone)}`,
-      `Reporting interval: ${reportInterval(analytics)}`,
-      `Reporting timezone: ${analytics.interval.timeZone}`,
+      `Configured protocol: ${client.assignedProtocol ? getClinicalProtocolTemplate(client.assignedProtocol)?.name ?? protocolDisplayName(client.assignedProtocol) : 'Unavailable'}`,
+      `Generated: ${generatedLabel(generatedAt, timeZone)}`,
+      ...scopeMetadata,
+      `Reporting timezone: ${timeZone}`,
       'Source provenance: authenticated session repository fields (timestamp, duration, in-zone measurement, and device snapshot); sample records are labeled.',
     ],
-    metrics: [
-      `Persisted sessions: ${row?.sessionCount ?? 0}`,
-      `Training Demo completions: ${row?.demoSessionCount ?? 0} (included in aggregates; synthetic provenance)`,
-      `Sample workspace records: ${row?.sampleSessionCount ?? 0} (fictional; excluded from persisted-session aggregates)`,
-      `Total recorded duration: ${formatMetric(row?.durationMinutes ?? null, ' minutes')}`,
-      `Interval adherence: ${formatMetric(row?.adherencePercent ?? null, '%')} (${row?.expectedSessions == null ? 'schedule unavailable' : `${row.sessionCount} of ${row.expectedSessions} scheduled sessions`})`,
-      `Average in-zone time: ${formatMetric(row?.averageInZonePercent ?? null, '%')} (${coverage(row?.inZoneRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
-      `Device snapshot coverage: ${row && row.sessionCount > 0 ? `${Math.round(row.deviceRecordedSessions / row.sessionCount * 100)}%` : 'Unavailable'} (${coverage(row?.deviceRecordedSessions ?? 0, row?.sessionCount ?? 0)})`,
-    ],
+    metrics,
     notes: [
-      `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`,
+      scope === 'interval'
+        ? `Adherence formula: persisted interval sessions, including intentional training Demo sessions, divided by scheduled sessions (weekly prescription × ${analytics.interval.dayCount}/7), capped at 100%.`
+        : 'Adherence is calculated in interval reports from the Reports view, where the scheduling window is defined.',
       'Intentional training Demo sessions are included and labeled as synthetic. Fictional sample-workspace records are separate and excluded.',
       'No peak-focus, spectral-band, QEEG, benchmark, significance, treatment outcome, or recommendation claim is included without a validated source contract.',
       'Unavailable values are not replaced with profile aggregates, cohort defaults, or zero.',
     ],
     tableHeader: 'Date/time | Source | Duration | In-zone | Device',
     tableRows: sessions.map(session => {
-      const when = typeof session.timestamp === 'number' && Number.isFinite(session.timestamp) && session.timestamp > 0
-        ? new Intl.DateTimeFormat('en-US', {
-            timeZone: analytics.interval.timeZone,
-            year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-          }).format(new Date(session.timestamp))
-        : 'Unavailable';
       const duration = typeof session.durationSeconds === 'number' && Number.isFinite(session.durationSeconds) && session.durationSeconds >= 0
         ? `${Math.round(session.durationSeconds / 60)} min`
         : 'Unavailable';
@@ -142,7 +179,7 @@ export function buildPatientReportText(
         ? `${session.timeInZonePercent}%`
         : 'Unavailable';
       const source = session.isDemo === true ? 'Training Demo (synthetic)' : 'Non-Demo';
-      return `${when} | ${source} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
+      return `${formatSessionWhen(session, timeZone)} | ${source} | ${duration} | ${inZone} | ${session.device?.model?.trim() || 'Unavailable'}`;
     }),
   };
 }
@@ -298,13 +335,16 @@ export async function generatePatientClinicalPDF(
   client: ClientProfile,
   analyticsOrSessions: ClinicalReportAnalytics | SessionRecord[],
   brand: ClinicBrandConfig,
+  selectionScope?: Exclude<PatientReportScope, 'interval'>,
 ): Promise<void> {
   const generatedAt = Date.now();
   const analytics = Array.isArray(analyticsOrSessions)
     ? buildPatientSelectionReportAnalytics(client, analyticsOrSessions, generatedAt)
     : analyticsOrSessions;
-  const doc = renderReport(buildPatientReportText(client, analytics, brand, generatedAt));
-  const filename = `Session_Activity_${(client.name || 'Patient').replace(/\s+/g, '_')}_${new Date(generatedAt).toISOString().slice(0, 10)}.pdf`;
+  const scope: PatientReportScope = Array.isArray(analyticsOrSessions) ? selectionScope ?? 'all-sessions' : 'interval';
+  const doc = renderReport(buildPatientReportText(client, analytics, brand, generatedAt, scope));
+  const filenamePrefix = scope === 'selected-session' ? 'Selected_Session' : 'Session_Activity';
+  const filename = `${filenamePrefix}_${(client.name || 'Patient').replace(/\s+/g, '_')}_${new Date(generatedAt).toISOString().slice(0, 10)}.pdf`;
   await saveOrExportPDF(doc, filename);
 }
 
@@ -317,12 +357,14 @@ export function buildPatientSelectionReportAnalytics(
   client: ClientProfile,
   sessions: SessionRecord[],
   generatedAt: number,
+  // Same local-timezone resolution the Reports view uses, so both exports agree on dates.
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
 ): ClinicalReportAnalytics {
   const validTimes = sessions.map(session => session.timestamp).filter(time => Number.isFinite(time) && time > 0);
   const startMs = validTimes.length ? Math.min(...validTimes) : generatedAt;
   const endMs = Math.max(generatedAt, ...(validTimes.length ? validTimes : [generatedAt]));
   const label = (timestamp: number) => new Intl.DateTimeFormat('en-US', {
-    timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
+    timeZone, year: 'numeric', month: 'short', day: 'numeric',
   }).format(new Date(timestamp));
   const analytics = buildClinicalReportAnalytics([client], sessions, {
     range: 'ytd',
@@ -332,7 +374,7 @@ export function buildPatientSelectionReportAnalytics(
     startLabel: label(startMs),
     endLabel: label(endMs),
     dayCount: Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1),
-    timeZone: 'UTC',
+    timeZone,
   }, { mode: 'explicit-selection' });
   return {
     ...analytics,

@@ -67,4 +67,32 @@ describe('deterministic PDF report text', () => {
     expect(content.metrics).toContain('Persisted sessions: 1');
     expect(content.tableRows).toEqual(['Unavailable | Non-Demo | 10 min | 0% | Muse 2']);
   });
+
+  it('dates selection exports in the given local timezone rather than UTC', () => {
+    const lateEvening = session({ timestamp: Date.parse('2026-09-20T02:00:00Z') });
+    const analytics = buildPatientSelectionReportAnalytics(client, [lateEvening], generatedAt + 86_400_000, 'America/Toronto');
+    const content = buildPatientReportText(client, analytics, brand, generatedAt + 86_400_000, 'all-sessions');
+    expect(content.metadata).toContain('Reporting timezone: America/Toronto');
+    expect(content.tableRows).toEqual(['Sep 19, 2026, 10:00 PM | Non-Demo | 10 min | 0% | Muse 2']);
+  });
+
+  it('labels a single selected session as scoped, without account-wide counts or a false schedule reason', () => {
+    const analytics = buildPatientSelectionReportAnalytics(client, [session()], generatedAt, 'UTC');
+    const content = buildPatientReportText(client, analytics, brand, generatedAt, 'selected-session');
+    expect(content.title).toBe('Selected Session Report');
+    expect(content.metadata).toContain('Report scope: 1 selected session (other sessions are not included)');
+    expect(content.metrics).toContain('Sessions in this report: 1 (selected session only)');
+    expect(content.metrics).toContain('Adherence: Not calculated for a single-session report (weekly prescription: 1 session)');
+    expect(content.metrics.join(' ')).not.toMatch(/Persisted sessions|schedule unavailable/);
+    expect(content.notes.join(' ')).not.toContain('Adherence formula');
+  });
+
+  it('marks an all-sessions export as covering every recorded session', () => {
+    const analytics = buildPatientSelectionReportAnalytics(client, [session(), session({ id: 'two' })], generatedAt, 'UTC');
+    const content = buildPatientReportText(client, analytics, brand, generatedAt, 'all-sessions');
+    expect(content.title).toBe('Patient Session Activity Report');
+    expect(content.metadata).toContain('Report scope: All recorded sessions (2)');
+    expect(content.metrics).toContain('Persisted sessions: 2');
+    expect(content.metrics).toContain('Adherence: Not calculated for an all-sessions export (weekly prescription: 1 session)');
+  });
 });

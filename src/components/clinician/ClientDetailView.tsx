@@ -139,7 +139,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     pdfRequestRef.current = request;
     setPdfUi({ clientId: client.id, pendingSessionId: selected?.id ?? null, error: null });
     try {
-      await generatePatientClinicalPDF(client, selected ? [selected] : sessions, brand);
+      if (selected) await generatePatientClinicalPDF(client, [selected], brand, 'selected-session');
+      else await generatePatientClinicalPDF(client, sessions, brand);
     } catch {
       if (mountedRef.current && pdfGenerationRef.current === request.generation) {
         setPdfUi((current) => current.clientId === client.id
