@@ -117,7 +117,7 @@ test.describe('linked clinician and patient collaboration (stateful)', () => {
             await invitePanel.getByPlaceholder('patient@example.com', { exact: true }).fill(patientEmail!);
             await invitePanel.getByText('Primary Clinical Indication', { exact: true }).locator('..').locator('select').selectOption('ADHD (Inattentive)');
             await invitePanel.getByText('Assigned Protocol', { exact: true }).locator('..').locator('select').selectOption('theta-beta-ratio');
-            await invitePanel.getByPlaceholder('Unavailable', { exact: true }).fill('3');
+            await invitePanel.getByPlaceholder('e.g. 3', { exact: true }).fill('3');
             await invitePanel.getByRole('button', { name: 'Create Invitation', exact: true }).click();
 
             const createdPanel = clinician.page.getByRole('heading', { name: 'Invitation created', exact: true }).locator('..');

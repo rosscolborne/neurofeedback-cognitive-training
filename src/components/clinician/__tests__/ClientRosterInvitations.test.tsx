@@ -48,7 +48,7 @@ describe('ClientRosterView invitations', () => {
       renderer.root.findAllByType('input').find((node) => node.props.placeholder === 'patient@example.com')!.props.onChange({ target: { value: created.patientEmail } });
       renderer.root.findAllByType('select')[0].props.onChange({ target: { value: 'Peak Performance' } });
       renderer.root.findAllByType('select')[1].props.onChange({ target: { value: 'alpha-enhancement' } });
-      renderer.root.findAllByType('input').find((node) => node.props.placeholder === 'Unavailable')!.props.onChange({ target: { value: '2' } });
+      renderer.root.findAllByType('input').find((node) => node.props.placeholder === 'e.g. 3')!.props.onChange({ target: { value: '2' } });
     });
     await act(async () => { await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() }); });
     await act(async () => { await button('Copy invitation link')!.props.onClick(); });

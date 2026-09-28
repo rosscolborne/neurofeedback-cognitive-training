@@ -664,7 +664,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     background: '#FFFFFF',
                   }}
                 >
-                  <option value="">Unavailable</option>
+                  <option value="" disabled={!editingClient}>{editingClient ? 'Not set' : 'Select an indication'}</option>
                   <option value="ADHD (Inattentive)">ADHD (Inattentive)</option>
                   <option value="ADHD (Combined)">ADHD (Combined)</option>
                   <option value="Generalized Anxiety">Generalized Anxiety</option>
@@ -673,7 +673,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: editingClient ? '1fr 1fr' : '1fr', gap: '10px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                     Assigned Protocol
@@ -690,7 +690,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                       background: '#FFFFFF',
                     }}
                   >
-                    <option value="">Use default (Theta/Beta)</option>
+                    <option value="" disabled={!editingClient}>{editingClient ? 'Use default (Theta/Beta)' : 'Select a protocol'}</option>
                     <option value="theta-beta-ratio">Theta/Beta (Lubar)</option>
                     <option value="smr-enhancement">SMR (Sterman)</option>
                     <option value="alpha-enhancement">Alpha (Hardt)</option>
@@ -698,7 +698,8 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     <option value="beta-downtraining">Beta Downtraining</option>
                   </select>
                 </div>
-                <div>
+                {/* Invitations do not carry a status; it applies once the patient is on the roster. */}
+                {editingClient && <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                     Status
                   </label>
@@ -718,7 +719,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                     <option value="paused">Paused</option>
                     <option value="completed">Completed</option>
                   </select>
-                </div>
+                </div>}
               </div>
 
               <div>
@@ -731,7 +732,7 @@ export const ClientRosterView: React.FC<ClientRosterViewProps> = ({
                   step={1}
                   value={formSessionsPerWeek}
                   onChange={(e) => setFormSessionsPerWeek(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="Unavailable"
+                  placeholder="e.g. 3"
                   style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '13px' }}
                 />
               </div>

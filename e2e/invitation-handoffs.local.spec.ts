@@ -14,7 +14,7 @@ async function submitInvitation(page: Page, email: string, name = 'Invited Patie
   await page.getByPlaceholder('patient@example.com').fill(email);
   await page.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
   await page.locator('form select').nth(1).selectOption('alpha-enhancement');
-  await page.getByPlaceholder('Unavailable').fill('3');
+  await page.getByPlaceholder('e.g. 3').fill('3');
   await page.getByRole('button', { name: 'Create Invitation' }).click();
 }
 
