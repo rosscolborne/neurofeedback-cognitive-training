@@ -18,6 +18,8 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
   isPaused = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const clockRef = useRef(0);
+  const swayRef = useRef<number | null>(null);
   const planktonRef = useRef<Array<{ x: number; y: number; speed: number; radius: number; hue: number }>>([]);
   const kelpRef = useRef<Array<{ x: number; height: number; segments: number; baseSpeed: number; width: number }>>([]);
   const creatureRef = useRef({ x: -100, y: 150, speed: 45, visible: false, wingPhase: 0 });
@@ -50,7 +52,8 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
 
     let animationId: number;
     let lastTime = performance.now();
-    let timeElapsed = 0;
+    // Persist the clock across EEG-driven effect restarts so motion never snaps back.
+    let timeElapsed = clockRef.current;
 
     const resize = () => {
       if (!canvas) return;
@@ -67,13 +70,17 @@ export const TidalGardenCanvas: React.FC<TidalGardenProps> = ({
       const dt = Math.min(0.1, (time - lastTime) / 1000);
       lastTime = time;
       if (!isPaused) timeElapsed += dt;
+      clockRef.current = timeElapsed;
 
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;
 
       // Alpha wave dominance drives garden bioluminescence & blooms
       const alphaVal = eegData?.bands.alpha || 9.5;
-      const alphaRatio = Math.max(0.2, Math.min(1.0, (alphaVal - 5) / 13));
+      const targetAlphaRatio = Math.max(0.2, Math.min(1.0, (alphaVal - 5) / 13));
+      // Ease toward each new EEG reading instead of jumping, which made the kelp vibrate.
+      swayRef.current = swayRef.current === null ? targetAlphaRatio : swayRef.current + (targetAlphaRatio - swayRef.current) * Math.min(1, dt * 2.5);
+      const alphaRatio = swayRef.current;
       const inZone = eegData?.inZone ?? true;
       const zoneScore = eegData?.zoneScore ?? (inZone ? 1.0 : 0.0);
 

@@ -10,6 +10,7 @@ interface RhythmLockProps {
 
 export const RhythmLockGame: React.FC<RhythmLockProps> = ({ eegData, isPaused = false }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const clockRef = useRef(0);
   const [score, setScore] = useState(0);
   const [feedbackText, setFeedbackText] = useState<string | null>(null);
   const audioStartedRef = useRef(false);
@@ -66,7 +67,8 @@ export const RhythmLockGame: React.FC<RhythmLockProps> = ({ eegData, isPaused = 
     if (!ctx) return;
 
     let animationId: number;
-    let timeElapsed = 0;
+// Persist the clock across EEG-driven effect restarts so motion never snaps back.
+    let timeElapsed = clockRef.current;
     let lastTime = performance.now();
 
     const resize = () => {
@@ -84,6 +86,7 @@ export const RhythmLockGame: React.FC<RhythmLockProps> = ({ eegData, isPaused = 
       const dt = Math.min(0.1, (time - lastTime) / 1000);
       lastTime = time;
       if (!isPaused) timeElapsed += dt;
+      clockRef.current = timeElapsed;
 
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;

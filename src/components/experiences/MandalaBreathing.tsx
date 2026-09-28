@@ -8,6 +8,7 @@ interface MandalaProps {
 
 export const MandalaBreathing: React.FC<MandalaProps> = ({ eegData, isPaused = false }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const clockRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -16,7 +17,8 @@ export const MandalaBreathing: React.FC<MandalaProps> = ({ eegData, isPaused = f
     if (!ctx) return;
 
     let animationId: number;
-    let timeElapsed = 0;
+// Persist the clock across EEG-driven effect restarts so motion never snaps back.
+    let timeElapsed = clockRef.current;
     let lastTime = performance.now();
 
     const resize = () => {
@@ -34,6 +36,7 @@ export const MandalaBreathing: React.FC<MandalaProps> = ({ eegData, isPaused = f
       const dt = Math.min(0.1, (time - lastTime) / 1000);
       lastTime = time;
       if (!isPaused) timeElapsed += dt;
+      clockRef.current = timeElapsed;
 
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;
