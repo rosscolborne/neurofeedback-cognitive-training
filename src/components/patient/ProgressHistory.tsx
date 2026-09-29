@@ -13,6 +13,8 @@ import {
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
 import { FactGrid, type Fact } from '../ui/FactGrid';
+import { useBoundedHistory } from '../ui/boundedHistory';
+import { HistoryShowMore } from '../ui/HistoryShowMore';
 import { MOODS } from './sessionMoods';
 
 interface ProgressHistoryProps {
@@ -130,6 +132,9 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     () => [...progressDisplay.periodSessions].reverse(),
     [progressDisplay.periodSessions],
   );
+  // One page at a time, newest first. The page resets with the range, and a range change is
+  // blocked while a journal is open, so the reset can never hide an unsaved journal.
+  const history = useBoundedHistory(historySessions, `${client.id}:${period}`);
   const exportAvailability = getSessionExportState(progressDisplay.presentation);
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
@@ -355,8 +360,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                   : 'Choose another range or complete a training session to see it here.'}
             </p>
           </div>
-        ) : (
-          historySessions.map(s => {
+        ) : (<>
+          {history.visible.map(s => {
             const isExpanded = expandedSession?.clientId === client.id && expandedSession.sessionId === s.id;
             const timestamp = getSessionTimestamp(s);
             const timeInZone = getTimeInZonePercent(s);
@@ -452,8 +457,9 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
                 )}
               </div>
             );
-          })
-        )}
+          })}
+          {history.paged && <HistoryShowMore shown={history.shown} total={history.total} nextCount={history.nextCount} onShowMore={history.showMore} />}
+        </>)}
       </div>
 
       {/* Milestone Badges Gallery */}

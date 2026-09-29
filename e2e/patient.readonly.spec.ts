@@ -72,7 +72,11 @@ test('Progress ranges reconcile with visible history and expose the honest expor
         const count = Number(metric.match(/\d+/)?.[0]);
         expect(Number.isFinite(count)).toBe(true);
         counts.push(count);
-        await expect(visibleHistoryCount(page)).toHaveCount(count || 1);
+        // History renders one page of ten; the count line reconciles longer ranges.
+        await expect(visibleHistoryCount(page)).toHaveCount(Math.min(count, 10) || 1);
+        if (count > 10) {
+            await expect(page.getByText(`Showing 10 of ${count} sessions`, { exact: true })).toBeVisible();
+        }
         if (count === 0) {
             await expect(page.getByText('No sessions in this period', { exact: true })).toBeVisible();
         }
