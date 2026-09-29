@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { containsRunMarker } from './cleanupPlan';
-import type { DisposableE2EAccount, DisposableE2ERun, E2EPairRun } from './dataLifecycle';
+import type { DisposableE2EAccount, DisposableE2ERun, E2EPairRun } from './e2eRunTypes';
 import type { AuthorizedDocument, AuthorizedRead } from './authorizedFirestore';
 
 /** Persistence reads use the signed-in page's Firebase ID token and Firestore rules. */

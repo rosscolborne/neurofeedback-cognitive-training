@@ -1,8 +1,10 @@
 /**
- * Pure cleanup planning for the stateful E2E harness.
+ * Pure cleanup planning from the former deployed-project stateful E2E harness,
+ * which this repository no longer has. It stays only because
+ * persistenceAssertions.ts (local emulator specs) uses its run-marker helpers.
  *
- * Nothing here talks to Firebase. dataLifecycle.ts reads Firestore into these
- * shapes, asks for a plan, reports it, and (only in execute mode) applies it
+ * Nothing here talks to Firebase. The removed harness read Firestore into these
+ * shapes, asked for a plan, reported it, and (only in execute mode) applied it
  * atomically with update-time checks. A document is deleted only with positive
  * evidence that the current run created it: the run marker in a field the test
  * wrote, the expected owner/UID fields, and server create/update times inside

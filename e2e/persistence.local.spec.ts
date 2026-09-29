@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
 import { seedLinkedPatient, seedPersistenceRecords } from './helpers/localEmulator';
-import type { E2EPairRun } from './helpers/dataLifecycle';
+import type { E2EPairRun } from './helpers/e2eRunTypes';
 import type { AuthorizedRead } from './helpers/authorizedFirestore';
 import {
   expectAppointmentPersisted,

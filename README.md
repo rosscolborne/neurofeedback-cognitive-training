@@ -1,5 +1,10 @@
 # Neurasticity
 
+> **This is the `neurofeedback-cognitive-training` (NFCT) consumer fork.** It
+> was forked from the Waveable clinical repository on 2026-09-29 and is being
+> migrated; the text below still describes the inherited app. Read
+> [AGENTS.md](AGENTS.md) and [docs/nfct/FORK.md](docs/nfct/FORK.md) first.
+
 Neurasticity connects a Muse Athena directly from the user's Chrome or Edge
 browser. It can send the browser-collected EEG windows to its BrainFlow
 analysis service for the shared smoothing, mindfulness, restfulness, fit, and

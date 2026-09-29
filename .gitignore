@@ -48,3 +48,6 @@ __pycache__/
 
 # Local environment (never commit Firebase or service settings)
 .env
+
+# Capacitor copies the web build here on `cap sync`; never commit it
+ios/App/App/public/

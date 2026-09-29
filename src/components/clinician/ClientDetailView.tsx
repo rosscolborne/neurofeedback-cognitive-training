@@ -10,6 +10,8 @@ import { ProtocolBuilderModal } from './ProtocolBuilderModal';
 import { BrainMapUploadModal } from './BrainMapUploadModal';
 import { PatientAvatar } from './PatientAvatar';
 import { ClinicianSessionDetail } from './ClinicianSessionDetail';
+import { useBoundedHistory } from '../ui/boundedHistory';
+import { HistoryShowMore } from '../ui/HistoryShowMore';
 import { appendBrainMapForDisplay, comparePersistedBrainMaps, parsePersistedRecordingDate, type ManualBrainMapSave } from './brainMapManualEntry';
 import { experienceDisplayName, protocolDisplayName } from '../displayLabels';
 import { FactGrid } from '../ui/FactGrid';
@@ -196,6 +198,9 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
     }),
   ].sort(comparePersistedBrainMaps);
   const sessionContentState = getSessionContentState(sessionsState, sessions);
+  // Session Logs render one page at a time. The count only grows for a patient, so an opened
+  // session's detail (and its feedback draft) stays mounted; the tab label still counts every session.
+  const sessionLog = useBoundedHistory(sessions, client.id);
   const psdRows = deriveSessionBandRows(sessions);
   const psdGroups = psdRows.filter((row) => row.bands != null);
   const invalidPsdRows = psdRows.filter((row) => row.issue);
@@ -619,12 +624,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading session logs…</div>
           ) : sessionContentState === 'error' ? (
             <div role="alert" style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--status-alert)', fontSize: '13px' }}>Session logs could not be loaded.</div>
-          ) : sessions.length > 0 ? (
+          ) : sessions.length > 0 ? (<>
             <div className="session-log" role="list" aria-label="Session logs">
               <div className="session-log-head" aria-hidden="true">
                 <span>Session</span><span>Duration</span><span>In zone</span><span>Coherence</span><span>Mood</span><span>Reflection</span><span />
               </div>
-              {sessions.map((s) => {
+              {sessionLog.visible.map((s) => {
                 const isOpen = openedSession?.id === s.id;
                 const durationText = typeof s.durationSeconds === 'number' && Number.isFinite(s.durationSeconds) ? `${Math.round(s.durationSeconds / 60)} min` : null;
                 const hasCoherence = typeof s.averageCoherence === 'number' && Number.isFinite(s.averageCoherence);
@@ -678,7 +683,8 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
                 );
               })}
             </div>
-          ) : (
+            {sessionLog.paged && <div style={{ marginTop: '12px' }}><HistoryShowMore shown={sessionLog.shown} total={sessionLog.total} nextCount={sessionLog.nextCount} onShowMore={sessionLog.showMore} /></div>}
+          </>) : (
             <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
               No training sessions recorded yet for this patient.
             </div>
