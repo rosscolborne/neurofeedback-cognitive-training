@@ -19,6 +19,27 @@ async function openProgress(page: Page) {
 const historyCards = (page: Page) => page.locator('.card-patient').filter({ has: page.getByRole('img', { name: /in zone/ }) });
 const countText = (page: Page, text: string) => page.getByText(text, { exact: true });
 
+/** At a phone width, the count and one-line control fit without horizontal page scroll. */
+async function expectShowMoreFits(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 844 });
+  const count = countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.month} sessions`);
+  const button = page.getByRole('button', { name: 'Show 10 more sessions', exact: true });
+  await button.scrollIntoViewIfNeeded();
+  await expect(count).toBeVisible();
+  await expect(button).toBeVisible();
+  const box = await button.boundingBox();
+  const countBox = await count.boundingBox();
+  expect(box, `button box at ${width}px`).not.toBeNull();
+  expect(countBox, `count box at ${width}px`).not.toBeNull();
+  expect(box!.x, `button inside the viewport at ${width}px`).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width, `button inside the viewport at ${width}px`).toBeLessThanOrEqual(width);
+  // One line of 14px text plus padding is about 42px; a wrapped label would be over 60px.
+  expect(box!.height, `one-line button at ${width}px`).toBeLessThanOrEqual(48);
+  expect(countBox!.height, `one-line count at ${width}px`).toBeLessThanOrEqual(24);
+  expect(countBox!.x + countBox!.width, `count inside the viewport at ${width}px`).toBeLessThanOrEqual(width);
+  expect(await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth), `no horizontal overflow at ${width}px`).toBe(true);
+}
+
 async function openSessionLogs(page: Page, patientName: string) {
   await page.getByRole('row').filter({ hasText: patientName }).click();
   await page.getByRole('button', { name: `Session Logs (${SESSION_HISTORY_COUNTS.all})`, exact: true }).click();
@@ -27,7 +48,8 @@ async function openSessionLogs(page: Page, patientName: string) {
 test('patient Progress bounds a long history, reveals it a page at a time, and saves a journal on a revealed session', async ({ browser }) => {
   const fixture = await seedLinkedPatient();
   const ids = await seedSessionHistory(fixture);
-  const context = await browser.newContext();
+  // Patient Progress is a phone surface: run it at a phone viewport.
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   try {
     const page = await context.newPage();
     await loginThroughUi(page, fixture.patient);
@@ -37,22 +59,23 @@ test('patient Progress bounds a long history, reveals it a page at a time, and s
 
     // Past 30 days (the default range): one page, summary rows, details collapsed.
     await expect(cards).toHaveCount(10);
-    await expect(countText(page, 'Showing 10 of 20 sessions')).toBeVisible();
+    await expect(countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.month} sessions`)).toBeVisible();
     await expect(page.getByText('Session details', { exact: true })).toHaveCount(0);
+    for (const width of [320, 440, 390]) await expectShowMoreFits(page, width);
     await page.getByRole('button', { name: 'Show 10 more sessions', exact: true }).click();
-    await expect(cards).toHaveCount(20);
-    await expect(countText(page, 'Showing all 20 sessions')).toBeVisible();
+    await expect(cards).toHaveCount(SESSION_HISTORY_COUNTS.month);
+    await expect(countText(page, `Showing all ${SESSION_HISTORY_COUNTS.month} sessions`)).toBeVisible();
     await expect(page.getByRole('button', { name: /more sessions?$/ })).toHaveCount(0);
 
     // Each range starts again at one page.
     await page.getByRole('button', { name: /^week$/i }).click();
     await expect(cards).toHaveCount(10);
-    await expect(countText(page, 'Showing 10 of 12 sessions')).toBeVisible();
+    await expect(countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.week} sessions`)).toBeVisible();
     await page.getByRole('button', { name: 'Show 2 more sessions', exact: true }).click();
     await expect(cards).toHaveCount(SESSION_HISTORY_COUNTS.week);
     await page.getByRole('button', { name: 'All Time', exact: true }).click();
     await expect(cards).toHaveCount(10);
-    await expect(countText(page, 'Showing 10 of 28 sessions')).toBeVisible();
+    await expect(countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
     await page.getByRole('button', { name: 'Show 10 more sessions', exact: true }).click();
     await expect(cards).toHaveCount(20);
 
@@ -73,7 +96,7 @@ test('patient Progress bounds a long history, reveals it a page at a time, and s
     // Revealing more never hides the open journal; a range change is still refused.
     await page.getByRole('button', { name: 'Show 8 more sessions', exact: true }).click();
     await expect(cards).toHaveCount(SESSION_HISTORY_COUNTS.all);
-    await expect(countText(page, 'Showing all 28 sessions')).toBeVisible();
+    await expect(countText(page, `Showing all ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
     await expect(revealed.getByLabel('Personal journal')).toHaveValue(journal);
     await page.getByRole('button', { name: /^month$/i }).click();
     await expect(page.getByText('Save or cancel the current journal before opening another session or range.')).toBeVisible();
@@ -91,7 +114,7 @@ test('patient Progress bounds a long history, reveals it a page at a time, and s
     await arriveAtPatientDashboard(page);
     await openProgress(page);
     await expect(cards).toHaveCount(10);
-    await expect(countText(page, 'Showing 10 of 20 sessions')).toBeVisible();
+    await expect(countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.month} sessions`)).toBeVisible();
     await page.getByRole('button', { name: 'Show 10 more sessions', exact: true }).click();
     const reloaded = cards.nth(unmeasured);
     await expect(reloaded).toContainText('Focused · 4/5');
@@ -115,14 +138,14 @@ test('clinician Session Logs are bounded and a feedback draft on a revealed sess
 
     const rows = page.getByRole('list', { name: 'Session logs' }).getByRole('listitem');
     await expect(rows).toHaveCount(10);
-    await expect(countText(page, 'Showing 10 of 28 sessions')).toBeVisible();
+    await expect(countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
     await expect(page.getByRole('button', { name: `Open ${ids[9]}`, exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: `Open ${ids[10]}`, exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Show 10 more sessions', exact: true }).click();
     await expect(rows).toHaveCount(20);
-    await expect(countText(page, 'Showing 20 of 28 sessions')).toBeVisible();
+    await expect(countText(page, `Showing 20 of ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
     // The tab keeps counting every session, not the visible page.
-    await expect(page.getByRole('button', { name: 'Session Logs (28)', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Session Logs (${SESSION_HISTORY_COUNTS.all})`, exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: `Open ${ids[unmeasured]}`, exact: true }).click();
     const detail = page.getByRole('region', { name: `Session ${ids[unmeasured]} details` });
@@ -135,10 +158,10 @@ test('clinician Session Logs are bounded and a feedback draft on a revealed sess
     await expect(page.getByRole('region', { name: `Session ${ids[15]} details` })).toBeVisible();
     await expect(detail).toBeHidden();
     await page.getByRole('button', { name: 'Protocol Settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Session Logs (28)', exact: true }).click();
+    await page.getByRole('button', { name: `Session Logs (${SESSION_HISTORY_COUNTS.all})`, exact: true }).click();
     await page.getByRole('button', { name: 'Show 8 more sessions', exact: true }).click();
     await expect(rows).toHaveCount(SESSION_HISTORY_COUNTS.all);
-    await expect(countText(page, 'Showing all 28 sessions')).toBeVisible();
+    await expect(countText(page, `Showing all ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
     await page.getByRole('button', { name: `Open ${ids[unmeasured]}`, exact: true }).click();
     await expect(detail.getByLabel('Clinician feedback')).toHaveValue(draft);
 
