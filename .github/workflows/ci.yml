@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# No secrets and no Firebase configuration: unit tests use an inert demo
+# project, and every Firebase-backed test runs against local emulators.
+# The embedded brainflow_service/ is owned by the shared brainflow-service
+# repository, which runs its pytest suite; it is not tested here.
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # @elata-biosciences/eeg-web-ble@0.12.0 declares a peer on a
+      # non-existent @elata-biosciences/eeg-web@^0.2.1.
+      - run: npm ci --legacy-peer-deps
+      - run: npm run check:isolation
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:e2e:typecheck
+      - run: npm run test:rules:typecheck
+
+  emulators:
+    runs-on: ubuntu-latest
+    needs: web
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci --legacy-peer-deps
+      - run: npm run test:rules
+      - run: npx playwright test --project=permission-guard
+      # Local-emulator browser suite; Playwright uses /usr/bin/google-chrome.
+      - run: npm run test:e2e:protocol
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
