@@ -150,6 +150,8 @@ describe('HistoryShowMore', () => {
       await act(async () => { r.root.findByType('button').props.onClick(); });
       await act(async () => { r.update(<HistoryShowMore shown={23} total={23} nextCount={0} onShowMore={vi.fn()} />); });
       expect(focus).toHaveBeenCalledTimes(1);
+      // Focus must not scroll the newly revealed rows out of view.
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
       await act(async () => { r.unmount(); });
     } finally {
       vi.unstubAllGlobals();

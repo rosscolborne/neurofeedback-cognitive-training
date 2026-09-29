@@ -22,8 +22,9 @@ export const HistoryShowMore: React.FC<HistoryShowMoreProps> = ({ shown, total, 
     if (!complete || !focusCountWhenComplete.current) return;
     focusCountWhenComplete.current = false;
     if (typeof document === 'undefined') return;
-    // Only reclaim focus that was lost with the button, never take it from something else.
-    if (document.activeElement == null || document.activeElement === document.body) countRef.current?.focus();
+    // Only reclaim focus that was lost with the button, never take it from something else, and
+    // without scrolling: the newly revealed rows above the count stay where the person is reading.
+    if (document.activeElement == null || document.activeElement === document.body) countRef.current?.focus({ preventScroll: true });
   }, [complete]);
 
   return (
