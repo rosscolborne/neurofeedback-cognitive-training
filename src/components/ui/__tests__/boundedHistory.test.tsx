@@ -51,60 +51,63 @@ describe('boundHistory', () => {
 });
 
 describe('useBoundedHistory', () => {
-  let latest!: ReturnType<typeof useBoundedHistory<string>>;
-  const Probe: React.FC<{ items: string[]; resetKey: string }> = ({ items, resetKey }) => {
-    latest = useBoundedHistory(items, resetKey);
-    return null;
+  type Snapshot = { shown: number; total: number; nextCount: number; visible: string[] };
+  /** Renders the hook's window into the tree and reports every commit. */
+  const Probe: React.FC<{ items: string[]; resetKey: string; onCommit?: (snapshot: Snapshot) => void }> = ({ items, resetKey, onCommit }) => {
+    const history = useBoundedHistory(items, resetKey);
+    React.useLayoutEffect(() => { onCommit?.({ shown: history.shown, total: history.total, nextCount: history.nextCount, visible: history.visible }); });
+    return <button type="button" data-shown={history.shown} data-total={history.total} data-next={history.nextCount} data-visible={history.visible.join(',')} onClick={history.showMore} />;
   };
+  const state = (r: ReactTestRenderer) => {
+    const probe = r.root.findByType('button');
+    return { shown: probe.props['data-shown'], total: probe.props['data-total'], nextCount: probe.props['data-next'], visible: String(probe.props['data-visible']).split(',') };
+  };
+  const showMore = async (r: ReactTestRenderer) => { await act(async () => { r.root.findByType('button').props.onClick(); }); };
   beforeEach(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 
   it('grows one page per step, never shrinks for the same key, and resets for a new key', async () => {
     const items = rows(25);
     let r!: ReactTestRenderer;
     await act(async () => { r = create(<Probe items={items} resetKey="a" />); });
-    expect(latest.shown).toBe(10);
-    await act(async () => { latest.showMore(); });
-    expect(latest.shown).toBe(20);
+    expect(state(r).shown).toBe(10);
+    await showMore(r);
+    expect(state(r).shown).toBe(20);
     await act(async () => { r.update(<Probe items={[...items]} resetKey="a" />); });
-    expect(latest.shown).toBe(20);
-    await act(async () => { latest.showMore(); });
-    expect(latest).toMatchObject({ shown: 25, nextCount: 0 });
+    expect(state(r).shown).toBe(20);
+    await showMore(r);
+    expect(state(r)).toMatchObject({ shown: 25, nextCount: 0 });
 
     await act(async () => { r.update(<Probe items={rows(40)} resetKey="b" />); });
-    expect(latest).toMatchObject({ shown: 10, total: 40, nextCount: 10 });
+    expect(state(r)).toMatchObject({ shown: 10, total: 40, nextCount: 10 });
     // Returning to an earlier key is a fresh start too, not the old expansion.
     await act(async () => { r.update(<Probe items={items} resetKey="a" />); });
-    expect(latest.shown).toBe(10);
+    expect(state(r).shown).toBe(10);
     await act(async () => { r.unmount(); });
   });
 
   it('keeps revealed rows when the list is replaced in place, as after a save', async () => {
     let r!: ReactTestRenderer;
     await act(async () => { r = create(<Probe items={rows(30)} resetKey="a" />); });
-    await act(async () => { latest.showMore(); });
+    await showMore(r);
     const edited = rows(30).map((row) => row === 'row-15' ? 'row-15-saved' : row);
     await act(async () => { r.update(<Probe items={edited} resetKey="a" />); });
-    expect(latest.visible).toContain('row-15-saved');
-    expect(latest.shown).toBe(20);
+    expect(state(r).visible).toContain('row-15-saved');
+    expect(state(r).shown).toBe(20);
     await act(async () => { r.unmount(); });
   });
 
-  it('shows the first page on the first render for a new key', async () => {
-    const seen: number[] = [];
-    const Recorder: React.FC<{ resetKey: string }> = ({ resetKey }) => {
-      const history = useBoundedHistory(rows(30), resetKey);
-      seen.push(history.shown);
-      latest = history as ReturnType<typeof useBoundedHistory<string>>;
-      return null;
-    };
+  it('never commits the previous expansion for a new key', async () => {
+    const commits: number[] = [];
+    const onCommit = (snapshot: Snapshot) => { commits.push(snapshot.shown); };
     let r!: ReactTestRenderer;
-    await act(async () => { r = create(<Recorder resetKey="a" />); });
-    await act(async () => { latest.showMore(); latest.showMore(); });
-    expect(seen.at(-1)).toBe(30);
-    seen.length = 0;
-    await act(async () => { r.update(<Recorder resetKey="b" />); });
-    expect(seen.length).toBeGreaterThan(0);
-    expect(seen.every((shown) => shown === 10)).toBe(true);
+    await act(async () => { r = create(<Probe items={rows(30)} resetKey="a" onCommit={onCommit} />); });
+    await showMore(r);
+    await showMore(r);
+    expect(commits.at(-1)).toBe(30);
+    commits.length = 0;
+    await act(async () => { r.update(<Probe items={rows(30)} resetKey="b" onCommit={onCommit} />); });
+    expect(commits.length).toBeGreaterThan(0);
+    expect(commits.every((shown) => shown === 10)).toBe(true);
     await act(async () => { r.unmount(); });
   });
 });

@@ -13,7 +13,7 @@ const client: ClientProfile = { id: 'p', name: 'Patient', email: 'p@example.test
 const session = (index: number, now: number): SessionRecord => ({
   id: `s${index}`, patientId: 'p', patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27',
   timestamp: now - index * DAY - 3_600_000, protocol: 'alpha-enhancement', experience: 'tidal-garden',
-  durationSeconds: 600, timeInZonePercent: index % 4 === 0 ? undefined : 50, averageCoherence: null, timeSeries: [],
+  durationSeconds: 600, timeInZonePercent: index % 4 === 0 ? undefined as unknown as number : 50, averageCoherence: null, timeSeries: [],
   adaptiveAdjustmentsCount: 0, finalThreshold: 0.7, patientNotes: `Journal ${index}`, moodRating: 3,
 });
 /** 7 sessions this week, 25 this month, 30 in all. */
