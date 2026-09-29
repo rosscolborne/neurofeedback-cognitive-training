@@ -15,6 +15,7 @@
     "setup:brainflow": "uv sync --extra test",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "check:isolation": "node scripts/check-clinical-isolation.mjs",
     "test": "vitest run",
     "test:brainflow:integration": "node scripts/run-brainflow-integration-tests.mjs",
     "test:python": "uv run --extra test pytest",
