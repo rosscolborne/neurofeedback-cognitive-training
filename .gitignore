@@ -45,3 +45,6 @@ test-results/
 .venv/
 __pycache__/
 .pytest_cache/
+
+# Local environment (never commit Firebase or service settings)
+.env
