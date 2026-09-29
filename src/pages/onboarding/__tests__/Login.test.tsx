@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({
   login: vi.fn(), loginAsDemoClinician: vi.fn(), requestPasswordReset: vi.fn(), navigate: vi.fn(),
@@ -24,6 +24,19 @@ async function mount(): Promise<ReactTestRenderer> {
 }
 async function submit(renderer: ReactTestRenderer) {
   await act(async () => { await form(renderer).props.onSubmit({ preventDefault: vi.fn() }); });
+}
+const submitButton = (renderer: ReactTestRenderer) => renderer.root.findByProps({ type: 'submit' });
+async function typeEmail(renderer: ReactTestRenderer, value: string) {
+  await act(async () => { emailInput(renderer).props.onChange({ target: { value } }); });
+}
+async function openResetFor(renderer: ReactTestRenderer, value: string) {
+  await act(async () => { button(renderer, 'Forgot password?').props.onClick(); });
+  await typeEmail(renderer, value);
+}
+// Serializes the rendered tree without per-instance handler functions.
+const rendered = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
+async function advance(ms: number) {
+  await act(async () => { vi.advanceTimersByTime(ms); });
 }
 
 describe('Login password reset', () => {
@@ -139,5 +152,164 @@ describe('Login password reset', () => {
     await act(async () => { button(renderer, 'Forgot password?').props.onClick(); });
     expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(0);
     renderer.unmount();
+  });
+});
+
+describe('Login password reset cooldown', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    auth.requestPasswordReset.mockResolvedValue(undefined);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('blocks an immediate repeat request and shows the remaining time', async () => {
+    const renderer = await mount();
+    await openResetFor(renderer, 'person@example.test');
+    await submit(renderer);
+    await submit(renderer);
+    expect(auth.requestPasswordReset).toHaveBeenCalledOnce();
+    expect(status(renderer)).toContain('If an account uses that email address');
+    expect(status(renderer)).toContain('spam');
+    expect(submitButton(renderer).props.disabled).toBe(true);
+    expect(text(submitButton(renderer))).toBe('Resend in 60s');
+    await advance(1_000);
+    expect(text(submitButton(renderer))).toBe('Resend in 59s');
+    await advance(41_000);
+    expect(text(submitButton(renderer))).toBe('Resend in 18s');
+    expect(submitButton(renderer).props.disabled).toBe(true);
+    renderer.unmount();
+  });
+
+  it('keeps the countdown out of the status live region', async () => {
+    const renderer = await mount();
+    await openResetFor(renderer, 'person@example.test');
+    await submit(renderer);
+    const before = status(renderer);
+    await advance(5_000);
+    expect(status(renderer)).toBe(before);
+    expect(status(renderer)).not.toMatch(/\d+s/);
+    for (let node: ReactTestInstance | null = submitButton(renderer); node; node = node.parent) {
+      expect(node.props['aria-live']).toBeUndefined();
+      expect(['status', 'alert']).not.toContain(node.props.role);
+    }
+    renderer.unmount();
+  });
+
+  it('renders a missing account exactly like a sent reset, including the cooldown and a later resend', async () => {
+    const sent = await mount();
+    await openResetFor(sent, 'person@example.test');
+    await submit(sent);
+
+    auth.requestPasswordReset.mockRejectedValueOnce({ code: 'auth/user-not-found' });
+    const missing = await mount();
+    await openResetFor(missing, 'person@example.test');
+    await submit(missing);
+
+    expect(rendered(missing)).toBe(rendered(sent));
+    expect(text(submitButton(missing))).toBe('Resend in 60s');
+    expect(missing.root.findAllByProps({ role: 'alert' })).toHaveLength(0);
+    await submit(missing);
+    expect(auth.requestPasswordReset).toHaveBeenCalledTimes(2);
+
+    await advance(60_000);
+    auth.requestPasswordReset.mockResolvedValueOnce(undefined);
+    await submit(sent);
+    auth.requestPasswordReset.mockRejectedValueOnce({ code: 'auth/email-not-found' });
+    await submit(missing);
+    expect(auth.requestPasswordReset).toHaveBeenCalledTimes(4);
+    expect(rendered(missing)).toBe(rendered(sent));
+    expect(status(missing)).toContain('most recent email');
+    sent.unmount();
+    missing.unmount();
+  });
+
+  it.each([
+    'auth/invalid-email',
+    'auth/network-request-failed',
+    'auth/too-many-requests',
+    'auth/internal-error',
+  ])('does not start a cooldown after %s', async (code) => {
+    auth.requestPasswordReset.mockRejectedValueOnce({ code });
+    const renderer = await mount();
+    await openResetFor(renderer, 'person@example.test');
+    await submit(renderer);
+    expect(alert(renderer)).toBeTruthy();
+    expect(submitButton(renderer).props.disabled).toBe(false);
+    expect(text(submitButton(renderer))).toBe('Send reset instructions');
+    await submit(renderer);
+    expect(auth.requestPasswordReset).toHaveBeenCalledTimes(2);
+    expect(status(renderer)).toContain('password reset instructions');
+    expect(status(renderer)).not.toContain('most recent email');
+    renderer.unmount();
+  });
+
+  it('lets a corrected address send immediately and re-applies the cooldown to the original address', async () => {
+    const renderer = await mount();
+    await openResetFor(renderer, 'first@example.test');
+    await submit(renderer);
+    await typeEmail(renderer, 'second@example.test');
+    expect(submitButton(renderer).props.disabled).toBe(false);
+    expect(text(submitButton(renderer))).toBe('Send reset instructions');
+    await advance(10_000);
+    await typeEmail(renderer, ' FIRST@Example.test ');
+    expect(submitButton(renderer).props.disabled).toBe(true);
+    expect(text(submitButton(renderer))).toBe('Resend in 50s');
+    await submit(renderer);
+    expect(auth.requestPasswordReset).toHaveBeenCalledOnce();
+    await typeEmail(renderer, 'second@example.test');
+    await submit(renderer);
+    expect(auth.requestPasswordReset).toHaveBeenNthCalledWith(2, 'second@example.test');
+    expect(status(renderer)).not.toContain('most recent email');
+    expect(text(submitButton(renderer))).toBe('Resend in 60s');
+    renderer.unmount();
+  });
+
+  it('keeps the cooldown after returning to login and reopening the reset view', async () => {
+    const renderer = await mount();
+    await openResetFor(renderer, 'person@example.test');
+    await submit(renderer);
+    await act(async () => { button(renderer, 'Return to login').props.onClick(); });
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(5_000);
+    await act(async () => { button(renderer, 'Forgot password?').props.onClick(); });
+    expect(renderer.root.findAllByProps({ role: 'status' })).toHaveLength(0);
+    expect(submitButton(renderer).props.disabled).toBe(true);
+    expect(text(submitButton(renderer))).toBe('Resend in 55s');
+    await submit(renderer);
+    expect(auth.requestPasswordReset).toHaveBeenCalledOnce();
+    renderer.unmount();
+  });
+
+  it('allows a resend after the cooldown and says only the newest link works', async () => {
+    const renderer = await mount();
+    await openResetFor(renderer, 'person@example.test');
+    await submit(renderer);
+    await advance(59_000);
+    expect(text(submitButton(renderer))).toBe('Resend in 1s');
+    await advance(1_000);
+    expect(submitButton(renderer).props.disabled).toBe(false);
+    expect(text(submitButton(renderer))).toBe('Resend reset instructions');
+    expect(vi.getTimerCount()).toBe(0);
+    await submit(renderer);
+    expect(auth.requestPasswordReset).toHaveBeenCalledTimes(2);
+    expect(status(renderer)).toContain('If an account uses that email address');
+    expect(status(renderer)).toContain('most recent email');
+    expect(status(renderer)).toContain('Earlier reset links no longer work');
+    expect(text(submitButton(renderer))).toBe('Resend in 60s');
+    expect(submitButton(renderer).props.disabled).toBe(true);
+    renderer.unmount();
+  });
+
+  it('stops the countdown timer on unmount', async () => {
+    const renderer = await mount();
+    await openResetFor(renderer, 'person@example.test');
+    await submit(renderer);
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => { renderer.unmount(); });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
