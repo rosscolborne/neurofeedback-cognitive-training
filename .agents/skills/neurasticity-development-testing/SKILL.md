@@ -11,12 +11,11 @@ Use this skill when changing or reviewing Neurasticity behavior. Its purpose is 
 
 | Layer | Use it for | Limit |
 | --- | --- | --- |
-| Python/pytest (`npm run test:python`) | BrainFlow service, backend API, and signal processing | Does not prove browser integration or physical acquisition. |
+| Python/pytest (`npm run test:python`) | Inherited copy of the shared `brainflow-service` backend | Not owned by this repo: change the backend in `brainflow-service`, not here. Does not prove browser integration or physical acquisition. |
 | Vitest (`npm test`) | TypeScript domain, service, state, and component behavior | Default suite is offline; it excludes the two BrainFlow service backed tests. Start the local service with `npm run brainflow`, then run `npm run test:brainflow:integration` separately for those assertions. |
 | Static contract tests (Vitest) | Fast checks of source wiring and rules text where that contract is deliberate | Text checks do not prove runtime behavior or Firestore authorization. |
 | Local Firestore rules emulator (`npm run test:rules`) | Allowed and denied reads/writes under `firestore.rules` | Does not prove deployed rules or the complete UI workflow. |
-| Read-only Playwright projects | Authenticated navigation and observable UI behavior without a test-authored persistence change | Require provisioned identities and a running app; the app itself may back-fill signed-in profiles. |
-| Stateful Playwright projects | Save/reload, cross-account, and other persistence workflows | Change shared fixture state and require the scoped session workflow below. |
+| Local emulator Playwright suite (`npm run test:e2e:protocol`) | Authenticated navigation, save/reload, cross-account and rules-backed UI workflows | Emulators only; proves nothing about a deployed project. |
 | Physical hardware | Real Muse, Web Bluetooth, EEG acquisition, and signal quality | Demo Mode and simulated BLE cannot establish hardware behavior. |
 
 Choose the lowest layer that observes the behavior at risk. Add another layer when a real integration boundary matters, such as client transactions plus rules, or persistence plus UI reload. Check existing `e2e/` coverage before adding a browser test; update a clear existing test where possible. A static contract test does not replace runtime or rules evidence, and Demo Mode does not replace hardware evidence. See the [README checks](../../../README.md#checks) for current test commands.
@@ -25,7 +24,7 @@ Choose the lowest layer that observes the behavior at risk. Add another layer wh
 
 Read [the E2E reference](references/e2e.md) before adding or running authenticated Playwright tests.
 
-Local emulator and offline tests can be selected as routine coverage. For shared fixture writes or resets and stateful browser runs, require explicit scope in the task or session and use the documented session harness, lease, and cleanup workflow in the [E2E reference](references/e2e.md). Existing session authorization counts; do not demand a fresh confirmation for the same scoped action. Never use ambient ADC or a stored service-account key for privileged persistence. The [credential and fixture guide](../../../docs/e2e-credentials.md) is the authority for the pinned project, keyless impersonation, and recovery details. Do not infer that a successful read-only preflight proves reset or stateful cleanup.
+Local emulator and offline tests are routine coverage. This repository has no deployed-project E2E: never add tests, helpers or scripts that sign in to, read from or write to a real Firebase project, and never add service-account credentials. `npm run check:isolation` must stay green.
 
 For non-hardware patient flows, use the normal UI: choose **Skip to Dashboard** if the initial headset screen appears, and **Try Demo Mode** if an experience later asks for a headset. Demo Mode deliberately supplies synthetic Muse-like EEG for application-flow testing; do not remove it or report it as production mock-data leakage. State its limitation accurately: it tests the UI/workflow, not physical hardware, Bluetooth, acquisition, or signal quality.
 
