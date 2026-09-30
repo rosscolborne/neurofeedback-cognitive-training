@@ -32,11 +32,19 @@ Ownership is then one rule, and account deletion is one recursive delete. `userI
 Game → mode → start level → game session → performance metrics → domain taxonomy. EEG is not part of this chain. A session stores:
 
 - `gameId`, `gameVersion`, `modeId`, `startLevel`, `peakLevel` and `status` (`completed` or `abandoned`);
+- the session `seed` (added by NFCT-17, see below);
 - device-clock `startedAt`/`endedAt`, `activeDurationMs`, `localDate` and `timezone`;
 - raw per-trial observations (`trials`) and a client-derived display `summary`;
 - after processing, a server-written `result`.
 
 Game-specific trials and metrics are validated by each game's own Zod schemas (`gameSessionSchemaFor(definition)`). No game is forced into a universal metric shape.
+
+**The session seed.** Every session stores `seed`, an unsigned 32-bit integer (0 to 4294967295) that the client draws when the game starts, like the session ID, and never changes (`shared/games/seed.ts`).
+
+- **What it is for.** Each game version derives its content from the seed with a frozen algorithm. Trusted scoring can therefore reproduce every recorded question and reject trials the seed cannot produce (Mental Math v1: `question-not-from-seed`). It needs no stored counter: a question discarded on pause is replaced by the next of a fixed number of variants at the same position.
+- **What it is not.** The client chooses the seed, so it is forgeable like everything else the client writes, and decision 4 still holds. It is for reproducibility and plausibility, not anti-cheat. Leaderboards would still need server-issued seeds and server-timed trials.
+- **Every game.** It is required on every session, so the rules keep one exact key set. A game with no randomness stores it and ignores it.
+- **No `schemaVersion` bump.** Adding a required field would normally change the version 1 contract. No session had been written when it was added, and no build or document existed that could be broken.
 
 ### 3. EEG is separate, optional recording data
 
@@ -196,6 +204,7 @@ So:
 | --- | --- |
 | `domains.ts` | `DOMAIN_CATALOG`, domain IDs, weight schemas |
 | `games/definition.ts` | `GameDefinition` contract and `defineGame()` invariant check |
+| `games/seed.ts` | The session seed schema and `createSessionSeed` |
 | `schemas/*.ts` | Zod schemas and `read*` mappers for the profile, game session, EEG recording and progress |
 | `progress/unlocks.ts` | `unlockedStartLevel` |
 | `progress/applySession.ts` | The `applySession` reducer, `validOutcome` / `outcomeFromResult`, `canApplyToProgress` and `rebuildProgress` |

@@ -10,6 +10,7 @@ import {
   recordMetricNameSchema,
   type GameDefinition,
 } from '../games/definition';
+import { sessionSeedSchema } from '../games/seed';
 import {
   boundedTextSchema,
   compareTimestamps,
@@ -128,6 +129,12 @@ function gameSessionSchemaWith<Trial extends z.ZodType, Metrics extends z.ZodTyp
     modeId: slugIdSchema,
     /** The level the session began at. */
     startLevel: levelSchema,
+    /**
+     * Chosen by the client at game start and never changed; the game version
+     * derives the session's content from it, so trusted scoring can reproduce
+     * every recorded question. Forgeable: for reproducibility, not anti-cheat.
+     */
+    seed: sessionSeedSchema,
     /**
      * The highest level the client says it reached. An untrusted observation:
      * progress uses the peak replayed from the trials (`result.peakLevel`).
