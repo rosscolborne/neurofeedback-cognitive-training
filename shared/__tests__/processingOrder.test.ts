@@ -8,6 +8,7 @@ import {
   readSessionProgressFields,
   rebuildProgress,
   upgradeBlocker,
+  unlockedStartLevel,
   upgradeSession,
   type GameProgress,
   type ServerResult,
@@ -77,27 +78,54 @@ function randomSessions(random: ReturnType<typeof prng>): Doc[] {
   });
 }
 
-/** Processes every session in `order`, then upgrades, as the Cloud Function does. */
-function processInOrder(docs: readonly Doc[], order: readonly number[]) {
+/**
+ * Processes every session in `order` as the Cloud Function does: after a
+ * session raises the unlock, a reconcile scans flagged sessions level by
+ * level (each level in document-ID order, as the upgrade-scan query returns
+ * them) with at most `scanBudget` reads per call, and upgrades what it found.
+ * A call that runs out stops. `admin: true` then runs the admin reconcile,
+ * which has no budget.
+ */
+function processInOrder(docs: readonly Doc[], order: readonly number[], { scanBudget = Infinity, admin = false } = {}) {
   const results = new Map<string, ServerResult>();
   let progress: GameProgress | null = null;
   let clock = T0 + 60 * 60_000;
-  const byPlayOrder = [...docs].sort((a, b) => compareTimestamps(
+  let budgetHit = false;
+  const byId = [...docs].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const playOrder = (a: Doc, b: Doc) => compareTimestamps(
     a.raw.endedAt as TestTimestamp, b.raw.endedAt as TestTimestamp,
-  ) || (a.id < b.id ? -1 : 1));
+  ) || (a.id < b.id ? -1 : 1);
+  const fieldsOf = (doc: Doc) => readSessionProgressFields({ ...doc.raw, result: results.get(doc.id) });
 
-  const reconcile = () => {
-    for (let changed = true; changed;) {
-      changed = false;
-      for (const doc of byPlayOrder) {
-        const result = results.get(doc.id);
-        if (!result) continue;
-        const fields = readSessionProgressFields({ ...doc.raw, result });
-        if (upgradeBlocker(fields, progress, GAME_MODULE_REGISTRY) !== null) continue;
-        const upgraded = upgradeSession(fields, progress!, { sessionId: doc.id, upgradedAt: ts(clock += 1_000), registry: GAME_MODULE_REGISTRY })!;
+  const reconcile = (budget: number) => {
+    let scannedUpTo = 0;
+    let read = 0;
+    for (;;) {
+      const bound = unlockedStartLevel(mm.timed90, progress);
+      if (bound <= scannedUpTo) return;
+      const candidates: Doc[] = [];
+      let exhausted = false;
+      scan: for (let level = scannedUpTo + 1; level <= bound; level += 1) {
+        for (const doc of byId) {
+          if (results.get(doc.id)?.validity !== 'flagged' || doc.raw.startLevel !== level) continue;
+          if (read >= budget) {
+            exhausted = true;
+            break scan;
+          }
+          read += 1;
+          if (upgradeBlocker(fieldsOf(doc), progress, GAME_MODULE_REGISTRY) === null) candidates.push(doc);
+        }
+      }
+      scannedUpTo = bound;
+      for (const doc of candidates.sort(playOrder)) {
+        const upgraded = upgradeSession(fieldsOf(doc), progress!, { sessionId: doc.id, upgradedAt: ts(clock += 1_000), registry: GAME_MODULE_REGISTRY });
+        if (upgraded === null) continue;
         results.set(doc.id, upgraded.result);
         progress = upgraded.progress;
-        changed = true;
+      }
+      if (exhausted) {
+        budgetHit = true;
+        return;
       }
     }
   };
@@ -110,9 +138,10 @@ function processInOrder(docs: readonly Doc[], order: readonly number[]) {
     });
     results.set(doc.id, decision.result);
     progress = decision.progress;
-    if (decision.unlockRaised) reconcile();
+    if (decision.unlockRaised) reconcile(scanBudget);
   }
-  return { progress, results };
+  if (admin) reconcile(Infinity);
+  return { progress, results, budgetHit };
 }
 
 function content(progress: GameProgress | null) {
@@ -129,6 +158,7 @@ describe('order-independent processing', () => {
   it('converges to the same progress and validities whatever order sessions are processed in', () => {
     const random = prng(0x5eed_0019);
     let upgradesSeen = 0;
+    let budgetHits = 0;
     for (let run = 0; run < 120; run += 1) {
       const docs = randomSessions(random);
       const playOrder = [...docs.keys()].sort((a, b) => compareTimestamps(
@@ -137,18 +167,30 @@ describe('order-independent processing', () => {
       const reference = processInOrder(docs, playOrder);
 
       for (let attempt = 0; attempt < 6; attempt += 1) {
-        const shuffled = processInOrder(docs, random.shuffle(playOrder));
+        const order = random.shuffle(playOrder);
+        // With no budget, the triggers alone converge.
+        const shuffled = processInOrder(docs, order);
         expect(content(shuffled.progress), `run ${run}`).toEqual(content(reference.progress));
         expect(validities(shuffled.results), `run ${run}`).toEqual(validities(reference.results));
         upgradesSeen += [...shuffled.results.values()].filter((result) => result.reasons.includes('start-level-unlocked-later')).length;
+
+        // With a tight scan budget: converged whenever no reconcile ran out, and always after the admin reconcile.
+        const scanBudget = random.int(0, 3);
+        const tight = processInOrder(docs, order, { scanBudget });
+        if (!tight.budgetHit) expect(content(tight.progress), `run ${run} budget ${scanBudget}`).toEqual(content(reference.progress));
+        budgetHits += tight.budgetHit ? 1 : 0;
+        const finished = processInOrder(docs, order, { scanBudget, admin: true });
+        expect(content(finished.progress), `run ${run} budget ${scanBudget} + admin`).toEqual(content(reference.progress));
+        expect(validities(finished.results), `run ${run} budget ${scanBudget} + admin`).toEqual(validities(reference.results));
       }
 
       // A rebuild from the stored results gives the same progress as live processing.
       const stored = docs.map((doc) => ({ id: doc.id, session: readSessionProgressFields({ ...doc.raw, result: reference.results.get(doc.id) }) }));
       expect(content(rebuildProgress(mm.definition, stored, ts(T0)))).toEqual(content(reference.progress));
     }
-    // The generator really exercises the upgrade path.
+    // The generator really exercises the upgrade path and the budget.
     expect(upgradesSeen).toBeGreaterThan(50);
+    expect(budgetHits).toBeGreaterThan(20);
   });
 
   it('never downgrades: a valid session stays valid whatever is processed after it', () => {

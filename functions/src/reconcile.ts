@@ -44,35 +44,32 @@ type Candidate = { readonly id: string; readonly fields: SessionProgressFields }
 /**
  * Finds upgradable sessions of one game and mode at start levels
  * `fromLevel`..`toLevel`: one query per level on the merged "upgrade scan"
- * index (gameId, modeId, result.validity == 'flagged', startLevel), through a
- * projection without trials, paged, at most `reconcileLevelScanBudget`
- * documents per level; then the pure upgradeBlocker decides each.
+ * index (gameId, modeId, result.validity == 'flagged', startLevel == level),
+ * through a projection without trials, paged with cursors to the end of each
+ * level, so sessions flagged for other reasons cannot hide an upgradable one;
+ * the pure upgradeBlocker decides each. `budget` bounds the documents read
+ * over all levels; running out of it is reported, never silent.
  */
 async function findCandidates(
   context: ProcessingContext,
   uid: string,
   target: ReconcileTarget,
   progress: GameProgress,
-  fromLevel: number,
-  toLevel: number,
-): Promise<{ candidates: Candidate[]; exhausted: boolean }> {
-  const { limits } = context;
+  levels: { readonly from: number; readonly to: number },
+  budget: number,
+): Promise<{ candidates: Candidate[]; read: number; exhausted: boolean }> {
   const candidates: Candidate[] = [];
-  let exhausted = false;
-  for (let level = fromLevel; level <= toLevel; level += 1) {
+  let read = 0;
+  for (let level = levels.from; level <= levels.to; level += 1) {
     let query = sessionsOf(context.db, uid)
       .where('gameId', '==', target.gameId)
       .where('modeId', '==', target.modeId)
       .where('result.validity', '==', 'flagged')
       .where('startLevel', '==', level)
       .select(...SESSION_PROGRESS_FIELDS);
-    let read = 0;
     for (;;) {
-      const pageLimit = Math.min(limits.scanPageSize, limits.reconcileLevelScanBudget - read);
-      if (pageLimit <= 0) {
-        exhausted = true;
-        break;
-      }
+      const pageLimit = Math.min(context.limits.scanPageSize, budget - read);
+      if (pageLimit <= 0) return { candidates, read, exhausted: true };
       const page = await query.limit(pageLimit).get();
       read += page.size;
       for (const document of page.docs) {
@@ -89,7 +86,7 @@ async function findCandidates(
       query = query.startAfter(page.docs[page.docs.length - 1]!);
     }
   }
-  return { candidates, exhausted };
+  return { candidates, read, exhausted: false };
 }
 
 /**
@@ -133,12 +130,17 @@ async function upgradeBatch(
 /**
  * Upgrades every start-level-locked session of one game and mode that the
  * user's progress now unlocks, to a fixpoint. Each round scans only the start
- * levels the previous rounds had not reached, so every level is read at most
- * once per call; a new round only follows a raised unlock. Bounded: at most
- * `maxReconcileRounds` rounds, `reconcileLevelScanBudget` documents per
- * level and `maxUpgradesPerReconcile` upgrades, in transactions of
- * `upgradeBatchSize`. What a budget leaves is finished by the next reconcile
- * of the mode (the next raised unlock, a redelivery, or the admin scripts).
+ * levels the previous rounds had not reached (to the end of each level), so
+ * every flagged session is read at most once per call; a new round only
+ * follows a raised unlock.
+ *
+ * Bounded per call by `reconcileScanBudget` documents read,
+ * `maxUpgradesPerReconcile` upgrades (in transactions of `upgradeBatchSize`)
+ * and `maxReconcileRounds`. A call that runs out stops with 'budget' and logs
+ * it; nothing is lost, but only another reconcile finishes the work: the
+ * admin scripts reconcile with no budget (EXHAUSTIVE_RECONCILE), while a
+ * trigger reconciles again only when an unlock rises or a valid session is
+ * redelivered.
  */
 export async function reconcileUpgrades(
   context: ProcessingContext,
@@ -148,6 +150,7 @@ export async function reconcileUpgrades(
   const { limits } = context;
   const upgraded: string[] = [];
   let scannedUpTo = 0;
+  let read = 0;
   for (let round = 0; round < limits.maxReconcileRounds; round += 1) {
     const stored = await progressRef(context.db, uid, target.gameId).get();
     const state = classifyProgress(stored.data(), target.gameId, context.registry);
@@ -156,25 +159,35 @@ export async function reconcileUpgrades(
     const bound = unlockBound(context, target.gameId, target.modeId, state.progress);
     if (bound <= scannedUpTo) return { upgraded, stopped: 'fixpoint' };
 
-    const { candidates, exhausted } = await findCandidates(context, uid, target, state.progress, scannedUpTo + 1, bound);
+    const scan = await findCandidates(
+      context, uid, target, state.progress, { from: scannedUpTo + 1, to: bound }, limits.reconcileScanBudget - read,
+    );
+    read += scan.read;
     scannedUpTo = bound;
-    const ordered = candidates.sort((a, b) => compareTimestamps(a.fields.endedAt, b.fields.endedAt) || (a.id < b.id ? -1 : 1));
+    const ordered = scan.candidates.sort((a, b) => compareTimestamps(a.fields.endedAt, b.fields.endedAt) || (a.id < b.id ? -1 : 1));
     for (let index = 0; index < ordered.length;) {
       const remaining = limits.maxUpgradesPerReconcile - upgraded.length;
-      if (remaining <= 0) {
-        context.log.warn('reconcile upgrade budget reached; the next reconcile continues', { uid, ...target });
-        return { upgraded, stopped: 'budget' };
-      }
+      if (remaining <= 0) return stoppedByBudget(context, uid, target, upgraded, 'upgrades');
       const batch = ordered.slice(index, index + Math.min(limits.upgradeBatchSize, remaining));
       index += batch.length;
       const done = await upgradeBatch(context, uid, target.gameId, batch);
       if (done === 'progress-not-current') return { upgraded, stopped: 'progress-not-current' };
       upgraded.push(...done);
     }
-    if (exhausted) {
-      context.log.warn('reconcile scan budget reached at a start level; the next reconcile continues', { uid, ...target });
-      return { upgraded, stopped: 'budget' };
-    }
+    if (scan.exhausted) return stoppedByBudget(context, uid, target, upgraded, 'scan');
   }
+  return stoppedByBudget(context, uid, target, upgraded, 'rounds');
+}
+
+function stoppedByBudget(
+  context: ProcessingContext,
+  uid: string,
+  target: ReconcileTarget,
+  upgraded: string[],
+  budget: 'scan' | 'upgrades' | 'rounds',
+): ReconcileReport {
+  context.log.warn('reconcile stopped at its budget; run the admin reconcile (redrive-sessions --uid) to finish it', {
+    uid, ...target, budget, upgraded: upgraded.length,
+  });
   return { upgraded, stopped: 'budget' };
 }

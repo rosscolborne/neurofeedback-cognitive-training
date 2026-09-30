@@ -1,6 +1,7 @@
 import type { QueryDocumentSnapshot, Timestamp } from 'firebase-admin/firestore';
 import { compareTimestamps, type FirestoreTimestamp } from '@nfct/shared';
 import { sessionsOf, type ProcessingContext } from './context';
+import { EXHAUSTIVE_RECONCILE } from './policy';
 import { describeError, processingReasonOf } from './errors';
 import { runSessionPipeline } from './pipeline';
 import { recordProcessingState } from './processSession';
@@ -157,18 +158,21 @@ export async function redriveSessions(
 }
 
 /**
- * Runs the start-level upgrade for every registered game mode of one user:
- * finishes an upgrade a budget or a failure cut short.
+ * Runs the start-level upgrade for every registered game mode of one user
+ * with no budget (EXHAUSTIVE_RECONCILE): every flagged session at every
+ * unlocked start level is examined, so it completes any reconcile that an
+ * invocation's budget, or a failure, cut short. Admin only.
  */
 export async function reconcileUser(
   context: ProcessingContext,
   uid: string,
 ): Promise<{ gameId: string; modeId: string; report: ReconcileReport }[]> {
+  const exhaustive: ProcessingContext = { ...context, limits: { ...context.limits, ...EXHAUSTIVE_RECONCILE } };
   const targets = new Map<string, { gameId: string; modeId: string }>();
   for (const module of context.registry.modules) {
     for (const mode of module.definition.modes) targets.set(`${module.gameId}/${mode.id}`, { gameId: module.gameId, modeId: mode.id });
   }
   const reports = [];
-  for (const target of targets.values()) reports.push({ ...target, report: await reconcileUpgrades(context, uid, target) });
+  for (const target of targets.values()) reports.push({ ...target, report: await reconcileUpgrades(exhaustive, uid, target) });
   return reports;
 }

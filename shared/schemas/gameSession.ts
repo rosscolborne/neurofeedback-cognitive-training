@@ -178,19 +178,27 @@ export function sessionSummarySchemaFor<Trial, Metrics extends object>(definitio
 }
 
 /**
+ * Any value the rules accept as a number: Firestore doubles include NaN and
+ * the infinities, which z.number() refuses. Only the display summary needs
+ * this; nothing trusted is ever read from it.
+ */
+const rulesNumberSchema = z.custom<number>((value) => typeof value === 'number', 'Expected a number');
+
+/**
  * The summary's structure only, as the rules enforce it: exact keys, value
- * types and at most 32 metric keys. Trusted scoring parses the summary with
- * this, so a display bug or a forged summary can never make an otherwise
- * coherent session invalid; a summary that disagrees with trusted scoring, or
- * that the game's own summary schema rejects, is only the diagnostic
+ * types (any number the rules accept, NaN and the infinities included) and at
+ * most 32 metric keys. Trusted scoring parses the summary with this, so a
+ * display bug or a forged summary can never make an otherwise coherent
+ * session invalid; a summary that disagrees with trusted scoring, or that the
+ * game's own summary schema rejects, is only the diagnostic
  * 'summary-mismatch'.
  */
 export const sessionSummaryShapeSchema = z.strictObject({
-  score: z.number(),
-  accuracy: z.number().nullable(),
-  trialsTotal: z.number(),
-  trialsCorrect: z.number().nullable(),
-  responseTime: z.strictObject({ medianMs: z.number(), meanMs: z.number(), p90Ms: z.number() }).nullable(),
+  score: rulesNumberSchema,
+  accuracy: rulesNumberSchema.nullable(),
+  trialsTotal: rulesNumberSchema,
+  trialsCorrect: rulesNumberSchema.nullable(),
+  responseTime: z.strictObject({ medianMs: rulesNumberSchema, meanMs: rulesNumberSchema, p90Ms: rulesNumberSchema }).nullable(),
   metrics: z.record(z.string(), z.unknown()).refine((metrics) => Object.keys(metrics).length <= 32, 'At most 32 metrics'),
 });
 

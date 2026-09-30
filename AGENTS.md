@@ -78,11 +78,17 @@ owns the task:
 
 ```bash
 npm ci --legacy-peer-deps
+npm ci --prefix functions
 npm run check:isolation && npm run lint && npm run build && npm test
 npm run test:e2e:typecheck && npm run test:rules:typecheck
+npm run functions:typecheck && npm run functions:build
 npm run test:rules            # needs Java 21
+npm run test:functions        # Cloud Functions on the emulators; needs Java 21
 npm run test:e2e:protocol     # local emulator browser suite; needs Java 21
 ```
+
+`npm test` excludes `functions/**`, so a change to `shared/` or `functions/`
+also needs the Functions checks.
 
 More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md).
 

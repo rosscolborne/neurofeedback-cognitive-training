@@ -68,6 +68,11 @@ export const PROCESSING_REASONS = Object.freeze({
   unknownGameVersion: 'unknown-game-version',
   /** The session's `schemaVersion` is one this build cannot read. */
   unsupportedSchemaVersion: 'unsupported-schema-version',
+  /**
+   * The session is valid for its version except for envelope fields this
+   * build does not know: rules or clients were deployed before Functions.
+   */
+  unknownSessionField: 'unknown-session-field',
   /** The game's progress was written by newer code (schema, aggregate or game version); this build never overwrites it. */
   progressNewerThanCode: 'progress-newer-than-code',
   /** The game's progress document cannot be read and is not from newer code. */

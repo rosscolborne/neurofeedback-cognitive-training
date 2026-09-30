@@ -17,12 +17,14 @@ export interface ProcessingLimits {
   /** Most pending predecessors processed inline before the session itself. */
   readonly maxInlinePredecessors: number;
   /**
-   * Most flagged session documents (projected) one reconcile reads per start
-   * level. Each level is scanned separately, and once per reconcile, so
-   * sessions flagged for other reasons at one level never hide upgradable
-   * ones at another.
+   * Most flagged session documents (projected, without trials) one reconcile
+   * call reads, over all start levels. Each level is paged with cursors past
+   * sessions that are flagged for other reasons, so none of them can hide an
+   * upgradable session unless this budget runs out; the call then stops and
+   * reports 'budget'. The admin scripts reconcile with no budget
+   * (EXHAUSTIVE_RECONCILE).
    */
-  readonly reconcileLevelScanBudget: number;
+  readonly reconcileScanBudget: number;
   /** Page size for the projected scans. */
   readonly scanPageSize: number;
   /** Most sessions upgraded in one transaction. */
@@ -42,9 +44,20 @@ export const PROCESSING_LIMITS: ProcessingLimits = Object.freeze({
   predecessorLookbackMs: 24 * 60 * 60_000,
   predecessorScanBudget: 200,
   maxInlinePredecessors: 10,
-  reconcileLevelScanBudget: 20,
+  reconcileScanBudget: 1_000,
   scanPageSize: 50,
   upgradeBatchSize: 20,
   maxUpgradesPerReconcile: 100,
   maxReconcileRounds: 10,
+});
+
+/**
+ * Reconcile limits for the admin scripts: every flagged session at every
+ * unlocked start level is examined and every upgradable one upgraded, so a
+ * reconcile an invocation's budget cut short is always completed there.
+ */
+export const EXHAUSTIVE_RECONCILE: Partial<ProcessingLimits> = Object.freeze({
+  reconcileScanBudget: Number.POSITIVE_INFINITY,
+  maxUpgradesPerReconcile: Number.POSITIVE_INFINITY,
+  maxReconcileRounds: Number.POSITIVE_INFINITY,
 });

@@ -88,9 +88,22 @@ describe('evaluateSession', () => {
       { ...raw, startLevel: 11 }, // the rules allow 1-50; Mental Math v1 has 10 levels
       { ...raw, activeDurationMs: 3_600_001 },
       { ...raw, localDate: '2026-02-30' },
-      { ...raw, surprise: true },
+      { ...raw, surprise: true, localDate: '2026-02-30' },
+      { ...raw, trials: [{ ...trials[0], surprise: true }, ...trials.slice(1)] },
     ]) {
       expect(evaluate(broken)).toEqual({ kind: 'invalid', module: mentalMathV1Module, reasons: ['schema-invalid'] });
+    }
+  });
+
+  it('marks a session whose only fault is envelope fields this build does not know unsupported, not invalid', () => {
+    // The rules gate these with exact key sets: only rules or clients deployed before Functions produce them.
+    const raw = session();
+    for (const change of [
+      { surprise: true },
+      { client: { ...(raw.client as object), device: 'phone' } },
+      { summary: { ...(raw.summary as object), streak: 3 } },
+    ]) {
+      expect(evaluate({ ...raw, ...change })).toEqual({ kind: 'unsupported', reason: 'unknown-session-field' });
     }
   });
 
@@ -125,7 +138,11 @@ describe('evaluateSession', () => {
       const raw = session();
       const summary = raw.summary as Record<string, unknown>;
 
-      for (const change of [{ accuracy: 7 }, { trialsTotal: -3 }, { metrics: {} }, { metrics: { lives: 1 } }]) {
+      for (const change of [
+        { accuracy: 7 }, { trialsTotal: -3 }, { metrics: {} }, { metrics: { lives: 1 } },
+        { score: Number.NaN }, { accuracy: Number.POSITIVE_INFINITY }, { trialsCorrect: Number.NEGATIVE_INFINITY },
+        { responseTime: { medianMs: Number.NaN, meanMs: 1, p90Ms: 2 } },
+      ]) {
         expect(scored({ ...raw, summary: { ...summary, ...change } }).entries)
           .toEqual([{ code: 'summary-mismatch', outcome: 'diagnostic' }]);
       }
@@ -174,9 +191,9 @@ describe('evaluateSession', () => {
     expect(decision.progress).toBeNull();
   });
 
-  it('never reads EEG: a recording field on the document is an unknown key like any other', () => {
-    // The session schema has no EEG field at all; the only link is eegRecordings.gameSessionId.
-    expect(codes(evaluate({ ...session(), eegLinked: true }))).toEqual(['schema-invalid']);
+  it('never reads EEG: a recording field on the document is an unknown field like any other, never scored', () => {
+    // The session schema has no EEG field at all (the rules refuse one); the only link is eegRecordings.gameSessionId.
+    expect(evaluate({ ...session(), eegLinked: true })).toEqual({ kind: 'unsupported', reason: 'unknown-session-field' });
     // No processing module imports or names anything about EEG (comments aside).
     const sources = ['evaluate', 'decide', 'registry', 'modules', 'reasons', 'clock']
       .map((file) => readFileSync(new URL(`../processing/${file}.ts`, import.meta.url), 'utf8')

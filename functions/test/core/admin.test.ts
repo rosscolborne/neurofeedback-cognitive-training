@@ -67,6 +67,25 @@ describe('rebuild-progress', () => {
     expect(content(await readDoc(db, progressPath(uid)))).toEqual(content(live));
   });
 
+  it("finishes a start-level upgrade that an invocation's budget left, with no budget of its own", async () => {
+    const uid = newUid();
+    for (let index = 0; index < 3; index += 1) {
+      const fast = await writeSession(db, uid, { seed: 80 + index, startLevel: 2, targetPeak: 3, rtMs: 200, endedAtMs: minutesAgo(60 - index), order: index });
+      await runSessionPipeline(context, uid, fast.id);
+    }
+    const locked = await writeSession(db, uid, { seed: 84, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(30), order: 9_999 });
+    await runSessionPipeline(context, uid, locked.id);
+    const unlocking = await writeSession(db, uid, { seed: 85, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 9_000 });
+    const starved = await runSessionPipeline(coreContext(db, { limits: { reconcileScanBudget: 1, scanPageSize: 1 } }), uid, unlocking.id);
+    expect(starved.reconciled[0]?.report.stopped).toBe('budget');
+    expect((await readDoc(db, sessionPath(uid, locked.id)))?.result.validity).toBe('flagged');
+
+    await runRebuildProgress(['--project', CORE_PROJECT, '--uid', uid], env, out);
+
+    expect((await readDoc(db, sessionPath(uid, locked.id)))?.result).toMatchObject({ validity: 'valid', reasons: ['start-level-unlocked-later'] });
+    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 5, bestPeakLevel: { 'timed-90': 4 } });
+  });
+
   it('refuses to overwrite progress from newer code', async () => {
     const uid = newUid();
     const newer = { schemaVersion: 1, aggregateVersion: 9, gameId: 'mental-math' };

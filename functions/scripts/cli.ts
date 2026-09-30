@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { processingContext, type ProcessingContext } from '../src/context';
+import { EXHAUSTIVE_RECONCILE } from '../src/policy';
 import { rebuildableGames, rebuildUserProgress, type RebuildReport } from '../src/rebuild';
 import { reconcileUser, redriveSessions, type RedriveState } from '../src/redrive';
 
@@ -37,7 +38,8 @@ let appCount = 0;
 function contextFor(target: Target): { context: ProcessingContext; app: App } {
   appCount += 1;
   const app = initializeApp({ projectId: target.projectId }, `nfct-admin-script-${appCount}`);
-  return { app, context: processingContext(getFirestore(app)) };
+  // Admin runs reconcile with no budget, so they always finish what a trigger's budget left.
+  return { app, context: processingContext(getFirestore(app), { limits: EXHAUSTIVE_RECONCILE }) };
 }
 
 export type Output = (line: string) => void;
@@ -45,7 +47,7 @@ export type Output = (line: string) => void;
 /**
  * `rebuild-progress --project <id> --uid <uid> [--game <gameId>] [--live]`:
  * rebuilds the user's progress (every game with a module, or one) from their
- * stored trusted results, then runs the start-level upgrade.
+ * stored trusted results, then runs the start-level upgrade with no budget.
  */
 export async function runRebuildProgress(argv: readonly string[], env: CliEnvironment, out: Output): Promise<RebuildReport[]> {
   const { values } = parseArgs({
@@ -76,7 +78,9 @@ export async function runRebuildProgress(argv: readonly string[], env: CliEnviro
 /**
  * `redrive-sessions --project <id> [--uid <uid>] [--state pending,failed,unsupported]
  *  [--older-than-minutes 30] [--newer-than-days 7] [--limit 100] [--scan-budget 5000] [--dry-run] [--live]`:
- * re-drives sessions without a result through the trigger's pipeline.
+ * re-drives sessions without a result through the trigger's pipeline, then
+ * runs the admin reconcile (no budget) for every affected user. With --uid it
+ * also finishes that user's start-level upgrades when nothing needs re-driving.
  */
 export async function runRedriveSessions(argv: readonly string[], env: CliEnvironment, out: Output) {
   const { values } = parseArgs({
@@ -120,7 +124,11 @@ export async function runRedriveSessions(argv: readonly string[], env: CliEnviro
     });
     for (const { uid, sessionId, state } of report.targets) out(`${values['dry-run'] ? 'would re-drive' : 'target'} users/${uid}/gameSessions/${sessionId} (${state})`);
     for (const { uid, sessionId, now: state, error } of report.results) out(`users/${uid}/gameSessions/${sessionId}: ${state}${error ? ` (${error})` : ''}`);
-    if (values.uid && !values['dry-run']) await reconcileUser(context, values.uid);
+    // Finish every affected user's start-level upgrades, with no budget.
+    if (!values['dry-run']) {
+      const users = new Set(values.uid ? [values.uid] : report.results.map(({ uid }) => uid));
+      for (const uid of users) await reconcileUser(context, uid);
+    }
     return report;
   } finally {
     await deleteApp(app);

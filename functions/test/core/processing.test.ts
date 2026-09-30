@@ -81,6 +81,32 @@ describe('trusted session processing', () => {
     expect((await readDoc(db, progressPath(uid)))?.bestPeakLevel).toEqual({ 'timed-90': 3 });
   });
 
+  it('keeps a session valid when its display summary holds NaN or Infinity (numbers to the rules)', async () => {
+    const uid = newUid();
+    const id = newSessionId();
+    const doc = sessionDoc(uid, { seed: 14, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(5), createdAt: ts(Date.now()) });
+    const summary = doc.summary as Record<string, unknown>;
+    await db.doc(sessionPath(uid, id)).set({ ...doc, summary: { ...summary, score: Number.NaN, accuracy: Number.POSITIVE_INFINITY } });
+
+    await runSessionPipeline(context, uid, id);
+
+    expect((await readDoc(db, sessionPath(uid, id)))?.result).toMatchObject({ validity: 'valid', reasons: ['summary-mismatch'] });
+  });
+
+  it('marks a session with an envelope field this build does not know unsupported (rules deployed before Functions)', async () => {
+    const uid = newUid();
+    const id = newSessionId();
+    const doc = sessionDoc(uid, { seed: 15, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(5), createdAt: ts(Date.now()) });
+    await db.doc(sessionPath(uid, id)).set({ ...doc, futureOptionalField: 'x' });
+
+    await runSessionPipeline(context, uid, id);
+
+    const session = await readDoc(db, sessionPath(uid, id));
+    expect(session?.result).toBeUndefined();
+    expect(session?.processing).toMatchObject({ state: 'unsupported', reason: 'unknown-session-field', attempts: 1 });
+    expect(await readDoc(db, progressPath(uid))).toBeUndefined();
+  });
+
   it('flags a first session at level 2 start-level-locked: totals only, no record', async () => {
     const uid = newUid();
     const { id } = await writeSession(db, uid, { seed: 3, startLevel: 2, targetPeak: 5, endedAtMs: minutesAgo(5) });

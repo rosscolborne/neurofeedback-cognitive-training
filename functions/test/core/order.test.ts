@@ -137,22 +137,60 @@ describe('bounded work', () => {
     expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 6 });
   });
 
-  it('never lets sessions flagged for other reasons at one start level hide an upgradable one at another', async () => {
+  it('pages past sessions flagged for other reasons at the same start level, so none can hide an upgradable one', async () => {
     const uid = newUid();
-    for (let index = 0; index < 3; index += 1) {
-      const fast = await writeSession(db, uid, { seed: 60 + index, startLevel: 1, targetPeak: 2, rtMs: 200, endedAtMs: minutesAgo(40 - index), order: index });
+    // More sessions flagged for another reason at level 2 than the old per-level cap (20), all sorting first.
+    for (let index = 0; index < 22; index += 1) {
+      const fast = await writeSession(db, uid, { seed: 300 + index, startLevel: 2, targetPeak: 3, rtMs: 200, endedAtMs: minutesAgo(90 - index), order: index });
       await runSessionPipeline(context, uid, fast.id);
     }
-    const locked = await writeSession(db, uid, { seed: 64, startLevel: 2, targetPeak: 3, endedAtMs: minutesAgo(20), order: 5 });
+    const locked = await writeSession(db, uid, { seed: 330, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(30), order: 9_999 });
     await runSessionPipeline(context, uid, locked.id);
-    const unlocking = await writeSession(db, uid, { seed: 65, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 6 });
+    const unlocking = await writeSession(db, uid, { seed: 331, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 9_000 });
 
-    // Only two flagged documents may be read per level: level 1 alone has three.
-    const tight = coreContext(db, { limits: { reconcileLevelScanBudget: 2, scanPageSize: 2 } });
-    const report = await runSessionPipeline(tight, uid, unlocking.id);
+    const paged = coreContext(db, { limits: { scanPageSize: 5 } });
+    const report = await runSessionPipeline(paged, uid, unlocking.id);
 
-    expect(report.reconciled[0]?.report).toEqual({ upgraded: [locked.id], stopped: 'budget' });
+    expect(report.reconciled[0]?.report).toEqual({ upgraded: [locked.id], stopped: 'fixpoint' });
     expect(await resultOf(uid, locked.id)).toMatchObject({ validity: 'valid', reasons: ['start-level-unlocked-later'] });
+    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 24, bestPeakLevel: { 'timed-90': 4 } });
+  });
+
+  it("stops at an invocation's scan budget and says so; the admin reconcile, which has no budget, finishes it", async () => {
+    const uid = newUid();
+    for (let index = 0; index < 5; index += 1) {
+      const fast = await writeSession(db, uid, { seed: 340 + index, startLevel: 2, targetPeak: 3, rtMs: 200, endedAtMs: minutesAgo(60 - index), order: index });
+      await runSessionPipeline(context, uid, fast.id);
+    }
+    const locked = await writeSession(db, uid, { seed: 350, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(30), order: 9_999 });
+    await runSessionPipeline(context, uid, locked.id);
+    const unlocking = await writeSession(db, uid, { seed: 351, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 9_000 });
+
+    const tight = coreContext(db, { limits: { reconcileScanBudget: 3, scanPageSize: 2 } });
+    const report = await runSessionPipeline(tight, uid, unlocking.id);
+    expect(report.reconciled[0]?.report).toEqual({ upgraded: [], stopped: 'budget' });
+    expect((await resultOf(uid, locked.id)).validity).toBe('flagged');
+
+    // The admin reconcile ignores the tight limits it is given.
+    const [admin] = await reconcileUser(tight, uid);
+    expect(admin?.report).toEqual({ upgraded: [locked.id], stopped: 'fixpoint' });
+    expect((await resultOf(uid, locked.id)).validity).toBe('valid');
+  });
+
+  it('reconciles again when an already-valid session is redelivered (a reconcile lost after its commit)', async () => {
+    const uid = newUid();
+    const locked = await writeSession(db, uid, { seed: 360, startLevel: 2, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
+    await runSessionPipeline(context, uid, locked.id);
+    const unlocking = await writeSession(db, uid, { seed: 361, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 2 });
+    // The first delivery commits, then dies before its reconcile.
+    expect(await processSession(context, uid, unlocking.id)).toMatchObject({ status: 'processed', validity: 'valid' });
+    expect((await resultOf(uid, locked.id)).validity).toBe('flagged');
+
+    const redelivery = await runSessionPipeline(context, uid, unlocking.id);
+
+    expect(redelivery.outcome.status).toBe('already-processed');
+    expect(redelivery.reconciled[0]?.report.upgraded).toEqual([locked.id]);
+    expect((await resultOf(uid, locked.id)).validity).toBe('valid');
   });
 
   it('caps upgrades per reconcile; the next reconcile finishes them', async () => {

@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import type { ScoredResult } from '../games/definition';
 import { documentIdSchema } from '../primitives';
 import { GAME_SESSION_SCHEMA_VERSION } from '../schemas/gameSession';
@@ -49,12 +50,27 @@ function clientFields(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
+ * Whether the only problem is fields this build does not know in the
+ * envelope, `client` or `summary`. The rules gate those with exact key sets,
+ * so a client cannot add such a field: it only appears when a new optional
+ * field reached the rules or clients before a Functions deploy that knows it.
+ * That is this build's gap, not the session's fault, so the session is
+ * unsupported (re-driven after the deploy) rather than invalid. Trials are
+ * different: the rules do not check them, and a version's trial shape is
+ * frozen, so an unknown trial field stays a schema failure.
+ */
+function onlyUnknownEnvelopeFields(issues: readonly z.core.$ZodIssue[]): boolean {
+  return issues.length > 0 && issues.every((issue) => issue.code === 'unrecognized_keys' && issue.path[0] !== 'trials');
+}
+
+/**
  * Evaluates one session document as the client wrote it (any `result` or
  * `processing` is ignored). Deterministic: the same document always gives the
  * same evaluation.
  *
  * - unsupported: its `schemaVersion`, `gameId` or `gameVersion` has no module
- *   in this build (including values it cannot even read);
+ *   in this build (including values it cannot even read), or its only fault
+ *   is envelope fields this build does not know (a deploy-order problem);
  * - invalid: it fails its version's schemas ('schema-invalid'), its path does
  *   not match it, or the version's checks find a contract violation;
  * - scored: everything else, with the version's reasons and the clock
@@ -86,6 +102,9 @@ export function evaluateSession(
 
   const evaluation = module.evaluate(clientFields(document));
   if (!evaluation.ok) {
+    if (onlyUnknownEnvelopeFields(evaluation.issues)) {
+      return { kind: 'unsupported', reason: PROCESSING_REASONS.unknownSessionField };
+    }
     return { kind: 'invalid', module, reasons: mergeReasons([serverReason('schema-invalid'), ...locationReasons]).reasons };
   }
 

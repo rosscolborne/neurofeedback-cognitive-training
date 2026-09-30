@@ -227,7 +227,12 @@ describe('game session schema', () => {
       const withSummary = (change: Record<string, unknown>) => ({ ...session, summary: { ...summary, ...change } });
 
       // Values the game's own summary schema rejects are never a schema failure here.
-      for (const change of [{ accuracy: 1.5 }, { trialsTotal: -1 }, { trialsCorrect: 0.5 }, { metrics: {} }, { metrics: { lives: 3 } }]) {
+      for (const change of [
+        { accuracy: 1.5 }, { trialsTotal: -1 }, { trialsCorrect: 0.5 }, { metrics: {} }, { metrics: { lives: 3 } },
+        // Firestore doubles the rules accept as numbers, though z.number() refuses them.
+        { score: Number.NaN }, { accuracy: Number.POSITIVE_INFINITY }, { trialsTotal: Number.NEGATIVE_INFINITY },
+        { responseTime: { medianMs: Number.NaN, meanMs: 1, p90Ms: Number.POSITIVE_INFINITY } },
+      ]) {
         expect(schema.safeParse(withSummary(change)).success).toBe(true);
       }
       // The rules' structure still holds: exact keys, value types, at most 32 metrics.
