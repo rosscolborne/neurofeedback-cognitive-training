@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
 import { resolveFirebaseConfig } from './firebaseConfig';
+import { appFirestoreSettings } from './firestoreCache';
 
 const firebaseConfig = resolveFirebaseConfig(import.meta.env);
 
@@ -20,8 +21,19 @@ try {
 
 export const auth = authInstance;
 
-// Initialize Cloud Firestore
-export const db = getFirestore(app);
+// Initialize Cloud Firestore with the persistent offline cache.
+function initializeDb(): Firestore {
+  try {
+    return initializeFirestore(app, appFirestoreSettings());
+  } catch (error) {
+    // A hot-module reload re-runs this module after Firestore has started;
+    // the running instance already has the persistent cache.
+    if ((error as { code?: unknown } | null)?.code === 'failed-precondition') return getFirestore(app);
+    throw error;
+  }
+}
+
+export const db = initializeDb();
 
 // resolveFirebaseConfig has already refused any non-demo project in emulator mode.
 if (import.meta.env.VITE_E2E_EMULATORS === 'true') {
