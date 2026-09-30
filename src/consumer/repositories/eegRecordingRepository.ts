@@ -78,7 +78,7 @@ export interface EegRecordingsForSession {
 export type EegRecordingSkipReason =
   /** The profile has no EEG consent (or no consumer profile exists). */
   | 'consent-required'
-  /** Consent could not be checked: no cached profile, and the server did not answer in time. */
+  /** Consent could not be checked: the server did not answer in time, and the profile is not cached. */
   | 'consent-unavailable'
   /** The draft breaks the shared EEG schema. */
   | 'invalid';
@@ -118,12 +118,12 @@ export interface EegRecordingRepository {
 const DELETE_PAGE_SIZE = 400;
 
 /**
- * How long saving a session may wait for the server to answer a consent check
- * when the profile is not cached. Consent is read from the cache first, so this
- * applies only to a device that has never read the profile; after it, the
- * recording is skipped as 'consent-unavailable' and the session is queued.
+ * The longest a save waits for the server's copy of the profile when checking
+ * EEG consent. After it the cached profile is used, if there is one, and
+ * otherwise the recording is skipped as 'consent-unavailable'. Offline, the
+ * server read fails at once, so the cache is used without waiting.
  */
-export const CONSENT_SERVER_READ_TIMEOUT_MS = 2_000;
+export const CONSENT_SERVER_READ_TIMEOUT_MS = 1_500;
 
 export interface EegRecordingRepositoryOptions {
   readonly consentServerReadTimeoutMs?: number;
@@ -152,26 +152,32 @@ export function createEegRecordingRepository(
   const consentServerReadTimeoutMs = options.consentServerReadTimeoutMs ?? CONSENT_SERVER_READ_TIMEOUT_MS;
 
   /**
-   * The profile for a consent check, without making a session wait on the
-   * network: the cached profile when there is one (as the persistent cache
-   * normally holds it), otherwise a server read bounded by the timeout. A plain
-   * getDoc() would wait for the server while the connection state is unknown
-   * (at startup, or on a stalled connection), which can take many seconds.
+   * The profile for a consent check. The server's copy comes first, because
+   * the rules check consent as the server holds it when the batch arrives: a
+   * cached copy can still show consent that was withdrawn on another device,
+   * and a recording included on that basis would get the whole batch, session
+   * included, refused. The server read is bounded, so a save never waits long
+   * on the network: a plain getDoc() waits for the server while the connection
+   * state is unknown (at startup, or on a stalled connection), which can take
+   * many seconds. Offline, the server read fails at once and the cached copy
+   * is used; with neither, the recording is skipped.
    */
   async function profileForConsent(uid: string): Promise<DocumentSnapshot | null> {
     const ref = profileRef(firestore, uid);
+    const fromServer = await withinTimeout(getDocFromServer(ref), consentServerReadTimeoutMs);
+    if (fromServer) return fromServer;
     try {
       return await getDocFromCache(ref);
     } catch {
-      // Not cached on this device.
+      // Not cached on this device either.
+      return null;
     }
-    return withinTimeout(getDocFromServer(ref), consentServerReadTimeoutMs);
   }
 
   /** Null when the profile records consent; otherwise why the recording must be left out. */
   async function consentProblem(uid: string): Promise<EegRecordingSkipReason | null> {
     const snapshot = await profileForConsent(uid);
-    // No cached profile and no timely server answer. EEG is optional, so the session is saved without it.
+    // No timely server answer and no cached profile. EEG is optional, so the session is saved without it.
     if (!snapshot) return 'consent-unavailable';
     const read = readDocument('users', snapshot, (raw) => readUserProfile(raw));
     return read.status === 'readable' && read.data.eeg.consent !== null ? null : 'consent-required';
@@ -244,7 +250,7 @@ export function createEegRecordingRepository(
           reason: problem,
           message: problem === 'consent-required'
             ? 'EEG consent is not recorded on the profile.'
-            : 'EEG consent could not be checked: the profile is not cached and the server did not answer in time.',
+            : 'EEG consent could not be checked: the server did not answer in time and the profile is not cached.',
         };
       }
       const collectionRef = eegRecordingsRef(firestore, uid);

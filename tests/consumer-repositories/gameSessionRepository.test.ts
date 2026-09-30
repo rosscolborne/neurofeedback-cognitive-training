@@ -1,6 +1,6 @@
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { defineGame, GAME_SESSION_SCHEMA_VERSION, sessionSeedSchema } from '@nfct/shared';
 import { SignInRequiredError } from '../../src/consumer/firestore/context';
@@ -49,10 +49,23 @@ describe('starting a game', () => {
     expect(started.sessionId).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
     expect(started.userId).toBe(device.player.uid);
     expect(sessionSeedSchema.safeParse(started.seed).success).toBe(true);
-    const next = device.sessions.startGameSession();
-    expect(next.sessionId).not.toBe(started.sessionId);
-    expect(next.seed).not.toBe(started.seed);
+    expect(device.sessions.startGameSession().sessionId).not.toBe(started.sessionId);
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
+  });
+
+  it('draws the seed from the platform CSPRNG, once per game', async () => {
+    const device = await signedInDevice();
+    const fill = vi.spyOn(globalThis.crypto, 'getRandomValues');
+    try {
+      const started = device.sessions.startGameSession();
+      const seedFills = fill.mock.calls.map(([array]): unknown => array)
+        .filter((array): array is Uint32Array => array instanceof Uint32Array && array.length === 1);
+
+      expect(seedFills).toHaveLength(1);
+      expect(seedFills[0]?.[0]).toBe(started.seed);
+    } finally {
+      fill.mockRestore();
+    }
   });
 
   it('needs a signed-in user', async () => {
@@ -267,6 +280,25 @@ describe('saving with an optional EEG recording', () => {
   it('still saves the session when EEG consent is missing, and says the recording was skipped', async () => {
     const device = await signedInDevice();
     await withProfile(device);
+    const started = device.sessions.startGameSession();
+
+    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
+    await saved.acknowledged;
+
+    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-required' });
+    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
+    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
+  });
+
+  it('checks consent on the server, so consent withdrawn on another device skips the recording instead of costing the session', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    // This device has read (and cached) the profile with consent...
+    const cached = await device.profiles.getProfile();
+    expect(cached.status === 'readable' && cached.data.eeg.consent).not.toBeNull();
+    // ...then consent is withdrawn on another device; nothing here is listening to the profile.
+    const profile = await serverRead(`users/${device.player.uid}`);
+    await serverWrite({ [`users/${device.player.uid}`]: { ...profile, eeg: { ...profile?.eeg, consent: null } } });
     const started = device.sessions.startGameSession();
 
     const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });

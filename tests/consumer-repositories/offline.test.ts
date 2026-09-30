@@ -2,6 +2,7 @@ import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, disableNetwork, enableNetwork, getDocsFromCache, Timestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DomainReadError, readGameSession } from '@nfct/shared';
+import { CONSENT_SERVER_READ_TIMEOUT_MS } from '../../src/consumer/repositories/eegRecordingRepository';
 import type { RecentGameSessions } from '../../src/consumer/repositories/gameSessionRepository';
 import type { ProgressWithRecentSessions } from '../../src/consumer/repositories/progressRepository';
 import {
@@ -116,7 +117,10 @@ describe('playing offline', () => {
     await disableNetwork(device.firestore);
     const started = device.sessions.startGameSession();
 
+    const before = Date.now();
     const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
+    // Offline the server read fails at once: no waiting for the consent read's time bound.
+    expect(Date.now() - before).toBeLessThan(CONSENT_SERVER_READ_TIMEOUT_MS / 2);
     expect(saved.eegRecording.status).toBe('included');
     await enableNetwork(device.firestore);
     await saved.acknowledged;
@@ -199,10 +203,10 @@ describe('saving never waits on the network for EEG consent', () => {
   // cache at once. A stalled connection instead leaves it in an unknown state,
   // where a plain getDoc() waits for the server for many seconds.
 
-  it('uses the cached consent on a stalled connection, and queues the batch at once', async () => {
+  it('waits only the bounded server read on a stalled connection, then uses the cached consent and queues the batch', async () => {
     const stalled = await stalledEndpoint();
     try {
-      const device = await signedInDevice('stalled', { firestoreHost: stalled.host });
+      const device = await signedInDevice('stalled', { firestoreHost: stalled.host, eegOptions: { consentServerReadTimeoutMs: 300 } });
       // The profile and consent exist only in this device's cache: written here, never acknowledged.
       void device.profiles.createProfile(profileDraft()).acknowledged;
       void device.profiles.grantEegConsent(acceptedConsentVersion).acknowledged;
@@ -213,7 +217,8 @@ describe('saving never waits on the network for EEG consent', () => {
       const elapsed = Date.now() - before;
 
       expect(saved.eegRecording.status).toBe('included');
-      expect(elapsed).toBeLessThan(1_500);
+      expect(elapsed).toBeGreaterThanOrEqual(250);
+      expect(elapsed).toBeLessThan(2_000);
       const queued = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'gameSessions'));
       expect(queued.docs.map((item) => [item.id, item.metadata.hasPendingWrites])).toEqual([[started.sessionId, true]]);
     } finally {
@@ -222,7 +227,7 @@ describe('saving never waits on the network for EEG consent', () => {
     }
   });
 
-  it('bounds the server read when the profile is not cached, then skips the recording and queues the session', async () => {
+  it('skips the recording when the bounded server read fails and the profile is not cached, and queues the session', async () => {
     const stalled = await stalledEndpoint();
     try {
       const device = await signedInDevice('stalled', { firestoreHost: stalled.host, eegOptions: { consentServerReadTimeoutMs: 300 } });
