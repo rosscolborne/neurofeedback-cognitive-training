@@ -1,7 +1,8 @@
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { GAME_SESSION_SCHEMA_VERSION } from '@nfct/shared';
+import { z } from 'zod';
+import { defineGame, GAME_SESSION_SCHEMA_VERSION } from '@nfct/shared';
 import { SignInRequiredError } from '../../src/consumer/firestore/context';
 import { ConsumerWriteValidationError } from '../../src/consumer/firestore/writes';
 import {
@@ -23,7 +24,9 @@ import {
   sessionDraft,
   signedInDevice,
   testGame,
+  testTrialSchema,
   timestampAt,
+  type TestTrial,
   trustedResult,
   withProfile,
 } from './harness';
@@ -112,11 +115,15 @@ describe('saving a finished session', () => {
   it('the rules refuse the update a retried save would be, which is why the repository never retries', async () => {
     const device = await signedInDevice();
     const started = device.sessions.startGameSession();
-    await (await started.save({ definition: testGame, session: sessionDraft() })).acknowledged;
+    const draft = sessionDraft();
+    await (await started.save({ definition: testGame, session: draft })).acknowledged;
     const path = `users/${device.player.uid}/gameSessions/${started.sessionId}`;
-    const stored = await serverRead(path);
+    // Exactly what the save sent: the same document with createdAt = serverTimestamp().
+    const resend = { ...draft, schemaVersion: GAME_SESSION_SCHEMA_VERSION, userId: device.player.uid, createdAt: serverTimestamp() };
 
-    await expectDenied(rawClientWrite(device, path, { ...stored }));
+    await expectDenied(rawClientWrite(device, path, resend));
+    // The same write to a new ID is a create, and is accepted: only the update is refused.
+    await rawClientWrite(device, `users/${device.player.uid}/gameSessions/${device.sessions.startGameSession().sessionId}`, resend);
   });
 
   it('refuses the server-owned result and processing fields before writing, as the rules would', async () => {
@@ -181,6 +188,23 @@ describe('saving a finished session', () => {
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
 
     await (await started.save({ definition: testGame, session: sessionDraft() })).acknowledged;
+    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
+  });
+
+  it('refuses a value set to undefined as a validation error, before anything is queued', async () => {
+    const device = await signedInDevice();
+    // A game whose trials have an optional field: the shared schema accepts it set to undefined.
+    const withHint = defineGame({ ...testGame, trialSchema: testTrialSchema.extend({ hint: z.string().optional() }) });
+    const started = device.sessions.startGameSession();
+    const trials: (TestTrial & { hint?: string })[] = sessionDraft().trials.map((trial, index) => (index === 1 ? { ...trial, hint: undefined } : trial));
+
+    const error = await started.save({ definition: withHint, session: sessionDraft({ trials }) }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ConsumerWriteValidationError);
+    expect((error as ConsumerWriteValidationError).issues.map((issue) => issue.path.join('.'))).toEqual(['trials.1.hint']);
+    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
+    const withoutHint = trials.map(({ hint: _hint, ...trial }) => trial);
+    await (await started.save({ definition: withHint, session: sessionDraft({ trials: withoutHint }) })).acknowledged;
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
   });
 
@@ -277,6 +301,23 @@ describe('saving with an optional EEG recording', () => {
       expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
       expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
     }
+  });
+});
+
+describe('an EEG value set to undefined', () => {
+  it('leaves only the recording out, and still saves the session', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const started = device.sessions.startGameSession();
+    const summary = { ...eegDraft().summary, relativeBandPower: { delta: 0.3, theta: undefined } };
+
+    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft({ summary }) });
+    await saved.acknowledged;
+
+    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'invalid' });
+    expect(saved.eegRecording.status === 'skipped' && saved.eegRecording.message).toMatch(/summary\.relativeBandPower\.theta/);
+    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
+    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
   });
 });
 

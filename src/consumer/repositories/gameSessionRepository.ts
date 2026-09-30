@@ -15,6 +15,7 @@ import {
   type QueryConstraint,
   type QueryDocumentSnapshot,
   type Unsubscribe,
+  type WriteBatch,
 } from 'firebase/firestore';
 import {
   GAME_SESSION_SCHEMA_VERSION,
@@ -34,12 +35,20 @@ import {
 } from '../firestore/context';
 import { readDocument, readDocuments, type DocumentRead, type UnreadableDocument } from '../firestore/reads';
 import { serverTimestampSchema, toSdkTimestamps } from '../firestore/serverClock';
-import { assertNoReservedKeys, ConsumerWriteValidationError, pendingWrite, type PendingWrite } from '../firestore/writes';
+import {
+  assertNoReservedKeys,
+  assertNoUndefined,
+  ConsumerWriteValidationError,
+  pendingWrite,
+  withSdkValidation,
+  type PendingWrite,
+} from '../firestore/writes';
 import {
   createEegRecordingRepository,
   type EegRecordingDraft,
   type EegRecordingRepository,
   type EegRecordingSkipReason,
+  type PreparedEegRecording,
 } from './eegRecordingRepository';
 
 // users/{uid}/gameSessions/{sessionId}: the primary record (ADR-001 decisions
@@ -140,6 +149,13 @@ export interface StartedGameSession {
    * same batch. Resolves once the batch is queued (so it works offline);
    * `acknowledged` settles when the server accepts or refuses it. A handle
    * saves at most once: after a batch is queued, every further call throws.
+   *
+   * A refusal can be ambiguous. If the server applied the batch but its
+   * acknowledgement was lost (for example the connection dropped), the SDK
+   * sends the same write again, and the rules refuse it as an update:
+   * `acknowledged` rejects with `permission-denied` although the session
+   * exists. Re-read the session (`getGameSession`) before telling the player
+   * that a save failed.
    */
   save<Trial, Metrics extends object>(input: SaveGameSessionInput<Trial, Metrics>): Promise<SavedGameSession>;
 }
@@ -217,6 +233,20 @@ function queryRecord(raw: Record<string, unknown>, snapshot: QueryDocumentSnapsh
   return sessionRecord(raw, snapshot.id, snapshot.metadata.hasPendingWrites);
 }
 
+/**
+ * Adds a prepared recording to the session's batch. If the SDK still refuses
+ * its data, only the recording is left out: EEG never costs the session.
+ */
+function addRecording(batch: WriteBatch, prepared: PreparedEegRecording): EegRecordingOutcome {
+  try {
+    withSdkValidation('EEG recording', () => batch.set(prepared.ref, prepared.data));
+  } catch (error) {
+    if (error instanceof ConsumerWriteValidationError) return { status: 'skipped', reason: 'invalid', message: error.message };
+    throw error;
+  }
+  return { status: 'included', recordingId: prepared.ref.id };
+}
+
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
@@ -253,25 +283,24 @@ export function createGameSessionRepository(
       state = 'saving';
       try {
         assertNoReservedKeys('game session', input.session, [...REPOSITORY_OWNED_KEYS, ...SERVER_OWNED_KEYS]);
-        const parsed = gameSessionCreateSchemaFor(input.definition, serverTimestampSchema).safeParse({
+        const write = {
           ...input.session,
           schemaVersion: GAME_SESSION_SCHEMA_VERSION,
           userId,
           createdAt: serverTimestamp(),
-        });
+        };
+        assertNoUndefined('game session', write);
+        const parsed = gameSessionCreateSchemaFor(input.definition, serverTimestampSchema).safeParse(write);
         if (!parsed.success) throw new ConsumerWriteValidationError('game session', parsed.error.issues);
 
         let eegRecording: EegRecordingOutcome = { status: 'none' };
         const batch = writeBatch(firestore);
-        batch.set(gameSessionRef(firestore, userId, sessionId), toSdkTimestamps(parsed.data));
+        withSdkValidation('game session', () => batch.set(gameSessionRef(firestore, userId, sessionId), toSdkTimestamps(parsed.data)));
         if (input.eegRecording) {
           const prepared = await eegRecordings.prepareRecording(sessionId, input.eegRecording);
-          if (prepared.status === 'ready') {
-            batch.set(prepared.ref, prepared.data);
-            eegRecording = { status: 'included', recordingId: prepared.ref.id };
-          } else {
-            eegRecording = { status: 'skipped', reason: prepared.reason, message: prepared.message };
-          }
+          eegRecording = prepared.status === 'ready'
+            ? addRecording(batch, prepared)
+            : { status: 'skipped', reason: prepared.reason, message: prepared.message };
         }
         // Consent was read asynchronously: check again that the player who
         // started the game is still the signed-in user before queuing.

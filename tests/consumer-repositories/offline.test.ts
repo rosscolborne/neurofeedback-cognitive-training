@@ -5,17 +5,20 @@ import { DomainReadError, readGameSession } from '@nfct/shared';
 import type { RecentGameSessions } from '../../src/consumer/repositories/gameSessionRepository';
 import type { ProgressWithRecentSessions } from '../../src/consumer/repositories/progressRepository';
 import {
+  acceptedConsentVersion,
   closeDevices,
   closeEnvironment,
   eegDraft,
   eventually,
   newDevice,
+  profileDraft,
   resetEmulators,
   serverRead,
   serverWrite,
   sessionDraft,
   settle,
   signedInDevice,
+  stalledEndpoint,
   testGame,
   withProfile,
   type Device,
@@ -188,5 +191,55 @@ describe('playing offline', () => {
 
     expect((error as { code?: string }).code).toBe('permission-denied');
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
+  });
+});
+
+describe('saving never waits on the network for EEG consent', () => {
+  // disableNetwork() puts the SDK firmly offline, where reads answer from the
+  // cache at once. A stalled connection instead leaves it in an unknown state,
+  // where a plain getDoc() waits for the server for many seconds.
+
+  it('uses the cached consent on a stalled connection, and queues the batch at once', async () => {
+    const stalled = await stalledEndpoint();
+    try {
+      const device = await signedInDevice('stalled', { firestoreHost: stalled.host });
+      // The profile and consent exist only in this device's cache: written here, never acknowledged.
+      void device.profiles.createProfile(profileDraft()).acknowledged;
+      void device.profiles.grantEegConsent(acceptedConsentVersion).acknowledged;
+      const started = device.sessions.startGameSession();
+
+      const before = Date.now();
+      const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
+      const elapsed = Date.now() - before;
+
+      expect(saved.eegRecording.status).toBe('included');
+      expect(elapsed).toBeLessThan(1_500);
+      const queued = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'gameSessions'));
+      expect(queued.docs.map((item) => [item.id, item.metadata.hasPendingWrites])).toEqual([[started.sessionId, true]]);
+    } finally {
+      await closeDevices();
+      await stalled.close();
+    }
+  });
+
+  it('bounds the server read when the profile is not cached, then skips the recording and queues the session', async () => {
+    const stalled = await stalledEndpoint();
+    try {
+      const device = await signedInDevice('stalled', { firestoreHost: stalled.host, eegOptions: { consentServerReadTimeoutMs: 300 } });
+      const started = device.sessions.startGameSession();
+
+      const before = Date.now();
+      const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
+      const elapsed = Date.now() - before;
+
+      expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-unavailable' });
+      expect(elapsed).toBeGreaterThanOrEqual(250);
+      expect(elapsed).toBeLessThan(2_000);
+      const queued = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'gameSessions'));
+      expect(queued.docs.map((item) => item.id)).toEqual([started.sessionId]);
+    } finally {
+      await closeDevices();
+      await stalled.close();
+    }
   });
 });

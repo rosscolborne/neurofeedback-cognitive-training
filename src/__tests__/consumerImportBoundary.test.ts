@@ -10,8 +10,15 @@ import { describe, expect, it } from 'vitest';
 // imports:
 // - no storageEngine and no clinical types (src/types: ClientProfile,
 //   SessionRecord, Protocol, Experience, PersistedTimestamp, ...);
-// - no Firestore path naming the clinical `clients` or `sessions` collections;
+// - no Firestore path naming the clinical `clients` or `sessions` collections,
+//   in consumer code or anything it loads;
 // - no collection-group query: every consumer query stays inside users/{uid}.
+//
+// The path check sees literals passed to collection(), doc() or
+// collectionGroup(), string and template literals with a clients/sessions path
+// segment, and same-file `const X = 'clients'` constants passed to those
+// calls. It does not follow constants imported from another module, computed
+// strings or aliased path helpers.
 //
 // "App code" is every non-test module under src/ plus shared/: the code that
 // ships to the browser and the iOS app. It must not import server-only modules
@@ -80,6 +87,18 @@ function analyze(fileName: string, text: string): SourceFacts {
     fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const facts: SourceFacts = { specifiers: [], firestoreImports: [], clinicalPaths: [] };
 
+  // `const X = 'clients'` and `const X = 'sessions'` in this file.
+  const clinicalConstants = new Set<string>();
+  const collectConstants = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer
+      && ts.isStringLiteralLike(node.initializer) && CLINICAL_COLLECTIONS.has(node.initializer.text)
+      && ts.isVariableDeclarationList(node.parent) && (node.parent.flags & ts.NodeFlags.Const) !== 0) {
+      clinicalConstants.add(node.name.text);
+    }
+    ts.forEachChild(node, collectConstants);
+  };
+  collectConstants(source);
+
   const visit = (node: ts.Node): void => {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
       facts.specifiers.push(node.moduleSpecifier.text);
@@ -98,6 +117,8 @@ function analyze(fileName: string, text: string): SourceFacts {
       for (const argument of node.arguments) {
         if (ts.isStringLiteralLike(argument) && CLINICAL_COLLECTIONS.has(argument.text)) {
           facts.clinicalPaths.push(`${calleeName(node.expression)}(... '${argument.text}' ...)`);
+        } else if (ts.isIdentifier(argument) && clinicalConstants.has(argument.text)) {
+          facts.clinicalPaths.push(`${calleeName(node.expression)}(... ${argument.text} ...)`);
         }
       }
     }
@@ -158,6 +179,13 @@ function importClosure(entry: string): Map<string, string[]> {
   return reached;
 }
 
+/** Clinical collection paths in a file or in any repository module it loads, with the chain that reaches each. */
+function clinicalPathsReachedFrom(entry: string): string[] {
+  return [...importClosure(entry).entries()]
+    .filter(([file]) => file in SOURCES)
+    .flatMap(([file, chain]) => factsOf(file).clinicalPaths.map((path) => `${chain.join(' -> ')}: ${path}`));
+}
+
 const consumerFiles = CONSUMER_ROOTS.flatMap(sourceFiles);
 const appFiles = APP_ROOTS.flatMap(sourceFiles);
 
@@ -179,8 +207,8 @@ describe('consumer import boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  it('never addresses the clinical clients or sessions collections', () => {
-    const violations = consumerFiles.flatMap((file) => factsOf(file).clinicalPaths.map((path) => `${file}: ${path}`));
+  it('never addresses the clinical clients or sessions collections, directly or through what it loads', () => {
+    const violations = consumerFiles.flatMap((file) => clinicalPathsReachedFrom(file));
 
     expect(violations).toEqual([]);
   });
@@ -231,15 +259,18 @@ describe('import boundary checker', () => {
       "const path = 'clients/' + uid;",
       'const other = `users/${uid}/sessions/${id}`;',
       "const nested = `sessions/${id}`;",
+      "const CLIENTS = 'clients'; doc(db, CLIENTS, uid);",
     ].join('\n')).clinicalPaths;
     const clean = analyze('probe.ts', [
       "collection(db, 'users', uid, 'gameSessions');",
       "const goal = z.enum(['sessions', 'minutes', 'activeDays']);",
       "const copy = 'No sessions yet';",
       'const fine = `users/${uid}/gameSessions`;',
+      "const kind = 'sessions'; setGoal(kind); doc(db, 'users', uid);",
+      "let mutable = 'clients'; doc(db, 'users', mutable);",
     ].join('\n')).clinicalPaths;
 
-    expect(flagged).toHaveLength(6);
+    expect(flagged).toHaveLength(7);
     expect(clean).toEqual([]);
   });
 
@@ -251,5 +282,16 @@ describe('import boundary checker', () => {
     expect(resolveModule('src/components/x.ts', '../../functions/src/scoring')).toBe('functions/src/scoring');
     const closure = importClosure('src/services/storageEngine.ts');
     expect([...closure.keys()].some((file) => inModule(file, 'src/types'))).toBe(true);
+  });
+
+  it('finds clinical paths in the modules a file loads, not only in the file itself', () => {
+    // messageRepository reads clients/{patientId}; anything that imports it reaches that path.
+    expect(clinicalPathsReachedFrom('src/services/messageRepository.ts'))
+      .toContainEqual(expect.stringMatching(/^src\/services\/messageRepository\.ts: doc\(\.\.\. 'clients' \.\.\.\)$/));
+    const importer = Object.keys(SOURCES).find((file) => !isTestFile(file) && file !== 'src/services/messageRepository.ts'
+      && factsOf(file).clinicalPaths.length === 0
+      && factsOf(file).specifiers.some((specifier) => resolveModule(file, specifier) === 'src/services/messageRepository.ts'));
+    expect(importer).toBeDefined();
+    expect(clinicalPathsReachedFrom(importer!)).toContainEqual(expect.stringContaining(' -> src/services/messageRepository.ts: '));
   });
 });

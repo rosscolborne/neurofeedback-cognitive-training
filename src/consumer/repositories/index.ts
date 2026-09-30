@@ -8,6 +8,10 @@ import { createProgressRepository } from './progressRepository';
 // The consumer repositories, bound to the app's Firestore (persistent offline
 // cache) and Auth. UI code imports these; tests build their own with the
 // create* factories and emulator instances.
+//
+// Consumer UI that uses them belongs under src/consumer/, where the import
+// boundary test (src/__tests__/consumerImportBoundary.test.ts) keeps it away
+// from the clinical model; UI elsewhere must add its root to CONSUMER_ROOTS.
 
 const context: ConsumerFirestoreContext = { firestore: db, auth };
 

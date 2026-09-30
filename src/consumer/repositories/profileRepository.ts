@@ -8,7 +8,14 @@ import {
 } from '@nfct/shared';
 import { profileRef, signedInUid, type ConsumerFirestoreContext } from '../firestore/context';
 import { readDocument, type DocumentRead } from '../firestore/reads';
-import { assertValidWithServerClock, ConsumerWriteValidationError, pendingWrite, type PendingWrite } from '../firestore/writes';
+import {
+  assertNoUndefined,
+  assertValidWithServerClock,
+  ConsumerWriteValidationError,
+  pendingWrite,
+  withSdkValidation,
+  type PendingWrite,
+} from '../firestore/writes';
 
 // users/{uid}: the consumer profile. Created once at sign-up with server-clock
 // timestamps, then changed only by field-level updates: each update names the
@@ -81,7 +88,8 @@ export function createProfileRepository(context: ConsumerFirestoreContext): Prof
   function update(fields: Record<string, unknown>): PendingWrite {
     const ref = profileRef(firestore, signedInUid(context));
     const updatedAt: FieldValue = serverTimestamp();
-    return pendingWrite(updateDoc(ref, { ...fields, updatedAt }));
+    assertNoUndefined('profile update', fields);
+    return pendingWrite(withSdkValidation('profile update', () => updateDoc(ref, { ...fields, updatedAt })));
   }
 
   return {
@@ -103,8 +111,9 @@ export function createProfileRepository(context: ConsumerFirestoreContext): Prof
         onboarding: { version: draft.onboarding.version, completedAt: null },
         eeg: { enabled: draft.eeg.enabled, consent: null, preferredDevice: draft.eeg.preferredDevice },
       };
+      assertNoUndefined('profile', profile);
       assertValidWithServerClock('profile', userProfileWriteSchema, profile);
-      return pendingWrite(setDoc(ref, profile));
+      return pendingWrite(withSdkValidation('profile', () => setDoc(ref, profile)));
     },
 
     updateProfile(patch) {

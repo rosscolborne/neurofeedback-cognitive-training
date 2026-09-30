@@ -1,7 +1,8 @@
 import {
   deleteDoc,
   documentId,
-  getDoc,
+  getDocFromCache,
+  getDocFromServer,
   getDocs,
   getDocsFromCache,
   getDocsFromServer,
@@ -13,6 +14,7 @@ import {
   where,
   writeBatch,
   type DocumentReference,
+  type DocumentSnapshot,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import {
@@ -33,7 +35,14 @@ import {
 } from '../firestore/context';
 import { readDocument, readDocuments, type UnreadableDocument } from '../firestore/reads';
 import { toSdkTimestamps } from '../firestore/serverClock';
-import { assertNoReservedKeys, assertValidWithServerClock, ConsumerWriteValidationError, pendingWrite, type PendingWrite } from '../firestore/writes';
+import {
+  assertNoReservedKeys,
+  assertNoUndefined,
+  assertValidWithServerClock,
+  ConsumerWriteValidationError,
+  pendingWrite,
+  type PendingWrite,
+} from '../firestore/writes';
 
 // users/{uid}/eegRecordings/{recordingId}: optional EEG summaries, each linked
 // to one game session. A recording is written only in the same batch as its
@@ -69,7 +78,7 @@ export interface EegRecordingsForSession {
 export type EegRecordingSkipReason =
   /** The profile has no EEG consent (or no consumer profile exists). */
   | 'consent-required'
-  /** Consent could not be checked: offline, with no cached profile. */
+  /** Consent could not be checked: no cached profile, and the server did not answer in time. */
   | 'consent-unavailable'
   /** The draft breaks the shared EEG schema. */
   | 'invalid';
@@ -108,22 +117,62 @@ export interface EegRecordingRepository {
 
 const DELETE_PAGE_SIZE = 400;
 
+/**
+ * How long saving a session may wait for the server to answer a consent check
+ * when the profile is not cached. Consent is read from the cache first, so this
+ * applies only to a device that has never read the profile; after it, the
+ * recording is skipped as 'consent-unavailable' and the session is queued.
+ */
+export const CONSENT_SERVER_READ_TIMEOUT_MS = 2_000;
+
+export interface EegRecordingRepositoryOptions {
+  readonly consentServerReadTimeoutMs?: number;
+}
+
+/** Resolves with the read, or null if it fails or takes longer than `ms`. */
+async function withinTimeout<T>(read: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); });
+  try {
+    return await Promise.race([read.catch(() => null), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function recordingRecord(raw: Record<string, unknown>, snapshot: QueryDocumentSnapshot): EegRecordingRecord {
   return { id: snapshot.id, recording: readEegRecording(raw), hasPendingWrites: snapshot.metadata.hasPendingWrites };
 }
 
-export function createEegRecordingRepository(context: ConsumerFirestoreContext): EegRecordingRepository {
+export function createEegRecordingRepository(
+  context: ConsumerFirestoreContext,
+  options: EegRecordingRepositoryOptions = {},
+): EegRecordingRepository {
   const { firestore } = context;
+  const consentServerReadTimeoutMs = options.consentServerReadTimeoutMs ?? CONSENT_SERVER_READ_TIMEOUT_MS;
+
+  /**
+   * The profile for a consent check, without making a session wait on the
+   * network: the cached profile when there is one (as the persistent cache
+   * normally holds it), otherwise a server read bounded by the timeout. A plain
+   * getDoc() would wait for the server while the connection state is unknown
+   * (at startup, or on a stalled connection), which can take many seconds.
+   */
+  async function profileForConsent(uid: string): Promise<DocumentSnapshot | null> {
+    const ref = profileRef(firestore, uid);
+    try {
+      return await getDocFromCache(ref);
+    } catch {
+      // Not cached on this device.
+    }
+    return withinTimeout(getDocFromServer(ref), consentServerReadTimeoutMs);
+  }
 
   /** Null when the profile records consent; otherwise why the recording must be left out. */
   async function consentProblem(uid: string): Promise<EegRecordingSkipReason | null> {
-    let snapshot;
-    try {
-      snapshot = await getDoc(profileRef(firestore, uid));
-    } catch {
-      // Offline with no cached profile. EEG is optional, so the session is saved without it.
-      return 'consent-unavailable';
-    }
+    const snapshot = await profileForConsent(uid);
+    // No cached profile and no timely server answer. EEG is optional, so the session is saved without it.
+    if (!snapshot) return 'consent-unavailable';
     const read = readDocument('users', snapshot, (raw) => readUserProfile(raw));
     return read.status === 'readable' && read.data.eeg.consent !== null ? null : 'consent-required';
   }
@@ -182,6 +231,7 @@ export function createEegRecordingRepository(context: ConsumerFirestoreContext):
       });
       try {
         assertNoReservedKeys('EEG recording', draft, REPOSITORY_OWNED_KEYS);
+        assertNoUndefined('EEG recording', data);
         assertValidWithServerClock('EEG recording', eegRecordingWriteSchema, data);
       } catch (error) {
         if (error instanceof ConsumerWriteValidationError) return { status: 'skipped', reason: 'invalid', message: error.message };
@@ -194,7 +244,7 @@ export function createEegRecordingRepository(context: ConsumerFirestoreContext):
           reason: problem,
           message: problem === 'consent-required'
             ? 'EEG consent is not recorded on the profile.'
-            : 'EEG consent could not be checked offline.',
+            : 'EEG consent could not be checked: the profile is not cached and the server did not answer in time.',
         };
       }
       const collectionRef = eegRecordingsRef(firestore, uid);

@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase/firestore';
+import { FirestoreError, Timestamp } from 'firebase/firestore';
 import type { z } from 'zod';
 import { withServerClockAt } from './serverClock';
 
@@ -38,13 +38,15 @@ export class ConsumerWriteValidationError extends Error {
   }
 }
 
+function customIssue(path: readonly PropertyKey[], message: string): z.core.$ZodIssue {
+  return { code: 'custom', path: [...path], message, input: undefined } as z.core.$ZodIssue;
+}
+
 /** Keys a caller may not set, because the repository owns them (the path owner, the schema version, the server clock). */
 export function assertNoReservedKeys(what: string, draft: object, reserved: readonly string[]): void {
   const present = reserved.filter((key) => Object.prototype.hasOwnProperty.call(draft, key));
   if (present.length > 0) {
-    throw new ConsumerWriteValidationError(what, present.map((key) => ({
-      code: 'custom', path: [key], message: 'is set by the repository, not the caller', input: undefined,
-    }) as z.core.$ZodIssue));
+    throw new ConsumerWriteValidationError(what, present.map((key) => customIssue([key], 'is set by the repository, not the caller')));
   }
 }
 
@@ -56,4 +58,44 @@ export function assertNoReservedKeys(what: string, draft: object, reserved: read
 export function assertValidWithServerClock(what: string, schema: z.ZodType, write: unknown): void {
   const result = schema.safeParse(withServerClockAt(write, Timestamp.now()));
   if (!result.success) throw new ConsumerWriteValidationError(what, result.error.issues);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === Object.prototype || prototype === null;
+}
+
+/** The paths of every property or array element explicitly set to `undefined`. */
+export function undefinedPaths(value: unknown, path: readonly (string | number)[] = []): (string | number)[][] {
+  if (value === undefined) return [[...path]];
+  if (Array.isArray(value)) return value.flatMap((item, index) => undefinedPaths(item, [...path, index]));
+  if (isPlainObject(value)) return Object.entries(value).flatMap(([key, item]) => undefinedPaths(item, [...path, key]));
+  return [];
+}
+
+/**
+ * The shared schemas accept an optional field set to `undefined`, but the web
+ * SDK refuses to write one (it throws `invalid-argument` when the write is
+ * built). This refuses such a write as a validation error instead. The app's
+ * Firestore keeps the SDK default rather than `ignoreUndefinedProperties`,
+ * which would change every inherited write too.
+ */
+export function assertNoUndefined(what: string, write: unknown): void {
+  const paths = undefinedPaths(write);
+  if (paths.length > 0) {
+    throw new ConsumerWriteValidationError(what, paths.map((path) => customIssue(path, 'is undefined; omit the field instead')));
+  }
+}
+
+/** Runs a synchronous SDK write step, reporting data the SDK refuses as a validation error. */
+export function withSdkValidation<T>(what: string, step: () => T): T {
+  try {
+    return step();
+  } catch (error) {
+    if (error instanceof FirestoreError && error.code === 'invalid-argument') {
+      throw new ConsumerWriteValidationError(what, [customIssue([], error.message)]);
+    }
+    throw error;
+  }
 }

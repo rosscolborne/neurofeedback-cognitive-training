@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { resolve } from 'node:path';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app';
@@ -24,7 +25,7 @@ import { createEegRecordingRepository } from '../../src/consumer/repositories/ee
 import { createGameSessionRepository, type GameSessionDraft } from '../../src/consumer/repositories/gameSessionRepository';
 import { createProfileRepository, type UserProfileDraft } from '../../src/consumer/repositories/profileRepository';
 import { createProgressRepository } from '../../src/consumer/repositories/progressRepository';
-import type { EegRecordingDraft } from '../../src/consumer/repositories/eegRecordingRepository';
+import type { EegRecordingDraft, EegRecordingRepositoryOptions } from '../../src/consumer/repositories/eegRecordingRepository';
 
 /**
  * Repository tests run the real consumer repositories against the local Auth
@@ -76,16 +77,22 @@ export interface Player {
   readonly password: string;
 }
 
-export function newDevice(): Device {
+export interface DeviceOptions {
+  /** Connect Firestore here instead of the emulator (for example a stalled endpoint). */
+  readonly firestoreHost?: string;
+  readonly eegOptions?: EegRecordingRepositoryOptions;
+}
+
+export function newDevice(options: DeviceOptions = {}): Device {
   const app = initializeApp({ projectId, apiKey: 'demo-key', authDomain: `${projectId}.firebaseapp.com` }, `device-${randomUUID()}`);
   devices.push(app);
   const auth = getAuth(app);
   connectAuthEmulator(auth, `http://${authHost}`, { disableWarnings: true });
   const firestore = initializeFirestore(app, { localCache: memoryLocalCache({ garbageCollector: memoryLruGarbageCollector() }) });
-  const [host, port] = firestoreHost!.split(':');
+  const [host, port] = (options.firestoreHost ?? firestoreHost!).split(':');
   connectFirestoreEmulator(firestore, host!, Number(port));
   const context: ConsumerFirestoreContext = { firestore, auth };
-  const eeg = createEegRecordingRepository(context);
+  const eeg = createEegRecordingRepository(context, options.eegOptions);
   return {
     app, auth, firestore, context, eeg,
     profiles: createProfileRepository(context),
@@ -95,12 +102,34 @@ export function newDevice(): Device {
 }
 
 /** Signs a new emulator user up on a new device. */
-export async function signedInDevice(label = 'player'): Promise<Device & { player: Player }> {
-  const device = newDevice();
+export async function signedInDevice(label = 'player', options: DeviceOptions = {}): Promise<Device & { player: Player }> {
+  const device = newDevice(options);
   const email = `${label}-${randomUUID().slice(0, 8)}@example.test`;
   const password = 'Emulator!123';
   const credential = await createUserWithEmailAndPassword(device.auth, email, password);
   return { ...device, player: { uid: credential.user.uid, email, password } };
+}
+
+/**
+ * A TCP endpoint that accepts connections and never answers: a stalled
+ * network. A client pointed at it stays in the SDK's "unknown" connection
+ * state (neither online nor offline) instead of failing fast.
+ */
+export async function stalledEndpoint(): Promise<{ host: string; close(): Promise<void> }> {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+  const { port } = server.address() as AddressInfo;
+  return {
+    host: `127.0.0.1:${port}`,
+    close: async () => {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    },
+  };
 }
 
 export async function resetEmulators(): Promise<void> {
@@ -166,7 +195,7 @@ function levels(count: number): LevelDefinition[] {
   return Array.from({ length: count }, (_, index) => ({ level: index + 1, label: `Level ${index + 1}`, params: {} }));
 }
 
-const testTrialSchema = z.strictObject({
+export const testTrialSchema = z.strictObject({
   level: z.int().min(1).max(10),
   operands: z.array(z.int().min(1)).min(2).max(3),
   operators: z.array(z.enum(['+', '-', '×', '÷'])).min(1).max(2),
@@ -181,7 +210,7 @@ const testTrialSchema = z.strictObject({
 });
 export type TestTrial = z.infer<typeof testTrialSchema>;
 
-const testMetricsSchema = z.strictObject({
+export const testMetricsSchema = z.strictObject({
   correct: z.int().min(0),
   attempted: z.int().min(0),
   timedOut: z.int().min(0),
