@@ -3,9 +3,13 @@ import type { GameClock, GameTimerHandle } from '../../../clock/gameClock';
 /** A GameClock the test advances by hand. Due timers fire in time order, including ones scheduled while advancing. */
 export class ManualClock implements GameClock {
   private time = 0;
-  private wall = 1_790_000_000_000;
+  private readonly wall: number;
   private nextId = 1;
   private timers = new Map<number, { at: number; callback: () => void }>();
+
+  constructor(wallStartMs = 1_790_000_000_000) {
+    this.wall = wallStartMs;
+  }
 
   now(): number {
     return this.time;

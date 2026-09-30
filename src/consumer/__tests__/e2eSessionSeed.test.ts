@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import composition from '../repositories/index.ts?raw';
 import { E2E_EMULATOR_PROJECT_ID, E2E_FIXED_SESSION_SEED, e2eSessionSeedSource } from '../repositories/e2eSessionSeed';
 
 // The fixed seed exists only for the local-emulator browser suite. A
@@ -21,8 +21,7 @@ describe('E2E session seed source', () => {
   });
 
   it('is the only seed source the app composition passes to the repository', () => {
-    const composition = readFileSync(new URL('../repositories/index.ts', import.meta.url), 'utf8');
-    expect(composition).toMatch(/createGameSessionRepository\(context, eegRecordingRepository, \{ seedSource: e2eSessionSeedSource\(import\.meta\.env\) \}\)/);
+    expect(composition).toContain('seedSource: import.meta.env.DEV ? e2eSessionSeedSource(import.meta.env) : undefined,');
     expect(composition.match(/seedSource/g)).toHaveLength(1);
   });
 });

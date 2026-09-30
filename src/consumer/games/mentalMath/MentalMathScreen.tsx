@@ -427,7 +427,7 @@ const RunHandoff: React.FC<{
           <span className="mm-hud-label">Score · not yet verified</span>
         </div>
         <p className="mm-muted">
-          {outcome.run.trials.length} {outcome.run.trials.length === 1 ? 'question' : 'questions'} answered, {scored.metrics.correct} correct.
+          {outcome.run.trials.length} {outcome.run.trials.length === 1 ? 'question' : 'questions'} attempted, {scored.metrics.correct} correct.
         </p>
         <p className={`mm-save mm-save-${save.status}`} role="status">{saveText}</p>
         {eegLabel && save.status !== 'saving' && save.status !== 'failed' && <p className="mm-help">{eegMessage(save.eeg, eegLabel)}</p>}

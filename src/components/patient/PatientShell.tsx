@@ -625,7 +625,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cognitive games. No headset needed.</p>
               </div>
               <div className="train-grid">
-                <div className="card-patient" onClick={() => setMentalMathOwnerId(client.id)}>
+                <div className="card-patient train-game-card" onClick={() => setMentalMathOwnerId(client.id)}>
                   <div className="train-card-icon" aria-hidden="true">
                     <Calculator size={22} />
                   </div>

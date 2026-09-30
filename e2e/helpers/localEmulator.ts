@@ -278,3 +278,15 @@ export async function readPatientRelationship(patientUid: string) {
     appointmentStatuses: appointments.docs.map((entry) => entry.data().status as string),
   };
 }
+
+/** NFCT-21: the consumer game sessions the app wrote for a user, read back from the emulator. */
+export async function readGameSessions(uid: string): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  const snapshot = await adminDb.collection(`users/${uid}/gameSessions`).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+}
+
+/** NFCT-21: the EEG recordings linked to a user's game sessions. */
+export async function readEegRecordings(uid: string): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  const snapshot = await adminDb.collection(`users/${uid}/eegRecordings`).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+}

@@ -1,5 +1,6 @@
 import { auth, db } from '../../services/firebase';
 import type { ConsumerFirestoreContext } from '../firestore/context';
+import { e2eSessionSeedSource } from './e2eSessionSeed';
 import { createEegRecordingRepository } from './eegRecordingRepository';
 import { createGameSessionRepository } from './gameSessionRepository';
 import { createProfileRepository } from './profileRepository';
@@ -17,7 +18,12 @@ const context: ConsumerFirestoreContext = { firestore: db, auth };
 
 export const profileRepository = createProfileRepository(context);
 export const eegRecordingRepository = createEegRecordingRepository(context);
-export const gameSessionRepository = createGameSessionRepository(context);
+// The seed source is a fixed seed on the local-emulator E2E dev server only;
+// in every other build it is undefined and seeds come from crypto.getRandomValues.
+// import.meta.env.DEV is false in a production build, so the build drops it entirely.
+export const gameSessionRepository = createGameSessionRepository(context, {
+  seedSource: import.meta.env.DEV ? e2eSessionSeedSource(import.meta.env) : undefined,
+});
 export const progressRepository = createProgressRepository(context);
 
 export { SignInRequiredError, InvalidDocumentIdError } from '../firestore/context';

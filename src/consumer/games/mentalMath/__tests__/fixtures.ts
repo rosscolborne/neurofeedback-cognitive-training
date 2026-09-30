@@ -19,8 +19,8 @@ export function answerOf(text: string): number {
 }
 
 /** Plays a whole run: the first `correct` answers right, the rest wrong, 900 ms each. */
-export function playRun({ seed, startLevel, correct }: { seed: number; startLevel: number; correct: number }): RunOutcome {
-  const clock = new ManualClock();
+export function playRun({ seed, startLevel, correct, wallStartMs }: { seed: number; startLevel: number; correct: number; wallStartMs?: number }): RunOutcome {
+  const clock = new ManualClock(wallStartMs);
   let outcome: RunOutcome | null = null;
   const controller = new MentalMathRunController({ seed, startLevel, clock, onEnd: (ended) => { outcome = ended; } });
   controller.start();
