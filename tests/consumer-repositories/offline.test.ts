@@ -1,4 +1,4 @@
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, disableNetwork, enableNetwork, getDocsFromCache, Timestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DomainReadError, readGameSession } from '@nfct/shared';
@@ -241,5 +241,38 @@ describe('saving never waits on the network for EEG consent', () => {
       await closeDevices();
       await stalled.close();
     }
+  });
+});
+
+describe('queued writes and account switches', () => {
+  it("never sends one user's queued session under another user, and sends it when that user returns", async () => {
+    const playerB = (await signedInDevice('b')).player;
+    const device = await signedInDevice('a');
+    const playerA = device.player;
+    await disableNetwork(device.firestore);
+    const started = device.sessions.startGameSession();
+    const saved = await started.save({ definition: testGame, session: sessionDraft() });
+    const acknowledgement = watchAcknowledgement(saved.acknowledged);
+    const pathA = `users/${playerA.uid}/gameSessions/${started.sessionId}`;
+
+    // B signs in on the same install and the connection comes back.
+    await signOut(device.auth);
+    await signInWithEmailAndPassword(device.auth, playerB.email, playerB.password);
+    await enableNetwork(device.firestore);
+    // B's own write goes through, so the connection is flowing...
+    const savedByB = device.sessions.startGameSession();
+    await (await savedByB.save({ definition: testGame, session: sessionDraft() })).acknowledged;
+    await settle(300);
+
+    // ...but A's queued session stays on the device: not sent under B, not refused, not lost.
+    expect(await serverRead(pathA)).toBeUndefined();
+    expect(acknowledgement.settled()).toBe(false);
+    expect(await serverRead(`users/${playerB.uid}/gameSessions/${savedByB.sessionId}`)).toMatchObject({ userId: playerB.uid });
+
+    // A signs back in: the queued session is sent once, under A.
+    await signOut(device.auth);
+    await signInWithEmailAndPassword(device.auth, playerA.email, playerA.password);
+    await saved.acknowledged;
+    expect(await serverRead(pathA)).toMatchObject({ userId: playerA.uid, seed: started.seed });
   });
 });
