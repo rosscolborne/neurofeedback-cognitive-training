@@ -372,6 +372,10 @@ test('condition edits persist without changing assigned protocol or custom rewar
   const edit = clinicianPage.getByRole('heading', { name: 'Edit Patient Clinical Profile' }).locator('..');
   await edit.getByText('Primary Clinical Indication').locator('..').locator('select').selectOption('Generalized Anxiety');
   await clinicianPage.getByRole('button', { name: 'Save Changes' }).click();
+  // The dialog closes once the server has accepted the save. With the
+  // persistent cache (NFCT-20) the SDK stores a write locally before sending
+  // it, so reloading straight after the click can abandon it.
+  await expect(edit).toBeHidden();
   await clinicianPage.reload();
   await arriveAtClinicianDashboard(clinicianPage);
   const row = clinicianPage.getByRole('row').filter({ hasText: fixture.name });
