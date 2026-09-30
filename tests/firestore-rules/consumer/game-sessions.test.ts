@@ -14,6 +14,16 @@ const sessionPath = (uid: string, id = newSessionId) => `users/${uid}/gameSessio
 
 // Each ServerResult variant a client might forge. Even a bare `invalid` result
 // would set processedAt and stop trusted scoring from ever processing the session.
+// Server-owned processing metadata trusted scoring may write for a session it
+// could not score. A client must never send it.
+const forgedProcessing = [
+    { state: 'failed', updatedAt: serverTimestamp() },
+    { state: 'unsupported' },
+    { state: 'pending' },
+    {},
+    null,
+];
+
 const forgedResults = {
     valid: { ...validResult(serverTimestamp()), score: 9_999, peakLevel: 10, recordValues: { score: 9_999, peakLevel: 10 } },
     flagged: {
@@ -62,6 +72,17 @@ describe('users/{uid}/gameSessions: create', () => {
         }
     });
 
+    it('rejects client-supplied processing metadata in any form', async () => {
+        const database = await as(players.a);
+        for (const processing of forgedProcessing) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { processing })));
+        }
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { processingState: 'pending' })));
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, {
+            processing: { state: 'failed' }, result: forgedResults.invalid,
+        })));
+    });
+
     it('rejects a session missing any required key', async () => {
         const database = await as(players.a);
         for (const key of Object.keys(sessionData(players.a))) {
@@ -77,8 +98,37 @@ describe('users/{uid}/gameSessions: create', () => {
 
     it('accepts only games in the allowlist', async () => {
         const database = await as(players.a);
-        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameId: 'chess' })));
-        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameId: 'theta-beta-ratio' })));
+        for (const gameId of ['chess', 'theta-beta-ratio', 'Mental-Math', '', 1]) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameId })));
+        }
+    });
+
+    it("accepts only gameVersions inside the game's supported window (mental-math: 1 to 1)", async () => {
+        const database = await as(players.a);
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 0 })));
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 2 })));
+        for (const gameVersion of [-1, 1.5, '1', null, 1_000_000]) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion })));
+        }
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 1 })));
+    });
+
+    it('accepts an offline session played long ago', async () => {
+        const database = await as(players.a);
+        const daysAgo = (days: number) => minutesAgo(days * 24 * 60);
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, {
+            startedAt: Timestamp.fromMillis(daysAgo(400).toMillis() - 120_000), endedAt: daysAgo(400), localDate: '2025-08-26',
+        })));
+    });
+
+    it('allows up to 5 minutes of device clock skew on endedAt, and no more', async () => {
+        const database = await as(players.a);
+        const inMinutes = (minutes: number) => Timestamp.fromMillis(Date.now() + minutes * 60_000);
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { endedAt: inMinutes(4) })));
+        await assertFails(setDoc(doc(database, sessionPath(players.a, 'session-skewed-000001')), sessionData(players.a, { endedAt: inMinutes(6) })));
+        await assertFails(setDoc(doc(database, sessionPath(players.a, 'session-skewed-000001')), sessionData(players.a, {
+            startedAt: inMinutes(60 * 24), endedAt: inMinutes(60 * 24 + 2),
+        })));
     });
 
     it('rejects malformed envelopes', async () => {
@@ -87,8 +137,6 @@ describe('users/{uid}/gameSessions: create', () => {
         const malformed: Record<string, unknown>[] = [
             { schemaVersion: 2 },
             { schemaVersion: 0 },
-            { gameVersion: 0 },
-            { gameVersion: 1.5 },
             { modeId: 'Timed 90' },
             { modeId: 'x'.repeat(41) },
             { startLevel: 0, peakLevel: 1 },
@@ -120,6 +168,7 @@ describe('users/{uid}/gameSessions: create', () => {
             { summary: { ...sessionData(players.a).summary, trialsCorrect: [] } },
             { summary: { ...sessionData(players.a).summary, metrics: [] } },
             { summary: { ...sessionData(players.a).summary, metrics: null } },
+            { summary: { ...sessionData(players.a).summary, metrics: Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`m${index}`, index])) } },
             { summary: { ...sessionData(players.a).summary, responseTime: { medianMs: 1 } } },
             { summary: { ...sessionData(players.a).summary, responseTime: { medianMs: 1, meanMs: 1, p90Ms: 1, maxMs: 1 } } },
             { summary: { ...sessionData(players.a).summary, responseTime: { medianMs: 1, meanMs: '1', p90Ms: 1 } } },
@@ -130,16 +179,28 @@ describe('users/{uid}/gameSessions: create', () => {
         }
     });
 
-    it('accepts an untrusted display summary and peak level that trusted scoring will check', async () => {
-        // Trusted scoring recomputes these from the trials and records a mismatch;
+    it('accepts a well-typed display summary even when it disagrees with the trials', async () => {
+        // The summary is display-only. Trusted scoring recomputes it from the
+        // trials, and a mismatch is a diagnostic that never changes validity, so
         // a display bug must not stop the raw trials from being stored.
         const database = await as(players.a);
         const oddSummary = {
             score: -5, accuracy: 1.5, trialsTotal: -1, trialsCorrect: 99,
-            responseTime: { medianMs: -1, meanMs: 0.5, p90Ms: 1e9 }, metrics: {},
+            responseTime: { medianMs: -1, meanMs: 0.5, p90Ms: 1e9 },
+            metrics: Object.fromEntries(Array.from({ length: 32 }, (_, index) => [`m${index}`, index])),
         };
         await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { summary: oddSummary })));
+    });
+
+    it('accepts any bounded client peak level: it is an untrusted observation', async () => {
+        // Trusted scoring derives the real peak from the trials. A client peak
+        // below the start level, or claiming the top level, is only a diagnostic.
+        const database = await as(players.a);
         await assertSucceeds(setDoc(doc(database, sessionPath(players.a, 'session-low-peak-00001')), sessionData(players.a, { startLevel: 4, peakLevel: 3 })));
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a, 'session-high-peak-0001')), sessionData(players.a, { startLevel: 1, peakLevel: 50, trials: trials(1) })));
+        for (const peakLevel of [0, 51, 2.5, '10', null]) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a, 'session-bad-peak-00001')), sessionData(players.a, { peakLevel })));
+        }
     });
 
     it('requires a well-formed client-generated session ID', async () => {
@@ -160,7 +221,7 @@ describe('users/{uid}/gameSessions: write-once', () => {
         await assertFails(updateDoc(reference, { peakLevel: 10 }));
     });
 
-    it('never lets a client mark its own unprocessed session as processed', async () => {
+    it('never lets a client add result or processing to its own pending session', async () => {
         const database = await as(players.a);
         const reference = doc(database, sessionPath(players.a));
         await assertSucceeds(setDoc(reference, sessionData(players.a)));
@@ -168,6 +229,11 @@ describe('users/{uid}/gameSessions: write-once', () => {
             await assertFails(updateDoc(reference, { result }));
             await assertFails(setDoc(reference, { result }, { merge: true }));
         }
+        for (const processing of forgedProcessing) {
+            await assertFails(updateDoc(reference, { processing }));
+            await assertFails(setDoc(reference, { processing }, { merge: true }));
+        }
+        await assertFails(updateDoc(reference, { 'processing.state': 'unsupported' }));
     });
 
     it('refuses a retried create over an existing session', async () => {

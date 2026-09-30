@@ -9,6 +9,24 @@
       ]
     },
     {
+      "collectionGroup": "gameSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gameId", "order": "ASCENDING" },
+        { "fieldPath": "modeId", "order": "ASCENDING" },
+        { "fieldPath": "result.validity", "order": "ASCENDING" },
+        { "fieldPath": "startLevel", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gameSessions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "processing.state", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "accountDeletions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -18,6 +36,16 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "gameSessions",
+      "fieldPath": "createdAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
     { "collectionGroup": "gameSessions", "fieldPath": "trials", "indexes": [] },
     { "collectionGroup": "gameSessions", "fieldPath": "summary.metrics", "indexes": [] },
     { "collectionGroup": "gameSessions", "fieldPath": "result.reasons", "indexes": [] },
