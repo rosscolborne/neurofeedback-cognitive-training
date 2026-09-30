@@ -59,8 +59,12 @@ the local emulators. Run them only against local emulators and test
 environments. Never probe real users, a deployed Firebase project or any
 production service, and never run destructive tests outside the emulators.
 
-Do not commit probes. If one should become a permanent regression test,
-recommend it in the findings. Remove temporary files before you finish.
+Never write probes into the implementer's worktree or the primary checkout. Put
+them, and any test runs that write output, in a detached
+[review worktree](../nfct-worktrees/SKILL.md#review-worktrees) at the PR head,
+and remove it when the review ends. Never commit or push probes unless you are
+explicitly switched into an implementation role. If one
+should become a permanent regression test, recommend it in the findings.
 
 ## Findings
 

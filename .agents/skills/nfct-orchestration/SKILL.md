@@ -43,7 +43,7 @@ implementer.
 | Implementation | [nfct-worktrees](../nfct-worktrees/SKILL.md), [testing](../neurasticity-development-testing/SKILL.md), plus [nfct-frontend-design](../nfct-frontend-design/SKILL.md) for user-facing work | PR with targeted tests and the AGENTS.md completion report |
 | Deterministic testing | [testing](../neurasticity-development-testing/SKILL.md) | Tests in the PR, with commands and results. Usually the implementer; a separate stream for cross-card journeys such as NFCT-10 |
 | Independent review | [nfct-pr-review](../nfct-pr-review/SKILL.md) | Classified findings and a verdict |
-| Integration | This skill, [Integrate](#integrate) | Integrated branch or rebased PRs, full-suite results |
+| Integration | This skill, [Integrate](#integrate) | Full-suite results from a temporary integration branch, with conflicts and regressions routed to each branch's owner |
 | Exploratory QA (user-facing work) | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) | Findings report, including what was not tested |
 | Security review (trust, auth or data boundaries) | [nfct-security-review](../nfct-security-review/SKILL.md) | Classified findings and a verdict |
 
@@ -54,7 +54,8 @@ For larger parallel work, the expected order is:
 1. isolated worktrees;
 2. targeted implementation tests;
 3. independent review;
-4. integration and rebase;
+4. integration in a temporary integration branch, with owners rebasing their
+   own branches where needed;
 5. the full relevant CI and test suite;
 6. exploratory browser QA where the work is user-facing;
 7. security review where trust, auth or data boundaries are involved;
@@ -66,10 +67,18 @@ boundary change is clear from the design.
 
 ## Integrate
 
-- Combine completed branches in dependency order: rebase each downstream
-  branch onto its upstream (or onto `origin/main` once the upstream merges),
-  or build a temporary integration branch in its own worktree to test the
-  combination.
+- Work in your own temporary integration branch and worktree, created from
+  `origin/main` (for example `integration/<epic>` at `$PRIMARY-integration`;
+  see [nfct-worktrees](../nfct-worktrees/SKILL.md#create)). Never rewrite,
+  rebase or force-push another agent's feature or PR branch.
+- Merge, rebase or cherry-pick completed branches into the integration branch
+  in dependency order to test that they work together.
+- When a feature branch itself needs rebasing onto a new upstream, ask its
+  owner to do it in their own worktree. If that rewrites published history,
+  they push with `git push --force-with-lease`, never plain `--force`.
+- Send findings to the implementer, who fixes them on their own branch and
+  worktree, not on the integration branch. Re-integrate from the updated
+  branches.
 - Resolve conflicts by the architecture and contracts, not just by making Git
   happy. If a conflict reveals a contract disagreement, stop and report it.
 - Check that no branch undid another: compare each branch's intended change
@@ -82,14 +91,19 @@ boundary change is clear from the design.
   every branch before final merge.
 - Hand the integrated result to independent review, exploratory QA and
   security review as their triggers apply.
+- The integration branch is disposable. Do not open it as a PR unless the
+  owner asks; remove its worktree when the pass ends, per the
+  [lifecycle rules](../nfct-worktrees/SKILL.md#lifecycle).
 
-Merging to `main` is the owner's decision unless they delegate it.
+Merging to `main` is the owner's decision. The orchestrator merges only when
+explicitly delegated, and never merges a PR it implemented itself.
 
 ## Reshape when contracts change
 
 If an upstream contract changes (a type, path, rule or interface), pause the
-downstream streams that depend on it. Reassess their plans, rebase them, or
-stop them, rather than letting them finish against a stale contract.
+downstream streams that depend on it. Reassess their plans, have their owners
+rebase them, or stop them, rather than letting them finish against a stale
+contract.
 
 ## Report
 

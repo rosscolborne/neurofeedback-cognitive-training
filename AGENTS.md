@@ -34,20 +34,24 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   Never modify another task's worktree or uncommitted work.
 - An open PR keeps its worktree. It becomes eligible for cleanup only once the
   PR is merged or abandoned **and** the worktree is clean and fully pushed.
-  [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) covers creating,
-  naming, diagnosing and removing worktrees.
+  Detached review worktrees have no PR lifecycle: remove them, once clean, as
+  soon as the review ends. [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md)
+  covers creating, naming, diagnosing and removing worktrees.
 - Stay within the Jira card's scope. Report meaningful unrelated work, or
   propose a card for it, instead of silently expanding the PR.
 - Respect the canonical Stage 1 design, ADRs and the card's Jira contract. If
   the implementation conflicts with them, stop at that boundary and report the
   conflict; do not silently invent a new architecture.
-- Do not add mock or fake data or silent fallbacks unless the card requires
-  them. (Demo Mode's synthetic EEG is an existing, deliberate feature.) Never
-  weaken production behavior just to make a test pass.
+- Do not add mock or fake data or silent fallbacks to production code paths
+  unless the card requires them. Test fixtures, seeded emulator data and
+  deliberate test doubles are fine, and Demo Mode's synthetic EEG is an
+  existing, deliberate feature. Never weaken production behavior just to make a
+  test pass.
 - Before opening or updating a PR, run the relevant [checks](#checks), follow
   [Stage 1 test coverage](#stage-1-test-coverage), and leave only intended
   files in the diff ([hand-off hygiene](.agents/skills/nfct-worktrees/SKILL.md#hand-off-hygiene)).
-- Do not merge your own PR.
+- Do not merge your own PR. Merging is the owner's decision; an agent merges
+  only when explicitly delegated, and never a PR it implemented.
 - Finish with a report giving, where applicable: branch and worktree, commit
   SHA, PR URL, files and scope changed, checks and tests run with results, and
   unresolved risks, blockers or follow-ups.
@@ -61,7 +65,7 @@ owns the task:
 
 | Skill | Use it to |
 | --- | --- |
-| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task worktrees and branches |
+| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task and review worktrees and branches |
 | [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md) | Choose and run the right test layers |
 | [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md) | Independently review a PR (read-only) |
 | [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
@@ -100,10 +104,22 @@ behavior instead of browser tests.
 - Keep Playwright tests deterministic. Where an injected or fake clock
   (`page.clock`) or another test seam exists, use it instead of real-time waits
   such as `page.waitForTimeout`.
-- Keep the existing spec naming, so CI still discovers new specs: emulator
-  specs are `*.local.spec.ts` matched by `testMatch` in
-  `playwright.protocol.config.ts` (for example
-  `session-history.persistence.local.spec.ts`).
+- Make sure CI runs every new spec. `playwright.protocol.config.ts` does not
+  match every `*.local.spec.ts`: its `testMatch` lists fixed suite suffixes
+  (for example `persistence` in `session-history.persistence.local.spec.ts`).
+  Give a new emulator spec a suffix `testMatch` already matches, or extend
+  `testMatch` in the same PR. Then confirm the file is listed:
+
+  ```bash
+  GCLOUD_PROJECT=demo-neurasticity-protocol-e2e FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+    FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx playwright test -c playwright.protocol.config.ts --list
+  ```
+
+  The variables satisfy the emulator guard in `e2e/helpers/localEmulator.ts`;
+  without them no spec loads and the list is silently empty (exit code 0). No
+  emulators need to be running. From `playwright.config.ts`, CI runs only the
+  `permission-guard` project, so a spec there also needs a project CI runs
+  (check with `npx playwright test --list --project=<name>`).
 - Cover the card's user-visible behavior. Do not add broad or flaky browser
   tests just to have E2E coverage.
 

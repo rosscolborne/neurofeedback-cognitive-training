@@ -58,8 +58,13 @@ not the most tests.
 ## Probing
 
 Run targeted tests, or write temporary probes and tests, where they would
-confirm or rule out a finding. Keep them out of the PR: do not commit them, and
-remove them before you finish. Use local emulators only.
+confirm or rule out a finding. Use local emulators only.
+
+Never write probes into the implementer's worktree or the primary checkout. Put
+them, and any test runs that write output, in a detached
+[review worktree](../nfct-worktrees/SKILL.md#review-worktrees) at the PR head,
+and remove it when the review ends. Never commit or push probes unless you are
+explicitly switched into an implementation role.
 
 ## Findings
 
