@@ -39,6 +39,32 @@ npm run test:e2e:protocol     # local emulator browser suite; needs Java 21
 
 More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md).
 
+## Stage 1 test coverage
+
+Every user-facing Stage 1 card adds or updates deterministic Playwright
+coverage of the behavior users see, or its PR explains why browser E2E does not
+apply. Domain, security and backend cards use the lower layer that observes the
+behavior instead of browser tests.
+
+| Card | Coverage |
+| --- | --- |
+| NFCT-17 | Unit, property and simulation tests |
+| NFCT-18 | Firestore emulator rules tests |
+| NFCT-19 | Functions emulator integration tests |
+| NFCT-20 | Repository tests against the emulators |
+| NFCT-21, NFCT-22, NFCT-23, NFCT-6 | User-facing: update Playwright coverage |
+| NFCT-10 | The canonical Stage 1 end-to-end Playwright journey |
+
+- Keep Playwright tests deterministic. Where an injected or fake clock
+  (`page.clock`) or another test seam exists, use it instead of real-time waits
+  such as `page.waitForTimeout`.
+- Keep the existing spec naming, so CI still discovers new specs: emulator
+  specs are `*.local.spec.ts` matched by `testMatch` in
+  `playwright.protocol.config.ts` (for example
+  `session-history.persistence.local.spec.ts`).
+- Cover the card's user-visible behavior. Do not add broad or flaky browser
+  tests just to have E2E coverage.
+
 ## Running locally
 
 Development is emulator-first. The NFCT dev Firebase project is `nfct-dev`
