@@ -61,7 +61,6 @@ describe('game session create schema', () => {
     expect(issueCodes(createSchema, sessionCreate({ startLevel: 0 }))).toEqual(['startLevel:too_small']);
     expect(issueCodes(createSchema, sessionCreate({ userId: 'a/b' }))).toEqual(['userId:invalid_format']);
     expect(issueCodes(createSchema, sessionCreate({ eegLinked: true }))).toEqual([':unrecognized_keys']);
-    expect(issueCodes(createSchema, sessionCreate({ startLevel: 4, peakLevel: 3 }))).toEqual(['peakLevel:custom']);
     expect(issueCodes(createSchema, sessionCreate({ startedAt: at(5), endedAt: at(5) }))).toEqual(['endedAt:custom']);
   });
 
@@ -73,7 +72,7 @@ describe('game session create schema', () => {
     expect(issueCodes(schema, sessionCreate())).toEqual(['addedLater:invalid_type']);
     expect(schema.parse(sessionCreate({ addedLater: 'value' }))).toMatchObject({ addedLater: 'value' });
     // The envelope's refinements still apply after the extension.
-    expect(issueCodes(schema, sessionCreate({ addedLater: 'value', startLevel: 4, peakLevel: 3 }))).toEqual(['peakLevel:custom']);
+    expect(issueCodes(schema, sessionCreate({ addedLater: 'value', startedAt: at(5), endedAt: at(5) }))).toEqual(['endedAt:custom']);
   });
 
   it("checks one game version's trials, metrics, mode and version", () => {

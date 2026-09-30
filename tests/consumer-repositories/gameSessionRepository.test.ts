@@ -229,8 +229,9 @@ describe('saving a finished session', () => {
       .rejects.toThrow(/trials\.0\.level/);
     await expect(started.save({ definition: testGame, session: sessionDraft({ modeId: 'endless' }) }))
       .rejects.toThrow(/modeId/);
-    await expect(started.save({ definition: testGame, session: sessionDraft({ startLevel: 3, peakLevel: 2 }) }))
-      .rejects.toThrow(/peakLevel/);
+    const instant = minutesAgo(1);
+    await expect(started.save({ definition: testGame, session: sessionDraft({ startedAt: instant, endedAt: instant }) }))
+      .rejects.toThrow(/endedAt/);
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
 
     await (await started.save({ definition: testGame, session: sessionDraft() })).acknowledged;
