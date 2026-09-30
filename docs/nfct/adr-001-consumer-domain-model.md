@@ -57,7 +57,7 @@ The client generates the session ID when the game starts, so an EEG recording ca
 `onGameSessionCreated` (NFCT-19) is the only writer of `result` and `progress/{gameId}`, and writes both in one transaction:
 
 1. validate the session with the game's schemas;
-2. rescore it with the game's pure `score()`;
+2. rescore it with the game's pure `score()`, which also replays the trusted peak level from the trials;
 3. run plausibility checks and set `validity`;
 4. write both documents.
 
@@ -65,10 +65,15 @@ It processes a user's sessions in play order.
 
 | Validity | History | Totals | Records and unlocks |
 | --- | --- | --- | --- |
-| `valid` | Shown | Counted | Set, if the session completed on the current `gameVersion` |
+| `valid` | Shown | Counted | Set, if the session completed; records go to the record set of the session's own `gameVersion` |
 | `flagged` (e.g. RT floor, locked start level) | Shown | Counted | Never |
 | `invalid` (schema failure) | Kept for debugging | Not counted | Never |
 
+- **Result variants.** `result` is a union on `validity`. Every variant carries the processing metadata that makes a session processed exactly once: `processedAt`, `scoringVersion`, `validity` and `reasons`, where a flagged or invalid result needs at least one reason.
+  - **`valid` and `flagged`** also carry the scored values: `score`, `accuracy`, `responseTime`, the trusted `peakLevel` and `metrics`, the `performanceIndex` pair and `domainContributions`.
+  - **`valid`** also fixes the `recordKey` and `recordValues` the session competed with, plus `personalBest` and `unlocked`.
+  - **`invalid`** carries nothing else, so trusted scoring can mark a session permanently processed without inventing gameplay values.
+- **Trusted peak level.** The session's own `peakLevel` is a client observation only. Trusted scoring compares it with the peak replayed from the trials as a plausibility check. `bestPeakLevel`, unlocks and the `peakLevel` record use only the replayed `result.peakLevel`.
 - **Totals.** Abandoned sessions add active time and last-played time, but do not count as completed or set records.
 - **`performanceIndex`.** `result.performanceIndex` and `performanceIndexVersion` are `number | null` and always null in Stage 1. `GameDefinition.performanceIndex` stays absent until a formula is validated on real gameplay data (NFCT-26).
 - **Where the logic lives.** The per-game reducer `applySession` and `unlockedStartLevel` are pure functions in `shared/`. Trusted scoring, the client's optimistic preview and the rebuild script all call the same code.
@@ -76,12 +81,16 @@ It processes a user's sessions in play order.
 
 `applySession(progress | null, { definition, sessionId, session, outcome, appliedAt })` works as follows:
 
+- **Trusted input only.** The outcome is either `validOutcome(definition, { modeId, startLevel }, scored)` for a session just scored, or `outcomeFromResult(result)` for a stored one. It holds the validity and, for a valid session, the trusted peak, record key and record values. The reducer never reads the client's `peakLevel`.
+
 - **Deterministic and non-mutating.** It reads no clock and never mutates its inputs.
 - **Not idempotent.** Applying the same session twice adds its totals twice (records, best peak level and unlocks are max-based and unaffected). Progress stores no session ledger. Exactly-once application is the caller's responsibility:
   - **Trusted scoring (NFCT-19)** reads the session inside the transaction and skips it when `result.processedAt` is already set. `result` and `progress` are then written in that same transaction.
   - **Rebuilds** start from empty progress and replay each stored session once, in play order.
   - **The client preview (NFCT-20, NFCT-22)** de-duplicates pending sessions in transient client state, never in persisted progress. Progress and a session's `result` land in one commit but may arrive through separate listeners. To avoid a transient double preview, treat a session as pending only until its trusted `result` is observed, and coordinate the two listeners (for example with `onSnapshotsInSync`) before combining cached progress with pending sessions.
 - **Missing progress.** An invalid session on missing progress leaves it missing. The first valid or flagged session creates the document.
+- **Deterministic ties.** A higher value takes a record. On an equal value the earlier achievement (`endedAt`) keeps it, and then the lower session ID. The result never depends on the order in which triggers or a rebuild apply sessions.
+- **Unknown aggregates.** `canApplyToProgress(progress, definition)` is false when progress was maintained by a different `aggregateVersion` or a newer `gameVersion`. Reading such progress still works. Trusted scoring then rebuilds before applying; a client preview declines to preview and shows the trusted server state as it is. `applySession` refuses rather than reinterpret it.
 
 ### 7. Deletion: hard delete, server-driven
 
@@ -104,16 +113,31 @@ Then:
 
 | Version | Lives on | Bump when | Effect |
 | --- | --- | --- | --- |
-| `schemaVersion` | Every document | A field is renamed, removed or changes meaning (not when an optional field is added) | Readers upcast in memory via one mapper per collection (`readUserProfile`, `readGameSession`, `readEegRecording`, `readGameProgress`). Rules accept current and current − 1. |
-| `gameVersion` | Catalogue and each session | Scores stop being comparable (new levels, changed ramp) | Records restart; the old set moves to `progress.bestsArchive`. Only current-version sessions set records. |
-| `scoringVersion` | Catalogue and `result` | `score()` or the performance index changes | New sessions use it; a rebuild can rescore stored trials. |
+| `schemaVersion` | Every document | A field is changed, removed or repurposed, or an existing enum gains a value (the domain catalogue excepted). Adding an optional field is not a bump. | Readers upcast in memory via one mapper per collection (`readUserProfile`, `readGameSession`, `readEegRecording`, `readGameProgress`). Rules accept current and current − 1. |
+| `gameVersion` | Catalogue and each session | Scores stop being comparable (new levels, changed ramp) | A new record set starts; the previous one moves to `progress.bestsArchive`. Earned unlocks carry over. |
+| `scoringVersion` | Catalogue and `result` | `score()` or the performance index changes | New sessions use it. Stored results stay as written; rescoring them is a deliberate, separate job. |
 | `aggregateVersion` | Each aggregate | A reducer changes | That user's aggregates are rebuilt from sessions. Derived data is never migrated. |
+
+**Strict writes, tolerant reads.**
+
+- **Writes are strict.** Each collection has a write schema for the current version (`*WriteSchema`) that rejects unknown fields, and rules enforce the same exact key set.
+- **Reads are tolerant.** The `read*` mappers drop fields they do not understand, so an older build can read a document from a newer compatible writer. That is why adding an optional field needs no `schemaVersion` bump, while changing, removing or repurposing a field does.
+- **Domain IDs are the one open set.** Readers ignore domain contributions whose ID this build's catalogue does not know (decision 10).
+- **Unreadable documents.** A document whose `schemaVersion` a build cannot read throws `DomainReadError`. Repositories (NFCT-20) treat it as unreadable rather than crash.
+
+**Rebuilds across game versions.** `rebuildProgress(definition, sessions, appliedAt)` is the pure rebuild:
+
+- **Stored results, not rescoring.** It replays each processed session once, in play order (`endedAt`, then session ID), from its stored trusted result.
+- **Old sessions are never re-checked.** A session is never revalidated against, or rescored with, a later game version's schemas or scoring. `readGameSessionFor(definition)` applies only to the definition's exact `gameVersion`; older sessions are read with `readGameSession`.
+- **Old records stay archived.** Records stay in the record set of the session's own `gameVersion`, so earlier sets move into `bestsArchive` rather than disappear. A late session of an earlier version lands in that version's archived set.
+- **Unlocks survive by default.** `bestPeakLevel` spans every game version, and `unlockedStartLevel` clamps it to the current mode's levels, so a routine rebuild or version bump never revokes an earned unlock. A future version whose levels change meaning must define an explicit migration instead, for example a new mode ID.
+- **Unprocessed sessions are skipped.** Trusted scoring applies them when it processes them.
 
 Two catalogue identifiers are also versioned:
 
 - **Domain catalogue.** It carries its own `version` (decision 10).
 - **Record keys.** A `recordKey` change is a catalogue change:
-  - if gameplay is unchanged, bump `scoringVersion` and rebuild records from stored trials;
+  - if gameplay is unchanged, bump `scoringVersion` and run a deliberate rescoring of stored trials;
   - if gameplay changed, bump `gameVersion`.
 
 ### 9. Mental Math records are keyed by mode + start level
@@ -126,8 +150,10 @@ Scores from different start levels are not comparable in the inherited Mental Ma
 
 So:
 
-- **Records.** Bests are kept per `recordKey`: Mental Math uses `${modeId}:${startLevel}` (e.g. `endless:3`). The record metrics are score, correct answers and peak level, each with its own `sessionId` and date. Ties keep the earlier record. No normalisation merges the classes until one can be validated on real data.
-- **Unlocks.** `bestPeakLevel[modeId]` is the highest peak level in any valid completed run at **any** start level. `unlockedStartLevel(mode, progress | null)` = `max(initiallyUnlockedStartLevel, min(maxLevel, bestPeakLevel − 1))`. For Mental Math endless (initial level 1, 8 levels) that is `min(8, max(1, bestPeakLevel − 1))`.
+- **Records.** Bests are kept per `recordKey`: Mental Math uses `${modeId}:${startLevel}` (e.g. `endless:3`). The record metrics are score, correct answers and peak level, each with its own `sessionId` and date. Ties go to the earlier achievement, then the lower session ID (decision 6). No normalisation merges the classes until one can be validated on real data.
+- **Unlocks.** `bestPeakLevel[modeId]` is the highest trusted peak level in any valid completed run at **any** start level.
+  - **The mode owns the rule.** Each mode defines a deterministic `unlockPolicy({ bestPeakLevel, maxLevel })`. `unlockedStartLevel(mode, progress | null)` applies it and clamps the result to `[initiallyUnlockedStartLevel, maxLevel]`. Shared code holds no game-specific formula.
+  - **Mental Math endless (NFCT-17), intended v1 policy:** unlock up to `bestPeakLevel − 1`, but once the top level has actually been reached, the top level itself is an allowed start level (`bestPeakLevel >= maxLevel ? maxLevel : bestPeakLevel − 1`). The initial level and the mode's bounds always apply.
 - **Missing progress.** A missing progress document, or no entry for the mode, yields `initiallyUnlockedStartLevel`.
 - **Where it is called.** The start-level picker, the client preview and the server all call this one function. It derives the level from `bestPeakLevel` and never trusts the cached `progress.unlocked`.
 - **Totals** (sessions and time) are per game and include flagged sessions.
@@ -139,6 +165,7 @@ So:
 - **Product taxonomy only.** It is the v1 taxonomy, not a permanent scientific ontology. No field or label claims to measure intelligence or cognitive improvement, or to have a clinical effect. User-facing domain wording is a separate owner decision.
 - **Fractional weights.** A game belongs to one or more domains through `domainWeights`, which are non-negative and sum to 1 (e.g. `{ math: 0.7, 'processing-speed': 0.2, memory: 0.1 }`). Weights say how a game is filed; they are not measurements.
 - **Additive growth.** Adding a domain such as `attention` or `cognitive-flexibility` appends it and bumps the catalogue `version`. Aggregates are keyed maps, so weights written under v1 stay valid and no schema migration is needed. Domain IDs are never renamed, removed or reused.
+- **Older builds tolerate newer domains.** A build that reads contributions naming a domain its catalogue does not know ignores that domain rather than fail. Writes accept only the writer's own catalogue.
 
 ### 11. EEG storage policy and simulated provenance
 
@@ -157,7 +184,7 @@ So:
   - valence, arousal, emotion or any "state" label;
   - neurofeedback concepts such as `inZone`.
 
-  The schema rejects unknown keys, so these cannot be added silently. Raw capture, if ever wanted, is a separately consented schema version 2 backed by Cloud Storage.
+  The write schema rejects unknown keys, so these cannot be added silently, and readers drop any field they do not know. Raw capture, if ever wanted, is a separately consented schema version 2 backed by Cloud Storage.
 - **Consent.** Profile consent gates every write (enforced by rules). Recordings live as long as the account and are deletable by the user.
 - **Provenance.** Every recording carries `source: 'measured' | 'simulated'`. `device.model` always names the actual headset (`muse-2`, `muse-s`, `muse-s-athena` or `unknown`), never "simulated". Simulated recordings (demo mode, tests) keep that provenance wherever they appear. They are labelled as simulated and excluded from real EEG history and analytics. Whether production demo mode exists is NFCT-16's decision.
 
@@ -171,17 +198,17 @@ So:
 | `games/definition.ts` | `GameDefinition` contract and `defineGame()` invariant check |
 | `schemas/*.ts` | Zod schemas and `read*` mappers for the profile, game session, EEG recording and progress |
 | `progress/unlocks.ts` | `unlockedStartLevel` |
-| `progress/applySession.ts` | The `applySession` reducer |
+| `progress/applySession.ts` | The `applySession` reducer, `validOutcome` / `outcomeFromResult`, `canApplyToProgress` and `rebuildProgress` |
 
 `GameDefinition` fields:
 
 - stable `id`, `gameVersion` and `scoringVersion`;
-- `modes`, each with levels 1..N and `initiallyUnlockedStartLevel`;
+- `modes`, each with levels 1..N, `initiallyUnlockedStartLevel` and a deterministic `unlockPolicy`;
 - `domainWeights`;
 - `trialSchema` and `metricsSchema`;
 - `limits`;
-- a pure, deterministic `score()`;
-- `recordKey()` and `recordMetrics`;
+- a pure, deterministic `score()` that also returns the trusted `peakLevel`;
+- `recordKey()` and `recordMetrics`, whose names must fit the stored record-name format (letters and digits);
 - an optional versioned `performanceIndex`.
 
 Timestamps are typed structurally (`FirestoreTimestamp`), so the same schemas read web SDK and Admin SDK documents.

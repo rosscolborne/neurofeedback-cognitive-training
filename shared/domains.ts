@@ -43,9 +43,25 @@ export function domainWeightsSchemaFor<const D extends string>(catalog: { readon
 export const domainIdSchema = z.enum(DOMAIN_CATALOG.domains);
 export const domainWeightsSchema = domainWeightsSchemaFor(DOMAIN_CATALOG);
 
+const KNOWN_DOMAINS: ReadonlySet<string> = new Set(DOMAIN_CATALOG.domains);
+const contributionSchema = z.number().min(0).max(1);
+const withinWhole = (weights: Record<string, number | undefined>) =>
+  sumOf(weights) <= 1 + DOMAIN_WEIGHT_SUM_TOLERANCE;
+
 /**
  * The weights recorded on one session's server result. Unlike a game's weights
  * they may be empty (a session that contributes to no domain).
+ *
+ * Writes accept only catalogue domains. Reads ignore domain IDs this build does
+ * not know, so a document written under a newer catalogue version still reads.
  */
-export const domainContributionsSchema = z.partialRecord(domainIdSchema, z.number().min(0).max(1))
-  .refine((weights) => sumOf(weights) <= 1 + DOMAIN_WEIGHT_SUM_TOLERANCE, 'Domain contributions cannot exceed 1');
+export function domainContributionsSchemaFor(mode: 'write' | 'read'): z.ZodType<DomainWeights> {
+  if (mode === 'write') {
+    return z.partialRecord(domainIdSchema, contributionSchema).refine(withinWhole, 'Domain contributions cannot exceed 1');
+  }
+  return z.record(z.string(), contributionSchema)
+    .transform((weights): DomainWeights => Object.fromEntries(
+      Object.entries(weights).filter(([domain]) => KNOWN_DOMAINS.has(domain)),
+    ))
+    .refine(withinWhole, 'Domain contributions cannot exceed 1');
+}

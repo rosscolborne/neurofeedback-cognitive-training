@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
-import { DomainReadError, eegRecordingSchema, readEegRecording } from '@nfct/shared';
+import { eegRecordingWriteSchema, readEegRecording } from '@nfct/shared';
 import { storedEegRecording } from './fixtures';
 
 /** Every property name anywhere in a zod schema. */
@@ -33,9 +33,10 @@ function propertyNames(schema: z.core.$ZodType): string[] {
 const FORBIDDEN_FIELD = /raw|^samples$|samples$|^data$|valence|arousal|emotion|affect|mood|^state$|inzone|zonescore|serial|mac$|peripheral/i;
 
 describe('EEG recording schema', () => {
-  it('reads a valid stored recording', () => {
+  it('reads and writes a valid stored recording', () => {
     const raw = storedEegRecording();
 
+    expect(eegRecordingWriteSchema.parse(raw)).toEqual(raw);
     expect(readEegRecording(raw)).toEqual(raw);
   });
 
@@ -66,14 +67,14 @@ describe('EEG recording schema', () => {
   });
 
   it('has no raw-sample, device-identifier or affective-state fields', () => {
-    const names = propertyNames(eegRecordingSchema);
+    const names = propertyNames(eegRecordingWriteSchema);
 
     expect(names).toContain('gameSessionId');
     expect(names).toContain('mindfulness');
     expect(names.filter((name) => FORBIDDEN_FIELD.test(name))).toEqual([]);
   });
 
-  it('rejects raw samples and affective labels if a writer adds them', () => {
+  it('refuses to write raw samples or affective labels, and never reads them back', () => {
     const raw = storedEegRecording();
     const summary = raw.summary as object;
     const cases: Record<string, unknown>[] = [
@@ -88,7 +89,8 @@ describe('EEG recording schema', () => {
     ];
 
     for (const candidate of cases) {
-      expect(() => readEegRecording(candidate)).toThrow(DomainReadError);
+      expect(eegRecordingWriteSchema.safeParse(candidate).success).toBe(false);
+      expect(readEegRecording(candidate)).toEqual(raw);
     }
   });
 
@@ -97,7 +99,7 @@ describe('EEG recording schema', () => {
     const long = Array.from({ length: 361 }, () => 0.5);
 
     expect(() => readEegRecording({ ...raw, timeline: { bucketSeconds: 10, mindfulness: long, restfulness: long } }))
-      .toThrow(DomainReadError);
+      .toThrow(/timeline/);
     expect(() => readEegRecording({
       ...raw,
       quality: { ...(raw.quality as object), channelGoodFraction: { Fp1: 0.9 } },

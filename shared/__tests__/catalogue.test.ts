@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   DOMAIN_CATALOG,
   defineGame,
+  domainContributionsSchemaFor,
   domainWeightsSchema,
   domainWeightsSchemaFor,
   MAX_TRIALS_PER_SESSION,
@@ -36,6 +38,13 @@ describe('domain catalogue', () => {
 
     expect(v2Weights.safeParse({ math: 0.7, 'processing-speed': 0.2, memory: 0.1 }).success).toBe(true);
     expect(v2Weights.safeParse({ attention: 0.5, reasoning: 0.5 }).success).toBe(true);
+  });
+
+  it('lets an older build read contributions that name a domain it does not know', () => {
+    const newer = { math: 0.5, attention: 0.3, memory: 0.2 };
+
+    expect(domainContributionsSchemaFor('read').parse(newer)).toEqual({ math: 0.5, memory: 0.2 });
+    expect(domainContributionsSchemaFor('write').safeParse(newer).success).toBe(false);
   });
 });
 
@@ -75,5 +84,23 @@ describe('defineGame', () => {
     expect(() => defineGame(variant({ recordKey: ({ modeId, startLevel }) => `${modeId} ${startLevel}` })))
       .toThrow(/recordKey/);
     expect(() => defineGame(variant({ recordMetrics: [] }))).toThrow(/record metric/);
+  });
+
+  it('rejects record metric names that progress cannot store', () => {
+    const metricsSchema = z.strictObject({ correct_answers: z.int().min(0) });
+
+    expect(() => defineGame({
+      ...fixtureGame,
+      metricsSchema,
+      score: () => ({ score: 0, accuracy: null, responseTime: null, peakLevel: 1, metrics: { correct_answers: 0 } }),
+      recordMetrics: ['score', 'correct_answers'],
+    })).toThrow(/record metric 'correct_answers'/);
+  });
+
+  it('requires each mode\'s unlock policy to return an integer', () => {
+    const [endlessMode] = fixtureGame.modes;
+
+    expect(() => defineGame(variant({ modes: [{ ...endlessMode!, unlockPolicy: ({ bestPeakLevel }) => bestPeakLevel / 2 }] })))
+      .toThrow(/unlockPolicy/);
   });
 });

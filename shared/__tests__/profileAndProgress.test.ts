@@ -1,21 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   applySession,
-  DomainReadError,
+  canApplyToProgress,
+  gameProgressWriteSchema,
   readGameProgress,
   readUserProfile,
+  userProfileWriteSchema,
+  validOutcome,
   type GameProgress,
 } from '@nfct/shared';
-import { at, fixtureGame, progressSession, sessionId, storedProfile, valid } from './fixtures';
+import { at, fixtureGame, progressSession, scored, sessionId, storedProfile } from './fixtures';
 
 describe('user profile schema', () => {
-  it('reads a valid stored profile', () => {
+  it('reads and writes a valid stored profile', () => {
     const raw = storedProfile();
 
+    expect(userProfileWriteSchema.parse(raw)).toEqual(raw);
     expect(readUserProfile(raw)).toEqual(raw);
   });
 
-  it('rejects inherited and unknown fields', () => {
+  it('refuses to write inherited or unknown fields, and reads past them', () => {
     const raw = storedProfile();
     const cases: Record<string, unknown>[] = [
       { ...raw, role: 'clinician' },
@@ -25,7 +29,8 @@ describe('user profile schema', () => {
     ];
 
     for (const candidate of cases) {
-      expect(() => readUserProfile(candidate)).toThrow(DomainReadError);
+      expect(userProfileWriteSchema.safeParse(candidate).success).toBe(false);
+      expect(readUserProfile(candidate)).toEqual(raw);
     }
   });
 
@@ -45,22 +50,32 @@ describe('game progress schema', () => {
   const progress = applySession(null, {
     definition: fixtureGame,
     sessionId: sessionId(1),
-    session: progressSession({ peakLevel: 3 }),
-    outcome: valid(120, 6),
+    session: progressSession(),
+    outcome: validOutcome(fixtureGame, { modeId: 'endless', startLevel: 1 }, scored(120, { correct: 6, peakLevel: 3 })),
     appliedAt: at(1),
   }) as GameProgress;
 
-  it('reads progress produced by the reducer', () => {
+  it('reads and writes progress produced by the reducer', () => {
+    expect(gameProgressWriteSchema.parse(progress)).toEqual(progress);
     expect(readGameProgress(progress)).toEqual(progress);
   });
 
-  it('rejects unknown keys, including Stage 2 aggregates', () => {
+  it('refuses to write unknown keys, including Stage 2 aggregates', () => {
     for (const key of ['streak', 'dailyStats', 'achievements', 'performanceIndex', 'domains', 'appliedSessionIds']) {
-      expect(() => readGameProgress({ ...progress, [key]: null })).toThrow(DomainReadError);
+      expect(gameProgressWriteSchema.safeParse({ ...progress, [key]: null }).success).toBe(false);
     }
-    expect(() => readGameProgress({
+    expect(gameProgressWriteSchema.safeParse({
       ...progress,
       bests: { 'endless:1': { score: { value: 1, sessionId: sessionId(1), achievedAt: at(1), eeg: 1 } } },
-    })).toThrow(DomainReadError);
+    }).success).toBe(false);
+  });
+
+  it('reads progress from a newer reducer without failing, and declines to apply to it', () => {
+    const newer = { ...progress, aggregateVersion: 2, domains: { math: { index: null } } };
+
+    const read = readGameProgress(newer);
+
+    expect(read).toEqual({ ...progress, aggregateVersion: 2 });
+    expect(canApplyToProgress(read, fixtureGame)).toBe(false);
   });
 });

@@ -19,6 +19,13 @@ export interface LevelDefinition {
   readonly params: Readonly<Record<string, unknown>>;
 }
 
+export interface UnlockContext {
+  /** The highest trusted peak level in any valid completed run of the mode, any start level. */
+  readonly bestPeakLevel: number;
+  /** The mode's highest level. `bestPeakLevel` can exceed it after a gameVersion removes levels. */
+  readonly maxLevel: number;
+}
+
 export interface GameModeDefinition {
   readonly id: string;
   /** Levels 1..N, in order. */
@@ -27,6 +34,12 @@ export interface GameModeDefinition {
   readonly adaptive: boolean;
   /** The unlocked start level when there is no valid progress for this mode. */
   readonly initiallyUnlockedStartLevel: number;
+  /**
+   * The mode's own deterministic unlock rule: the highest start level earned
+   * so far. It must return an integer; `unlockedStartLevel` clamps the result
+   * to [initiallyUnlockedStartLevel, maxLevel].
+   */
+  unlockPolicy(ctx: UnlockContext): number;
 }
 
 export interface GameLimits {
@@ -48,22 +61,32 @@ export const responseTimeSummarySchema = z.strictObject({
 });
 export type ResponseTimeSummary = z.infer<typeof responseTimeSummarySchema>;
 
+/** What a game's trusted scoring derives from the raw trials. */
 export interface ScoredResult<Metrics extends object> {
   readonly score: number;
   /** 0-1; null for games without right or wrong answers. */
   readonly accuracy: number | null;
   readonly responseTime: ResponseTimeSummary | null;
+  /**
+   * The highest level reached, replayed from the trials. Progress, records and
+   * unlocks use this value; the session's own `peakLevel` is only a client
+   * observation to check it against.
+   */
+  readonly peakLevel: number;
   readonly metrics: Metrics;
 }
 
 type NumericKeys<T> = { [K in keyof T]-?: T[K] extends number ? K : never }[keyof T] & string;
 
 /**
- * A metric a record is kept for; higher is better. 'score' is the scored
- * result's score, 'peakLevel' is the session's peak level, and any other name
- * is a numeric field of the game's metrics.
+ * A metric a record is kept for; higher is better. 'score' and 'peakLevel' come
+ * from the scored result, and any other name is a numeric field of the game's
+ * metrics.
  */
 export type RecordMetric<Metrics extends object> = 'score' | 'peakLevel' | NumericKeys<Metrics>;
+
+/** A record metric's name, as stored in `progress.bests` and `result.recordValues`. */
+export const recordMetricNameSchema = z.string().max(40).regex(/^[A-Za-z][A-Za-z0-9]*$/);
 
 /** A versioned, validated performance index. No game defines one in Stage 1. */
 export interface PerformanceIndexDefinition<Trial> {
@@ -86,7 +109,10 @@ export interface GameDefinition<Trial, Metrics extends object> {
   /** Validates the game-specific summary metrics. */
   readonly metricsSchema: z.ZodType<Metrics>;
   readonly limits: GameLimits;
-  /** Pure and deterministic: the same trials and context always give the same result. */
+  /**
+   * Pure and deterministic: the same trials and context always give the same
+   * result, including the replayed `peakLevel`.
+   */
   score(trials: readonly Trial[], ctx: ScoreContext): ScoredResult<Metrics>;
   /** Which record class a session competes in (Mental Math: `${modeId}:${startLevel}`). */
   recordKey(ctx: ScoreContext): string;
@@ -128,6 +154,18 @@ function modeProblems(mode: GameModeDefinition): string[] {
   if (!Number.isInteger(initial) || initial < 1 || initial > mode.levels.length) {
     problems.push(`mode '${mode.id}': initiallyUnlockedStartLevel must be a level of the mode`);
   }
+  if (typeof mode.unlockPolicy !== 'function') {
+    problems.push(`mode '${mode.id}': unlockPolicy is required`);
+    return problems;
+  }
+  const maxLevel = mode.levels.length;
+  for (let bestPeakLevel = 1; bestPeakLevel <= MAX_GAME_LEVEL; bestPeakLevel += 1) {
+    const unlocked = mode.unlockPolicy({ bestPeakLevel, maxLevel });
+    if (!Number.isInteger(unlocked) || mode.unlockPolicy({ bestPeakLevel, maxLevel }) !== unlocked) {
+      problems.push(`mode '${mode.id}': unlockPolicy must return the same integer for bestPeakLevel ${bestPeakLevel}`);
+      break;
+    }
+  }
   return problems;
 }
 
@@ -167,6 +205,11 @@ export function defineGame<Trial, Metrics extends object>(
   if (definition.recordMetrics.length === 0) problems.push('at least one record metric is required');
   if (new Set(definition.recordMetrics).size !== definition.recordMetrics.length) {
     problems.push('record metrics must be unique');
+  }
+  for (const metric of definition.recordMetrics) {
+    if (!recordMetricNameSchema.safeParse(metric).success) {
+      problems.push(`record metric '${metric}' must be letters and digits, starting with a letter (max 40)`);
+    }
   }
   if (problems.length === 0) {
     for (const mode of definition.modes) {

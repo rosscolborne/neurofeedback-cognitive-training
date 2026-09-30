@@ -6,15 +6,18 @@ import type { GameProgress } from '../schemas/progress';
  * function the start-level picker, the client preview and trusted scoring all
  * call. A missing progress document is passed as null.
  *
- * It derives the level from `bestPeakLevel` and never reads the cached
- * `progress.unlocked`, so a stale or forged cache cannot unlock anything.
- * Mental Math endless (initial 1, 8 levels): min(8, max(1, bestPeakLevel - 1)).
+ * With no valid progress for the mode it returns `initiallyUnlockedStartLevel`.
+ * Otherwise the mode's own `unlockPolicy` decides, and the result is clamped to
+ * [initiallyUnlockedStartLevel, maxLevel]. It reads `bestPeakLevel`, never the
+ * cached `progress.unlocked`, so a stale or forged cache cannot unlock anything.
  */
 export function unlockedStartLevel(
   mode: GameModeDefinition,
   progress: Pick<GameProgress, 'bestPeakLevel'> | null,
 ): number {
-  const best = progress?.bestPeakLevel[mode.id];
-  if (best === undefined) return mode.initiallyUnlockedStartLevel;
-  return Math.max(mode.initiallyUnlockedStartLevel, Math.min(maxLevelOf(mode), best - 1));
+  const bestPeakLevel = progress?.bestPeakLevel[mode.id];
+  if (bestPeakLevel === undefined) return mode.initiallyUnlockedStartLevel;
+  const maxLevel = maxLevelOf(mode);
+  const earned = mode.unlockPolicy({ bestPeakLevel, maxLevel });
+  return Math.max(mode.initiallyUnlockedStartLevel, Math.min(maxLevel, earned));
 }

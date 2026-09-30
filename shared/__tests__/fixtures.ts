@@ -4,7 +4,7 @@ import {
   type FirestoreTimestamp,
   type LevelDefinition,
   type ProgressSession,
-  type SessionOutcome,
+  type ScoredResult,
 } from '@nfct/shared';
 
 /** Structurally identical to the SDKs' Timestamp; equal values compare equal. */
@@ -32,7 +32,7 @@ export function sessionId(n: number): string {
   return `session-${String(n).padStart(8, '0')}`;
 }
 
-function levels(count: number): LevelDefinition[] {
+export function levels(count: number): LevelDefinition[] {
   return Array.from({ length: count }, (_, index) => ({ level: index + 1, label: `Level ${index + 1}`, params: {} }));
 }
 
@@ -50,8 +50,10 @@ const fixtureMetricsSchema = z.strictObject({
 export type FixtureMetrics = z.infer<typeof fixtureMetricsSchema>;
 
 /**
- * A test-only game: an adaptive 8-level mode that starts at level 1 (like
- * Mental Math endless) and a fixed 3-level mode that starts at level 2.
+ * A test-only game: an adaptive 8-level mode that starts at level 1 with the
+ * unlock policy intended for Mental Math endless (one below the best peak, or
+ * the top level once it is reached), and a fixed 3-level mode that starts at
+ * level 2 and unlocks every level reached.
  */
 export const fixtureGame = defineGame<FixtureTrial, FixtureMetrics>({
   id: 'fixture-game',
@@ -59,8 +61,20 @@ export const fixtureGame = defineGame<FixtureTrial, FixtureMetrics>({
   scoringVersion: 1,
   domainWeights: { reasoning: 0.6, 'processing-speed': 0.4 },
   modes: [
-    { id: 'endless', adaptive: true, initiallyUnlockedStartLevel: 1, levels: levels(8) },
-    { id: 'sprint', adaptive: false, initiallyUnlockedStartLevel: 2, levels: levels(3) },
+    {
+      id: 'endless',
+      adaptive: true,
+      initiallyUnlockedStartLevel: 1,
+      levels: levels(8),
+      unlockPolicy: ({ bestPeakLevel, maxLevel }) => (bestPeakLevel >= maxLevel ? maxLevel : bestPeakLevel - 1),
+    },
+    {
+      id: 'sprint',
+      adaptive: false,
+      initiallyUnlockedStartLevel: 2,
+      levels: levels(3),
+      unlockPolicy: ({ bestPeakLevel }) => bestPeakLevel,
+    },
   ],
   trialSchema: fixtureTrialSchema,
   metricsSchema: fixtureMetricsSchema,
@@ -71,6 +85,7 @@ export const fixtureGame = defineGame<FixtureTrial, FixtureMetrics>({
       score: correct * 10 * startLevel,
       accuracy: trials.length === 0 ? null : correct / trials.length,
       responseTime: null,
+      peakLevel: Math.max(startLevel, ...trials.map((trial) => trial.level)),
       metrics: { correct, attempted: trials.length },
     };
   },
@@ -87,7 +102,6 @@ export function progressSession(overrides: Partial<ProgressSession> = {}): Progr
     gameVersion: 1,
     modeId: 'endless',
     startLevel: 1,
-    peakLevel: 1,
     status: 'completed',
     activeDurationMs: 60_000,
     endedAt: at(0),
@@ -95,15 +109,10 @@ export function progressSession(overrides: Partial<ProgressSession> = {}): Progr
   };
 }
 
-export function valid(score: number, correct = 0): SessionOutcome<FixtureMetrics> {
-  return {
-    validity: 'valid',
-    scored: { score, accuracy: null, responseTime: null, metrics: { correct, attempted: correct } },
-  };
+/** A trusted scored result, as the fixture game's scoring would return it. */
+export function scored(score: number, { correct = 0, peakLevel = 1 } = {}): ScoredResult<FixtureMetrics> {
+  return { score, accuracy: null, responseTime: null, peakLevel, metrics: { correct, attempted: correct } };
 }
-
-export const flagged: SessionOutcome<FixtureMetrics> = { validity: 'flagged' };
-export const invalid: SessionOutcome<FixtureMetrics> = { validity: 'invalid' };
 
 /** A complete, valid stored game session document. */
 export function storedSession(): Record<string, unknown> {
@@ -140,13 +149,23 @@ export function storedSession(): Record<string, unknown> {
       score: 20,
       accuracy: 0.5,
       responseTime: { medianMs: 1_150, meanMs: 1_150, p90Ms: 1_350 },
+      peakLevel: 3,
+      metrics: { correct: 1, attempted: 2 },
       performanceIndex: null,
       performanceIndexVersion: null,
       domainContributions: { reasoning: 0.6, 'processing-speed': 0.4 },
+      recordKey: 'endless:2',
+      recordValues: { score: 20, correct: 1, peakLevel: 3 },
       personalBest: true,
       unlocked: [{ modeId: 'endless', startLevel: 2 }],
     },
   };
+}
+
+/** A valid stored game session that trusted scoring has not processed yet. */
+export function unprocessedSession(): Record<string, unknown> {
+  const { result: _result, ...unprocessed } = storedSession();
+  return unprocessed;
 }
 
 /** A complete, valid stored EEG recording document. */

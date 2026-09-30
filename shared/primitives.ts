@@ -4,6 +4,17 @@ import { z } from 'zod';
 // docs/nfct/adr-001-consumer-domain-model.md.
 
 /**
+ * Writes of the current schema are strict and reject unknown fields. Reads are
+ * tolerant: they drop fields added by a newer compatible writer (adding an
+ * optional field does not bump schemaVersion) and keep what they understand.
+ */
+export type SchemaMode = 'write' | 'read';
+
+export function objectSchema<const S extends z.core.$ZodShape>(mode: SchemaMode, shape: S): z.ZodObject<S> {
+  return (mode === 'write' ? z.strictObject(shape) : z.object(shape)) as z.ZodObject<S>;
+}
+
+/**
  * The structural shape shared by the web SDK's and the Admin SDK's Firestore
  * `Timestamp`, so this package never imports either SDK.
  */
