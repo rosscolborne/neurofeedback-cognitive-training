@@ -312,13 +312,17 @@ const RunView: React.FC<{
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const digit = /^[0-9]$/.test(event.key);
       if (!digit && event.key !== 'Backspace' && event.key !== 'Enter') return;
+      // Keys answer only while a question is on screen. Otherwise (paused, the
+      // feedback flash) the browser keeps its native behaviour, so Enter still
+      // activates a focused button such as Resume or Quit run.
+      const current = controller.getSnapshot();
+      if (current.phase !== 'question' || current.question === null) return;
       event.preventDefault();
       // Holding a digit or Enter never repeats it.
       if (event.repeat && event.key !== 'Backspace') return;
-      const current = controller.getSnapshot();
       if (digit) controller.pressDigit(Number(event.key));
       else if (event.key === 'Backspace') controller.deleteDigit();
-      else if (current.question) controller.submit(current.question.id);
+      else controller.submit(current.question.id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

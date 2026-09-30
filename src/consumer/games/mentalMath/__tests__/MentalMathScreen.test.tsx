@@ -346,7 +346,8 @@ describe('MentalMathScreen', () => {
     const h = harness();
     h.press('Start at level 1');
     h.advance(1_000);
-    const key = (name: string, repeat = false) => act(() => { listeners.keydown!({ key: name, repeat, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as KeyboardEvent); });
+    const preventDefault = vi.fn();
+    const key = (name: string, repeat = false) => act(() => { listeners.keydown!({ key: name, repeat, altKey: false, ctrlKey: false, metaKey: false, preventDefault } as unknown as KeyboardEvent); });
     key('4');
     key('4', true);
     key('4', true);
@@ -358,9 +359,20 @@ describe('MentalMathScreen', () => {
     expect(submit.props.disabled).toBeUndefined();
     expect(submit.props['aria-disabled']).toBe('true');
     expect(h.buttons('4')[0]!.props['aria-disabled']).toBe('true');
+    // During the flash the keys are left to the browser.
+    preventDefault.mockClear();
+    key('Enter');
+    key('7');
+    expect(preventDefault).not.toHaveBeenCalled();
     h.advance(FEEDBACK_MS);
     expect(h.buttons('4')[0]!.props['aria-disabled']).toBeUndefined();
     h.press('Pause');
+    // Paused: Enter, digits and Backspace keep their native behaviour, so Enter activates a focused Resume or Quit run.
+    key('Enter');
+    key('5');
+    key('Backspace');
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(h.buttons('Resume')).toHaveLength(1);
     h.press('Quit run');
     expect(h.saves[0]!.session.trials).toHaveLength(1);
     expect(h.saves[0]!.session.trials[0]).toMatchObject({ response: 4, rtMs: 1_000 });

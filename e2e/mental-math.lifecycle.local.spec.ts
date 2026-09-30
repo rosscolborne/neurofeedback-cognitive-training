@@ -178,7 +178,9 @@ test('pausing and backgrounding freeze the run clock and discard the question, a
   await expect(page.locator('.mm-question')).toHaveCount(0);
   await page.clock.runFor(60_000);
   await expect(hud(page, 'time')).toHaveText('1:27');
-  await page.getByRole('button', { name: 'Resume', exact: true }).click();
+  // The pause panel takes focus, and Enter activates the focused Resume.
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
   const afterPause = await waitForQuestion(page);
   expect(afterPause).not.toBe(beforePause);
   await expect(hud(page, 'time')).toHaveText('1:27');
@@ -198,7 +200,8 @@ test('pausing and backgrounding freeze the run clock and discard the question, a
 
   // Only an explicit quit ends the run early, as abandoned.
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
-  await page.getByRole('button', { name: 'Quit run', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit run', exact: true }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Run ended early', exact: true })).toBeVisible();
   await expectSaved(page);
   const sessions = await readGameSessions(uid);
