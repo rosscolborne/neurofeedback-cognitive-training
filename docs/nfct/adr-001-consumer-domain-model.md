@@ -205,6 +205,7 @@ So:
 | `domains.ts` | `DOMAIN_CATALOG`, domain IDs, weight schemas |
 | `games/definition.ts` | `GameDefinition` contract and `defineGame()` invariant check |
 | `games/seed.ts` | The session seed schema and `createSessionSeed` |
+| `games/mental-math/` | Mental Math: one frozen module per `gameVersion` (`v1/`), and the simulation script |
 | `schemas/*.ts` | Zod schemas and `read*` mappers for the profile, game session, EEG recording and progress |
 | `progress/unlocks.ts` | `unlockedStartLevel` |
 | `progress/applySession.ts` | The `applySession` reducer, `validOutcome` / `outcomeFromResult`, `canApplyToProgress` and `rebuildProgress` |
@@ -212,7 +213,7 @@ So:
 `GameDefinition` fields:
 
 - stable `id`, `gameVersion` and `scoringVersion`;
-- `modes`, each with levels 1..N, `initiallyUnlockedStartLevel` and a deterministic `unlockPolicy`;
+- `modes`, each with levels 1..N, `initiallyUnlockedStartLevel`, a deterministic `unlockPolicy` and an optional `runDurationMs` (design section C; Mental Math `timed-90`: 90 s);
 - `domainWeights`;
 - `trialSchema` and `metricsSchema`;
 - `limits`;

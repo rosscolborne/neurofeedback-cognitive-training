@@ -21,6 +21,7 @@
     "test:python": "uv run --extra test pytest",
     "test:rules:typecheck": "tsc -p tsconfig.rules.json",
     "test:rules": "firebase emulators:exec --only firestore --project demo-neurasticity-rules \"vitest run --config vitest.rules.config.ts\"",
+    "simulate:mental-math": "tsx shared/games/mental-math/simulate.ts",
     "test:e2e": "npx playwright test --project=public --project=permission-guard",
     "test:e2e:typecheck": "tsc -p tsconfig.e2e.json",
     "test:e2e:guard": "npx playwright test --project=permission-guard",
