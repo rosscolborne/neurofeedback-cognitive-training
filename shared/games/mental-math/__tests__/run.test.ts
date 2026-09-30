@@ -253,6 +253,18 @@ describe('run reducer: submissions', () => {
     expect(mm.timeOutQuestion(timed, { questionId: timed.current!.id })).toMatchObject({ accepted: true, trial: { rtMs: 8_000 } });
   });
 
+  it('judges the run end on the recorded time: a Submit after the time limit is a timeout ending at the limit', () => {
+    // Shown at 82 s on level 1 (8 s limit): a Submit at 8.5 s would end at 90.5 s, but it
+    // is recorded as a timeout ending at 90 s, so it is accepted rather than refused as run-over.
+    const run = mm.presentQuestion(mm.startRun({ seed: SEED, startLevel: 1 }), 82_000);
+    const result = mm.answerQuestion(run, { questionId: run.current!.id, response: run.current!.expected, rtMs: 8_500 });
+
+    expect(result).toMatchObject({
+      accepted: true,
+      trial: { response: null, correct: false, timedOut: true, shownAtMs: 82_000, rtMs: 8_000 },
+    });
+  });
+
   it('reports the peak level and stops at the trial cap', () => {
     const { run } = play(SEED, 1, Array.from({ length: 9 }, () => correct(1_000)));
 
