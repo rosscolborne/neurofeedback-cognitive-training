@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.shared.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.shared.test.tsbuildinfo",
+    "types": ["node"],
+    "paths": {
+      "@nfct/shared": ["./shared/index.ts"]
+    }
+  },
+  "include": ["shared/**/__tests__"],
+  "exclude": []
+}
