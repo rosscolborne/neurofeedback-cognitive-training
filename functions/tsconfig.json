@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "types": ["node"],
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // shared/ is bundled into lib/ at build time (build.mjs); tests and
+    // scripts resolve it from source.
+    "paths": {
+      "@nfct/shared": ["../shared/index.ts"]
+    }
+  },
+  "include": ["src", "scripts", "test", "vitest.config.mts"]
+}
