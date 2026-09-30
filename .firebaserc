@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "dev": "nfct-dev",
+    "emulator": "demo-neurasticity-protocol-e2e"
+  }
+}
