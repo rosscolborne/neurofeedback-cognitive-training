@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  APPLIED_SESSION_LEDGER_SIZE,
   applySession,
   DomainReadError,
   readGameProgress,
@@ -56,18 +55,12 @@ describe('game progress schema', () => {
   });
 
   it('rejects unknown keys, including Stage 2 aggregates', () => {
-    for (const key of ['streak', 'dailyStats', 'achievements', 'performanceIndex', 'domains']) {
+    for (const key of ['streak', 'dailyStats', 'achievements', 'performanceIndex', 'domains', 'appliedSessionIds']) {
       expect(() => readGameProgress({ ...progress, [key]: null })).toThrow(DomainReadError);
     }
     expect(() => readGameProgress({
       ...progress,
       bests: { 'endless:1': { score: { value: 1, sessionId: sessionId(1), achievedAt: at(1), eeg: 1 } } },
     })).toThrow(DomainReadError);
-  });
-
-  it('bounds the applied-session ledger', () => {
-    const ledger = Array.from({ length: APPLIED_SESSION_LEDGER_SIZE + 1 }, (_, index) => sessionId(index));
-
-    expect(() => readGameProgress({ ...progress, appliedSessionIds: ledger })).toThrow(DomainReadError);
   });
 });

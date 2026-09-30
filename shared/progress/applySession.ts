@@ -2,7 +2,6 @@ import { findMode, recordKeySchema, type GameDefinition, type ScoredResult } fro
 import { compareTimestamps, documentIdSchema, type FirestoreTimestamp } from '../primitives';
 import type { GameSession } from '../schemas/gameSession';
 import {
-  APPLIED_SESSION_LEDGER_SIZE,
   GAME_PROGRESS_SCHEMA_VERSION,
   PROGRESS_AGGREGATE_VERSION,
   type Bests,
@@ -89,7 +88,6 @@ function emptyProgress(
     unlocked: {},
     bests: {},
     bestsArchive: {},
-    appliedSessionIds: [],
   };
 }
 
@@ -120,8 +118,12 @@ function withRecords(
 
 /**
  * Folds one processed session into a game's progress. Pure and deterministic:
- * it reads no clock and mutates nothing. Re-applying a session already in the
- * `appliedSessionIds` ledger returns the progress unchanged.
+ * it reads no clock and mutates nothing.
+ *
+ * It is not idempotent: applying the same session twice adds its totals twice.
+ * Exactly-once application is the caller's job. Trusted scoring (NFCT-19)
+ * checks `result.processedAt` in the same transaction; a rebuild replays each
+ * stored session once; a client preview applies only sessions still pending.
  *
  * - invalid: counts nowhere; progress is returned as given (null stays null).
  * - flagged: counts in totals; sets no records and no unlocks.
@@ -138,7 +140,6 @@ export function applySession<Trial, Metrics extends object>(
   const { definition, sessionId, session, outcome, appliedAt } = input;
   if (outcome.validity === 'invalid') return progress;
   assertApplicable(progress, input);
-  if (progress?.appliedSessionIds.includes(sessionId)) return progress;
 
   const base = progress === null
     ? emptyProgress(definition, session.endedAt, appliedAt)
@@ -172,6 +173,5 @@ export function applySession<Trial, Metrics extends object>(
     bestPeakLevel,
     unlocked,
     bests,
-    appliedSessionIds: [...base.appliedSessionIds, sessionId].slice(-APPLIED_SESSION_LEDGER_SIZE),
   };
 }

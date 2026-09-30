@@ -16,8 +16,6 @@ import { readVersioned } from './read';
 
 export const GAME_PROGRESS_SCHEMA_VERSION = 1;
 export const PROGRESS_AGGREGATE_VERSION = 1;
-/** How many recently applied session IDs progress remembers, so re-applying one is a no-op. */
-export const APPLIED_SESSION_LEDGER_SIZE = 100;
 
 export const recordEntrySchema = z.strictObject({
   value: z.number(),
@@ -52,8 +50,6 @@ const gameProgressV1Schema = z.strictObject({
   bests: bestsSchema,
   /** Earlier gameVersion -> the bests recorded under it. */
   bestsArchive: z.record(z.string().regex(/^[1-9][0-9]*$/), bestsSchema),
-  /** Most recently applied session IDs, oldest first. */
-  appliedSessionIds: z.array(documentIdSchema).max(APPLIED_SESSION_LEDGER_SIZE),
 });
 
 export const gameProgressSchema = gameProgressV1Schema;

@@ -76,8 +76,11 @@ It processes a user's sessions in play order.
 
 `applySession(progress | null, { definition, sessionId, session, outcome, appliedAt })` works as follows:
 
-- **Deterministic.** It reads no clock and mutates nothing.
-- **Idempotent.** The primary guard is the trigger's `result.processedAt` check in the same transaction. On top of that, progress keeps `appliedSessionIds`, the last 100 applied session IDs, so re-applying a session returns the progress unchanged. That covers trigger retries and a client preview that re-applies a pending session after its result arrives.
+- **Deterministic and non-mutating.** It reads no clock and never mutates its inputs.
+- **Not idempotent.** Applying the same session twice adds its totals twice (records, best peak level and unlocks are max-based and unaffected). Progress stores no session ledger. Exactly-once application is the caller's responsibility:
+  - **Trusted scoring (NFCT-19)** reads the session inside the transaction and skips it when `result.processedAt` is already set. `result` and `progress` are then written in that same transaction.
+  - **Rebuilds** start from empty progress and replay each stored session once, in play order.
+  - **The client preview (NFCT-20, NFCT-22)** de-duplicates pending sessions in transient client state, never in persisted progress. Progress and a session's `result` land in one commit but may arrive through separate listeners. To avoid a transient double preview, treat a session as pending only until its trusted `result` is observed, and coordinate the two listeners (for example with `onSnapshotsInSync`) before combining cached progress with pending sessions.
 - **Missing progress.** An invalid session on missing progress leaves it missing. The first valid or flagged session creates the document.
 
 ### 7. Deletion: hard delete, server-driven

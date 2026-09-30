@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  APPLIED_SESSION_LEDGER_SIZE,
   applySession,
   defineGame,
   readGameProgress,
@@ -59,7 +58,6 @@ function buildHistory(): Step[] {
     { id: 6, session: { startLevel: 1, peakLevel: 1 }, outcome: invalid },
   ];
 }
-const history = buildHistory();
 
 describe('applySession', () => {
   afterEach(() => vi.useRealTimers());
@@ -86,7 +84,6 @@ describe('applySession', () => {
         },
       },
       bestsArchive: {},
-      appliedSessionIds: [sessionId(1)],
     });
     expect(readGameProgress(progress)).toEqual(progress);
   });
@@ -152,7 +149,6 @@ describe('applySession', () => {
     expect(after.sessionsCompleted).toBe(2);
     expect(after.activeMs).toBe(120_000);
     expect(after.lastPlayedAt).toEqual(at(2));
-    expect(after.appliedSessionIds).toEqual([sessionId(1), sessionId(2)]);
   });
 
   it('creates progress with totals only from a first flagged session', () => {
@@ -217,39 +213,40 @@ describe('applySession', () => {
     expect(progress.bests['endless:1']?.score?.value).toBe(100);
   });
 
-  it('is deterministic and never mutates its inputs', () => {
+  it('is deterministic: the same history gives the same progress, whatever the clock', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    const first = replay(deepFreeze(buildHistory()));
+    const first = replay(buildHistory());
     vi.setSystemTime(new Date('2031-06-15T12:00:00Z'));
-    const midway = deepFreeze(replay(buildHistory().slice(0, 3)));
-    const second = replay(buildHistory().slice(3), midway);
+    const second = replay(buildHistory());
 
     expect(second).toEqual(first);
     expect(JSON.stringify(second)).toBe(JSON.stringify(first));
   });
 
-  it('is idempotent: re-applying a session changes nothing', () => {
-    const once = replay(history)!;
+  it('never mutates the progress or session it is given', () => {
+    const midway = replay(buildHistory().slice(0, 3))!;
+    const snapshot = JSON.stringify(midway);
+    const rest = deepFreeze(buildHistory().slice(3));
 
-    for (const step of history) {
-      expect(apply(once, step)).toBe(once);
-    }
-    expect(replay([...history, ...history])).toEqual(once);
-    expect(replay([history[0]!, history[0]!, history[1]!, history[0]!])).toEqual(replay(history.slice(0, 2)));
+    const frozen = replay(rest, deepFreeze(midway));
+
+    expect(JSON.stringify(midway)).toBe(snapshot);
+    expect(frozen).toEqual(replay(buildHistory()));
   });
 
-  it('remembers only the most recent applied sessions', () => {
-    const steps = Array.from({ length: APPLIED_SESSION_LEDGER_SIZE + 5 }, (_, index) => ({
-      id: index + 1,
-      outcome: valid(index),
-    }));
-    const progress = replay(steps)!;
+  it('re-applies additive totals when the same session is applied twice, so callers must apply exactly once', () => {
+    const step: Step = { id: 1, session: { peakLevel: 4, activeDurationMs: 60_000 }, outcome: valid(300, 14) };
+    const once = apply(null, step)!;
+    const twice = apply(once, step)!;
 
-    expect(progress.appliedSessionIds).toHaveLength(APPLIED_SESSION_LEDGER_SIZE);
-    expect(progress.appliedSessionIds[0]).toBe(sessionId(6));
-    expect(progress.appliedSessionIds.at(-1)).toBe(sessionId(APPLIED_SESSION_LEDGER_SIZE + 5));
-    expect(progress.sessionsCompleted).toBe(APPLIED_SESSION_LEDGER_SIZE + 5);
+    expect(twice.sessionsCompleted).toBe(2);
+    expect(twice.activeMs).toBe(120_000);
+    // Max-based fields are unchanged by the repeat; only the totals double.
+    expect(twice.bests).toEqual(once.bests);
+    expect(twice.bestPeakLevel).toEqual(once.bestPeakLevel);
+    expect(twice.unlocked).toEqual(once.unlocked);
+    expect(twice.lastPlayedAt).toEqual(once.lastPlayedAt);
   });
 
   it('refuses a session that does not belong to the game', () => {
