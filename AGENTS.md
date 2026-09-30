@@ -34,12 +34,14 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   Never modify another task's worktree or uncommitted work.
 - An open PR keeps its worktree. It becomes eligible for cleanup only once the
   PR is merged or abandoned **and** the worktree is clean and fully pushed.
-  Detached review and integration worktrees have no PR lifecycle: remove them,
-  once clean, as soon as the review or integration pass ends.
+  Detached review, QA and integration-check worktrees have no PR lifecycle:
+  remove them, once clean, as soon as their pass ends. An integration branch
+  is a task branch.
   [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) covers creating,
   naming, diagnosing and removing worktrees.
-- Stay within the Jira card's scope. Report meaningful unrelated work, or
-  propose a card for it, instead of silently expanding the PR.
+- Stay within the Jira card's scope. Handle unrelated work as
+  [out-of-scope work](#out-of-scope-work) instead of silently expanding the
+  PR.
 - Respect the canonical Stage 1 design, ADRs and the card's Jira contract. If
   the implementation conflicts with them, stop at that boundary and report the
   conflict; do not silently invent a new architecture.
@@ -51,28 +53,55 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 - Before opening or updating a PR, run the relevant [checks](#checks), follow
   [Stage 1 test coverage](#stage-1-test-coverage), and leave only intended
   files in the diff ([hand-off hygiene](.agents/skills/nfct-worktrees/SKILL.md#hand-off-hygiene)).
+- When one objective is split into parallel streams, finishing the streams
+  does not finish the objective. It is done only when
+  [nfct-integration](.agents/skills/nfct-integration/SKILL.md) reports the
+  combined result merge-ready, unless the user explicitly asked for
+  independent PRs.
 - Do not merge your own PR. Merging is the owner's decision; an agent merges
-  only when explicitly delegated, and never a PR it implemented.
+  only when explicitly delegated, and never a PR it implemented or
+  integrated.
 - Finish with a report giving, where applicable: branch and worktree, commit
   SHA, PR URL, files and scope changed, checks and tests run with results, and
   unresolved risks, blockers or follow-ups.
+
+## Out-of-scope work
+
+A bug, gap or improvement found outside the current card (or, during
+integration, outside the combined objective) becomes a follow-up card, not
+part of the PR. Something that breaks the card's acceptance criteria is in
+scope: fix it, or report it as a blocker.
+
+- Write it up Jira-ready: a summary; bug or task; steps to reproduce or
+  context; expected and actual behavior; branch, SHA and environment;
+  evidence; whether it is a regression or pre-existing; and the card or PR
+  where it was found.
+- Read-only roles (reviewers and independent QA) put it in their report and
+  do not change Jira.
+- The orchestrator files it, or, without one, the agent running the task.
+  Search the NFCT project for an existing card first, then create a Task and
+  link it to the card where the work was found. Without Jira access, list it
+  in the report for the owner to file.
 
 ## Skills
 
 Procedures live in `.agents/skills/`, the single source of truth for every
 agent tool. `.claude/skills` is a symlink to it so Claude Code discovers the
 same files; add or edit skills only under `.agents/skills/`. Use the skill that
-owns the task:
+owns the task; the others link to it rather than restating it. This file takes
+precedence over any skill: if they conflict, follow this file and report the
+conflict.
 
 | Skill | Use it to |
 | --- | --- |
-| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task, review and integration worktrees and branches |
+| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task, review, QA and integration worktrees and branches |
 | [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md) | Choose and run the right test layers |
 | [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md) | Independently review a PR (read-only) |
 | [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
 | [nfct-frontend-design](.agents/skills/nfct-frontend-design/SKILL.md) | Design and build user-facing UI and game HUDs within the existing visual language |
-| [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Explore the running app in a browser like a user, including UI checks |
-| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, coordinate and integrate multi-stream work |
+| [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Test user-facing changes like a user in a real browser against the local app, including UI checks |
+| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, assign and track multi-stream work through to one merge-ready result |
+| [nfct-integration](.agents/skills/nfct-integration/SKILL.md) | Converge finished parallel streams into one validated, merge-ready PR |
 
 ## Checks
 

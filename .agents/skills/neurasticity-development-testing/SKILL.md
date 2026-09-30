@@ -30,6 +30,12 @@ For non-hardware patient flows, use the normal UI: choose **Skip to Dashboard** 
 
 Test observable behavior, including meaningful empty, error, and negative states when their regression risk warrants it. Reuse the repository's auth and navigation helpers. Never alter production behavior or bypass real authentication to make an E2E test pass.
 
+## Deterministic tests and exploratory QA
+
+This skill owns deterministic, repeatable coverage. Driving the running app in a browser to find what no test encodes yet belongs to [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md), which never substitutes for the coverage required here. When exploratory QA hands over a defect that reproduces reliably, the owner of the branch adds its regression test at the lowest layer that observes it; that is Playwright when only the UI shows it.
+
+On an integration branch, the relevant suite is everything the merged checks and CI run, plus deterministic tests for behavior that crosses streams; see [nfct-integration](../nfct-integration/SKILL.md#validate-the-combined-result).
+
 ## Definition of done
 
 Before reporting an implementation or review complete:
