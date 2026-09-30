@@ -74,8 +74,15 @@ It processes a user's sessions in play order.
 | Validity | History | Totals | Records and unlocks |
 | --- | --- | --- | --- |
 | `valid` | Shown | Counted | Set, if the session completed; records go to the record set of the session's own `gameVersion` |
-| `flagged` (e.g. RT floor, locked start level) | Shown | Counted | Never |
-| `invalid` (schema failure) | Kept for debugging | Not counted | Never |
+| `flagged` (e.g. RT floor, locked start level, the game's timing checks) | Shown | Counted | Never |
+| `invalid` (schema failure, or a game's deterministic contract violation) | Kept for debugging | Not counted | Never |
+
+- **Who classifies game checks.** Each game version owns and freezes the outcome of its own plausibility checks, so trusted scoring applies them generically. Mental Math v1 does this in `REASON_OUTCOMES` (NFCT-17):
+  - `invalid`: contract violations a conforming client cannot produce, such as arithmetic, flags, time limits, level legality, staircase replay and seed reproduction;
+  - `flagged`: statistical and timing checks;
+  - `diagnostic`: reasons recorded on any result, including a valid one, that never change validity (a disagreeing client `peakLevel`, a summary mismatch).
+
+  Trusted scoring adds its own reasons, such as `schema-invalid` and `start-level-locked`. This split is provisional pending owner confirmation.
 
 - **Result variants.** `result` is a union on `validity`. Every variant carries the processing metadata that makes a session processed exactly once: `processedAt`, `scoringVersion`, `validity` and `reasons`, where a flagged or invalid result needs at least one reason.
   - **`valid` and `flagged`** also carry the scored values: `score`, `accuracy`, `responseTime`, the trusted `peakLevel` and `metrics`, the `performanceIndex` pair and `domainContributions`.

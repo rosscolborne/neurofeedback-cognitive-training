@@ -248,8 +248,20 @@ export type PlausibilityReport = {
   readonly issues: PlausibilityIssue[];
 };
 
-/** Combines issues into a report. Exported so trusted scoring can merge issues of its own kind. */
+/**
+ * Combines Mental Math v1 issues into a report. It handles v1 reason codes
+ * only, with the outcomes REASON_OUTCOMES freezes: an unknown code, or an
+ * issue whose outcome disagrees with the table, throws rather than being
+ * dropped, so a non-valid outcome always comes with at least one reason.
+ * Trusted scoring merges its own reasons (schema-invalid, start-level-locked,
+ * envelope and clock checks) separately, not through this function.
+ */
 export function reportOf(issues: readonly PlausibilityIssue[]): PlausibilityReport {
+  for (const { code, outcome } of issues) {
+    if (!Object.hasOwn(REASON_OUTCOMES, code) || REASON_OUTCOMES[code] !== outcome) {
+      throw new Error(`Not a Mental Math v1 reason and outcome: '${String(code)}' (${String(outcome)})`);
+    }
+  }
   const found = new Set(issues.map(({ code }) => code));
   const outcomes = new Set(issues.map(({ outcome }) => outcome));
   return {

@@ -77,6 +77,15 @@ describe('Mental Math v1 plausibility: outcomes', () => {
     expect(mm.reportOf([])).toEqual({ outcome: 'valid', reasons: [], issues: [] });
   });
 
+  it('reports v1 reasons only: an unknown code or a changed outcome throws instead of being dropped', () => {
+    const lockedStart = { code: 'start-level-locked', outcome: 'flagged', trialIndex: null } as unknown as mm.PlausibilityIssue;
+
+    expect(() => mm.reportOf([lockedStart])).toThrow(/start-level-locked/);
+    expect(() => mm.reportOf([{ code: 'rt-below-floor', outcome: 'diagnostic', trialIndex: null }])).toThrow(/rt-below-floor/);
+    expect(mm.reportOf([{ code: 'trial-overlap', outcome: 'flagged', trialIndex: 3 }]))
+      .toEqual({ outcome: 'flagged', reasons: ['trial-overlap'], issues: [{ code: 'trial-overlap', outcome: 'flagged', trialIndex: 3 }] });
+  });
+
   it('refuses a session of another mode: validate with gameSessionSchemaFor first', () => {
     expect(() => mm.checkSession({ ...conforming().session, modeId: 'endless' })).toThrow(/mode/);
   });
@@ -195,6 +204,16 @@ describe('Mental Math v1 plausibility: one failing case per check', () => {
     expect(mm.checkTiming(overlapping, session)).toEqual([{ code: 'trial-overlap', outcome: 'flagged', trialIndex: 1 }]);
     expect(mm.checkTiming(withTrial(session.trials, 1, { shownAtMs: previous.shownAtMs }), session)[0]?.code).toBe('trial-overlap');
     expect(mm.checkSession({ ...session, trials: overlapping })).toMatchObject({ outcome: 'flagged', reasons: ['trial-overlap'] });
+  });
+
+  it('trial-overlap: shownAtMs must strictly increase, even when the previous trial was within the tolerance', () => {
+    const { session } = conforming();
+    const quick = withTrial(session.trials, 0, { rtMs: 30 }); // ends 30 ms after it appeared
+    const shownAt = quick[0]!.shownAtMs;
+
+    expect(mm.checkTiming(withTrial(quick, 1, { shownAtMs: shownAt + 1 }), session)).toEqual([]); // 29 ms overlap: tolerated
+    expect(mm.checkTiming(withTrial(quick, 1, { shownAtMs: shownAt }), session))
+      .toEqual([{ code: 'trial-overlap', outcome: 'flagged', trialIndex: 1 }]);
   });
 
   it('run-overrun: a trial that ends after the 90 s run', () => {

@@ -72,7 +72,9 @@ export const MAX_RESPONSE = 999_999;
 export const MIN_PLAUSIBLE_RT_MS = 250;
 /**
  * "Mostly two-step": at levels 7-10 two-step templates carry 80 of every 100
- * weight, and level-6 one-step review questions the other 20.
+ * weight, and one-step review questions the other 20. Review questions keep
+ * their level's stated bounds (one-digit parts at level 7, two-digit parts at
+ * level 8, answers up to 500 at level 9, up to 999 at level 10).
  */
 export const TWO_STEP_WEIGHT = 80;
 export const ONE_STEP_REVIEW_WEIGHT = 20;
@@ -109,7 +111,7 @@ const sub2d2dBorrow: TemplateSpec = {
   operands: [range(10, 99), range(10, 99)], answer: range(1, 79), constraints: ['units-borrow'],
 };
 
-// Level 6's four one-step templates, reused as the review share at levels 7-10.
+// Level 6's four one-step templates, reused as the review share at level 10.
 const level6Specs: readonly TemplateSpec[] = [
   { id: 'mul-2d-1d', operators: ['×'], grouped: false, operands: [range(11, 99), range(2, 9)], answer: range(22, 891) },
   { id: 'div-2d-quotient', operators: ['÷'], grouped: false, operands: [range(22, 225), range(2, 9)], answer: range(11, 25) },
@@ -117,11 +119,31 @@ const level6Specs: readonly TemplateSpec[] = [
   { id: 'sub-3d-2d', operators: ['-'], grouped: false, operands: [range(101, 999), range(10, 99)], answer: range(2, 989) },
 ];
 
-function withReview(twoStep: readonly [number, TemplateSpec][]): QuestionTemplate[] {
-  const reviewWeight = ONE_STEP_REVIEW_WEIGHT / level6Specs.length;
+// One-step review questions for levels 7-9, within each level's own bounds.
+// Level 7 (one-digit parts): the × tables 2-9 only.
+const level7ReviewSpecs: readonly TemplateSpec[] = [
+  { id: 'review-mul-tables-2-9', operators: ['×'], grouped: false, operands: [range(2, 9), range(2, 9)], answer: range(4, 81) },
+];
+// Level 8 (two-digit parts): no operand above 99.
+const level8ReviewSpecs: readonly TemplateSpec[] = [
+  { id: 'review-add-2d-2d', operators: ['+'], grouped: false, operands: [range(10, 99), range(10, 99)], answer: range(20, 198) },
+  { id: 'review-sub-2d-2d', operators: ['-'], grouped: false, operands: [range(11, 99), range(10, 98)], answer: range(1, 89) },
+  { id: 'review-mul-2d-1d', operators: ['×'], grouped: false, operands: [range(11, 99), range(2, 9)], answer: range(22, 891) },
+  { id: 'review-div-2d-1d', operators: ['÷'], grouped: false, operands: [range(22, 99), range(2, 9)], answer: range(11, 49) },
+];
+// Level 9 (answers up to 500).
+const level9ReviewSpecs: readonly TemplateSpec[] = [
+  { id: 'review-mul-2d-1d-500', operators: ['×'], grouped: false, operands: [range(11, 99), range(2, 9)], answer: range(22, 500) },
+  { id: 'review-div-2d-quotient', operators: ['÷'], grouped: false, operands: [range(22, 225), range(2, 9)], answer: range(11, 25) },
+  { id: 'review-add-3d-2d-500', operators: ['+'], grouped: false, operands: [range(100, 490), range(10, 99)], answer: range(110, 500) },
+  { id: 'review-sub-3d-2d-500', operators: ['-'], grouped: false, operands: [range(101, 500), range(10, 99)], answer: range(2, 490) },
+];
+
+function withReview(twoStep: readonly [number, TemplateSpec][], review: readonly TemplateSpec[]): QuestionTemplate[] {
+  const reviewWeight = ONE_STEP_REVIEW_WEIGHT / review.length;
   return [
     ...twoStep.map(([weight, spec]) => template(weight, spec)),
-    ...level6Specs.map((spec) => template(reviewWeight, spec)),
+    ...review.map((spec) => template(reviewWeight, spec)),
   ];
 }
 
@@ -214,7 +236,7 @@ export const LEVELS: readonly LevelParams[] = deepFreeze([
         operands: [range(2, 9), range(2, 9), range(2, 9)], intermediate: range(4, 18), answer: range(1, 16),
         constraints: ['no-cancellation'],
       }],
-    ]),
+    ], level7ReviewSpecs),
     fallback: { operands: [4, 5, 6], operators: ['+', '×'], grouped: true },
   },
   {
@@ -235,7 +257,7 @@ export const LEVELS: readonly LevelParams[] = deepFreeze([
         id: 'mul-sub-2d', operators: ['×', '-'], grouped: false,
         operands: [range(2, 9), range(2, 9), range(10, 79)], intermediate: range(12, 81), answer: range(1, 71),
       }],
-    ]),
+    ], level8ReviewSpecs),
     fallback: { operands: [54, 46, 7], operators: ['-', '×'], grouped: true },
   },
   {
@@ -259,7 +281,7 @@ export const LEVELS: readonly LevelParams[] = deepFreeze([
         id: 'grouped-sub-mul-2d1d', operators: ['-', '×'], grouped: true,
         operands: [range(20, 99), range(10, 89), range(2, 9)], intermediate: range(10, 89), answer: range(20, 500),
       }],
-    ]),
+    ], level9ReviewSpecs),
     fallback: { operands: [47, 6, 38], operators: ['×', '+'], grouped: false },
   },
   {
@@ -283,7 +305,7 @@ export const LEVELS: readonly LevelParams[] = deepFreeze([
         id: 'grouped-sub-div-3d', operators: ['-', '÷'], grouped: true,
         operands: [range(110, 999), range(10, 99), range(2, 9)], intermediate: range(100, 989), answer: range(12, 494),
       }],
-    ]),
+    ], level6Specs),
     fallback: { operands: [87, 9, 45], operators: ['×', '+'], grouped: false },
   },
 ] satisfies LevelParams[]);

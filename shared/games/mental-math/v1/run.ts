@@ -1,15 +1,24 @@
-import { MAX_RESPONSE, MAX_TRIALS, levelParams, type QuestionShape } from './params';
+import { MAX_RESPONSE, MAX_TRIALS, RUN_DURATION_MS, levelParams, type QuestionShape } from './params';
 import { QUESTION_VARIANTS, questionAt, sameQuestion, type Question } from './questions';
 import type { MentalMathTrial } from './schemas';
 import { initialStaircase, nextStaircaseState, type StaircaseState } from './staircase';
 
 // Mental Math gameVersion 1: the pure state of one run, for the game screen
-// (NFCT-21) to drive. It owns every rule that trusted scoring later checks, so
-// the client cannot drift from it: which question comes next, the staircase,
-// the question-ID guard against double submission, and "an answer at the
-// deadline counts as a timeout". It owns no clock, timer, feedback or UI: the
-// caller passes integer active-clock readings (round clock readings, then
-// subtract, so trials meet exactly).
+// (NFCT-21) to drive. It owns the run rules that trusted scoring later checks,
+// so the client cannot drift from them: which question comes next, the
+// staircase, the question-ID guard against double submission, "an answer at
+// the deadline counts as a timeout", and "expiry always wins". It owns no
+// clock, timer, feedback or UI: the caller passes integer active-clock
+// readings (round clock readings, then subtract, so trials meet exactly).
+//
+// Expiry always wins. The run ends at RUN_DURATION_MS of active time. A
+// question cannot be presented at or after that time (presentQuestion
+// throws), and an answer or timeout that would end after it is refused with
+// reason 'run-over' and changes nothing: the question was still on screen at
+// expiry, so the caller discards it (discardQuestion) and ends the run. A
+// trial may end exactly at RUN_DURATION_MS. So a run the reducer accepted
+// never ends a trial after the run (run-overrun) or outside a 90 s
+// activeDurationMs (active-duration-mismatch).
 //
 // Question order. The question at position p (the number of trials recorded
 // so far) is questionAt(seed, p, variant, level). A new position starts at
@@ -52,8 +61,12 @@ export type MentalMathRun = {
 
 export type AnswerResult =
   | { readonly accepted: true; readonly run: MentalMathRun; readonly trial: MentalMathTrial }
-  /** Nothing changed: no question is on screen, or the answer quotes another question (a double submission). */
-  | { readonly accepted: false; readonly run: MentalMathRun; readonly reason: 'no-question' | 'stale-question' };
+  /**
+   * Nothing changed. 'no-question': none is on screen. 'stale-question': the
+   * answer quotes another question (a double submission). 'run-over': the
+   * trial would end after the run; discard the question and end the run.
+   */
+  | { readonly accepted: false; readonly run: MentalMathRun; readonly reason: 'no-question' | 'stale-question' | 'run-over' };
 
 export function startRun({ seed, startLevel }: { readonly seed: number; readonly startLevel: number }): MentalMathRun {
   questionAt(seed, 0, 0, startLevel); // validates the seed and the start level
@@ -91,6 +104,9 @@ export function presentQuestion(run: MentalMathRun, shownAtMs: number): MentalMa
   const last = run.trials[run.trials.length - 1];
   if (!Number.isInteger(shownAtMs) || shownAtMs < 0 || (last !== undefined && shownAtMs < trialEnd(last))) {
     throw new RangeError(`shownAtMs must be an integer at or after the previous trial's end, got ${shownAtMs}`);
+  }
+  if (shownAtMs >= RUN_DURATION_MS) {
+    throw new RangeError(`The run ends at ${RUN_DURATION_MS} ms of active time; cannot present at ${shownAtMs}`);
   }
   const position = run.trials.length;
   const level = run.staircase.level;
@@ -132,6 +148,9 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
   }
   // An answer at or after the deadline counts as a timeout.
   const timedOut = response === null || rtMs >= current.timeLimitMs;
+  const recordedRtMs = timedOut ? current.timeLimitMs : rtMs;
+  // Expiry always wins: a trial may not end after the run.
+  if (current.shownAtMs + recordedRtMs > RUN_DURATION_MS) return { accepted: false, run, reason: 'run-over' };
   const recorded = timedOut ? null : response;
   const correct = recorded !== null && recorded === current.expected;
   const trial: MentalMathTrial = {
@@ -144,7 +163,7 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
     correct,
     timedOut,
     shownAtMs: current.shownAtMs,
-    rtMs: timedOut ? current.timeLimitMs : rtMs,
+    rtMs: recordedRtMs,
     timeLimitMs: current.timeLimitMs,
   };
   return {
@@ -166,7 +185,8 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
  * Submits a response to the question on screen, `rtMs` after it appeared. A
  * second submission for the same question, or one quoting an older question,
  * is refused and changes nothing. A response at or after the time limit is
- * recorded as a timeout.
+ * recorded as a timeout. One that would end after the run is refused
+ * ('run-over'): expiry wins.
  */
 export function answerQuestion(
   run: MentalMathRun,
@@ -175,7 +195,10 @@ export function answerQuestion(
   return resolve(run, questionId, response, rtMs);
 }
 
-/** Records a timeout for the question on screen (response null, rtMs = the level's limit). */
+/**
+ * Records a timeout for the question on screen (response null, rtMs = the
+ * level's limit). Refused ('run-over') when the limit falls after the run.
+ */
 export function timeOutQuestion(run: MentalMathRun, { questionId }: { readonly questionId: string }): AnswerResult {
   const limit = run.current?.timeLimitMs ?? 0;
   return resolve(run, questionId, null, limit);

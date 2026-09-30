@@ -23,10 +23,108 @@ const render = (question: mm.Question) => `${mm.formatQuestion(question)} = ${qu
 
 describe('Mental Math v1 golden values', () => {
   it('keeps the level parameters', () => {
-    expect(fnv1a(JSON.stringify(mm.LEVELS))).toBe('940b5da5');
-    expect(mm.RUN_DURATION_MS).toBe(90_000);
-    expect(mm.QUESTION_VARIANTS).toBe(16);
-    expect(mm.MAX_DRAWS_PER_QUESTION).toBe(64);
+    expect(fnv1a(JSON.stringify(mm.LEVELS))).toBe('6fdf6b12');
+  });
+
+  it('keeps every v1 constant, bound and tolerance', () => {
+    expect({
+      GAME_ID: mm.GAME_ID,
+      GAME_VERSION: mm.GAME_VERSION,
+      SCORING_VERSION: mm.SCORING_VERSION,
+      MODE_ID: mm.MODE_ID,
+      RUN_DURATION_MS: mm.RUN_DURATION_MS,
+      MIN_LEVEL: mm.MIN_LEVEL,
+      MAX_LEVEL: mm.MAX_LEVEL,
+      LEVEL_UP_STREAK: mm.LEVEL_UP_STREAK,
+      MAX_TRIALS: mm.MAX_TRIALS,
+      MAX_RESPONSE: mm.MAX_RESPONSE,
+      MIN_PLAUSIBLE_RT_MS: mm.MIN_PLAUSIBLE_RT_MS,
+      TWO_STEP_WEIGHT: mm.TWO_STEP_WEIGHT,
+      ONE_STEP_REVIEW_WEIGHT: mm.ONE_STEP_REVIEW_WEIGHT,
+      QUESTION_VARIANTS: mm.QUESTION_VARIANTS,
+      MAX_DRAWS_PER_QUESTION: mm.MAX_DRAWS_PER_QUESTION,
+      MAX_RANDOM_SPAN: mm.MAX_RANDOM_SPAN,
+      MAX_FAST_RESPONSE_PERCENT: mm.MAX_FAST_RESPONSE_PERCENT,
+      TIMING_TOLERANCE_MS: mm.TIMING_TOLERANCE_MS,
+      ACTIVE_DURATION_TOLERANCE_MS: mm.ACTIVE_DURATION_TOLERANCE_MS,
+      OPERATORS: mm.OPERATORS,
+      limits: mm.definition.limits,
+    }).toEqual({
+      GAME_ID: 'mental-math',
+      GAME_VERSION: 1,
+      SCORING_VERSION: 1,
+      MODE_ID: 'timed-90',
+      RUN_DURATION_MS: 90_000,
+      MIN_LEVEL: 1,
+      MAX_LEVEL: 10,
+      LEVEL_UP_STREAK: 3,
+      MAX_TRIALS: 400,
+      MAX_RESPONSE: 999_999,
+      MIN_PLAUSIBLE_RT_MS: 250,
+      TWO_STEP_WEIGHT: 80,
+      ONE_STEP_REVIEW_WEIGHT: 20,
+      QUESTION_VARIANTS: 16,
+      MAX_DRAWS_PER_QUESTION: 64,
+      MAX_RANDOM_SPAN: 2_097_152,
+      MAX_FAST_RESPONSE_PERCENT: 20,
+      TIMING_TOLERANCE_MS: 50,
+      ACTIVE_DURATION_TOLERANCE_MS: 1_000,
+      OPERATORS: ['+', '-', '×', '÷'],
+      limits: { maxTrials: 400, minActiveMs: 0, maxActiveMs: 91_000, minPlausibleRtMs: 250 },
+    });
+  });
+
+  it('keeps the trial and metrics schema bounds', () => {
+    const baseTrial = {
+      level: 1, operands: [7, 5], operators: ['+'], grouped: false, expected: 12, response: 12,
+      correct: true, timedOut: false, shownAtMs: 0, rtMs: 1_000, timeLimitMs: 8_000,
+    };
+    const baseMetrics = {
+      correct: 0, attempted: 0, timedOut: 0, longestStreak: 0, finalLevel: 1, difficultyPoints: 0, speedBonusPoints: 0,
+    };
+    const accepted = (schema: typeof mm.trialSchema | typeof mm.metricsSchema, base: object, cases: Record<string, readonly unknown[]>) =>
+      Object.fromEntries(Object.entries(cases).map(([field, values]) => [
+        field,
+        values.map((value) => {
+          const candidate = field === 'operand' ? { ...base, operands: [value, 5] } : { ...base, [field]: value };
+          return schema.safeParse(candidate).success;
+        }),
+      ]));
+
+    expect(accepted(mm.trialSchema, baseTrial, {
+      level: [0, 1, 10, 11, 1.5],
+      operand: [0, 1, 9_999, 10_000, 2.5],
+      expected: [0, 1, 999_999, 1_000_000, 1.5],
+      response: [-1, 0, 999_999, 1_000_000, 1.5, null],
+      shownAtMs: [-1, 0, 3_600_000, 3_600_001, 0.5],
+      rtMs: [-1, 0, 60_000, 60_001, 0.5],
+      timeLimitMs: [0, 1, 60_000, 60_001, 0.5],
+    })).toEqual({
+      level: [false, true, true, false, false],
+      operand: [false, true, true, false, false],
+      expected: [false, true, true, false, false],
+      response: [false, true, true, false, false, true],
+      shownAtMs: [false, true, true, false, false],
+      rtMs: [false, true, true, false, false],
+      timeLimitMs: [false, true, true, false, false],
+    });
+    expect(accepted(mm.metricsSchema, baseMetrics, {
+      correct: [-1, 0, 400, 401],
+      attempted: [-1, 0, 400, 401],
+      timedOut: [-1, 0, 400, 401],
+      longestStreak: [-1, 0, 400, 401],
+      finalLevel: [0, 1, 10, 11],
+      difficultyPoints: [-1, 0, 110_000, 110_001],
+      speedBonusPoints: [-1, 0, 110_000, 110_001],
+    })).toEqual({
+      correct: [false, true, true, false],
+      attempted: [false, true, true, false],
+      timedOut: [false, true, true, false],
+      longestStreak: [false, true, true, false],
+      finalLevel: [false, true, true, false],
+      difficultyPoints: [false, true, true, false],
+      speedBonusPoints: [false, true, true, false],
+    });
   });
 
   it('keeps the questions of seed 42, positions 0-4, at every level', () => {
@@ -39,9 +137,9 @@ describe('Mental Math v1 golden values', () => {
       ['6 × 6 = 36', '40 - 35 = 5', '97 - 39 = 58', '6 × 8 = 48', '8 × 4 = 32'],
       ['36 ÷ 6 = 6', '4 × 12 = 48', '3 × 3 = 9', '48 ÷ 6 = 8', '32 ÷ 8 = 4'],
       ['120 ÷ 6 = 20', '977 - 26 = 951', '191 - 25 = 166', '58 × 8 = 464', '88 × 4 = 352'],
-      ['6 × 6 + 5 = 41', '977 - 26 = 951', '254 + 24 = 278', '(6 + 8) × 4 = 56', '(8 + 4) × 8 = 96'],
-      ['(64 + 68) ÷ 6 = 22', '977 - 26 = 951', '254 + 24 = 278', '(74 - 57) × 4 = 68', '(93 - 86) × 8 = 56'],
-      ['65 × 6 - 52 = 338', '977 - 26 = 951', '254 + 24 = 278', '58 × 8 + 19 = 483', '88 × 4 + 84 = 436'],
+      ['6 × 6 + 5 = 41', '3 × 9 = 27', '3 × 3 = 9', '(6 + 8) × 4 = 56', '(8 + 4) × 8 = 96'],
+      ['(64 + 68) ÷ 6 = 22', '99 ÷ 3 = 33', '26 × 3 = 78', '(74 - 57) × 4 = 68', '(93 - 86) × 8 = 56'],
+      ['65 × 6 - 52 = 338', '498 - 26 = 472', '168 + 24 = 192', '58 × 8 + 19 = 483', '88 × 4 + 84 = 436'],
       ['66 × 6 - 52 = 344', '977 - 26 = 951', '254 + 24 = 278', '59 × 8 + 40 = 512', '88 × 4 + 84 = 436'],
     ]);
   });
@@ -64,7 +162,7 @@ describe('Mental Math v1 golden values', () => {
       }
     }
     expect(lines).toHaveLength(24_000);
-    expect(fnv1a(lines.join('\n'))).toBe('2a693663');
+    expect(fnv1a(lines.join('\n'))).toBe('01f26ab2');
   });
 
   it('keeps a scripted run: its trials and its score', () => {

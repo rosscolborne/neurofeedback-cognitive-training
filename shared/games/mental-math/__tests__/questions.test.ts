@@ -87,6 +87,18 @@ describe('level legality', () => {
     expect(mm.isLegalQuestion(9, q([87, 9, 45], ['×', '+']))).toBe(false); // answer over 500
     expect(mm.isLegalQuestion(10, q([87, 9, 45], ['×', '+']))).toBe(true);
     expect(mm.isLegalQuestion(10, q([7, 9, 45], ['×', '+']))).toBe(false); // intermediate under 100
+    // Review questions at levels 7-9 stay within the level's own bounds.
+    expect(mm.isLegalQuestion(7, q([7, 8], ['×']))).toBe(true);
+    expect(mm.isLegalQuestion(7, q([47, 6], ['×']))).toBe(false); // not one-digit parts
+    expect(mm.isLegalQuestion(8, q([47, 38], ['+']))).toBe(true);
+    expect(mm.isLegalQuestion(8, q([467, 38], ['-']))).toBe(false); // not two-digit parts
+    expect(mm.isLegalQuestion(8, q([96, 8], ['÷']))).toBe(true);
+    expect(mm.isLegalQuestion(8, q([120, 8], ['÷']))).toBe(false);
+    expect(mm.isLegalQuestion(9, q([47, 6], ['×']))).toBe(true);
+    expect(mm.isLegalQuestion(9, q([97, 6], ['×']))).toBe(false); // answer over 500
+    expect(mm.isLegalQuestion(9, q([467, 38], ['-']))).toBe(true);
+    expect(mm.isLegalQuestion(9, q([977, 26], ['-']))).toBe(false); // over 500
+    expect(mm.isLegalQuestion(10, q([977, 26], ['-']))).toBe(true);
   });
 
   it('includes each level\'s fallback question', () => {
@@ -163,8 +175,10 @@ describe('question generator (property tests over all 10 levels and many seeds)'
       if (question.operators[0] === '÷') expect(question.expected >= 2 && question.expected <= 9).toBe(true);
       else expect(question.operands.every((operand) => operand >= 2 && operand <= 12)).toBe(true);
     }
-    expect(Math.max(...answers(9))).toBeLessThanOrEqual(999); // one-step review items reach 999
-    for (const question of generated(9)) if (question.operators.length === 2) expect(question.expected).toBeLessThanOrEqual(500);
+    // Levels 7-10: the one-step review questions keep their level's bounds too.
+    for (const question of generated(7)) expect(question.operands.every((operand) => operand >= 2 && operand <= 9)).toBe(true);
+    for (const question of generated(8)) expect(Math.max(...question.operands)).toBeLessThanOrEqual(99);
+    expect(Math.max(...answers(9))).toBeLessThanOrEqual(500);
     for (const question of generated(10)) {
       expect(question.expected).toBeLessThanOrEqual(999);
       if (question.operators.length === 2) expect(mm.intermediateOf(question)).toBeGreaterThanOrEqual(100);

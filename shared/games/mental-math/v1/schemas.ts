@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { MAX_ACTIVE_DURATION_MS } from '../../definition';
 import { MAX_LEVEL, MAX_RESPONSE, MAX_TRIALS, MIN_LEVEL, OPERATORS } from './params';
 
 // Mental Math gameVersion 1: the trial and metrics schemas. FROZEN: a material
@@ -10,10 +9,15 @@ import { MAX_LEVEL, MAX_RESPONSE, MAX_TRIALS, MIN_LEVEL, OPERATORS } from './par
 // plausibility checks, which report stable reason codes instead of failing
 // the whole document.
 
-/** Generous sanity bounds; each level's own ranges are checked by plausibility. */
+/**
+ * Generous sanity bounds; each level's own ranges are checked by plausibility.
+ * Literals, not shared constants, so a shared change cannot alter v1.
+ */
 const MAX_OPERAND = 9_999;
 const MAX_EXPECTED = 999_999;
 const MAX_TIME_LIMIT_MS = 60_000;
+/** The longest active run time any trial may start at (the shared session maximum when v1 was frozen). */
+const MAX_SHOWN_AT_MS = 3_600_000;
 
 export const operatorSchema = z.enum(OPERATORS);
 
@@ -40,7 +44,7 @@ export const trialSchema = z.strictObject({
   /** response === null. */
   timedOut: z.boolean(),
   /** Active run time when the question appeared (pauses and feedback excluded). */
-  shownAtMs: z.int().min(0).max(MAX_ACTIVE_DURATION_MS),
+  shownAtMs: z.int().min(0).max(MAX_SHOWN_AT_MS),
   /** From presentation until Submit; equal to timeLimitMs on a timeout. */
   rtMs: z.int().min(0).max(MAX_TIME_LIMIT_MS),
   /** The level's per-question limit. */

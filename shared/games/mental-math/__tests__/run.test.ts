@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mentalMathV1 as mm } from '@nfct/shared';
-import { correct, pause, play, timeout, wrong } from './helpers';
+import { correct, pause, play, sessionOf, timeout, wrong } from './helpers';
 
 const SEED = 0xc0ff_ee00;
 
@@ -22,6 +22,85 @@ describe('run reducer: seed reproduction, including discarded questions', () => 
     expect(validation.variants.every((variant) => variant !== null && variant < mm.QUESTION_VARIANTS)).toBe(true);
     expect(validation.variants[0]).toBe(0);
     expect(validation.variants[1]).not.toBe(0); // two discards at position 1 moved its variant on
+  });
+
+  it('reproduces the variant reached after 15, 16 and 17 discards at one position (15, then wrapping to 0 and 1)', () => {
+    const seed = 12_345; // its 16 level-10 variants at position 0 are all different, so no skip applies
+    expect(new Set(Array.from({ length: mm.QUESTION_VARIANTS }, (_, v) => mm.formatQuestion(mm.questionAt(seed, 0, v, 10)))).size)
+      .toBe(mm.QUESTION_VARIANTS);
+    for (const [discards, variant] of [[15, 15], [16, 0], [17, 1]] as const) {
+      let run = mm.presentQuestion(mm.startRun({ seed, startLevel: 10 }), 0);
+      for (let discard = 1; discard <= discards; discard += 1) run = mm.presentQuestion(mm.discardQuestion(run), discard * 10);
+      expect(run.current!.variant).toBe(variant);
+      const answered = mm.answerQuestion(run, { questionId: run.current!.id, response: run.current!.expected, rtMs: 3_000 });
+      if (!answered.accepted) throw new Error('refused');
+      expect(mm.validateTrialsAgainstSeed(seed, answered.run.trials)).toEqual({ issues: [], variants: [variant] });
+      const session = sessionOf(seed, answered.run, { status: 'abandoned', activeDurationMs: discards * 10 + 3_000 });
+      expect(mm.checkSession(session)).toEqual({ outcome: 'valid', reasons: [], issues: [] });
+    }
+  });
+
+  it('keeps honest runs valid through random pause bursts, including more than 16 discards at one position', () => {
+    const behaviour = mm.createRng(2_026);
+    let longestBurst = 0;
+    for (let runIndex = 0; runIndex < 60; runIndex += 1) {
+      const seed = behaviour.nextUint32();
+      const startLevel = 1 + (runIndex % 10);
+      let run = mm.startRun({ seed, startLevel });
+      let clock = 0;
+      for (;;) {
+        run = mm.presentQuestion(run, clock);
+        if (mm.randomInt(behaviour, 0, 99) < 15) {
+          const burst = mm.randomInt(behaviour, 1, 40);
+          longestBurst = Math.max(longestBurst, burst);
+          let expired = false;
+          for (let pauseIndex = 0; pauseIndex < burst && !expired; pauseIndex += 1) {
+            clock += mm.randomInt(behaviour, 0, 30);
+            run = mm.discardQuestion(run);
+            expired = clock >= mm.RUN_DURATION_MS;
+            if (!expired) run = mm.presentQuestion(run, clock);
+          }
+          if (expired) break;
+        }
+        const current = run.current!;
+        const rtMs = mm.randomInt(behaviour, 300, current.timeLimitMs + 2_000);
+        const response = mm.randomInt(behaviour, 0, 9) < 7 ? current.expected : current.expected + 1;
+        const result = mm.answerQuestion(run, { questionId: current.id, response, rtMs });
+        if (!result.accepted) {
+          expect(result.reason).toBe('run-over'); // the clock expired with the question on screen
+          run = mm.discardQuestion(run);
+          break;
+        }
+        run = result.run;
+        clock += result.trial.rtMs;
+        if (clock >= mm.RUN_DURATION_MS) break;
+      }
+      const report = mm.checkSession(sessionOf(seed, run));
+      expect({ runIndex, report }).toEqual({ runIndex, report: { outcome: 'valid', reasons: [], issues: [] } });
+    }
+    expect(longestBurst).toBeGreaterThan(mm.QUESTION_VARIANTS);
+  });
+
+  it('skips a variant that would repeat the question just discarded', () => {
+    const seed = 33; // at level 5, position 0, variants 0 and 1 are the same question
+    expect(mm.sameQuestion(mm.questionAt(seed, 0, 0, 5), mm.questionAt(seed, 0, 1, 5))).toBe(true);
+    const first = mm.presentQuestion(mm.startRun({ seed, startLevel: 5 }), 0);
+    const replaced = mm.presentQuestion(mm.discardQuestion(first), 500);
+
+    expect(first.current!.variant).toBe(0);
+    expect(replaced.current!.variant).toBe(2);
+    expect(mm.sameQuestion(replaced.current!, first.current!)).toBe(false);
+  });
+
+  it('skips a variant that would repeat the previous trial\'s question', () => {
+    const seed = 78; // at level 5, position 1 variant 0 repeats position 0 variant 0
+    expect(mm.sameQuestion(mm.questionAt(seed, 0, 0, 5), mm.questionAt(seed, 1, 0, 5))).toBe(true);
+    const { run } = play(seed, 5, [correct(1_000)]);
+    const next = mm.presentQuestion(run, 1_000);
+
+    expect(next.current!.position).toBe(1);
+    expect(next.current!.variant).toBe(1);
+    expect(mm.sameQuestion(next.current!, run.trials[0]!)).toBe(false);
   });
 
   it('shows a fresh question after a pause, at the same level, and never repeats it back to back', () => {
@@ -152,6 +231,26 @@ describe('run reducer: submissions', () => {
     expect(() => mm.startRun({ seed: -1, startLevel: 1 })).toThrow(RangeError);
     expect(() => mm.startRun({ seed: 1, startLevel: 11 })).toThrow(RangeError);
     expect(mm.discardQuestion(answered.run)).toBe(answered.run);
+  });
+
+  it('lets expiry always win: nothing is presented at or after 90 s, and no trial ends after it', () => {
+    const start = mm.startRun({ seed: SEED, startLevel: 1 });
+    expect(() => mm.presentQuestion(start, mm.RUN_DURATION_MS)).toThrow(/run ends/);
+    expect(() => mm.presentQuestion(start, 95_000)).toThrow(RangeError);
+
+    const late = mm.presentQuestion(start, 89_000); // level 1: an 8 s limit
+    const id = late.current!.id;
+    expect(mm.answerQuestion(late, { questionId: id, response: late.current!.expected, rtMs: 1_000 }))
+      .toMatchObject({ accepted: true, trial: { shownAtMs: 89_000, rtMs: 1_000 } }); // ends exactly at 90 s
+    // A Submit handled 1 ms after expiry, or a timeout due after it, is refused and changes nothing.
+    expect(mm.answerQuestion(late, { questionId: id, response: late.current!.expected, rtMs: 1_001 }))
+      .toEqual({ accepted: false, run: late, reason: 'run-over' });
+    expect(mm.timeOutQuestion(late, { questionId: id })).toEqual({ accepted: false, run: late, reason: 'run-over' });
+    // The caller then discards the question at expiry.
+    expect(mm.discardQuestion(late).current).toBeNull();
+    // A timeout that ends exactly at 90 s is still recorded.
+    const timed = mm.presentQuestion(start, 82_000);
+    expect(mm.timeOutQuestion(timed, { questionId: timed.current!.id })).toMatchObject({ accepted: true, trial: { rtMs: 8_000 } });
   });
 
   it('reports the peak level and stops at the trial cap', () => {
