@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": ["node", "vite/client"],
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@nfct/shared": ["./shared/index.ts"]
+    }
+  },
+  "include": ["tests/consumer-repositories/**/*.ts", "src/consumer/**/*.ts", "vitest.repositories.config.ts"]
+}

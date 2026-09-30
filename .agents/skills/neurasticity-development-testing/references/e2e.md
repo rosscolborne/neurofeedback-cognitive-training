@@ -58,6 +58,19 @@ additional browser contexts. Specs that probe a deliberate denial call
   rules, that data the UI reports as saved reached Firestore.
 - `e2e/helpers/firestoreProbe.ts`: in-page allowed/denied read probes.
 
+## Consumer repository tests
+
+`tests/consumer-repositories/` runs the real consumer repositories
+(`src/consumer/repositories/`) against the local Auth and Firestore emulators
+(project `demo-nfct-repositories`), with the real `firestore.rules` loaded, so
+the repositories and the rules are checked together. The harness refuses to
+run without loopback emulator hosts. It needs Java 21:
+
+```bash
+JAVA_HOME=~/.local/share/temurin-jre-21 PATH=$JAVA_HOME/bin:$PATH npm run test:repositories
+npm run test:repositories:typecheck
+```
+
 ## Firestore rules tests
 
 `tests/firestore-rules/` runs positive and adversarial cases against the local

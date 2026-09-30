@@ -18,6 +18,7 @@ export default defineConfig({
       ...configDefaults.exclude,
       'e2e/**',
       'tests/firestore-rules/**',
+      'tests/consumer-repositories/**',
       'src/services/__tests__/backendFitE2E.test.ts',
       'src/services/__tests__/eegPipelineIntegration.test.ts',
     ],
