@@ -123,6 +123,11 @@ describe('users/{uid}/eegRecordings: create', () => {
             { gameSessionId: 'short' },
             { startedAt: base.endedAt, endedAt: base.startedAt },
             { device: { ...base.device, channels: [] } },
+            {
+                device: { ...base.device, channels: ['TP9', 'TP9'] },
+                quality: { ...base.quality, channelGoodFraction: { TP9: 0.9 } },
+            },
+            { quality: { ...base.quality, channelGoodFraction: { ...base.quality.channelGoodFraction, Fpz: 0.5 } } },
             { device: { ...base.device, transport: 'usb' } },
             { device: { ...base.device, sampleRateHz: 0 } },
             { processing: { ...base.processing, service: 'waveable-service' } },

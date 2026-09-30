@@ -373,6 +373,7 @@ service cloud.firestore {
           boundedTextOrNull(device.firmwareVersion, 40) &&
           device.transport in ['web-bluetooth', 'native-ble', 'brainflow'] &&
           device.channels is list && device.channels.size() >= 1 && device.channels.size() <= 16 &&
+          device.channels.toSet().size() == device.channels.size() &&
           device.sampleRateHz is number && device.sampleRateHz > 0 && device.sampleRateHz <= 10000;
       }
 
@@ -444,6 +445,7 @@ service cloud.firestore {
           validEegProcessing(recording.processing) &&
           validEegCalibration(recording.calibration) &&
           validEegQuality(recording.quality) &&
+          recording.quality.channelGoodFraction.keys().hasOnly(recording.device.channels) &&
           validEegSummary(recording.summary) &&
           validEegTimeline(recording.timeline);
       }
