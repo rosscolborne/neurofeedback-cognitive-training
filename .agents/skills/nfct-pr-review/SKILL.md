@@ -44,6 +44,13 @@ for:
 - NFCT hard rules: clinical isolation, emulator-only tests, EEG never driving
   scores or progression, and the Stage 1 Playwright policy.
 
+Flag the trust-boundary and authorization issues you find, but this is not a
+security review. When the PR touches Firebase Auth, Firestore rules, Cloud
+Functions, account deletion, trusted scoring or progression, EEG data, secrets
+or user ownership, say that it needs
+[nfct-security-review](../nfct-security-review/SKILL.md), or run that skill if
+asked.
+
 Check coverage with the
 [testing skill](../neurasticity-development-testing/SKILL.md): the right layer,
 not the most tests.

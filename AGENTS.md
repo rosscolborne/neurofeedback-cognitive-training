@@ -32,6 +32,10 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 - Give each independent writable task or PR its own branch and git worktree,
   based on current `origin/main` unless it deliberately stacks on another PR.
   Never modify another task's worktree or uncommitted work.
+- An open PR keeps its worktree. It becomes eligible for cleanup only once the
+  PR is merged or abandoned **and** the worktree is clean and fully pushed.
+  [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) covers creating,
+  naming, diagnosing and removing worktrees.
 - Stay within the Jira card's scope. Report meaningful unrelated work, or
   propose a card for it, instead of silently expanding the PR.
 - Respect the canonical Stage 1 design, ADRs and the card's Jira contract. If
@@ -40,14 +44,26 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 - Do not add mock or fake data or silent fallbacks unless the card requires
   them. (Demo Mode's synthetic EEG is an existing, deliberate feature.) Never
   weaken production behavior just to make a test pass.
-- Before opening or updating a PR, run the relevant [checks](#checks) and
-  follow [Stage 1 test coverage](#stage-1-test-coverage).
-- Do not merge your own PR. Independent reviews follow
-  [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md); exploratory
-  browser QA follows [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md).
+- Before opening or updating a PR, run the relevant [checks](#checks), follow
+  [Stage 1 test coverage](#stage-1-test-coverage), and leave only intended
+  files in the diff ([hand-off hygiene](.agents/skills/nfct-worktrees/SKILL.md#hand-off-hygiene)).
+- Do not merge your own PR.
 - Finish with a report giving, where applicable: branch and worktree, commit
   SHA, PR URL, files and scope changed, checks and tests run with results, and
   unresolved risks, blockers or follow-ups.
+
+## Skills
+
+Procedures live in `.agents/skills/`. Use the one that owns the task:
+
+| Skill | Use it to |
+| --- | --- |
+| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task worktrees and branches |
+| [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md) | Choose and run the right test layers |
+| [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md) | Independently review a PR (read-only) |
+| [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
+| [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Explore the running app in a browser like a user |
+| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, coordinate and integrate multi-stream work |
 
 ## Checks
 
