@@ -10,6 +10,7 @@ export * from './games/mental-math';
 export * from './schemas/read';
 export * from './schemas/profile';
 export * from './schemas/gameSession';
+export * from './schemas/gameSessionCreate';
 export * from './schemas/eegRecording';
 export * from './schemas/progress';
 export * from './progress/unlocks';
