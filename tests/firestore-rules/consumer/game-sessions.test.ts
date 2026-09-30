@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, it } from 'vitest';
 import { anonymous, as, closeEnvironment, past } from '../fixture';
-import { minutesAgo, players, resetConsumerWorld, seededSessionId, sessionData, trials, without } from './consumerFixture';
+import { minutesAgo, players, resetConsumerWorld, seededSessionId, sessionData, trials, validResult, without } from './consumerFixture';
 
 beforeEach(resetConsumerWorld);
 afterAll(closeEnvironment);
@@ -12,11 +12,16 @@ afterAll(closeEnvironment);
 const newSessionId = 'session-new-0000000001';
 const sessionPath = (uid: string, id = newSessionId) => `users/${uid}/gameSessions/${id}`;
 
-const forgedResult = {
-    processedAt: serverTimestamp(), scoringVersion: 1, validity: 'valid', reasons: [], score: 9_999,
-    accuracy: 1, responseTime: null, metrics: {}, performanceIndex: null, performanceIndexVersion: null,
-    domainContributions: { math: 1 }, personalBest: true, unlocked: [{ modeId: 'timed-90', startLevel: 10 }],
-    achievementsAwarded: [],
+// Each ServerResult variant a client might forge. Even a bare `invalid` result
+// would set processedAt and stop trusted scoring from ever processing the session.
+const forgedResults = {
+    valid: { ...validResult(serverTimestamp()), score: 9_999, peakLevel: 10, recordValues: { score: 9_999, peakLevel: 10 } },
+    flagged: {
+        processedAt: serverTimestamp(), scoringVersion: 1, validity: 'flagged', reasons: ['rt-below-floor'],
+        score: 1, accuracy: null, responseTime: null, peakLevel: 1, metrics: {},
+        performanceIndex: null, performanceIndexVersion: null, domainContributions: {},
+    },
+    invalid: { processedAt: serverTimestamp(), scoringVersion: 1, validity: 'invalid', reasons: ['schema-invalid'] },
 };
 
 describe('users/{uid}/gameSessions: create', () => {
@@ -50,10 +55,11 @@ describe('users/{uid}/gameSessions: create', () => {
         }
     });
 
-    it('rejects a client-supplied server result, even a null one', async () => {
+    it('rejects a client-supplied server result of any validity, even a null one', async () => {
         const database = await as(players.a);
-        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { result: forgedResult })));
-        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { result: null })));
+        for (const result of [...Object.values(forgedResults), null, {}]) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { result })));
+        }
     });
 
     it('rejects a session missing any required key', async () => {
@@ -66,7 +72,7 @@ describe('users/{uid}/gameSessions: create', () => {
     it('requires createdAt to be the server clock', async () => {
         const database = await as(players.a);
         await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { createdAt: past })));
-        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { createdAt: minutesAgo(0) })));
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { createdAt: minutesAgo(1) })));
     });
 
     it('accepts only games in the allowlist', async () => {
@@ -88,7 +94,6 @@ describe('users/{uid}/gameSessions: create', () => {
             { startLevel: 0, peakLevel: 1 },
             { startLevel: 51, peakLevel: 51 },
             { startLevel: 1.5 },
-            { startLevel: 4, peakLevel: 3 },
             { peakLevel: 51 },
             { status: 'won' },
             { startedAt: minutesAgo(1), endedAt: minutesAgo(3) },
@@ -109,15 +114,32 @@ describe('users/{uid}/gameSessions: create', () => {
             { trials: { 0: {} } },
             { summary: null },
             { summary: { ...sessionData(players.a).summary, eegScore: 1 } },
-            { summary: { ...sessionData(players.a).summary, accuracy: 1.5 } },
-            { summary: { ...sessionData(players.a).summary, trialsTotal: -1 } },
+            { summary: { ...sessionData(players.a).summary, score: '42' } },
+            { summary: { ...sessionData(players.a).summary, accuracy: 'all' } },
+            { summary: { ...sessionData(players.a).summary, trialsTotal: null } },
+            { summary: { ...sessionData(players.a).summary, trialsCorrect: [] } },
             { summary: { ...sessionData(players.a).summary, metrics: [] } },
+            { summary: { ...sessionData(players.a).summary, metrics: null } },
             { summary: { ...sessionData(players.a).summary, responseTime: { medianMs: 1 } } },
+            { summary: { ...sessionData(players.a).summary, responseTime: { medianMs: 1, meanMs: 1, p90Ms: 1, maxMs: 1 } } },
+            { summary: { ...sessionData(players.a).summary, responseTime: { medianMs: 1, meanMs: '1', p90Ms: 1 } } },
             { summary: without(sessionData(players.a).summary, 'metrics') },
         ];
         for (const overrides of malformed) {
             await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, overrides)));
         }
+    });
+
+    it('accepts an untrusted display summary and peak level that trusted scoring will check', async () => {
+        // Trusted scoring recomputes these from the trials and records a mismatch;
+        // a display bug must not stop the raw trials from being stored.
+        const database = await as(players.a);
+        const oddSummary = {
+            score: -5, accuracy: 1.5, trialsTotal: -1, trialsCorrect: 99,
+            responseTime: { medianMs: -1, meanMs: 0.5, p90Ms: 1e9 }, metrics: {},
+        };
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { summary: oddSummary })));
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a, 'session-low-peak-00001')), sessionData(players.a, { startLevel: 4, peakLevel: 3 })));
     });
 
     it('requires a well-formed client-generated session ID', async () => {
@@ -130,10 +152,22 @@ describe('users/{uid}/gameSessions: create', () => {
 describe('users/{uid}/gameSessions: write-once', () => {
     it('never lets a client update a session, including forging its result', async () => {
         const reference = doc(await as(players.a), sessionPath(players.a, seededSessionId));
-        await assertFails(updateDoc(reference, { result: forgedResult }));
+        await assertFails(updateDoc(reference, { result: forgedResults.valid }));
         await assertFails(updateDoc(reference, { 'result.score': 9_999 }));
+        await assertFails(updateDoc(reference, { 'result.peakLevel': 10, 'result.recordValues.peakLevel': 10 }));
+        await assertFails(updateDoc(reference, { 'result.processedAt': serverTimestamp() }));
         await assertFails(updateDoc(reference, { 'summary.score': 9_999 }));
         await assertFails(updateDoc(reference, { peakLevel: 10 }));
+    });
+
+    it('never lets a client mark its own unprocessed session as processed', async () => {
+        const database = await as(players.a);
+        const reference = doc(database, sessionPath(players.a));
+        await assertSucceeds(setDoc(reference, sessionData(players.a)));
+        for (const result of Object.values(forgedResults)) {
+            await assertFails(updateDoc(reference, { result }));
+            await assertFails(setDoc(reference, { result }, { merge: true }));
+        }
     });
 
     it('refuses a retried create over an existing session', async () => {

@@ -288,30 +288,39 @@ service cloud.firestore {
 
       // ---- Game sessions: client-created once, never updated ----
       // The client generates the ID at game start and writes the document once
-      // when the game ends. `result` is written only by trusted scoring
-      // (NFCT-19), so it must be absent on create. There is no EEG flag: the
-      // only link is eegRecordings.gameSessionId.
+      // when the game ends. `result`, in any validity variant, is written only
+      // by trusted scoring (NFCT-19), so it must be absent on create: a forged
+      // `result.processedAt` would otherwise mark the session as processed.
+      // There is no EEG flag: the only link is eegRecordings.gameSessionId.
+      //
+      // Rules check the envelope's structure. Trusted scoring validates what
+      // rules cannot: trials and metrics with the game's schemas, the mode and
+      // gameVersion against the catalogue, the start-level unlock, the replayed
+      // peak level and every plausibility check.
 
-      function validResponseTimeOrNull(times) {
-        return times == null || (
-          times is map && exactKeys(times, ['medianMs', 'meanMs', 'p90Ms'], []) &&
-          times.medianMs is number && times.medianMs >= 0 &&
-          times.meanMs is number && times.meanMs >= 0 &&
-          times.p90Ms is number && times.p90Ms >= 0
-        );
+      // The summary is client-derived for immediate display and never trusted:
+      // trusted scoring recomputes every value from the trials and records a
+      // summary-mismatch. Rules enforce its exact key set and value types only,
+      // so a display bug can never make an otherwise valid session impossible
+      // to submit. Value ranges and per-game metrics belong to trusted scoring.
+      function numberOrNull(value) {
+        return value == null || value is number;
       }
 
-      // Client-derived and never trusted; the shape is still exact. Per-game
-      // trial and metric shapes are validated by trusted scoring, because rules
-      // cannot iterate a list.
       function validSessionSummary(summary) {
         return summary is map &&
           exactKeys(summary, ['score', 'accuracy', 'trialsTotal', 'trialsCorrect', 'responseTime', 'metrics'], []) &&
           summary.score is number &&
-          (summary.accuracy == null || fraction(summary.accuracy)) &&
-          nonNegativeInt(summary.trialsTotal) &&
-          (summary.trialsCorrect == null || nonNegativeInt(summary.trialsCorrect)) &&
-          validResponseTimeOrNull(summary.responseTime) &&
+          numberOrNull(summary.accuracy) &&
+          summary.trialsTotal is number &&
+          numberOrNull(summary.trialsCorrect) &&
+          (summary.responseTime == null || (
+            summary.responseTime is map &&
+            exactKeys(summary.responseTime, ['medianMs', 'meanMs', 'p90Ms'], []) &&
+            summary.responseTime.medianMs is number &&
+            summary.responseTime.meanMs is number &&
+            summary.responseTime.p90Ms is number
+          )) &&
           summary.metrics is map;
       }
 
@@ -327,7 +336,9 @@ service cloud.firestore {
           session.gameVersion is int && session.gameVersion >= 1 &&
           slugId(session.modeId) &&
           intBetween(session.startLevel, 1, 50) &&
-          intBetween(session.peakLevel, session.startLevel, 50) &&
+          // An untrusted observation: trusted scoring replays the real peak
+          // from the trials and flags a mismatch.
+          intBetween(session.peakLevel, 1, 50) &&
           session.status in ['completed', 'abandoned'] &&
           deviceInterval(session.startedAt, session.endedAt) &&
           intBetween(session.activeDurationMs, 0, 3600000) &&

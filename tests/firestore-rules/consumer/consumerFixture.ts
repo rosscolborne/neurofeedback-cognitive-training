@@ -139,13 +139,24 @@ export function recordingData(userId: string, gameSessionId: string, overrides: 
     };
 }
 
+/** A `valid` server result, as trusted scoring (NFCT-19) writes it. */
+export function validResult(processedAt: unknown) {
+    return {
+        processedAt, scoringVersion: 1, validity: 'valid', reasons: [],
+        score: 40, accuracy: 1, responseTime: null, peakLevel: 3, metrics: { correct: 3 },
+        performanceIndex: null, performanceIndexVersion: null, domainContributions: { math: 0.7 },
+        recordKey: 'timed-90:1', recordValues: { score: 40 }, personalBest: true,
+        unlocked: [{ modeId: 'timed-90', startLevel: 2 }],
+    };
+}
+
 /** A game session as trusted setup stores it (a real createdAt, and a server result). */
 function storedSession(userId: string) {
     return sessionData(userId, {
         createdAt: past,
         startedAt: past,
         endedAt: Timestamp.fromMillis(past.toMillis() + 120_000),
-        result: { processedAt: past, scoringVersion: 1, validity: 'valid', reasons: [], score: 40 },
+        result: validResult(past),
     });
 }
 
