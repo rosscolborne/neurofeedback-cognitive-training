@@ -159,9 +159,8 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain("request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null)");
   });
 
-  it('does not expose the user directory or let clinicians create and delete patient profiles', () => {
-    const usersBlock = rules.slice(rules.indexOf('match /users/{userId}'), rules.indexOf('// A clinician creates an invitation'));
-    expect(usersBlock).toContain('allow read: if isOwner(userId);');
+  // users/{uid} is covered by the emulator tests in tests/firestore-rules/consumer/.
+  it('does not let clinicians create and delete patient profiles', () => {
     const clientsBlock = rules.slice(rules.indexOf('match /clients/{clientId}'), rules.indexOf('// Neurofeedback Session Records'));
     expect(clientsBlock).not.toContain("request.resource.data.get('clinicianId', null) == request.auth.uid");
     expect(clientsBlock).toContain('allow delete: if isAuthenticated() && (\n        request.auth.uid == clientId');
