@@ -2,7 +2,7 @@
 // Fails if any tracked file references the Waveable clinical product's Firebase
 // project, credentials or auto-deploy workflow. Run in CI on every PR.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, lstatSync, readlinkSync } from 'node:fs';
 
 const FORBIDDEN = [
   /brainwell-327dc/,                  // clinical Firebase project id / auth domain / bucket
@@ -22,8 +22,10 @@ const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).spli
 const problems = [];
 for (const file of files) {
   if (FORBIDDEN_FILES.some((pattern) => pattern.test(file))) problems.push(`${file}: file must not be tracked`);
-  if (!existsSync(file)) continue;
-  const content = readFileSync(file);
+  let stat;
+  try { stat = lstatSync(file); } catch { continue; } // deleted in the working tree
+  // Git tracks a symlink as its target path; tracked targets are checked themselves.
+  const content = stat.isSymbolicLink() ? Buffer.from(readlinkSync(file)) : readFileSync(file);
   if (content.includes(0)) continue; // binary
   const text = content.toString('utf8');
   const allowed = ALLOWED.get(file) ?? [];
