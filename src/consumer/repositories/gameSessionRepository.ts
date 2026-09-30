@@ -20,6 +20,7 @@ import {
 import {
   createSessionSeed,
   GAME_SESSION_SCHEMA_VERSION,
+  sessionSeedSchema,
   gameSessionCreateSchemaFor,
   readGameSession,
   type GameDefinition,
@@ -292,16 +293,46 @@ export function historyQuery(
   );
 }
 
+export interface GameSessionRepositoryOptions {
+  /**
+   * Where session seeds come from. Omitted (as in the app's production wiring,
+   * `src/consumer/repositories/index.ts`), each game draws its seed from
+   * `crypto.getRandomValues`. A seam for deterministic tests, for example an
+   * E2E build replaying the same seed: the repository has no environment
+   * logic, so a caller that injects a source owns gating it (for example on
+   * `VITE_E2E_EMULATORS`) and must never inject one in a production build.
+   * Every value is checked with `sessionSeedSchema`; an invalid one throws
+   * when the game starts, and there is no fallback.
+   */
+  readonly seedSource?: () => number;
+}
+
+export class InvalidSessionSeedError extends Error {
+  constructor(seed: unknown) {
+    super(`The seed source returned an invalid session seed: ${String(seed)}`);
+    this.name = 'InvalidSessionSeedError';
+  }
+}
+
 export function createGameSessionRepository(
   context: ConsumerFirestoreContext,
   eegRecordings: EegRecordingRepository = createEegRecordingRepository(context),
+  options: GameSessionRepositoryOptions = {},
 ): GameSessionRepository {
   const { firestore } = context;
+  const { seedSource } = options;
+
+  function sessionSeed(): number {
+    if (!seedSource) return newSessionSeed();
+    const seed = seedSource();
+    if (!sessionSeedSchema.safeParse(seed).success) throw new InvalidSessionSeedError(seed);
+    return seed;
+  }
 
   function startGameSession(): StartedGameSession {
     const userId = signedInUid(context);
     const sessionId = newDocumentId(gameSessionsRef(firestore, userId));
-    const seed = newSessionSeed();
+    const seed = sessionSeed();
     let state: 'ready' | 'saving' | 'saved' = 'ready';
 
     async function save<Trial, Metrics extends object>(input: SaveGameSessionInput<Trial, Metrics>): Promise<SavedGameSession> {

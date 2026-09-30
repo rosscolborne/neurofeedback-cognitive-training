@@ -21,7 +21,11 @@ import {
 import { mentalMath } from '@nfct/shared';
 import type { ConsumerFirestoreContext } from '../../src/consumer/firestore/context';
 import { createEegRecordingRepository } from '../../src/consumer/repositories/eegRecordingRepository';
-import { createGameSessionRepository, type GameSessionDraft } from '../../src/consumer/repositories/gameSessionRepository';
+import {
+  createGameSessionRepository,
+  type GameSessionDraft,
+  type GameSessionRepositoryOptions,
+} from '../../src/consumer/repositories/gameSessionRepository';
 import { createProfileRepository, type UserProfileDraft } from '../../src/consumer/repositories/profileRepository';
 import { createProgressRepository } from '../../src/consumer/repositories/progressRepository';
 import type { EegRecordingDraft, EegRecordingRepositoryOptions } from '../../src/consumer/repositories/eegRecordingRepository';
@@ -80,6 +84,7 @@ export interface DeviceOptions {
   /** Connect Firestore here instead of the emulator (for example a stalled endpoint). */
   readonly firestoreHost?: string;
   readonly eegOptions?: EegRecordingRepositoryOptions;
+  readonly sessionOptions?: GameSessionRepositoryOptions;
 }
 
 export function newDevice(options: DeviceOptions = {}): Device {
@@ -95,7 +100,7 @@ export function newDevice(options: DeviceOptions = {}): Device {
   return {
     app, auth, firestore, context, eeg,
     profiles: createProfileRepository(context),
-    sessions: createGameSessionRepository(context, eeg),
+    sessions: createGameSessionRepository(context, eeg, options.sessionOptions),
     progress: createProgressRepository(context),
   };
 }

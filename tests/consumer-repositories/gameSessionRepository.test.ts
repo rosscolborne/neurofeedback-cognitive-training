@@ -8,6 +8,7 @@ import { ConsumerWriteValidationError } from '../../src/consumer/firestore/write
 import {
   GameSessionAlreadySavedError,
   GameSessionOwnerChangedError,
+  InvalidSessionSeedError,
   type GameSessionRecord,
 } from '../../src/consumer/repositories/gameSessionRepository';
 import {
@@ -65,6 +66,31 @@ describe('starting a game', () => {
       expect(seedFills[0]?.[0]).toBe(started.seed);
     } finally {
       fill.mockRestore();
+    }
+  });
+
+  it('uses an injected seed source, and saves its seed', async () => {
+    const seeds = [4_000_000_000, 0];
+    const device = await signedInDevice('seeded', { sessionOptions: { seedSource: () => seeds.shift()! } });
+    const fill = vi.spyOn(globalThis.crypto, 'getRandomValues');
+    try {
+      const first = device.sessions.startGameSession();
+      const second = device.sessions.startGameSession();
+
+      expect([first.seed, second.seed]).toEqual([4_000_000_000, 0]);
+      expect(fill.mock.calls.some(([array]: [unknown]) => array instanceof Uint32Array && array.length === 1)).toBe(false);
+      await (await first.save({ definition: testGame, session: sessionDraft() })).acknowledged;
+      expect(await serverRead(`users/${device.player.uid}/gameSessions/${first.sessionId}`)).toMatchObject({ seed: 4_000_000_000 });
+    } finally {
+      fill.mockRestore();
+    }
+  });
+
+  it('refuses an invalid injected seed when the game starts, with no fallback', async () => {
+    for (const invalid of [-1, 2 ** 32, 1.5, Number.NaN]) {
+      const device = await signedInDevice('bad-seed', { sessionOptions: { seedSource: () => invalid } });
+
+      expect(() => device.sessions.startGameSession()).toThrow(InvalidSessionSeedError);
     }
   });
 
