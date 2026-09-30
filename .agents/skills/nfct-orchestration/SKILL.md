@@ -13,7 +13,8 @@ procedure rather than restating it.
 
 - The Jira epic and cards, including acceptance criteria and links.
 - The relevant parts of the canonical Stage 1 design and ADRs.
-- [AGENTS.md](../../../AGENTS.md), including the Stage 1 test coverage table.
+- [AGENTS.md](../../../AGENTS.md), including the Stage 1 test coverage table
+  and the skills table, so each stream uses the skill that owns its role.
 - Dependency state: which PRs are open, merged or blocked, and which
   worktrees already exist (see [nfct-worktrees](../nfct-worktrees/SKILL.md#diagnose)).
 

@@ -54,7 +54,10 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 
 ## Skills
 
-Procedures live in `.agents/skills/`. Use the one that owns the task:
+Procedures live in `.agents/skills/`, the single source of truth for every
+agent tool. `.claude/skills` is a symlink to it so Claude Code discovers the
+same files; add or edit skills only under `.agents/skills/`. Use the skill that
+owns the task:
 
 | Skill | Use it to |
 | --- | --- |

@@ -51,3 +51,6 @@ __pycache__/
 
 # Capacitor copies the web build here on `cap sync`; never commit it
 ios/App/App/public/
+
+# Per-user Claude Code settings; .claude/skills is a tracked symlink
+.claude/settings.local.json

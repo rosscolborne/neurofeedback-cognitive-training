@@ -1,6 +1,6 @@
 ---
 name: nfct-security-review
-description: Adversarially review NFCT changes that cross authentication, authorization, trusted-data, persistence, deletion or backend boundaries. Read-only by default; use for changes to Firebase Auth, Firestore rules, Cloud Functions, account deletion, trusted scoring or progression, EEG data, secrets or configuration, or user ownership.
+description: Adversarially review NFCT changes that cross authentication, authorization, trusted-data, persistence, deletion, privacy or backend boundaries. Read-only by default; use for changes to Firebase Auth, Firestore rules, Cloud Functions, account deletion, trusted scoring or progression, EEG persistence or privacy, secrets or configuration, or user ownership.
 ---
 
 # NFCT security review
@@ -70,7 +70,8 @@ Classify each finding:
   exposure problem.
 - **Should fix before merge**: a real weakness or missing guard that is small
   enough to fix in this PR.
-- **Follow-up**: defense in depth or hardening that belongs in another card.
+- **Follow-up / non-blocking**: defense in depth or hardening that belongs in
+  another card.
 
 For each, give the file and line, the attacker's steps, the impact and the
 evidence (probe output or code path). List the areas you checked and ruled
