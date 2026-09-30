@@ -65,6 +65,8 @@ export function App() {
   const [dataIdentity, setDataIdentity] = useState('');
   const loadGeneration = useRef(0);
   const brandGeneration = useRef(0);
+  // The signed-in clinician's clinic, while its settings are still loading.
+  const pendingClinicLoad = useRef<{ identity: string; clinicId: Promise<string | null> } | null>(null);
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
   const accountIdentityRef = useRef(accountIdentity);
   accountIdentityRef.current = accountIdentity;
@@ -178,6 +180,7 @@ export function App() {
     setBrand(BRAND_PRESETS[0]);
     setClinicId(null);
     setClinicIdentity(accountIdentity);
+    pendingClinicLoad.current = null;
 
     if (loading || !user) return;
     if (isDemoWorkspace) {
@@ -186,7 +189,12 @@ export function App() {
     }
 
     if (role === 'clinician') {
-      void clinicSettingsRepository.load()
+      const request = clinicSettingsRepository.load();
+      pendingClinicLoad.current = {
+        identity: accountIdentity,
+        clinicId: request.then((snapshot) => (snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null), () => null),
+      };
+      void request
         .then((snapshot) => {
           if (!isCurrent()) return;
           setClinicId(snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null);
@@ -249,12 +257,18 @@ export function App() {
   const handleAddClient = async (newClient: Partial<ClientProfile>): Promise<PatientInvitation> => {
     const requestIdentity = accountIdentity;
     if (!newClient.email?.trim()) throw new Error('Patient email is required');
-    if (!visibleClinicId) throw new Error('Complete clinic setup before inviting a patient');
+    // The clinic settings load after sign-in. An invitation sent before they
+    // arrive waits for them instead of reporting a missing clinic.
+    const pending = pendingClinicLoad.current;
+    const clinicForInvitation = visibleClinicId
+      ?? (pending?.identity === requestIdentity ? await pending.clinicId : null);
+    if (accountIdentityRef.current !== requestIdentity) throw new Error('The signed-in account changed. Try again.');
+    if (!clinicForInvitation) throw new Error('Complete clinic setup before inviting a patient');
     if (!newClient.condition || !newClient.assignedProtocol || newClient.prescribedSessionsPerWeek == null) {
       throw new Error('Select a clinical indication, protocol, and weekly target before inviting a patient');
     }
     const invitation = await storageEngine.createPatientInvitation({
-      clinicId: visibleClinicId,
+      clinicId: clinicForInvitation,
       clinicianName: user?.displayName || user?.email || 'Clinician',
       patientEmail: newClient.email,
       patientName: newClient.name || '',
