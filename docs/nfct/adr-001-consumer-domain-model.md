@@ -142,18 +142,18 @@ Two catalogue identifiers are also versioned:
 
 ### 9. Mental Math records are keyed by mode + start level
 
-Scores from different start levels are not comparable in the inherited Mental Math scoring:
+Mental Math v1 has one mode, `timed-90`: a fixed 90-second run over 10 levels, driven by a 3-up/1-down staircase. Scores from different start levels are not comparable, even with the staircase:
 
-- points per answer scale roughly 6× from level 1 to level 8;
-- the ramp front-loads easy points;
-- lives cut the other way.
+- base points per answer scale 5.5× from level 1 to level 10;
+- a higher start skips the climb, earning high-value points from its first answer;
+- the staircase pulls every run toward the player's own level, but how quickly is unknown until there is real data.
 
 So:
 
-- **Records.** Bests are kept per `recordKey`: Mental Math uses `${modeId}:${startLevel}` (e.g. `endless:3`). The record metrics are score, correct answers and peak level, each with its own `sessionId` and date. Ties go to the earlier achievement, then the lower session ID (decision 6). No normalisation merges the classes until one can be validated on real data.
+- **Records.** Bests are kept per `recordKey`: Mental Math uses `${modeId}:${startLevel}`, so `timed-90` has up to 10 record classes, `timed-90:1` to `timed-90:10`. The record metrics are score, correct answers and peak level, each with its own `sessionId` and date. Ties go to the earlier achievement, then the lower session ID (decision 6). No normalisation merges the classes until one can be validated on real data.
 - **Unlocks.** `bestPeakLevel[modeId]` is the highest trusted peak level in any valid completed run at **any** start level.
   - **The mode owns the rule.** Each mode defines a deterministic `unlockPolicy({ bestPeakLevel, maxLevel })`. `unlockedStartLevel(mode, progress | null)` applies it and clamps the result to `[initiallyUnlockedStartLevel, maxLevel]`. Shared code holds no game-specific formula.
-  - **Mental Math endless (NFCT-17), intended v1 policy:** unlock up to `bestPeakLevel − 1`, but once the top level has actually been reached, the top level itself is an allowed start level (`bestPeakLevel >= maxLevel ? maxLevel : bestPeakLevel − 1`). The initial level and the mode's bounds always apply.
+  - **Mental Math `timed-90` (NFCT-17), v1 policy:** unlock up to `bestPeakLevel − 1`, but once level 10 has actually been reached, level 10 itself is an allowed start level (`bestPeakLevel >= 10 ? 10 : bestPeakLevel − 1`). The initial level (1) and the mode's bounds always apply.
 - **Missing progress.** A missing progress document, or no entry for the mode, yields `initiallyUnlockedStartLevel`.
 - **Where it is called.** The start-level picker, the client preview and the server all call this one function. It derives the level from `bestPeakLevel` and never trusts the cached `progress.unlocked`.
 - **Totals** (sessions and time) are per game and include flagged sessions.
