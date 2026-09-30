@@ -18,6 +18,7 @@ import {
   type WriteBatch,
 } from 'firebase/firestore';
 import {
+  createSessionSeed,
   GAME_SESSION_SCHEMA_VERSION,
   gameSessionCreateSchemaFor,
   readGameSession,
@@ -52,14 +53,18 @@ import {
 } from './eegRecordingRepository';
 
 // users/{uid}/gameSessions/{sessionId}: the primary record (ADR-001 decisions
-// 2 and 5). The session ID is generated when the game starts, so an EEG
-// recording can reference it before anything is written. The session is
+// 2 and 5). The session ID and the session seed are generated when the game
+// starts: an EEG recording can reference the ID before anything is written,
+// and the game derives the session's content from the seed. The session is
 // written exactly once, when the game ends, in one batch with its optional EEG
 // recording. It is never updated and never retried as an update: the rules
 // allow create only, so an offline retry either lands once or is refused.
 
-/** Fields the repository sets: the path owner, the schema version and the server clock. */
-const REPOSITORY_OWNED_KEYS = ['schemaVersion', 'userId', 'createdAt'] as const;
+/**
+ * Fields the repository sets: the path owner, the schema version, the server
+ * clock and the seed chosen when the game started.
+ */
+const REPOSITORY_OWNED_KEYS = ['schemaVersion', 'userId', 'createdAt', 'seed'] as const;
 const SERVER_OWNED_KEYS = ['result', 'processing'] as const;
 
 /**
@@ -139,9 +144,17 @@ export interface SaveGameSessionInput<Trial, Metrics extends object> {
   readonly eegRecording?: EegRecordingDraft | null;
 }
 
-/** A game in progress. Its ID exists from the start; nothing is written until `save`. */
+/** A game in progress. Its ID and seed exist from the start; nothing is written until `save`. */
 export interface StartedGameSession {
   readonly sessionId: string;
+  /**
+   * The session seed (an unsigned 32-bit integer, shared `createSessionSeed`),
+   * drawn from a cryptographically strong source when the game starts. The
+   * game derives the session's content from it (Mental Math:
+   * `mentalMath.startRun({ seed, startLevel })`), and `save` stores it, so
+   * trusted scoring can reproduce what the player was shown.
+   */
+  readonly seed: number;
   /** The user who started the game. Saving under a different signed-in user is refused. */
   readonly userId: string;
   /**
@@ -175,7 +188,7 @@ export class GameSessionOwnerChangedError extends Error {
 }
 
 export interface GameSessionRepository {
-  /** Call when the game starts: generates the session ID. */
+  /** Call when the game starts: generates the session ID and the session seed. */
   startGameSession(): StartedGameSession;
   getGameSession(sessionId: string): Promise<DocumentRead<GameSessionRecord>>;
   /** Watches one session, for example until its trusted `result` arrives. */
@@ -234,6 +247,19 @@ function queryRecord(raw: Record<string, unknown>, snapshot: QueryDocumentSnapsh
 }
 
 /**
+ * A new session seed from the platform's cryptographically strong random
+ * source. There is deliberately no weaker fallback.
+ */
+function newSessionSeed(): number {
+  const random = globalThis.crypto;
+  if (typeof random?.getRandomValues !== 'function') {
+    throw new Error('Secure random numbers are unavailable, so a game session cannot start.');
+  }
+  // createSessionSeed allocates an ordinary (non-shared) Uint32Array.
+  return createSessionSeed((buffer) => random.getRandomValues(buffer as Uint32Array<ArrayBuffer>));
+}
+
+/**
  * Adds a prepared recording to the session's batch. If the SDK still refuses
  * its data, only the recording is left out: EEG never costs the session.
  */
@@ -275,6 +301,7 @@ export function createGameSessionRepository(
   function startGameSession(): StartedGameSession {
     const userId = signedInUid(context);
     const sessionId = newDocumentId(gameSessionsRef(firestore, userId));
+    const seed = newSessionSeed();
     let state: 'ready' | 'saving' | 'saved' = 'ready';
 
     async function save<Trial, Metrics extends object>(input: SaveGameSessionInput<Trial, Metrics>): Promise<SavedGameSession> {
@@ -287,6 +314,7 @@ export function createGameSessionRepository(
           ...input.session,
           schemaVersion: GAME_SESSION_SCHEMA_VERSION,
           userId,
+          seed,
           createdAt: serverTimestamp(),
         };
         assertNoUndefined('game session', write);
@@ -313,7 +341,7 @@ export function createGameSessionRepository(
       }
     }
 
-    return { sessionId, userId, save };
+    return { sessionId, seed, userId, save };
   }
 
   return {

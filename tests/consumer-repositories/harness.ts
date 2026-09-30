@@ -18,8 +18,7 @@ import {
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore';
-import { z } from 'zod';
-import { defineGame, type LevelDefinition } from '@nfct/shared';
+import { mentalMath } from '@nfct/shared';
 import type { ConsumerFirestoreContext } from '../../src/consumer/firestore/context';
 import { createEegRecordingRepository } from '../../src/consumer/repositories/eegRecordingRepository';
 import { createGameSessionRepository, type GameSessionDraft } from '../../src/consumer/repositories/gameSessionRepository';
@@ -187,64 +186,16 @@ export async function expectDenied(write: Promise<unknown>): Promise<void> {
 }
 
 // ---- Test game ----
-// A test double with Mental Math's catalogue identity (the rules allow only
-// supported games) and the Stage 1 trial shape. Replaced by the real
-// shared/games/mental-math definition once NFCT-17 lands.
+// The real Mental Math v1 definition (NFCT-17): its trial and metrics schemas
+// check every session the tests save.
 
-function levels(count: number): LevelDefinition[] {
-  return Array.from({ length: count }, (_, index) => ({ level: index + 1, label: `Level ${index + 1}`, params: {} }));
-}
+export const testGame = mentalMath.definition;
+export const testTrialSchema = mentalMath.trialSchema;
+export type TestTrial = mentalMath.MentalMathTrial;
+export type TestMetrics = mentalMath.MentalMathMetrics;
 
-export const testTrialSchema = z.strictObject({
-  level: z.int().min(1).max(10),
-  operands: z.array(z.int().min(1)).min(2).max(3),
-  operators: z.array(z.enum(['+', '-', '×', '÷'])).min(1).max(2),
-  grouped: z.boolean(),
-  expected: z.int().min(1),
-  response: z.int().min(0).nullable(),
-  correct: z.boolean(),
-  timedOut: z.boolean(),
-  shownAtMs: z.int().min(0),
-  rtMs: z.int().min(0),
-  timeLimitMs: z.int().min(1),
-});
-export type TestTrial = z.infer<typeof testTrialSchema>;
-
-export const testMetricsSchema = z.strictObject({
-  correct: z.int().min(0),
-  attempted: z.int().min(0),
-  timedOut: z.int().min(0),
-});
-export type TestMetrics = z.infer<typeof testMetricsSchema>;
-
-export const testGame = defineGame<TestTrial, TestMetrics>({
-  id: 'mental-math',
-  gameVersion: 1,
-  scoringVersion: 1,
-  domainWeights: { math: 0.7, 'processing-speed': 0.2, memory: 0.1 },
-  modes: [{
-    id: 'timed-90',
-    adaptive: true,
-    initiallyUnlockedStartLevel: 1,
-    levels: levels(10),
-    unlockPolicy: ({ bestPeakLevel }) => (bestPeakLevel >= 10 ? 10 : bestPeakLevel - 1),
-  }],
-  trialSchema: testTrialSchema,
-  metricsSchema: testMetricsSchema,
-  limits: { maxTrials: 400, minActiveMs: 0, maxActiveMs: 3_600_000, minPlausibleRtMs: 250 },
-  score(trials, { startLevel }) {
-    const correct = trials.filter((trial) => trial.correct).length;
-    return {
-      score: correct * 50,
-      accuracy: trials.length === 0 ? null : correct / trials.length,
-      responseTime: null,
-      peakLevel: Math.max(startLevel, ...trials.map((trial) => trial.level)),
-      metrics: { correct, attempted: trials.length, timedOut: trials.filter((trial) => trial.timedOut).length },
-    };
-  },
-  recordKey: ({ modeId, startLevel }) => `${modeId}:${startLevel}`,
-  recordMetrics: ['score', 'correct', 'peakLevel'],
-});
+/** A fixed session seed for documents the tests write around the repositories. */
+export const TEST_SEED = 2_654_435_761;
 
 // ---- Builders ----
 
@@ -257,6 +208,19 @@ function trial(index: number): TestTrial {
     level: 1, operands: [2, 3], operators: ['+'], grouped: false, expected: 5, response: 5,
     correct: true, timedOut: false, shownAtMs: index * 2_000, rtMs: 1_200, timeLimitMs: 8_000,
   };
+}
+
+/**
+ * A stored session document as the repository would write it (seed and
+ * createdAt included), for writes that go around the repository: trusted
+ * setup, or a raw client write that shows what the rules refuse.
+ */
+export function sessionDocument(
+  userId: string,
+  overrides: Record<string, unknown> = {},
+  endedMinutesAgo = 1,
+): Record<string, unknown> {
+  return { ...sessionDraft({}, endedMinutesAgo), schemaVersion: 1, userId, seed: TEST_SEED, createdAt: Timestamp.now(), ...overrides };
 }
 
 /** A finished Mental Math session as the game produces it, ended `endedMinutesAgo` minutes ago. */
@@ -279,12 +243,12 @@ export function sessionDraft(
     client: { appVersion: '0.1.0', platform: 'web' },
     trials: [trial(0), trial(1), trial(2)],
     summary: {
-      score: 150,
+      score: 180,
       accuracy: 1,
       trialsTotal: 3,
       trialsCorrect: 3,
       responseTime: { medianMs: 1_200, meanMs: 1_200, p90Ms: 1_200 },
-      metrics: { correct: 3, attempted: 3, timedOut: 0 },
+      metrics: { correct: 3, attempted: 3, timedOut: 0, longestStreak: 3, finalLevel: 1, difficultyPoints: 150, speedBonusPoints: 30 },
     },
     ...overrides,
   };
@@ -347,7 +311,8 @@ export async function withProfile(device: Device, { eegConsent = false } = {}): 
 export function trustedResult(processedAt: Timestamp = Timestamp.now()) {
   return {
     processedAt, scoringVersion: 1, validity: 'valid', reasons: [],
-    score: 150, accuracy: 1, responseTime: null, peakLevel: 2, metrics: { correct: 3, attempted: 3, timedOut: 0 },
+    score: 180, accuracy: 1, responseTime: null, peakLevel: 2,
+    metrics: { correct: 3, attempted: 3, timedOut: 0, longestStreak: 3, finalLevel: 1, difficultyPoints: 150, speedBonusPoints: 30 },
     performanceIndex: null, performanceIndexVersion: null, domainContributions: { math: 0.7, 'processing-speed': 0.2, memory: 0.1 },
     recordKey: 'timed-90:1', recordValues: { score: 150 }, personalBest: true,
     unlocked: [{ modeId: 'timed-90', startLevel: 2 }] as { modeId: string; startLevel: number }[],

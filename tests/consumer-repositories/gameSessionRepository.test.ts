@@ -2,7 +2,7 @@ import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { defineGame, GAME_SESSION_SCHEMA_VERSION } from '@nfct/shared';
+import { defineGame, GAME_SESSION_SCHEMA_VERSION, sessionSeedSchema } from '@nfct/shared';
 import { SignInRequiredError } from '../../src/consumer/firestore/context';
 import { ConsumerWriteValidationError } from '../../src/consumer/firestore/writes';
 import {
@@ -21,6 +21,7 @@ import {
   resetEmulators,
   serverRead,
   serverWrite,
+  sessionDocument,
   sessionDraft,
   signedInDevice,
   testGame,
@@ -33,7 +34,7 @@ import {
 
 const SESSION_KEYS = [
   'activeDurationMs', 'client', 'createdAt', 'endedAt', 'gameId', 'gameVersion', 'localDate', 'modeId', 'peakLevel',
-  'schemaVersion', 'startLevel', 'startedAt', 'status', 'summary', 'timezone', 'trials', 'userId',
+  'schemaVersion', 'seed', 'startLevel', 'startedAt', 'status', 'summary', 'timezone', 'trials', 'userId',
 ];
 
 beforeEach(resetEmulators);
@@ -47,7 +48,10 @@ describe('starting a game', () => {
 
     expect(started.sessionId).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
     expect(started.userId).toBe(device.player.uid);
-    expect(device.sessions.startGameSession().sessionId).not.toBe(started.sessionId);
+    expect(sessionSeedSchema.safeParse(started.seed).success).toBe(true);
+    const next = device.sessions.startGameSession();
+    expect(next.sessionId).not.toBe(started.sessionId);
+    expect(next.seed).not.toBe(started.seed);
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
   });
 
@@ -75,6 +79,7 @@ describe('saving a finished session', () => {
     expect(stored).toMatchObject({
       schemaVersion: GAME_SESSION_SCHEMA_VERSION,
       userId: device.player.uid,
+      seed: started.seed,
       gameId: 'mental-math',
       trials: draft.trials,
       summary: draft.summary,
@@ -119,7 +124,7 @@ describe('saving a finished session', () => {
     await (await started.save({ definition: testGame, session: draft })).acknowledged;
     const path = `users/${device.player.uid}/gameSessions/${started.sessionId}`;
     // Exactly what the save sent: the same document with createdAt = serverTimestamp().
-    const resend = { ...draft, schemaVersion: GAME_SESSION_SCHEMA_VERSION, userId: device.player.uid, createdAt: serverTimestamp() };
+    const resend = { ...draft, schemaVersion: GAME_SESSION_SCHEMA_VERSION, userId: device.player.uid, seed: started.seed, createdAt: serverTimestamp() };
 
     await expectDenied(rawClientWrite(device, path, resend));
     // The same write to a new ID is a create, and is accepted: only the update is refused.
@@ -136,7 +141,7 @@ describe('saving a finished session', () => {
       expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
 
       // The same document without the server-owned field is accepted, so the field alone is what the rules refuse.
-      const clientWrite = { ...sessionDraft(), schemaVersion: 1, userId: device.player.uid, createdAt: serverTimestamp() };
+      const clientWrite = sessionDocument(device.player.uid, { createdAt: serverTimestamp() });
       await expectDenied(rawClientWrite(device, `users/${device.player.uid}/gameSessions/${device.sessions.startGameSession().sessionId}`, { ...clientWrite, ...serverOwned }));
       await rawClientWrite(device, `users/${device.player.uid}/gameSessions/${device.sessions.startGameSession().sessionId}`, clientWrite);
     }
@@ -148,6 +153,8 @@ describe('saving a finished session', () => {
     const started = owner.sessions.startGameSession();
 
     const forged = { ...sessionDraft(), userId: other.player.uid } as ReturnType<typeof sessionDraft>;
+    const ownSeed = { ...sessionDraft(), seed: 7 } as ReturnType<typeof sessionDraft>;
+    await expect(started.save({ definition: testGame, session: ownSeed })).rejects.toThrow(/seed: is set by the repository/);
     await expect(started.save({ definition: testGame, session: forged })).rejects.toThrow(ConsumerWriteValidationError);
 
     await (await started.save({ definition: testGame, session: sessionDraft() })).acknowledged;
@@ -390,7 +397,7 @@ describe('reading history', () => {
     const otherId = 'other-game-session-0001';
     await serverWrite({
       [`users/${device.player.uid}/gameSessions/${otherId}`]: {
-        ...sessionDraft({}, 20), gameId: 'word-ladder', schemaVersion: 1, userId: device.player.uid, createdAt: Timestamp.now(),
+        ...sessionDocument(device.player.uid, { gameId: 'word-ladder' }, 20),
       },
     });
 
@@ -414,8 +421,8 @@ describe('reading history', () => {
     // Ended 30 minutes ago: passes the rules' shape but not the reader (not a real calendar date).
     const badDateId = 'bad-date-session-000001';
     await serverWrite({
-      [`users/${uid}/gameSessions/${unreadableId}`]: { ...sessionDraft({}, 20), schemaVersion: 99, userId: uid, createdAt: Timestamp.now() },
-      [`users/${uid}/gameSessions/${badDateId}`]: { ...sessionDraft({ localDate: '2026-02-30' }, 30), schemaVersion: 1, userId: uid, createdAt: Timestamp.now() },
+      [`users/${uid}/gameSessions/${unreadableId}`]: sessionDocument(uid, { schemaVersion: 99 }, 20),
+      [`users/${uid}/gameSessions/${badDateId}`]: sessionDocument(uid, { localDate: '2026-02-30' }, 30),
     });
 
     const pages = [];
@@ -440,8 +447,8 @@ describe('reading history', () => {
     const saved = await saveSessions(device, [30]);
     const uid = device.player.uid;
     await serverWrite({
-      [`users/${uid}/gameSessions/unreadable-session-0010`]: { ...sessionDraft({}, 10), schemaVersion: 99, userId: uid, createdAt: Timestamp.now() },
-      [`users/${uid}/gameSessions/unreadable-session-0020`]: { ...sessionDraft({}, 20), schemaVersion: 99, userId: uid, createdAt: Timestamp.now() },
+      [`users/${uid}/gameSessions/unreadable-session-0010`]: sessionDocument(uid, { schemaVersion: 99 }, 10),
+      [`users/${uid}/gameSessions/unreadable-session-0020`]: sessionDocument(uid, { schemaVersion: 99 }, 20),
     });
 
     const first = await device.sessions.listGameSessions({ pageSize: 2 });
