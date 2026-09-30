@@ -43,7 +43,7 @@ implementer.
 | Implementation | [nfct-worktrees](../nfct-worktrees/SKILL.md), [testing](../neurasticity-development-testing/SKILL.md), plus [nfct-frontend-design](../nfct-frontend-design/SKILL.md) for user-facing work | PR with targeted tests and the AGENTS.md completion report |
 | Deterministic testing | [testing](../neurasticity-development-testing/SKILL.md) | Tests in the PR, with commands and results. Usually the implementer; a separate stream for cross-card journeys such as NFCT-10 |
 | Independent review | [nfct-pr-review](../nfct-pr-review/SKILL.md) | Classified findings and a verdict |
-| Integration | This skill, [Integrate](#integrate) | Full-suite results from a temporary integration branch, with conflicts and regressions routed to each branch's owner |
+| Integration | This skill, [Integrate](#integrate) | Full-suite results from a temporary integration worktree, with conflicts and regressions routed to each branch's owner |
 | Exploratory QA (user-facing work) | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) | Findings report, including what was not tested |
 | Security review (trust, auth or data boundaries) | [nfct-security-review](../nfct-security-review/SKILL.md) | Classified findings and a verdict |
 
@@ -54,8 +54,8 @@ For larger parallel work, the expected order is:
 1. isolated worktrees;
 2. targeted implementation tests;
 3. independent review;
-4. integration in a temporary integration branch, with owners rebasing their
-   own branches where needed;
+4. integration in a temporary, detached integration worktree, with owners
+   rebasing their own branches where needed;
 5. the full relevant CI and test suite;
 6. exploratory browser QA where the work is user-facing;
 7. security review where trust, auth or data boundaries are involved;
@@ -67,20 +67,22 @@ boundary change is clear from the design.
 
 ## Integrate
 
-- Work in your own temporary integration branch and worktree, created from
-  `origin/main` (for example `integration/<epic>` at `$PRIMARY-integration`;
-  see [nfct-worktrees](../nfct-worktrees/SKILL.md#create)). Never rewrite,
-  rebase or force-push another agent's feature or PR branch.
-- Merge, rebase or cherry-pick completed branches into the integration branch
-  in dependency order to test that they work together.
+- Work in your own temporary integration worktree, detached at `origin/main`
+  (see [nfct-worktrees](../nfct-worktrees/SKILL.md#integration-worktrees)).
+  Never rewrite, rebase or force-push another agent's feature or PR branch.
+- Merge or cherry-pick completed branches into the temporary integration
+  worktree in dependency order, only to test that they work together. Never
+  push that state.
 - When a feature branch itself needs rebasing onto a new upstream, ask its
   owner to do it in their own worktree. If that rewrites published history,
   they push with `git push --force-with-lease`, never plain `--force`.
 - Send findings to the implementer, who fixes them on their own branch and
-  worktree, not on the integration branch. Re-integrate from the updated
-  branches.
+  worktree, not in the integration worktree. Re-integrate in a fresh
+  integration worktree from the updated branches.
 - Resolve conflicts by the architecture and contracts, not just by making Git
-  happy. If a conflict reveals a contract disagreement, stop and report it.
+  happy, and report each resolution to the branch owners, who make it on
+  their own branches. If a conflict reveals a contract disagreement, stop and
+  report it.
 - Check that no branch undid another: compare each branch's intended change
   with the combined diff (`git range-diff`, `git diff origin/main...HEAD`).
 - Run the full relevant suite from [Checks](../../../AGENTS.md#checks) on the
@@ -91,9 +93,9 @@ boundary change is clear from the design.
   every branch before final merge.
 - Hand the integrated result to independent review, exploratory QA and
   security review as their triggers apply.
-- The integration branch is disposable. Do not open it as a PR unless the
-  owner asks; remove its worktree when the pass ends, per the
-  [lifecycle rules](../nfct-worktrees/SKILL.md#lifecycle).
+- The integration worktree is disposable: never push it or open it as a PR.
+  Once findings are handed back and it is clean, remove it per
+  [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-review-and-integration-worktrees).
 
 Merging to `main` is the owner's decision. The orchestrator merges only when
 explicitly delegated, and never merges a PR it implemented itself.
@@ -110,4 +112,4 @@ contract.
 Give the stream plan (cards, owners, worktrees, dependencies, merge order), the
 current state of each stream, open findings by severity, follow-ups raised, and
 what remains blocked. Once work is merged, have stale worktrees cleaned up per
-[nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up).
+[nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree).

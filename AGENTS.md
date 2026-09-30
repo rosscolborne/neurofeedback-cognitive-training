@@ -34,9 +34,10 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   Never modify another task's worktree or uncommitted work.
 - An open PR keeps its worktree. It becomes eligible for cleanup only once the
   PR is merged or abandoned **and** the worktree is clean and fully pushed.
-  Detached review worktrees have no PR lifecycle: remove them, once clean, as
-  soon as the review ends. [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md)
-  covers creating, naming, diagnosing and removing worktrees.
+  Detached review and integration worktrees have no PR lifecycle: remove them,
+  once clean, as soon as the review or integration pass ends.
+  [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) covers creating,
+  naming, diagnosing and removing worktrees.
 - Stay within the Jira card's scope. Report meaningful unrelated work, or
   propose a card for it, instead of silently expanding the PR.
 - Respect the canonical Stage 1 design, ADRs and the card's Jira contract. If
@@ -65,7 +66,7 @@ owns the task:
 
 | Skill | Use it to |
 | --- | --- |
-| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task and review worktrees and branches |
+| [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task, review and integration worktrees and branches |
 | [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md) | Choose and run the right test layers |
 | [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md) | Independently review a PR (read-only) |
 | [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
@@ -115,10 +116,11 @@ behavior instead of browser tests.
     FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx playwright test -c playwright.protocol.config.ts --list
   ```
 
-  The variables satisfy the emulator guard in `e2e/helpers/localEmulator.ts`;
-  without them no spec loads and the list is silently empty (exit code 0). No
-  emulators need to be running. From `playwright.config.ts`, CI runs only the
-  `permission-guard` project, so a spec there also needs a project CI runs
+  The variables satisfy the guard in `e2e/helpers/localEmulator.ts`; no
+  emulators need to be running. Without them, specs that import that helper
+  fail to load with the guard error, so the discovery check is invalid.
+  From `playwright.config.ts`, CI runs only the `permission-guard` project, so
+  a spec there also needs a project CI runs
   (check with `npx playwright test --list --project=<name>`).
 - Cover the card's user-visible behavior. Do not add broad or flaky browser
   tests just to have E2E coverage.

@@ -1,6 +1,6 @@
 ---
 name: nfct-worktrees
-description: Create, hand off and clean up isolated NFCT task and review worktrees and branches safely. Use when starting writable work on a card, setting up a reviewer's probe worktree, finishing or handing off a PR, or diagnosing and removing stale worktrees.
+description: Create, hand off and clean up isolated NFCT task, review and integration worktrees and branches safely. Use when starting writable work on a card, setting up a reviewer's probe worktree or an integration test worktree, finishing or handing off a PR, or diagnosing and removing stale worktrees.
 ---
 
 # NFCT worktrees
@@ -9,10 +9,12 @@ This skill owns the lifecycle of worktrees: creating them, keeping them tidy for
 hand-off, and removing them once their work is done.
 
 Commands below use `$PRIMARY`, the primary checkout. Git always lists it first,
-so derive it rather than hardcoding a path; this works from any worktree:
+so derive it rather than hardcoding a path. Shell state does not persist
+between agent tool calls, so define it in the same command or block that uses
+it. This form works from any worktree and keeps spaces in paths:
 
 ```bash
-PRIMARY=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 ```
 
 ## When a worktree is needed
@@ -22,7 +24,8 @@ PRIMARY=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
   normal case here.
 - Read-only planning, review, Jira work and analysis do not need one. A
   reviewer who wants temporary probe files uses a
-  [review worktree](#review-worktrees).
+  [review worktree](#review-worktrees); an integrator uses an
+  [integration worktree](#integration-worktrees).
 - The primary checkout is shared. Do not switch its branch or do task work in
   it while other streams are running.
 - Never modify another agent's active worktree, branch or uncommitted work.
@@ -35,6 +38,7 @@ Use predictable names from the Jira card: branch `<type>/<CARD>-<slug>`
 `<CARD>`.
 
 ```bash
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch origin
 git -C "$PRIMARY" worktree add --no-track -b feature/NFCT-18-firestore-rules \
   "$PRIMARY-NFCT-18" origin/main
@@ -65,15 +69,36 @@ into the implementer's worktree or the primary checkout. When probe files or
 tests are useful, create a detached worktree at the PR head:
 
 ```bash
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch origin pull/<n>/head
 git -C "$PRIMARY" worktree add --detach "$PRIMARY-review-pr<n>" FETCH_HEAD
 ```
 
-It has no branch and no PR lifecycle. Never commit or push from it unless you
-are explicitly switched into an implementation role. When the review ends,
-delete your own probe files (note any worth keeping as permanent tests in the
-findings), confirm `git status --porcelain` is empty, then remove it and run
-`git worktree prune`.
+It has no `node_modules`; run `npm ci --legacy-peer-deps` in it before running
+tests. It has no branch and no PR lifecycle. Never commit or push from it
+unless you are explicitly switched into an implementation role. When the
+review ends, delete your own probe files (note any worth keeping as permanent
+tests in the findings), then [remove it](#clean-up-review-and-integration-worktrees).
+
+## Integration worktrees
+
+An integrator tests completed branches together in a detached worktree from
+`origin/main`, never in anyone's feature branch:
+
+```bash
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+git -C "$PRIMARY" fetch origin
+git -C "$PRIMARY" worktree add --detach "$PRIMARY-integration-<slug>" origin/main
+git -C "$PRIMARY-integration-<slug>" merge --no-ff --no-edit origin/feature/NFCT-18-firestore-rules
+```
+
+Merge or cherry-pick branches into it in dependency order, then install
+dependencies and run the suite there. The merge and cherry-pick commits it
+gains are disposable test state: never push them and never create a branch
+from them. Conflicts and regressions go back to each branch's owner as
+findings. Do not create a named integration branch unless the owner asks; one
+that is pushed or opened as a PR is a task branch and follows the task
+lifecycle.
 
 ## Hand-off hygiene
 
@@ -88,21 +113,23 @@ Before opening, updating or handing off a PR:
 
 ## Lifecycle
 
-- **An open PR is not a disposable worktree.** Keep the worktree while its PR
-  is open, so review fixes are made in place. It becomes eligible for cleanup
-  only when the PR is merged or the work is explicitly abandoned by the owner,
-  **and** the worktree is clean and fully pushed.
-- **Review and temporary integration worktrees are disposable.** They are
-  eligible for cleanup as soon as the review or integration pass ends, once
-  clean and holding no commits of their own.
+- **An open PR is not a disposable worktree.** Keep a task worktree while its
+  PR is open, so review fixes are made in place. It becomes eligible for
+  cleanup only when the PR is merged or the work is explicitly abandoned by the
+  owner, **and** the worktree is clean and fully pushed.
+- **Review and integration worktrees are disposable.** A review worktree never
+  has commits; an integration worktree's local test merges are never pushed.
+  Either is eligible for cleanup as soon as the review or integration pass
+  ends and its findings are handed back, once `git status` is clean.
 
 ## Diagnose
 
 List every worktree with its state:
 
 ```bash
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch --prune origin
-git -C "$PRIMARY" worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt; do
+git -C "$PRIMARY" worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
   b=$(git -C "$wt" branch --show-current)
   dirty=$(git -C "$wt" status --porcelain | wc -l | tr -d ' ')
   unpushed=$(git -C "$wt" rev-list --count HEAD --not --remotes)
@@ -119,18 +146,20 @@ done
 - The first line is the primary checkout. Never remove it.
 - `dirty` counts modified and untracked files; ignored files such as
   `node_modules/` are not counted and do not block removal.
-- `unpushed` counts commits on no remote branch. After a squash merge whose
-  remote branch was deleted, confirm with
-  `gh pr view <n> --json state,headRefOid` that the merged head equals local
-  `HEAD`.
-- A detached worktree is usually a review worktree. `pr=none` with a dirty tree
-  usually means work in progress. Leave both to their owner unless the
-  lifecycle rules say otherwise.
+- `unpushed` counts commits on no remote branch. For a detached integration
+  worktree these are its disposable test merges.
+- A detached worktree is a review or integration worktree (`-review-pr<n>`,
+  `-integration-<slug>`). `pr=none` with a dirty tree usually means work in
+  progress. Leave both to their owner unless the lifecycle rules say
+  otherwise.
 - Active-agent check, **Linux only**: look for processes running in the
   worktree, then for recent edits:
 
   ```bash
-  ls -l /proc/*/cwd 2>/dev/null | awk -v wt="$wt" '$NF==wt || index($NF, wt "/")==1'
+  for p in /proc/[0-9]*; do
+    c=$(readlink "$p/cwd" 2>/dev/null) || continue
+    case "$c" in "$wt"|"$wt"/*) echo "pid ${p#/proc/}: $c" ;; esac
+  done
   find "$wt" -mmin -60 -not -path '*/node_modules/*' -not -path '*/.git/*' | head
   ```
 
@@ -138,34 +167,65 @@ done
   agent". In every case, if you cannot rule out an active agent, ask the owner
   or orchestrator.
 
-## Clean up
+## Clean up a task worktree
 
 Clean up only a worktree that meets the lifecycle rules and has no active
-agent. Run these from `$PRIMARY`, since Git cannot remove the worktree you are
-in.
+agent. The block runs in a subshell and stops at the first failed check, so it
+is safe to paste as a whole. Set `b` and `wt` first.
 
 ```bash
-b=feature/NFCT-18-firestore-rules; wt="$PRIMARY-NFCT-18"
-git -C "$PRIMARY" fetch --prune origin
-git -C "$PRIMARY" merge-base --is-ancestor "$b" origin/main && echo "merged into origin/main"
-git -C "$PRIMARY" worktree remove "$wt"
-git -C "$PRIMARY" branch -d "$b"
-gh pr list --base "$b" --state open        # must list nothing before deleting the remote branch
-git -C "$PRIMARY" ls-remote --exit-code --heads origin "$b" \
-  && git -C "$PRIMARY" push origin --delete "$b"
-git -C "$PRIMARY" worktree prune
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+b=feature/NFCT-18-firestore-rules
+wt="$PRIMARY-NFCT-18"
+(
+  set -eu
+  stop() { echo "STOP: $*" >&2; exit 1; }
+  git -C "$PRIMARY" fetch --prune origin
+  [ "$(git -C "$wt" branch --show-current)" = "$b" ] || stop "$wt is not on $b"
+  [ -z "$(git -C "$wt" status --porcelain)" ] || stop "$wt has uncommitted changes"
+  [ "$(gh pr list --head "$b" --state open --json number -q length)" = 0 ] || stop "$b has an open PR (or gh failed)"
+  sha=$(git -C "$PRIMARY" rev-parse "$b")
+  if ! git -C "$PRIMARY" merge-base --is-ancestor "$sha" origin/main; then
+    # Squash merge: accept only if a merged PR's head is exactly this commit.
+    [ "$(gh pr list --head "$b" --state merged --json headRefOid -q '.[0].headRefOid // ""')" = "$sha" ] \
+      || stop "$b is not merged into origin/main"
+  fi
+  git -C "$PRIMARY" worktree remove "$wt"
+  git -C "$PRIMARY" branch -D "$b"   # merged state verified above
+  if git -C "$PRIMARY" ls-remote --exit-code --heads origin "$b" >/dev/null; then
+    stacked=$(gh pr list --base "$b" --state open --json number -q length)
+    if [ "$stacked" = 0 ]; then
+      git -C "$PRIMARY" push origin --delete "$b"
+    else
+      echo "KEEP: remote $b is the base of $stacked open PR(s)" >&2
+    fi
+  fi
+  git -C "$PRIMARY" worktree prune
+)
 ```
 
-- Confirm the branch is merged with the explicit `merge-base` check, not only
-  `git branch -d`, which compares against the branch's upstream or whatever
-  `HEAD` happens to be checked out.
-- `git worktree remove` and `git branch -d` refuse when work would be lost.
-  Treat a refusal as a stop signal. Never use `--force` or `branch -D` to get
-  past uncommitted or unpushed work.
-- `branch -D` is acceptable only when the `merge-base` check passed (for
-  example, `-d` refused because the upstream was deleted), or after a squash
-  merge once the merged head equals the local branch's `HEAD`.
-- Delete the remote branch only if GitHub has not already done so and no open
-  PR uses it as its base. For merged PRs this is routine; for abandoned work,
-  only with the owner's say-so.
+- Each check fails closed: if `gh` or `git` errors, `set -e` stops the block
+  before anything is removed.
+- `branch -D` is used only after the merged check passes, because `branch -d`
+  compares against the branch's upstream or whatever `HEAD` is checked out,
+  and refuses once GitHub has deleted the upstream.
+- `git worktree remove` still refuses a dirty worktree. Never add `--force`.
+- Abandoned work fails the merged check by design. Remove it only with the
+  owner's explicit say-so, after confirming it is pushed, and never with
+  `--force`.
 - Report what you removed and what you left, with the reason.
+
+## Clean up review and integration worktrees
+
+```bash
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+wt="$PRIMARY-review-pr<n>"   # or "$PRIMARY-integration-<slug>"
+(
+  set -eu
+  stop() { echo "STOP: $*" >&2; exit 1; }
+  [ -z "$(git -C "$wt" branch --show-current)" ] || stop "$wt is on a branch; use the task cleanup"
+  [ -z "$(git -C "$wt" status --porcelain)" ] || stop "$wt has uncommitted files"
+  git -C "$PRIMARY" worktree remove "$wt"
+  git -C "$PRIMARY" worktree prune
+)
+```
