@@ -74,7 +74,11 @@ export interface GameSessionRecord {
   readonly hasPendingWrites: boolean;
 }
 
-/** Where the next page starts: after the last document of this page, readable or not. */
+/**
+ * Where the next page starts: after the last document of this page, readable
+ * or not. Treat it as opaque and keep it in memory; `endedAt` is the stored
+ * value as the SDK returned it.
+ */
 export interface GameSessionCursor {
   readonly uid: string;
   readonly gameId: string | null;
@@ -269,8 +273,8 @@ export function createGameSessionRepository(
             eegRecording = { status: 'skipped', reason: prepared.reason, message: prepared.message };
           }
         }
-        // The owner cannot have changed while consent was read without this
-        // write going under the wrong user.
+        // Consent was read asynchronously: check again that the player who
+        // started the game is still the signed-in user before queuing.
         if (signedInUid(context) !== userId) throw new GameSessionOwnerChangedError();
         state = 'saved';
         return { sessionId, eegRecording, ...pendingWrite(batch.commit()) };
