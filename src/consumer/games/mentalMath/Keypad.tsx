@@ -4,6 +4,10 @@ import { Delete } from 'lucide-react';
 // The on-screen numeric keypad. It is made of buttons only, so the device
 // keyboard never opens. There is no minus key (answers are positive integers)
 // and nothing submits except the Submit key.
+//
+// Keys that cannot act right now (during the feedback flash, or Submit with
+// nothing typed) are marked aria-disabled rather than disabled, so a focused
+// key keeps focus between questions; the handlers ignore them.
 
 interface KeypadProps {
   /** Digits and Delete accept input. */
@@ -17,21 +21,27 @@ interface KeypadProps {
 
 const DIGIT_ROWS = [[1, 2, 3], [4, 5, 6], [7, 8, 9]] as const;
 
+const Key: React.FC<{ readonly active: boolean; readonly className?: string; readonly label?: string; readonly onPress: () => void; readonly children: React.ReactNode }> = ({ active, className = '', label, onPress, children }) => (
+  <button
+    type="button"
+    className={`mm-key ${className}`.trim()}
+    aria-label={label}
+    aria-disabled={active ? undefined : 'true'}
+    onClick={() => { if (active) onPress(); }}
+  >
+    {children}
+  </button>
+);
+
 export const Keypad: React.FC<KeypadProps> = ({ enabled, canSubmit, onDigit, onDelete, onSubmit }) => (
   <div className="mm-keypad" role="group" aria-label="Answer keypad">
     {DIGIT_ROWS.flat().map((digit) => (
-      <button key={digit} type="button" className="mm-key" disabled={!enabled} onClick={() => onDigit(digit)}>
-        {digit}
-      </button>
+      <Key key={digit} active={enabled} onPress={() => onDigit(digit)}>{digit}</Key>
     ))}
-    <button type="button" className="mm-key mm-key-muted" aria-label="Delete" disabled={!enabled} onClick={onDelete}>
+    <Key active={enabled} className="mm-key-muted" label="Delete" onPress={onDelete}>
       <Delete size={22} aria-hidden="true" />
-    </button>
-    <button type="button" className="mm-key" disabled={!enabled} onClick={() => onDigit(0)}>
-      0
-    </button>
-    <button type="button" className="mm-key mm-key-submit" disabled={!enabled || !canSubmit} onClick={onSubmit}>
-      Submit
-    </button>
+    </Key>
+    <Key active={enabled} onPress={() => onDigit(0)}>0</Key>
+    <Key active={enabled && canSubmit} className="mm-key-submit" onPress={onSubmit}>Submit</Key>
   </div>
 );

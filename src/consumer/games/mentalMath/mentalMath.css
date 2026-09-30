@@ -225,6 +225,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .mm-hud-value {
@@ -353,7 +354,7 @@
   user-select: none;
 }
 
-.mm-key:active:not(:disabled) {
+.mm-key:active:not([aria-disabled='true']) {
   background-color: var(--surface-patient-recessed);
 }
 
@@ -369,11 +370,11 @@
   font-size: 17px;
 }
 
-.mm-key-submit:active:not(:disabled) {
+.mm-key-submit:active:not([aria-disabled='true']) {
   background-color: var(--brand-primary-hover);
 }
 
-.mm-key:disabled {
+.mm-key[aria-disabled='true'] {
   opacity: 0.45;
   cursor: default;
 }
@@ -433,6 +434,29 @@
 @media (max-width: 360px) {
   .mm-hud-streak {
     display: none;
+  }
+
+  /* Room for the time label on one line; the button keeps its accessible name. */
+  .mm-pause-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .mm-pause {
+    padding: 0;
+  }
+
+  /* Level chips stay at least 44 px wide. */
+  .mm-panel {
+    padding: var(--space-4);
+  }
+
+  .mm-level-grid {
+    gap: 6px;
   }
 }
 

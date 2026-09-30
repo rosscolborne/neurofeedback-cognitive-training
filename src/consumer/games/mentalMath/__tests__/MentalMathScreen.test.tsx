@@ -6,7 +6,7 @@ import type { EegCaptureProvider } from '../../../eeg/eegCapture';
 import type { EegRecordingDraft } from '../../../repositories/eegRecordingRepository';
 import type { EegRecordingOutcome, SaveGameSessionInput, StartedGameSession } from '../../../repositories/gameSessionRepository';
 import type { ProgressWithRecentSessions } from '../../../repositories/progressRepository';
-import { MentalMathScreen } from '../MentalMathScreen';
+import { MentalMathScreen, type MentalMathScreenProps } from '../MentalMathScreen';
 import type { VisibilitySource } from '../visibility';
 import { FEEDBACK_MS } from '../runController';
 import type { MentalMathSessionDraft } from '../sessionDraft';
@@ -30,18 +30,24 @@ function textOf(node: ReactTestInstance | string): string {
   return typeof node === 'string' ? node : node.children.map(textOf).join('');
 }
 
-function harness({ state = pickerState(null), eegProvider = null, eegOutcome = { status: 'none' } as EegRecordingOutcome } = {} as {
+type SaveResult = { sessionId: string; eegRecording: EegRecordingOutcome; acknowledged: Promise<void> };
+
+function harness({ state = pickerState(null), eegProvider = null, eegOutcome = { status: 'none' } as EegRecordingOutcome, saveImpl, getGameSession = vi.fn() } = {} as {
   state?: ProgressWithRecentSessions; eegProvider?: EegCaptureProvider | null; eegOutcome?: EegRecordingOutcome;
+  /** Replaces the default save (queued at once, acknowledged at once) for the call with this index. */
+  saveImpl?: (input: SaveInput, call: number) => Promise<SaveResult>;
+  getGameSession?: (sessionId: string) => Promise<unknown>;
 }) {
   const clock = new ManualClock();
   const visibility = new FakeVisibility();
   const saves: SaveInput[] = [];
-  const save = vi.fn(async (input: SaveInput) => {
+  const save = vi.fn(async (input: SaveInput): Promise<SaveResult> => {
     saves.push(input);
+    if (saveImpl) return saveImpl(input, saves.length - 1);
     return { sessionId: 'sessionAAAAAAAAAAAA1', eegRecording: input.eegRecording ? eegOutcome : { status: 'none' as const }, acknowledged: Promise.resolve() };
   });
-  const startGameSession = vi.fn((): StartedGameSession => ({ sessionId: 'sessionAAAAAAAAAAAA1', seed: SEED, userId: 'player-1', save: save as StartedGameSession['save'] }));
-  const gameSessions = { startGameSession, getGameSession: vi.fn() };
+  const startGameSession = vi.fn((): StartedGameSession => ({ sessionId: 'sessionAAAAAAAAAAAA1', seed: SEED, userId: 'player-1', save: save as unknown as StartedGameSession['save'] }));
+  const gameSessions = { startGameSession, getGameSession: getGameSession as MentalMathScreenProps['gameSessions']['getGameSession'] };
   const progress = { subscribeToProgressWithRecentSessions: vi.fn((_gameId: string, _options: object, onNext: (value: ProgressWithRecentSessions) => void) => { onNext(state); return () => {}; }) };
   const onExit = vi.fn();
   let renderer!: ReactTestRenderer;
@@ -86,7 +92,10 @@ function harness({ state = pickerState(null), eegProvider = null, eegOutcome = {
     // Long enough for every remaining question to time out, feedback flashes included.
     advance(mentalMath.RUN_DURATION_MS * 2);
   };
-  return { renderer, root, clock, visibility, save, saves, startGameSession, onExit, buttons, press, advance, question, hud, radio, typeAnswer, playToEnd };
+  const flush = async () => { await act(async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve(); }); };
+  const title = () => root().findAll((node) => node.props.id === 'mm-handoff-title').map((node) => textOf(node))[0] ?? null;
+  const saveStatus = () => root().findAll((node) => typeof node.props.className === 'string' && node.props.className.startsWith('mm-save ')).map((node) => textOf(node))[0] ?? null;
+  return { renderer, root, clock, visibility, save, saves, startGameSession, onExit, buttons, press, advance, question, hud, radio, typeAnswer, playToEnd, flush, title, saveStatus };
 }
 
 const storageWrites = vi.fn();
@@ -118,7 +127,7 @@ describe('MentalMathScreen', () => {
     h.press('Start at level 1');
     expect(h.hud('time')).toBe('1:30');
     // Submit needs an answer, and a complete answer never submits itself.
-    expect(h.buttons('Submit')[0]!.props.disabled).toBe(true);
+    expect(h.buttons('Submit')[0]!.props['aria-disabled']).toBe('true');
     h.advance(1_000);
     const first = h.question()!;
     h.typeAnswer(answerOf(first));
@@ -227,6 +236,121 @@ describe('MentalMathScreen', () => {
     h.playToEnd([]);
     await act(async () => { await Promise.resolve(); });
     expect(textOf(h.root())).toContain('Simulated EEG (Demo Mode) was not saved: saving EEG needs your EEG consent.');
+  });
+
+  it('never lets a late save result from one run replace the next run, which keeps playing on screen', async () => {
+    let finishSave!: () => void;
+    let acknowledge!: () => void;
+    const h = harness({
+      saveImpl: (_input, call) => (call === 0
+        // Run 1: the save is slow to queue (for example the EEG consent read), then waits for the network.
+        ? new Promise<SaveResult>((resolve) => { finishSave = () => resolve({ sessionId: 'sessionAAAAAAAAAAAA1', eegRecording: { status: 'none' }, acknowledged: new Promise<void>((done) => { acknowledge = done; }) }); })
+        : Promise.resolve({ sessionId: 'sessionAAAAAAAAAAAA2', eegRecording: { status: 'none' }, acknowledged: Promise.resolve() })),
+    });
+    h.press('Start at level 1');
+    h.playToEnd([true]);
+    await h.flush();
+    expect(h.saveStatus()).toBe('Saving your run…');
+    h.press('Play again');
+    h.press('Start at level 1');
+    h.advance(2_000);
+    const runTwoQuestion = h.question();
+    expect(runTwoQuestion).not.toBeNull();
+
+    finishSave();
+    await h.flush();
+    acknowledge();
+    await h.flush();
+    // Run 2 is still the screen, still running, and nothing more was saved.
+    expect(h.title()).toBeNull();
+    expect(h.question()).toBe(runTwoQuestion);
+    expect(h.hud('time')).toBe('1:28');
+    expect(h.saves).toHaveLength(1);
+    h.advance(1_000);
+    expect(h.hud('time')).toBe('1:27');
+
+    h.playToEnd([]);
+    await h.flush();
+    expect(h.saves).toHaveLength(2);
+    expect(h.title()).toBe('Run complete');
+    expect(h.saveStatus()).toBe('Run saved to your account.');
+  });
+
+  it('tears down a run whose screen was replaced, so it never plays on unseen or saves', async () => {
+    const h = harness();
+    h.press('Start at level 1');
+    h.advance(5_000);
+    act(() => h.renderer.unmount());
+    h.advance(mentalMath.RUN_DURATION_MS * 2);
+    expect(h.save).not.toHaveBeenCalled();
+    expect(h.clock.pendingTimers).toBe(0);
+  });
+
+  it('still saves the run when the EEG capture fails to finish, and reports the recording as not captured', async () => {
+    const provider: EegCaptureProvider = { source: 'simulated', label: 'Simulated EEG (Demo Mode)', start: () => ({ finish: () => { throw new Error('capture broke'); }, cancel: vi.fn() }) };
+    const h = harness({ eegProvider: provider });
+    act(() => { h.root().find((node) => node.type === 'input' && node.props.type === 'checkbox').props.onChange({ target: { checked: true } }); });
+    h.press('Start at level 1');
+    h.playToEnd([true]);
+    await h.flush();
+    expect(h.saves).toHaveLength(1);
+    expect(h.saves[0]!.eegRecording).toBeNull();
+    expect(h.saveStatus()).toBe('Run saved to your account.');
+    expect(textOf(h.root())).toContain('No Simulated EEG (Demo Mode) was captured during this run.');
+  });
+
+  it('confirms a save whose acknowledgement was refused when the session is on the server (ambiguous commit)', async () => {
+    const refused = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    const getGameSession = vi.fn(async () => ({ status: 'readable', id: 'sessionAAAAAAAAAAAA1', data: { hasPendingWrites: false }, fromCache: false, hasPendingWrites: false }));
+    const h = harness({
+      getGameSession,
+      saveImpl: async () => ({ sessionId: 'sessionAAAAAAAAAAAA1', eegRecording: { status: 'none' }, acknowledged: Promise.reject(refused) }),
+    });
+    h.press('Start at level 1');
+    h.playToEnd([]);
+    await h.flush();
+    expect(getGameSession).toHaveBeenCalledWith('sessionAAAAAAAAAAAA1');
+    expect(h.saveStatus()).toBe('Run saved to your account.');
+  });
+
+  it('says the run could not be saved when the acknowledgement was refused and the session is not on the server', async () => {
+    const refused = new Error('Missing or insufficient permissions.');
+    const getGameSession = vi.fn(async () => ({ status: 'missing', id: 'sessionAAAAAAAAAAAA1', fromCache: false, hasPendingWrites: false }));
+    const h = harness({
+      getGameSession,
+      saveImpl: async () => ({ sessionId: 'sessionAAAAAAAAAAAA1', eegRecording: { status: 'none' }, acknowledged: Promise.reject(refused) }),
+    });
+    h.press('Start at level 1');
+    h.playToEnd([]);
+    await h.flush();
+    expect(getGameSession).toHaveBeenCalledTimes(1);
+    expect(h.saveStatus()).toBe('This run couldn’t be saved. Missing or insufficient permissions.');
+  });
+
+  it('keeps a pressed key focusable through the feedback flash, and ignores held keys', () => {
+    const listeners: Record<string, (event: KeyboardEvent) => void> = {};
+    vi.stubGlobal('window', { addEventListener: (type: string, listener: (event: KeyboardEvent) => void) => { listeners[type] = listener; }, removeEventListener: vi.fn() });
+    const h = harness();
+    h.press('Start at level 1');
+    h.advance(1_000);
+    const key = (name: string, repeat = false) => act(() => { listeners.keydown!({ key: name, repeat, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as KeyboardEvent); });
+    key('4');
+    key('4', true);
+    key('4', true);
+    expect(h.hud('entry')).toBe('4');
+    key('Enter');
+    key('Enter', true);
+    // During the flash the keys are aria-disabled, never disabled, so focus is not dropped.
+    const submit = h.buttons('Submit')[0]!;
+    expect(submit.props.disabled).toBeUndefined();
+    expect(submit.props['aria-disabled']).toBe('true');
+    expect(h.buttons('4')[0]!.props['aria-disabled']).toBe('true');
+    h.advance(FEEDBACK_MS);
+    expect(h.buttons('4')[0]!.props['aria-disabled']).toBeUndefined();
+    h.press('Pause');
+    h.press('Quit run');
+    expect(h.saves[0]!.session.trials).toHaveLength(1);
+    expect(h.saves[0]!.session.trials[0]).toMatchObject({ response: 4, rtMs: 1_000 });
   });
 
   it('gives identical trials and score with and without simulated EEG for the same seed and inputs', () => {

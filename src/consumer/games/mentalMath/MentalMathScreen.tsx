@@ -3,6 +3,7 @@ import { ArrowLeft, Lock, Pause } from 'lucide-react';
 import { mentalMath } from '@nfct/shared';
 import type { GameClock } from '../../clock/gameClock';
 import type { EegCapture, EegCaptureProvider } from '../../eeg/eegCapture';
+import type { EegRecordingDraft } from '../../repositories/eegRecordingRepository';
 import type { EegRecordingOutcome, GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import { Keypad } from './Keypad';
@@ -54,27 +55,44 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
   onExit,
 }) => {
   const [stage, setStage] = useState<Stage>({ kind: 'picker' });
-  const mounted = useRef(true);
-  const active = useRef<{ controller: MentalMathRunController; game: StartedGameSession; capture: EegCapture | null } | null>(null);
+  const active = useRef<{ controller: MentalMathRunController; capture: EegCapture | null } | null>(null);
 
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      // Leaving mid-run keeps nothing: no save, no partial state.
-      const current = active.current;
-      active.current = null;
-      current?.controller.dispose();
-      current?.capture?.cancel();
-    };
+  /** Tears down a run that has not ended: no save, no partial state. */
+  const discardActiveRun = useCallback(() => {
+    const current = active.current;
+    active.current = null;
+    if (!current) return;
+    current.controller.dispose();
+    try {
+      current.capture?.cancel();
+    } catch {
+      // EEG is optional; a failing provider never affects the game.
+    }
   }, []);
 
-  const saveRun = useCallback((game: StartedGameSession, capture: EegCapture | null, outcome: RunOutcome, eegLabel: string | null) => {
-    const setSave = (save: SaveState) => {
-      if (mounted.current) setStage({ kind: 'handoff', outcome, save, eegLabel });
-    };
-    setSave({ status: 'saving' });
-    const eegRecording = capture?.finish() ?? null;
+  // Leaving the screen mid-run keeps nothing.
+  useEffect(() => discardActiveRun, [discardActiveRun]);
+
+  // A run whose screen is gone is torn down, so it can never keep playing unseen.
+  useEffect(() => {
+    if (active.current && (stage.kind !== 'playing' || stage.controller !== active.current.controller)) discardActiveRun();
+  }, [stage, discardActiveRun]);
+
+  const saveRun = useCallback((game: StartedGameSession, controller: MentalMathRunController, capture: EegCapture | null, outcome: RunOutcome, eegLabel: string | null) => {
+    // Every update names its own run: a late result for this run never replaces a newer run's screen.
+    const setSave = (save: SaveState) => setStage((current) => (
+      current.kind === 'handoff' && current.outcome === outcome ? { ...current, save } : current
+    ));
+    setStage((current) => (
+      current.kind === 'playing' && current.controller === controller ? { kind: 'handoff', outcome, save: { status: 'saving' }, eegLabel } : current
+    ));
+    let eegRecording: EegRecordingDraft | null = null;
+    try {
+      eegRecording = capture?.finish() ?? null;
+    } catch {
+      // EEG is optional: a capture that fails to finish is reported as not captured, and the run is still saved.
+      eegRecording = null;
+    }
     let saved: SavedGameSession;
     void (async () => {
       try {
@@ -108,13 +126,13 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
     const provider = withEeg ? eegProvider : null;
     const eegLabel = provider?.label ?? null;
     let capture: EegCapture | null = null;
-    const controller = new MentalMathRunController({
+    const controller: MentalMathRunController = new MentalMathRunController({
       seed: game.seed,
       startLevel,
       clock,
       onEnd: (outcome) => {
-        active.current = null;
-        saveRun(game, capture, outcome, eegLabel);
+        if (active.current?.controller === controller) active.current = null;
+        saveRun(game, controller, capture, outcome, eegLabel);
       },
     });
     try {
@@ -123,10 +141,11 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
       // EEG is optional: a provider that fails to start never blocks the game.
       capture = null;
     }
-    active.current = { controller, game, capture };
+    discardActiveRun();
+    active.current = { controller, capture };
     setStage({ kind: 'playing', controller, eegLabel: capture ? eegLabel : null });
     controller.start();
-  }, [clock, eegProvider, gameSessions, saveRun]);
+  }, [clock, discardActiveRun, eegProvider, gameSessions, saveRun]);
 
   switch (stage.kind) {
     case 'picker':
@@ -287,12 +306,15 @@ const RunView: React.FC<{
     if (typeof window === 'undefined') return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-      const current = controller.getSnapshot();
-      if (/^[0-9]$/.test(event.key)) controller.pressDigit(Number(event.key));
-      else if (event.key === 'Backspace') controller.deleteDigit();
-      else if (event.key === 'Enter' && current.question && !event.repeat) controller.submit(current.question.id);
-      else return;
+      const digit = /^[0-9]$/.test(event.key);
+      if (!digit && event.key !== 'Backspace' && event.key !== 'Enter') return;
       event.preventDefault();
+      // Holding a digit or Enter never repeats it.
+      if (event.repeat && event.key !== 'Backspace') return;
+      const current = controller.getSnapshot();
+      if (digit) controller.pressDigit(Number(event.key));
+      else if (event.key === 'Backspace') controller.deleteDigit();
+      else if (current.question) controller.submit(current.question.id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -326,7 +348,7 @@ const RunView: React.FC<{
           </div>
         </dl>
         <button ref={pauseRef} type="button" className="mm-pause" onClick={() => controller.pause('player')} disabled={paused || snapshot.phase === 'ended'}>
-          <Pause size={18} aria-hidden="true" /> Pause
+          <Pause size={18} aria-hidden="true" /> <span className="mm-pause-label">Pause</span>
         </button>
       </header>
       {eegLabel && <p className="mm-eeg-tag"><span className="status-tag status-tag-neutral">{eegLabel}: simulated, not measured</span></p>}
@@ -353,7 +375,7 @@ const QuestionCard: React.FC<{ readonly snapshot: RunSnapshot }> = ({ snapshot }
   const tone = feedback === null ? '' : feedback.correct ? ' mm-card-correct' : ' mm-card-wrong';
   return (
     <section className={`mm-card${tone}`} aria-label="Question">
-      <p className="mm-question">{phase === 'waiting' ? 'No more questions this run' : `${text} =`}</p>
+      <p className="mm-question" aria-live="polite">{phase === 'waiting' ? 'No more questions this run' : `${text} =`}</p>
       <p className="mm-entry font-mono">
         <span className="mm-visually-hidden">Your answer: </span>
         {entry === '' ? <span className="mm-entry-placeholder" aria-hidden="true">?</span> : <span data-hud="entry">{entry}</span>}
