@@ -19,7 +19,9 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   `clients/{uid}` / `ClientProfile` or `sessions/{id}` / `SessionRecord`, and do
   not extend `Protocol`, `Experience`, `allowedExperiences` or the self-directed
   plan to represent games. The consumer model (user profile, game session,
-  separate EEG recording) will be built new.
+  separate EEG recording) is built new in `shared/` (`@nfct/shared`); see
+  [ADR-001](docs/nfct/adr-001-consumer-domain-model.md). `shared/` imports
+  only `zod` and its own modules.
 - **EEG is optional.** It must never be required to play and must never drive
   game scores, progression, unlocks or achievements.
 - Do not deploy anything (Firebase, Vercel, Render, App Store) or link this
