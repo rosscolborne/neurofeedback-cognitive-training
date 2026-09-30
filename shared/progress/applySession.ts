@@ -37,13 +37,15 @@ export type ProgressSession = Pick<
 export type SessionOutcome =
   | { readonly validity: 'invalid' }
   | { readonly validity: 'flagged' }
-  | {
-    readonly validity: 'valid';
-    /** Replayed from the trials by the game's scoring. */
-    readonly peakLevel: number;
-    readonly recordKey: string;
-    readonly recordValues: Readonly<Record<string, number>>;
-  };
+  | ValidSessionOutcome;
+
+export type ValidSessionOutcome = {
+  readonly validity: 'valid';
+  /** Replayed from the trials by the game's scoring. */
+  readonly peakLevel: number;
+  readonly recordKey: string;
+  readonly recordValues: Readonly<Record<string, number>>;
+};
 
 export interface ApplySessionInput<Trial, Metrics extends object> {
   /** The current definition of the session's game. */
@@ -53,6 +55,10 @@ export interface ApplySessionInput<Trial, Metrics extends object> {
   readonly outcome: SessionOutcome;
   /** Becomes `updatedAt`. */
   readonly appliedAt: FirestoreTimestamp;
+}
+
+export interface ApplyValidEffectsInput<Trial, Metrics extends object> extends ApplySessionInput<Trial, Metrics> {
+  readonly outcome: ValidSessionOutcome;
 }
 
 /** The value of each of the game's record metrics for one scored session. */
@@ -215,8 +221,74 @@ function withRecords(
 }
 
 /**
+ * The additive part of one counted (valid or flagged) session: completed
+ * sessions, active time and last played. Not idempotent. A session of a newer
+ * game version also starts a new record set here, so a flagged session of the
+ * new version archives the old bests just as a valid one would.
+ */
+function applyTotals<Trial, Metrics extends object>(
+  progress: GameProgress | null,
+  { definition, session, appliedAt }: ApplySessionInput<Trial, Metrics>,
+): GameProgress {
+  let base = progress ?? emptyProgress(definition.id, session.gameVersion, session.endedAt, appliedAt);
+  if (session.gameVersion > base.gameVersion) base = startRecordSet(base, session.gameVersion);
+  return {
+    ...base,
+    updatedAt: appliedAt,
+    sessionsCompleted: base.sessionsCompleted + (session.status === 'completed' ? 1 : 0),
+    activeMs: base.activeMs + session.activeDurationMs,
+    lastPlayedAt: compareTimestamps(session.endedAt, base.lastPlayedAt) > 0 ? session.endedAt : base.lastPlayedAt,
+  };
+}
+
+/**
+ * The effects only a valid session has: records in the record set of the
+ * session's own game version, the best trusted peak level, and the cached
+ * unlocks derived from it. An abandoned session has none of them.
+ *
+ * Idempotent: every effect is a maximum with deterministic ties, so applying
+ * the same session twice (with the same `appliedAt`) gives the same progress
+ * as applying it once. It never touches the totals (completed sessions,
+ * active time, last played), so it is safe for trusted scoring to use when it
+ * upgrades a session it already counted as flagged (NFCT-19).
+ *
+ * Progress must already exist: the session's totals were counted when it was
+ * first processed, which created it.
+ */
+export function applyValidEffects<Trial, Metrics extends object>(
+  progress: GameProgress,
+  input: ApplyValidEffectsInput<Trial, Metrics>,
+): GameProgress {
+  const { definition, sessionId, session, outcome, appliedAt } = input;
+  if (outcome.validity !== 'valid') throw new Error(`applyValidEffects needs a valid outcome, got '${String(outcome.validity)}'`);
+  assertApplicable(progress, input);
+
+  let base = progress;
+  if (session.gameVersion > base.gameVersion) base = startRecordSet(base, session.gameVersion);
+  if (session.status !== 'completed') return { ...base, updatedAt: appliedAt };
+
+  let { bests, bestsArchive } = base;
+  const addTo = (set: Bests) => withRecords(set, outcome.recordKey, outcome.recordValues, sessionId, session.endedAt);
+  if (session.gameVersion === base.gameVersion) {
+    bests = addTo(bests);
+  } else {
+    const version = String(session.gameVersion);
+    bestsArchive = { ...bestsArchive, [version]: addTo(bestsArchive[version] ?? {}) };
+  }
+  const bestPeakLevel = {
+    ...base.bestPeakLevel,
+    [session.modeId]: Math.max(base.bestPeakLevel[session.modeId] ?? outcome.peakLevel, outcome.peakLevel),
+  };
+  const mode = findMode(definition, session.modeId);
+  const unlocked = mode ? { ...base.unlocked, [mode.id]: unlockedStartLevel(mode, { bestPeakLevel }) } : base.unlocked;
+
+  return { ...base, updatedAt: appliedAt, bestPeakLevel, unlocked, bests, bestsArchive };
+}
+
+/**
  * Folds one processed session into a game's progress. Pure, deterministic and
- * non-mutating: it reads no clock and never changes its inputs.
+ * non-mutating: it reads no clock and never changes its inputs. It is the
+ * session's totals followed, for a valid session, by `applyValidEffects`.
  *
  * It is not idempotent: applying the same session twice adds its totals twice.
  * Exactly-once application is the caller's job. Trusted scoring (NFCT-19)
@@ -234,46 +306,20 @@ export function applySession<Trial, Metrics extends object>(
   progress: GameProgress | null,
   input: ApplySessionInput<Trial, Metrics>,
 ): GameProgress | null {
-  const { definition, sessionId, session, outcome, appliedAt } = input;
+  const { outcome } = input;
   if (outcome.validity === 'invalid') return progress;
   assertApplicable(progress, input);
-
-  let base = progress ?? emptyProgress(definition.id, session.gameVersion, session.endedAt, appliedAt);
-  if (session.gameVersion > base.gameVersion) base = startRecordSet(base, session.gameVersion);
-
-  let { bests, bestsArchive, bestPeakLevel, unlocked } = base;
-  if (outcome.validity === 'valid' && session.status === 'completed') {
-    const addTo = (set: Bests) => withRecords(set, outcome.recordKey, outcome.recordValues, sessionId, session.endedAt);
-    if (session.gameVersion === base.gameVersion) {
-      bests = addTo(bests);
-    } else {
-      const version = String(session.gameVersion);
-      bestsArchive = { ...bestsArchive, [version]: addTo(bestsArchive[version] ?? {}) };
-    }
-    bestPeakLevel = {
-      ...bestPeakLevel,
-      [session.modeId]: Math.max(bestPeakLevel[session.modeId] ?? outcome.peakLevel, outcome.peakLevel),
-    };
-    const mode = findMode(definition, session.modeId);
-    if (mode) unlocked = { ...unlocked, [mode.id]: unlockedStartLevel(mode, { bestPeakLevel }) };
-  }
-
-  return {
-    ...base,
-    updatedAt: appliedAt,
-    sessionsCompleted: base.sessionsCompleted + (session.status === 'completed' ? 1 : 0),
-    activeMs: base.activeMs + session.activeDurationMs,
-    lastPlayedAt: compareTimestamps(session.endedAt, base.lastPlayedAt) > 0 ? session.endedAt : base.lastPlayedAt,
-    bestPeakLevel,
-    unlocked,
-    bests,
-    bestsArchive,
-  };
+  const counted = applyTotals(progress, input);
+  return outcome.validity === 'valid' ? applyValidEffects(counted, { ...input, outcome }) : counted;
 }
 
 export interface StoredGameSession {
   readonly id: string;
-  readonly session: GameSession;
+  /**
+   * A stored session, or only the fields progress depends on
+   * (`readSessionProgressFields`): a rebuild never needs trials.
+   */
+  readonly session: ProgressSession & { readonly result?: ServerResult };
 }
 
 /**
