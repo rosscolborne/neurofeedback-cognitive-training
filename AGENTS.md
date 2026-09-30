@@ -27,6 +27,28 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 - Do not deploy anything (Firebase, Vercel, Render, App Store) or link this
   repository to Waveable's hosting, Render service or Xcode Cloud workflows.
 
+## Working on a card
+
+- Give each independent writable task or PR its own branch and git worktree,
+  based on current `origin/main` unless it deliberately stacks on another PR.
+  Never modify another task's worktree or uncommitted work.
+- Stay within the Jira card's scope. Report meaningful unrelated work, or
+  propose a card for it, instead of silently expanding the PR.
+- Respect the canonical Stage 1 design, ADRs and the card's Jira contract. If
+  the implementation conflicts with them, stop at that boundary and report the
+  conflict; do not silently invent a new architecture.
+- Do not add mock or fake data or silent fallbacks unless the card requires
+  them. (Demo Mode's synthetic EEG is an existing, deliberate feature.) Never
+  weaken production behavior just to make a test pass.
+- Before opening or updating a PR, run the relevant [checks](#checks) and
+  follow [Stage 1 test coverage](#stage-1-test-coverage).
+- Do not merge your own PR. Independent reviews follow
+  [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md); exploratory
+  browser QA follows [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md).
+- Finish with a report giving, where applicable: branch and worktree, commit
+  SHA, PR URL, files and scope changed, checks and tests run with results, and
+  unresolved risks, blockers or follow-ups.
+
 ## Checks
 
 ```bash
