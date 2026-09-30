@@ -98,10 +98,404 @@ service cloud.firestore {
         (isClinicMember(session.clinicId) && isPatientInClinic(session.patientId, session.clinicId));
     }
 
-    // User profiles (users/{userId})
-    match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId);
+    // Consumer data model (NFCT-18). See docs/nfct/adr-001-consumer-domain-model.md.
+    //
+    // A signed-in user reads everything under their own users/{uid} and nothing
+    // else. Clients write only their profile, new game sessions and their EEG
+    // recordings, each with an exact schema. Every other consumer document is
+    // written by trusted server code (Admin SDK), which bypasses these rules.
+    // There are no roles, custom claims or cross-user reads.
+    //
+    // Firestore rules OR together, so users/{uid} has exactly one match. It has
+    // two branches: consumer profiles (with schemaVersion) and, until NFCT-4
+    // removes the inherited clinical app, legacy profiles (without).
+    //
+    // Writers always write a supported schemaVersion. Readers upcast every
+    // stored version in shared/, so reads never depend on it. When a version is
+    // bumped, rules accept N - 1 and N for a transition window, each validated
+    // by its own schema, never by a looser one.
+    match /users/{uid} {
+      function exactKeys(data, required, optional) {
+        return data.keys().hasAll(required) && data.keys().hasOnly(required.concat(optional));
+      }
+
+      function boundedText(value, max) {
+        return value is string && value.size() >= 1 && value.size() <= max &&
+          value.matches('^\\S(.*\\S)?$');
+      }
+
+      function boundedTextOrNull(value, max) {
+        return value == null || boundedText(value, max);
+      }
+
+      function intBetween(value, low, high) {
+        return value is int && value >= low && value <= high;
+      }
+
+      function nonNegativeInt(value) {
+        return value is int && value >= 0;
+      }
+
+      function fraction(value) {
+        return value is number && value >= 0 && value <= 1;
+      }
+
+      // Client-generated IDs for game sessions and EEG recordings.
+      function validDocumentId(id) {
+        return id is string && id.matches('^[A-Za-z0-9_-]{16,64}$');
+      }
+
+      // Stable kebab-case game and mode IDs.
+      function slugId(value) {
+        return value is string && value.size() <= 40 &&
+          value.matches('^[a-z][a-z0-9]*(-[a-z0-9]+)*$');
+      }
+
+      // Device-clock intervals: ordered, and not in the future beyond 5 minutes of skew.
+      function deviceInterval(startedAt, endedAt) {
+        return startedAt is timestamp && endedAt is timestamp && startedAt < endedAt &&
+          endedAt <= request.time + duration.value(5, 'm');
+      }
+
+      // Games with scoring code. Adding a game needs a rules deploy.
+      function knownGameIds() {
+        return ['mental-math'];
+      }
+
+      // The actual headset only. Simulated data is `source`, never a model.
+      function eegDeviceModels() {
+        return ['muse-2', 'muse-s', 'muse-s-athena', 'unknown'];
+      }
+
+      // EEG consent copy versions a profile may record. The placeholder stands
+      // in until the consent copy is approved (NFCT-25, NFCT-27), which replaces it.
+      function acceptedEegConsentVersions() {
+        return ['placeholder-1'];
+      }
+
+      // ---- Consumer profile ----
+
+      function validEegConsentShape(consent) {
+        return consent == null || (
+          consent is map && exactKeys(consent, ['version', 'grantedAt'], []) &&
+          boundedText(consent.version, 40) && consent.grantedAt is timestamp
+        );
+      }
+
+      // A newly recorded consent is stamped by the server clock with an accepted version.
+      function eegConsentGrantedNow(consent) {
+        return consent == null || (
+          consent.grantedAt == request.time && consent.version in acceptedEegConsentVersions()
+        );
+      }
+
+      function validWeeklyGoal(goal) {
+        return goal == null || (
+          goal is map && exactKeys(goal, ['kind', 'target'], []) &&
+          goal.kind in ['sessions', 'minutes', 'activeDays'] &&
+          intBetween(goal.target, 1, 10080) &&
+          (goal.kind != 'activeDays' || goal.target <= 7)
+        );
+      }
+
+      function validConsumerProfile(profile) {
+        return exactKeys(profile,
+            ['schemaVersion', 'createdAt', 'updatedAt', 'displayName', 'avatar', 'preferences', 'onboarding', 'eeg'], []) &&
+          profile.schemaVersion == 1 &&
+          profile.createdAt is timestamp &&
+          profile.updatedAt == request.time &&
+          boundedTextOrNull(profile.displayName, 40) &&
+          (profile.avatar == null || (
+            profile.avatar is map && exactKeys(profile.avatar, ['kind', 'presetId'], []) &&
+            profile.avatar.kind == 'preset' && boundedText(profile.avatar.presetId, 40)
+          )) &&
+          profile.preferences is map &&
+          exactKeys(profile.preferences, ['timezone', 'soundEnabled', 'hapticsEnabled', 'weeklyGoal'], []) &&
+          boundedText(profile.preferences.timezone, 64) &&
+          profile.preferences.soundEnabled is bool &&
+          profile.preferences.hapticsEnabled is bool &&
+          validWeeklyGoal(profile.preferences.weeklyGoal) &&
+          profile.onboarding is map &&
+          exactKeys(profile.onboarding, ['version', 'completedAt'], []) &&
+          nonNegativeInt(profile.onboarding.version) &&
+          (profile.onboarding.completedAt == null || profile.onboarding.completedAt is timestamp) &&
+          profile.eeg is map &&
+          exactKeys(profile.eeg, ['enabled', 'consent', 'preferredDevice'], []) &&
+          profile.eeg.enabled is bool &&
+          validEegConsentShape(profile.eeg.consent) &&
+          (profile.eeg.preferredDevice == null || (
+            profile.eeg.preferredDevice is map &&
+            exactKeys(profile.eeg.preferredDevice, ['model'], []) &&
+            profile.eeg.preferredDevice.model in eegDeviceModels()
+          ));
+      }
+
+      function validConsumerProfileCreate(profile) {
+        return validConsumerProfile(profile) &&
+          profile.createdAt == request.time &&
+          eegConsentGrantedNow(profile.eeg.consent);
+      }
+
+      // createdAt is immutable: it is not an updatable key.
+      function validConsumerProfileUpdate(next, previous) {
+        return validConsumerProfile(next) &&
+          next.diff(previous).affectedKeys().hasOnly(
+            ['displayName', 'avatar', 'preferences', 'onboarding', 'eeg', 'updatedAt', 'schemaVersion']) &&
+          (next.eeg.consent == previous.get('eeg', {}).get('consent', null) ||
+            eegConsentGrantedNow(next.eeg.consent));
+      }
+
+      // ---- Legacy profile (transitional; removed with `role` by NFCT-4) ----
+      // Only what the inherited sign-up, role selection and account deletion
+      // write. A legacy profile can never gain schemaVersion, so it can never
+      // become a consumer profile.
+
+      function legacyTextOrNull(value, max) {
+        return value == null || (value is string && value.size() <= max);
+      }
+
+      function validLegacyProfileCreate(profile) {
+        return profile.keys().hasAll(['role']) &&
+          profile.keys().hasOnly(['email', 'displayName', 'createdAt', 'role']) &&
+          profile.role == null &&
+          legacyTextOrNull(profile.get('email', null), 320) &&
+          legacyTextOrNull(profile.get('displayName', null), 200) &&
+          legacyTextOrNull(profile.get('createdAt', null), 40);
+      }
+
+      function validLegacyProfileUpdate(next, previous) {
+        return next.diff(previous).affectedKeys().hasOnly(
+            ['role', 'updatedAt', 'email', 'displayName', 'accountDeletionStartedAt']) &&
+          next.get('role', null) in [null, 'patient', 'clinician'] &&
+          legacyTextOrNull(next.get('email', null), 320) &&
+          legacyTextOrNull(next.get('displayName', null), 200) &&
+          legacyTextOrNull(next.get('updatedAt', null), 40) &&
+          (next.get('accountDeletionStartedAt', null) == previous.get('accountDeletionStartedAt', null) ||
+            next.get('accountDeletionStartedAt', null) == request.time);
+      }
+
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && (
+        ('schemaVersion' in request.resource.data && validConsumerProfileCreate(request.resource.data)) ||
+        (!('schemaVersion' in request.resource.data) && validLegacyProfileCreate(request.resource.data))
+      );
+      allow update: if isOwner(uid) && (
+        ('schemaVersion' in resource.data && validConsumerProfileUpdate(request.resource.data, resource.data)) ||
+        (!('schemaVersion' in resource.data) && validLegacyProfileUpdate(request.resource.data, resource.data))
+      );
+      // Only server-driven account deletion removes a profile.
+      allow delete: if false;
+
+      // ---- Game sessions: client-created once, never updated ----
+      // The client generates the ID at game start and writes the document once
+      // when the game ends. `result` is written only by trusted scoring
+      // (NFCT-19), so it must be absent on create. There is no EEG flag: the
+      // only link is eegRecordings.gameSessionId.
+
+      function validResponseTimeOrNull(times) {
+        return times == null || (
+          times is map && exactKeys(times, ['medianMs', 'meanMs', 'p90Ms'], []) &&
+          times.medianMs is number && times.medianMs >= 0 &&
+          times.meanMs is number && times.meanMs >= 0 &&
+          times.p90Ms is number && times.p90Ms >= 0
+        );
+      }
+
+      // Client-derived and never trusted; the shape is still exact. Per-game
+      // trial and metric shapes are validated by trusted scoring, because rules
+      // cannot iterate a list.
+      function validSessionSummary(summary) {
+        return summary is map &&
+          exactKeys(summary, ['score', 'accuracy', 'trialsTotal', 'trialsCorrect', 'responseTime', 'metrics'], []) &&
+          summary.score is number &&
+          (summary.accuracy == null || fraction(summary.accuracy)) &&
+          nonNegativeInt(summary.trialsTotal) &&
+          (summary.trialsCorrect == null || nonNegativeInt(summary.trialsCorrect)) &&
+          validResponseTimeOrNull(summary.responseTime) &&
+          summary.metrics is map;
+      }
+
+      function validGameSessionCreate(session) {
+        return exactKeys(session, [
+            'schemaVersion', 'userId', 'gameId', 'gameVersion', 'modeId', 'startLevel', 'peakLevel',
+            'status', 'startedAt', 'endedAt', 'activeDurationMs', 'localDate', 'timezone', 'createdAt',
+            'client', 'trials', 'summary'
+          ], []) &&
+          session.schemaVersion == 1 &&
+          session.userId == uid &&
+          session.gameId in knownGameIds() &&
+          session.gameVersion is int && session.gameVersion >= 1 &&
+          slugId(session.modeId) &&
+          intBetween(session.startLevel, 1, 50) &&
+          intBetween(session.peakLevel, session.startLevel, 50) &&
+          session.status in ['completed', 'abandoned'] &&
+          deviceInterval(session.startedAt, session.endedAt) &&
+          intBetween(session.activeDurationMs, 0, 3600000) &&
+          session.localDate is string && session.localDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+          boundedText(session.timezone, 64) &&
+          session.createdAt == request.time &&
+          session.client is map && exactKeys(session.client, ['appVersion', 'platform'], []) &&
+          boundedText(session.client.appVersion, 40) &&
+          session.client.platform in ['ios', 'android', 'web'] &&
+          session.trials is list && session.trials.size() <= 400 &&
+          validSessionSummary(session.summary);
+      }
+
+      match /gameSessions/{sessionId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validDocumentId(sessionId) &&
+          validGameSessionCreate(request.resource.data);
+        // Write-once. Account deletion removes sessions with the Admin SDK.
+        allow update, delete: if false;
+      }
+
+      // ---- EEG recordings: optional, consent-gated, summary only ----
+      // No raw samples and no affective or state fields. Never read by
+      // progression. The owner may delete a recording at any time.
+
+      function validDistributionOrNull(distribution) {
+        return distribution == null || (
+          distribution is map && exactKeys(distribution, ['mean', 'median', 'p10', 'p90', 'n'], []) &&
+          distribution.mean is number && distribution.median is number &&
+          distribution.p10 is number && distribution.p90 is number &&
+          nonNegativeInt(distribution.n)
+        );
+      }
+
+      function absentOrFraction(data, key) {
+        return !(key in data) || fraction(data[key]);
+      }
+
+      function validEegDevice(device) {
+        return device is map &&
+          exactKeys(device, ['model', 'firmwareVersion', 'transport', 'channels', 'sampleRateHz'], []) &&
+          device.model in eegDeviceModels() &&
+          boundedTextOrNull(device.firmwareVersion, 40) &&
+          device.transport in ['web-bluetooth', 'native-ble', 'brainflow'] &&
+          device.channels is list && device.channels.size() >= 1 && device.channels.size() <= 16 &&
+          device.sampleRateHz is number && device.sampleRateHz > 0 && device.sampleRateHz <= 10000;
+      }
+
+      function validEegProcessing(processing) {
+        return processing is map &&
+          exactKeys(processing, ['service', 'serviceVersion', 'featureVersion', 'windowSeconds'], []) &&
+          // `service` is a rules keyword, so it needs bracket access.
+          processing['service'] == 'brainflow-service' &&
+          boundedText(processing.serviceVersion, 40) &&
+          processing.featureVersion is int && processing.featureVersion >= 1 &&
+          processing.windowSeconds is number && processing.windowSeconds > 0 && processing.windowSeconds <= 60;
+      }
+
+      function validEegCalibration(calibration) {
+        return calibration is map &&
+          exactKeys(calibration, ['status', 'windowsCollected', 'windowsRequired'], []) &&
+          calibration.status in ['none', 'partial', 'complete'] &&
+          nonNegativeInt(calibration.windowsCollected) &&
+          nonNegativeInt(calibration.windowsRequired);
+      }
+
+      function validEegQuality(quality) {
+        return quality is map &&
+          exactKeys(quality, ['windowsTotal', 'windowsUsable', 'usableFraction', 'channelGoodFraction', 'artifactFraction'], []) &&
+          nonNegativeInt(quality.windowsTotal) &&
+          nonNegativeInt(quality.windowsUsable) && quality.windowsUsable <= quality.windowsTotal &&
+          fraction(quality.usableFraction) &&
+          quality.channelGoodFraction is map && quality.channelGoodFraction.size() <= 16 &&
+          fraction(quality.artifactFraction);
+      }
+
+      function validEegSummary(summary) {
+        return summary is map &&
+          exactKeys(summary, ['mindfulness', 'restfulness', 'relativeBandPower'], []) &&
+          validDistributionOrNull(summary.mindfulness) &&
+          validDistributionOrNull(summary.restfulness) &&
+          (summary.relativeBandPower == null || (
+            summary.relativeBandPower is map &&
+            summary.relativeBandPower.keys().hasOnly(['delta', 'theta', 'alpha', 'beta', 'gamma']) &&
+            absentOrFraction(summary.relativeBandPower, 'delta') &&
+            absentOrFraction(summary.relativeBandPower, 'theta') &&
+            absentOrFraction(summary.relativeBandPower, 'alpha') &&
+            absentOrFraction(summary.relativeBandPower, 'beta') &&
+            absentOrFraction(summary.relativeBandPower, 'gamma')
+          ));
+      }
+
+      function validEegTimeline(timeline) {
+        return timeline == null || (
+          timeline is map && exactKeys(timeline, ['bucketSeconds', 'mindfulness', 'restfulness'], []) &&
+          timeline.bucketSeconds == 10 &&
+          timeline.mindfulness is list && timeline.mindfulness.size() <= 360 &&
+          timeline.restfulness is list && timeline.restfulness.size() == timeline.mindfulness.size()
+        );
+      }
+
+      function validEegRecordingCreate(recording) {
+        return exactKeys(recording, [
+            'schemaVersion', 'userId', 'gameSessionId', 'source', 'createdAt', 'startedAt', 'endedAt',
+            'device', 'processing', 'calibration', 'quality', 'summary', 'timeline'
+          ], []) &&
+          recording.schemaVersion == 1 &&
+          recording.userId == uid &&
+          validDocumentId(recording.gameSessionId) &&
+          recording.source in ['measured', 'simulated'] &&
+          recording.createdAt == request.time &&
+          deviceInterval(recording.startedAt, recording.endedAt) &&
+          validEegDevice(recording.device) &&
+          validEegProcessing(recording.processing) &&
+          validEegCalibration(recording.calibration) &&
+          validEegQuality(recording.quality) &&
+          validEegSummary(recording.summary) &&
+          validEegTimeline(recording.timeline);
+      }
+
+      // Evaluated after the write, so a session and its recording can be
+      // written in one batch, and consent granted in that batch counts.
+      function linkedSessionExistsAfter(sessionId) {
+        return existsAfter(/databases/$(database)/documents/users/$(uid)/gameSessions/$(sessionId));
+      }
+
+      function hasEegConsentAfter() {
+        return getAfter(/databases/$(database)/documents/users/$(uid)).data
+          .get('eeg', {}).get('consent', null) != null;
+      }
+
+      match /eegRecordings/{recordingId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && validDocumentId(recordingId) &&
+          validEegRecordingCreate(request.resource.data) &&
+          linkedSessionExistsAfter(request.resource.data.gameSessionId) &&
+          hasEegConsentAfter();
+        allow update: if false;
+        allow delete: if isOwner(uid);
+      }
+
+      // ---- Server-owned aggregates: owner-read, never client-written ----
+      // Maintained by trusted scoring (NFCT-19) from sessions.
+
+      match /progress/{gameId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
+      match /stats/{statsId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
+      match /dailyStats/{localDate} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
+      match /achievements/{achievementId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+    }
+
+    // Account-deletion ledger: server only (NFCT-23). No client access at all.
+    match /accountDeletions/{uid} {
+      allow read, write: if false;
     }
 
     // A clinician creates an invitation, then the intended patient accepts it
@@ -952,6 +1346,12 @@ service cloud.firestore {
         request.resource.data.clinicId == resource.data.clinicId &&
         isClinicMember(resource.data.clinicId);
       allow delete: if false;
+    }
+
+    // Everything not matched above is denied. Rules OR together, so this
+    // grants nothing; it makes the default explicit.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

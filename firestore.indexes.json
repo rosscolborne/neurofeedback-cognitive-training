@@ -1,0 +1,28 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "gameSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gameId", "order": "ASCENDING" },
+        { "fieldPath": "endedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "accountDeletions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "gameSessions", "fieldPath": "trials", "indexes": [] },
+    { "collectionGroup": "gameSessions", "fieldPath": "summary.metrics", "indexes": [] },
+    { "collectionGroup": "gameSessions", "fieldPath": "result.reasons", "indexes": [] },
+    { "collectionGroup": "eegRecordings", "fieldPath": "timeline", "indexes": [] },
+    { "collectionGroup": "eegRecordings", "fieldPath": "quality.channelGoodFraction", "indexes": [] },
+    { "collectionGroup": "eegRecordings", "fieldPath": "summary", "indexes": [] }
+  ]
+}
