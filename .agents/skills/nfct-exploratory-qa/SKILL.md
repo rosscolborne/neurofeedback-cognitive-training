@@ -6,7 +6,10 @@ description: Explore the running NFCT app through a browser like a user, looking
 # NFCT exploratory browser QA
 
 Exploratory QA complements the deterministic Playwright suite; it does not
-replace it. Its output is a findings report, not code.
+replace it. Its output is a findings report, not code. It can be an
+independent pass, or an implementer checking their own UI work as
+[nfct-frontend-design](../nfct-frontend-design/SKILL.md) asks. In that case the
+implementer fixes in-scope findings after the pass, still as the implementer.
 
 ## Set up
 
@@ -39,9 +42,18 @@ EEG is optional. Check that every flow is usable with no headset connected.
 Do not assume Demo Mode or other simulated EEG affects cognitive scores,
 progression, unlocks or achievements; if it does, that is a bug.
 
-Throughout, watch for layout and visual problems, unexpected focus behavior,
-stale UI after state changes, console errors and failed network requests,
-where the browser tooling exposes them.
+Throughout, check the UI itself:
+
+- spacing, alignment, overflow and clipping;
+- layout shifts when scores, feedback, timers or validation messages change;
+- keyboard navigation and focus: visible focus, sensible order, and focus
+  landing somewhere sensible after each step;
+- disabled and loading states, and the timing of feedback;
+- behavior at a small window and a narrow, phone-like width;
+- stale UI after state changes;
+- console errors and failed network requests, where the browser tooling
+  exposes them;
+- whether the flow feels coherent as a user journey from start to finish.
 
 ## Report
 

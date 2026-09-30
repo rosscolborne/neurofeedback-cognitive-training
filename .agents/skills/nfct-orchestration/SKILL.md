@@ -40,7 +40,7 @@ implementer.
 
 | Role | Skill | Hand-off |
 | --- | --- | --- |
-| Implementation | [nfct-worktrees](../nfct-worktrees/SKILL.md), [testing](../neurasticity-development-testing/SKILL.md) | PR with targeted tests and the AGENTS.md completion report |
+| Implementation | [nfct-worktrees](../nfct-worktrees/SKILL.md), [testing](../neurasticity-development-testing/SKILL.md), plus [nfct-frontend-design](../nfct-frontend-design/SKILL.md) for user-facing work | PR with targeted tests and the AGENTS.md completion report |
 | Deterministic testing | [testing](../neurasticity-development-testing/SKILL.md) | Tests in the PR, with commands and results. Usually the implementer; a separate stream for cross-card journeys such as NFCT-10 |
 | Independent review | [nfct-pr-review](../nfct-pr-review/SKILL.md) | Classified findings and a verdict |
 | Integration | This skill, [Integrate](#integrate) | Integrated branch or rebased PRs, full-suite results |

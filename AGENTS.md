@@ -65,7 +65,8 @@ owns the task:
 | [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md) | Choose and run the right test layers |
 | [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md) | Independently review a PR (read-only) |
 | [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
-| [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Explore the running app in a browser like a user |
+| [nfct-frontend-design](.agents/skills/nfct-frontend-design/SKILL.md) | Design and build user-facing UI and game HUDs within the existing visual language |
+| [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Explore the running app in a browser like a user, including UI checks |
 | [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, coordinate and integrate multi-stream work |
 
 ## Checks
