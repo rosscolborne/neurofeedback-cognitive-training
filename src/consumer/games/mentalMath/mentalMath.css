@@ -1,0 +1,444 @@
+/* Mental Math (NFCT-21). Same column, surfaces and tokens as the patient app. */
+
+.mm-screen {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: var(--space-4);
+  padding-top: max(var(--space-4), env(safe-area-inset-top, 16px));
+  padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 16px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background-color: var(--surface-patient-base);
+}
+
+.mm-topbar {
+  display: flex;
+  align-items: center;
+}
+
+.mm-back {
+  min-height: 44px;
+  padding-left: var(--space-2);
+}
+
+.mm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  background-color: var(--surface-patient-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.mm-title {
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.mm-title:focus {
+  outline: none;
+}
+
+.mm-muted {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.mm-help {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mm-label {
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.mm-actions > .btn {
+  flex: 1 1 140px;
+  min-height: 48px;
+}
+
+/* ---- Start-level picker ---- */
+
+.mm-levels {
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mm-level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.mm-level {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 48px;
+  border: 1.5px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-patient-card);
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.mm-level:hover {
+  border-color: var(--brand-primary);
+}
+
+.mm-level-selected {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+
+.mm-level-locked {
+  border-style: dashed;
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.mm-level-locked:hover {
+  border-color: var(--border-default);
+}
+
+.mm-level:has(input:focus-visible) {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.mm-levels:disabled .mm-level {
+  cursor: progress;
+}
+
+.mm-eeg-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-patient-recessed);
+  cursor: pointer;
+}
+
+.mm-eeg-option input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--brand-primary);
+}
+
+.mm-eeg-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mm-eeg-option-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mm-start {
+  width: 100%;
+  min-height: 52px;
+}
+
+.mm-start:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ---- The run ---- */
+
+.mm-run {
+  gap: var(--space-3);
+}
+
+.mm-hud {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-patient-card);
+}
+
+.mm-hud-stats {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.mm-hud-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mm-hud-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mm-hud-value {
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.mm-pause {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-patient-card);
+  color: var(--text-primary);
+  font: 600 14px var(--font-body);
+  cursor: pointer;
+}
+
+.mm-pause:focus-visible,
+.mm-key:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.mm-pause:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mm-eeg-tag {
+  display: flex;
+  justify-content: center;
+}
+
+.mm-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-patient-card);
+  text-align: center;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.mm-card-correct {
+  border-color: var(--status-active);
+  background-color: var(--status-active-bg);
+}
+
+.mm-card-wrong {
+  border-color: var(--status-alert);
+  background-color: var(--status-alert-bg);
+}
+
+.mm-question {
+  color: var(--text-primary);
+  font-size: clamp(26px, 8vw, 34px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.mm-entry {
+  min-width: 6ch;
+  min-height: 52px;
+  padding: var(--space-1) var(--space-4);
+  border-bottom: 2px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.mm-entry-placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Reserved so the layout never shifts when feedback appears. */
+.mm-feedback {
+  min-height: 1.5em;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mm-card-correct .mm-feedback {
+  color: var(--status-active-text);
+}
+
+.mm-card-wrong .mm-feedback {
+  color: var(--status-alert-text);
+}
+
+.mm-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: auto;
+}
+
+.mm-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-patient-card);
+  color: var(--text-primary);
+  font: 600 24px var(--font-body);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.mm-key:active:not(:disabled) {
+  background-color: var(--surface-patient-recessed);
+}
+
+.mm-key-muted {
+  color: var(--text-secondary);
+  background-color: var(--surface-patient-recessed);
+}
+
+.mm-key-submit {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-size: 17px;
+}
+
+.mm-key-submit:active:not(:disabled) {
+  background-color: var(--brand-primary-hover);
+}
+
+.mm-key:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mm-paused {
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-5);
+  border-color: var(--status-paused);
+}
+
+.mm-paused-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 400;
+  color: var(--status-paused-text);
+}
+
+.mm-paused .mm-actions {
+  width: 100%;
+}
+
+/* ---- Handoff ---- */
+
+.mm-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mm-result-value {
+  color: var(--text-primary);
+  font-size: 44px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.mm-save {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mm-save-confirmed {
+  background-color: var(--status-active-bg);
+  color: var(--status-active-text);
+}
+
+.mm-save-failed {
+  background-color: var(--status-alert-bg);
+  color: var(--status-alert-text);
+}
+
+@media (max-width: 360px) {
+  .mm-hud-streak {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-card,
+  .mm-level {
+    transition: none;
+  }
+}
