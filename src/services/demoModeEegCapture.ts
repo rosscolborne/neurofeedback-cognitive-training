@@ -53,12 +53,19 @@ export function createDemoModeEegProvider(engine: DemoEngine = defaultEngine, no
       const windows: EegWindowSample[] = [];
       let pending: EEGDataPoint[] = [];
       let stopped = false;
+      // Once a headset connects the engine reports measured data, which must
+      // never be summarised under 'simulated': the whole capture is void.
+      let voided = false;
 
       engine.isDemoMode = true;
       engine.setSimulatedState('auto');
       engine.start(SAMPLE_INTERVAL_MS);
       const unsubscribe = engine.subscribe((point) => {
-        if (stopped) return;
+        if (stopped || voided) return;
+        if (engine.isHardwareConnected) {
+          voided = true;
+          return;
+        }
         pending.push(point);
         if (pending.length < SAMPLES_PER_WINDOW) return;
         const values = (pick: (sample: EEGDataPoint) => number | null) => pending.map(pick).filter((value): value is number => value !== null);
@@ -82,7 +89,8 @@ export function createDemoModeEegProvider(engine: DemoEngine = defaultEngine, no
 
       return {
         finish() {
-          if (!stop()) return null;
+          const measuredDataArrived = voided || engine.isHardwareConnected;
+          if (!stop() || measuredDataArrived) return null;
           return summarizeEegWindows({
             source: 'simulated',
             device: { ...DEMO_MODE_DEVICE, channels: [...DEMO_MODE_DEVICE.channels] },

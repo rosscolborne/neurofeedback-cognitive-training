@@ -228,6 +228,19 @@ describe('MentalMathScreen', () => {
     expect(textOf(h.root())).not.toMatch(/measured EEG/i);
   });
 
+  it('labels a measured provider as measured, from the provider’s own source', async () => {
+    const provider: EegCaptureProvider = { source: 'measured', label: 'Muse S', start: () => ({ finish: () => ({ source: 'measured' } as EegRecordingDraft), cancel: vi.fn() }) };
+    const h = harness({ eegProvider: provider, eegOutcome: { status: 'included', recordingId: 'recordingAAAAAAAAAA1' } });
+    act(() => { h.root().find((node) => node.type === 'input' && node.props.type === 'checkbox').props.onChange({ target: { checked: true } }); });
+    h.press('Start at level 1');
+    expect(textOf(h.root())).toContain('Muse S: measured');
+    expect(textOf(h.root())).not.toMatch(/simulated/i);
+    h.playToEnd([]);
+    await h.flush();
+    expect(textOf(h.root())).toContain('Muse S recording saved with this run.');
+    expect(textOf(h.root())).not.toMatch(/simulated|not a measurement/i);
+  });
+
   it('says so when the simulated recording could not be saved', async () => {
     const provider: EegCaptureProvider = { source: 'simulated', label: 'Simulated EEG (Demo Mode)', start: () => ({ finish: () => ({ source: 'simulated' } as EegRecordingDraft), cancel: vi.fn() }) };
     const h = harness({ eegProvider: provider, eegOutcome: { status: 'skipped', reason: 'consent-required', message: 'no consent' } });

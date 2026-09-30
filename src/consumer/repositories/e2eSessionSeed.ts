@@ -6,7 +6,10 @@
 // the demo emulator project. Anywhere else there is no seed source, and the
 // repository draws every seed from crypto.getRandomValues.
 
-export const E2E_EMULATOR_PROJECT_ID = 'demo-neurasticity-protocol-e2e';
+import { EMULATOR_PROJECT_ID } from '../../services/firebaseConfig';
+
+/** The emulator project, shared with the emulator wiring so the two gates cannot drift. */
+export const E2E_EMULATOR_PROJECT_ID = EMULATOR_PROJECT_ID;
 /** The seed every game session gets in the local-emulator browser suite. */
 export const E2E_FIXED_SESSION_SEED = 20_260_930;
 

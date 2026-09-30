@@ -53,6 +53,23 @@ describe('Demo Mode EEG provider', () => {
     expect(engine.isDemoMode).toBe(false);
   });
 
+  it('drops the whole recording if a headset connects during the capture, so measured data is never labelled simulated', () => {
+    const engine = fakeEngine();
+    const capture = createDemoModeEegProvider(engine).start();
+    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50 } });
+    engine.isHardwareConnected = true;
+    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 90, restfulnessScore: 90 } });
+    engine.isHardwareConnected = false;
+    expect(capture.finish()).toBeNull();
+    expect(engine.isDemoMode).toBe(false);
+
+    // A headset still connected at the end voids it too, even with no sample in between.
+    const second = createDemoModeEegProvider(engine).start();
+    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50 } });
+    engine.isHardwareConnected = true;
+    expect(second.finish()).toBeNull();
+  });
+
   it('cancel discards everything', () => {
     const engine = fakeEngine();
     const capture = createDemoModeEegProvider(engine).start();

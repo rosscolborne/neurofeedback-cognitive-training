@@ -3,6 +3,7 @@ import { ArrowLeft, Lock, Pause } from 'lucide-react';
 import { mentalMath } from '@nfct/shared';
 import type { GameClock } from '../../clock/gameClock';
 import type { EegCapture, EegCaptureProvider } from '../../eeg/eegCapture';
+import type { EegSource } from '@nfct/shared';
 import type { EegRecordingDraft } from '../../repositories/eegRecordingRepository';
 import type { EegRecordingOutcome, GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
@@ -35,10 +36,13 @@ type SaveState =
   | { readonly status: 'confirmed'; readonly eeg: EegRecordingOutcome }
   | { readonly status: 'failed'; readonly message: string };
 
+/** What the player is told about the EEG provider that ran: its label and its provenance. */
+type EegInfo = { readonly label: string; readonly source: EegSource };
+
 type Stage =
   | { readonly kind: 'picker' }
-  | { readonly kind: 'playing'; readonly controller: MentalMathRunController; readonly eegLabel: string | null }
-  | { readonly kind: 'handoff'; readonly outcome: RunOutcome; readonly save: SaveState; readonly eegLabel: string | null }
+  | { readonly kind: 'playing'; readonly controller: MentalMathRunController; readonly eeg: EegInfo | null }
+  | { readonly kind: 'handoff'; readonly outcome: RunOutcome; readonly save: SaveState; readonly eeg: EegInfo | null }
   | { readonly kind: 'start-failed'; readonly message: string };
 
 function errorMessage(error: unknown): string {
@@ -78,13 +82,13 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
     if (active.current && (stage.kind !== 'playing' || stage.controller !== active.current.controller)) discardActiveRun();
   }, [stage, discardActiveRun]);
 
-  const saveRun = useCallback((game: StartedGameSession, controller: MentalMathRunController, capture: EegCapture | null, outcome: RunOutcome, eegLabel: string | null) => {
+  const saveRun = useCallback((game: StartedGameSession, controller: MentalMathRunController, capture: EegCapture | null, outcome: RunOutcome, eeg: EegInfo | null) => {
     // Every update names its own run: a late result for this run never replaces a newer run's screen.
     const setSave = (save: SaveState) => setStage((current) => (
       current.kind === 'handoff' && current.outcome === outcome ? { ...current, save } : current
     ));
     setStage((current) => (
-      current.kind === 'playing' && current.controller === controller ? { kind: 'handoff', outcome, save: { status: 'saving' }, eegLabel } : current
+      current.kind === 'playing' && current.controller === controller ? { kind: 'handoff', outcome, save: { status: 'saving' }, eeg } : current
     ));
     let eegRecording: EegRecordingDraft | null = null;
     try {
@@ -124,7 +128,7 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
       return;
     }
     const provider = withEeg ? eegProvider : null;
-    const eegLabel = provider?.label ?? null;
+    const eeg: EegInfo | null = provider ? { label: provider.label, source: provider.source } : null;
     let capture: EegCapture | null = null;
     const controller: MentalMathRunController = new MentalMathRunController({
       seed: game.seed,
@@ -132,7 +136,7 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
       clock,
       onEnd: (outcome) => {
         if (active.current?.controller === controller) active.current = null;
-        saveRun(game, controller, capture, outcome, eegLabel);
+        saveRun(game, controller, capture, outcome, eeg);
       },
     });
     try {
@@ -143,7 +147,7 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
     }
     discardActiveRun();
     active.current = { controller, capture };
-    setStage({ kind: 'playing', controller, eegLabel: capture ? eegLabel : null });
+    setStage({ kind: 'playing', controller, eeg: capture ? eeg : null });
     controller.start();
   }, [clock, discardActiveRun, eegProvider, gameSessions, saveRun]);
 
@@ -151,9 +155,9 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
     case 'picker':
       return <StartLevelPicker progress={progress} eegProvider={eegProvider} onStart={startRun} onExit={onExit} />;
     case 'playing':
-      return <RunView controller={stage.controller} eegLabel={stage.eegLabel} visibility={visibility} />;
+      return <RunView controller={stage.controller} eeg={stage.eeg} visibility={visibility} />;
     case 'handoff':
-      return <RunHandoff outcome={stage.outcome} save={stage.save} eegLabel={stage.eegLabel} onPlayAgain={() => setStage({ kind: 'picker' })} onExit={onExit} />;
+      return <RunHandoff outcome={stage.outcome} save={stage.save} eeg={stage.eeg} onPlayAgain={() => setStage({ kind: 'picker' })} onExit={onExit} />;
     case 'start-failed':
       return (
         <div className="mm-screen">
@@ -287,9 +291,9 @@ const numberFormat = new Intl.NumberFormat();
 
 const RunView: React.FC<{
   readonly controller: MentalMathRunController;
-  readonly eegLabel: string | null;
+  readonly eeg: EegInfo | null;
   readonly visibility: VisibilitySource;
-}> = ({ controller, eegLabel, visibility }) => {
+}> = ({ controller, eeg, visibility }) => {
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const resumeRef = useRef<HTMLButtonElement>(null);
   const pauseRef = useRef<HTMLButtonElement>(null);
@@ -351,7 +355,7 @@ const RunView: React.FC<{
           <Pause size={18} aria-hidden="true" /> <span className="mm-pause-label">Pause</span>
         </button>
       </header>
-      {eegLabel && <p className="mm-eeg-tag"><span className="status-tag status-tag-neutral">{eegLabel}: simulated, not measured</span></p>}
+      {eeg && <p className="mm-eeg-tag"><span className="status-tag status-tag-neutral">{eeg.label}: {eeg.source === 'simulated' ? 'simulated, not measured' : 'measured'}</span></p>}
 
       {paused ? <PausePanel snapshot={snapshot} resumeRef={resumeRef} onResume={() => controller.resume()} onQuit={() => controller.quit()} /> : (
         <>
@@ -409,10 +413,12 @@ const PausePanel: React.FC<{
 
 // ---- Post-run handoff (NFCT-22 owns the full summary) ----
 
-function eegMessage(eeg: EegRecordingOutcome, label: string): string {
+function eegMessage(eeg: EegRecordingOutcome, { label, source }: EegInfo): string {
   switch (eeg.status) {
     case 'included':
-      return `${label} recording saved with this run. It is simulated data, not a measurement.`;
+      return source === 'simulated'
+        ? `${label} recording saved with this run. It is simulated data, not a measurement.`
+        : `${label} recording saved with this run.`;
     case 'skipped':
       return eeg.reason === 'consent-required'
         ? `${label} was not saved: saving EEG needs your EEG consent.`
@@ -427,10 +433,10 @@ function eegMessage(eeg: EegRecordingOutcome, label: string): string {
 const RunHandoff: React.FC<{
   readonly outcome: RunOutcome;
   readonly save: SaveState;
-  readonly eegLabel: string | null;
+  readonly eeg: EegInfo | null;
   readonly onPlayAgain: () => void;
   readonly onExit: () => void;
-}> = ({ outcome, save, eegLabel, onPlayAgain, onExit }) => {
+}> = ({ outcome, save, eeg, onPlayAgain, onExit }) => {
   const scored = mentalMath.score(outcome.run.trials, { modeId: mentalMath.MODE_ID, startLevel: outcome.run.startLevel });
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
@@ -452,7 +458,7 @@ const RunHandoff: React.FC<{
           {outcome.run.trials.length} {outcome.run.trials.length === 1 ? 'question' : 'questions'} attempted, {scored.metrics.correct} correct.
         </p>
         <p className={`mm-save mm-save-${save.status}`} role="status">{saveText}</p>
-        {eegLabel && save.status !== 'saving' && save.status !== 'failed' && <p className="mm-help">{eegMessage(save.eeg, eegLabel)}</p>}
+        {eeg && save.status !== 'saving' && save.status !== 'failed' && <p className="mm-help">{eegMessage(save.eeg, eeg)}</p>}
         <p className="mm-help">The server checks every run before it counts toward your records and unlocks. Until then this score is provisional.</p>
         <div className="mm-actions">
           <button type="button" className="btn btn-primary" onClick={onPlayAgain}>Play again</button>
