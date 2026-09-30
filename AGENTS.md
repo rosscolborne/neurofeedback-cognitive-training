@@ -39,8 +39,18 @@ More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/ne
 
 ## Running locally
 
-There is no NFCT Firebase project configured yet, so the app runs only against
-the emulators until one is set up in `.env.local`:
+Development is emulator-first. The NFCT dev Firebase project is `nfct-dev`
+(Spark plan, `northamerica-northeast2`), but do not create a `.env.local` that
+points ordinary development at it.
+
+`.firebaserc` has a `dev` alias for `nfct-dev` and an `emulator` alias, and
+deliberately no `default`. Keep at least two aliases: the Firebase CLI treats a
+lone alias as the default. A bare `firebase deploy` therefore has no target.
+Deploys to `nfct-dev` are manual, run by the owner after tests pass, and always
+name it (`--project dev`). Never run `firebase use dev`: it saves an active
+project for this directory, which a bare deploy would then use.
+
+Run the app against the emulators:
 
 ```bash
 npx firebase emulators:start --only auth,firestore --project demo-neurasticity-protocol-e2e
