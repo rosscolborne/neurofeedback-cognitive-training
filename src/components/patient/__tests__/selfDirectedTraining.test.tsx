@@ -79,7 +79,7 @@ describe('self-directed patient shell', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked())); });
     tab(renderer, 'Train');
-    const gameCard = renderer.root.findAll((node) => node.props.className === 'card-patient train-game-card')[0]!;
+    const gameCard = renderer.root.findAll((node) => node.props.className === 'train-game-card')[0]!;
     expect(hasText(gameCard, 'Mental Math')).toBe(true);
     act(() => { gameCard.props.onClick(); });
     const game = renderer.root.findAll((node) => (node.type as unknown) === 'mental-math-game');

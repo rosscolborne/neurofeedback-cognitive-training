@@ -1568,6 +1568,24 @@ input, select, textarea, button {
   font-size: 11px;
 }
 
+/* A game on the Train tab (NFCT-21): styled like an experience card, but not
+   part of the assigned experience catalogue, so it is not a .card-patient. */
+.train-grid > .train-game-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  background-color: var(--surface-patient-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.2s ease;
+}
+
 .train-card-research {
   position: relative;
   z-index: 1;
