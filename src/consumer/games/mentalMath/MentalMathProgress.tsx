@@ -59,7 +59,8 @@ function formatWhen(ms: number): string {
 const HistoryItem: React.FC<{ readonly row: HistoryRow }> = ({ row }) => {
   const tag = historyTag(row);
   return (
-    <li className="mm-history-row" data-history-row={row.id}>
+    // Focusable from script only: after "Show more runs", focus moves to the first run it added.
+    <li className="mm-history-row" data-history-row={row.id} tabIndex={-1}>
       <span className="mm-history-main">
         <span className="mm-history-when">{formatWhen(row.endedAtMs)}</span>
         <span className="mm-history-meta">
@@ -82,6 +83,9 @@ export const MentalMathProgress: React.FC<MentalMathProgressProps> = ({ progress
   const [firstPage, setFirstPage] = useState<Loaded<GameSessionHistoryPage>>({ status: 'loading' });
   const [older, setOlder] = useState<OlderPages | null>(null);
   const [loadingMore, setLoadingMore] = useState<'idle' | 'loading' | 'failed'>('idle');
+  /** The first run a "Show more runs" page added, to move focus to once it renders (the button may be gone). */
+  const focusRow = useRef<string | null>(null);
+  const historyRef = useRef<HTMLOListElement>(null);
   const request = useRef(0);
 
   useEffect(() => { headingRef.current?.focus(); }, []);
@@ -129,11 +133,20 @@ export const MentalMathProgress: React.FC<MentalMathProgressProps> = ({ progress
         unreadable: (olderPages?.unreadable ?? 0) + page.unreadable.length,
         nextCursor: page.nextCursor,
       });
+      focusRow.current = page.entries.find(isTimed90)?.id ?? null;
       setLoadingMore('idle');
     } catch {
       if (request.current === ticket) setLoadingMore('failed');
     }
   }, [first, firstBoundary, gameSessions, loadingMore, olderPages]);
+
+  useEffect(() => {
+    if (focusRow.current === null) return;
+    const row = historyRef.current?.querySelector<HTMLElement>(`[data-history-row="${focusRow.current}"]`);
+    if (!row) return;
+    row.focus();
+    focusRow.current = null;
+  });
 
   const progressNow = useMemo(() => (progressState.status === 'ready' ? currentProgress(progressState.value) : null), [progressState]);
   const overview = useMemo(() => gameOverview(progressNow?.progress ?? null), [progressNow]);
@@ -222,7 +235,7 @@ export const MentalMathProgress: React.FC<MentalMathProgressProps> = ({ progress
           <p className="mm-help">No runs yet. Every run you play, finished or not, appears here.</p>
         )}
         {rows.length > 0 && (
-          <ol className="mm-history" aria-label="Runs, newest first">
+          <ol ref={historyRef} className="mm-history" aria-label="Runs, newest first">
             {rows.map((row) => <HistoryItem key={row.id} row={row} />)}
           </ol>
         )}

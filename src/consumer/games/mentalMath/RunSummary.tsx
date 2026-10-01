@@ -112,6 +112,12 @@ interface Line {
   readonly title: string;
   readonly detail: string;
   readonly tone: 'achieved' | 'neutral' | 'muted';
+  /**
+   * An achievement from the provisional preview, not yet confirmed by the
+   * server. Its text is the same as once confirmed, so the layout never
+   * shifts; only its styling (and a screen-reader note) differs.
+   */
+  readonly pending?: boolean;
 }
 
 function recordLine(record: RecordLine, provisional: boolean, unavailable: boolean): Line {
@@ -124,7 +130,7 @@ function recordLine(record: RecordLine, provisional: boolean, unavailable: boole
       return { title: 'Records', detail: 'Your records update once the server checks this run.', tone: 'muted' };
     case 'new-best': {
       const what = record.metrics.length > 0 ? `${capitalize(listWords(record.metrics.map((metric) => METRIC_WORDS[metric])))} for runs from level ${record.startLevel}.` : `For runs from level ${record.startLevel}.`;
-      return { title: 'New personal best', detail: provisional ? `${what} Confirmed once the server checks your run.` : what, tone: 'achieved' };
+      return { title: 'New personal best', detail: what, tone: 'achieved', pending: provisional };
     }
     case 'best-so-far':
       return {
@@ -162,8 +168,7 @@ function unlockLine(unlock: UnlockLine, provisional: boolean, unavailable: boole
         : { title: 'Start levels', detail: 'Loading your start levels…', tone: 'muted' };
     case 'unlocked': {
       const highest = Math.max(...unlock.levels);
-      const detail = `You can now start a run at level ${highest}.`;
-      return { title: `${levelsText(unlock.levels)} unlocked`, detail: provisional ? `${detail} Confirmed once the server checks your run.` : detail, tone: 'achieved' };
+      return { title: `${levelsText(unlock.levels)} unlocked`, detail: `You can now start a run at level ${highest}.`, tone: 'achieved', pending: provisional };
     }
     case 'next':
       return {
@@ -177,10 +182,13 @@ function unlockLine(unlock: UnlockLine, provisional: boolean, unavailable: boole
 }
 
 const Highlight: React.FC<{ readonly icon: React.ReactNode; readonly line: Line; readonly name: string }> = ({ icon, line, name }) => (
-  <li className={`mm-highlight mm-highlight-${line.tone}`} data-summary={name}>
+  <li className={`mm-highlight mm-highlight-${line.tone}${line.pending ? ' mm-highlight-pending' : ''}`} data-summary={name} data-pending={line.pending ? 'true' : 'false'}>
     <span className="mm-highlight-icon" aria-hidden="true">{icon}</span>
     <span className="mm-highlight-text">
-      <strong className="mm-highlight-title">{line.title}</strong>
+      <strong className="mm-highlight-title">
+        {line.title}
+        {line.pending && <span className="mm-visually-hidden"> (provisional, until the server checks your run)</span>}
+      </strong>
       <span className="mm-highlight-detail">{line.detail}</span>
     </span>
   </li>
@@ -272,13 +280,13 @@ export const RunSummary: React.FC<RunSummaryProps> = ({ outcome, run, environmen
 
       <section className="mm-panel mm-panel-compact" aria-labelledby="mm-run-stats-title">
         <h2 id="mm-run-stats-title" className="mm-section-title">This run</h2>
-        <FactGrid facts={statFacts(model)} minColumnWidth={120} />
+        <FactGrid facts={statFacts(model)} minColumnWidth={136} />
       </section>
 
       <section className="mm-panel mm-panel-compact" aria-labelledby="mm-totals-title">
         <h2 id="mm-totals-title" className="mm-section-title">Mental Math so far</h2>
         <FactGrid
-          minColumnWidth={120}
+          minColumnWidth={136}
           facts={[
             { label: 'Runs completed', value: <span data-total="runs-completed">{totals ? numberFormat.format(totals.sessionsCompleted) : '—'}</span> },
             { label: 'Time played', value: <span data-total="time-played">{totals ? formatPlayTime(totals.activeMs) : '—'}</span> },

@@ -557,9 +557,11 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-summary', 'verification')).toBe('Provisional');
       expect(h.byData('data-summary', 'caption')).toBe('Provisional. Checking your run with the server…');
       expect(h.byData('data-result', 'score')).toBe(format(local.score));
-      expect(h.byData('data-summary', 'record')).toContain('New personal best');
-      expect(h.byData('data-summary', 'record')).toContain('Confirmed once the server checks your run.');
-      expect(h.byData('data-summary', 'unlock')).toContain('Level 2 unlocked');
+      // Predicted achievements read exactly as confirmed ones (no layout shift), marked provisional.
+      const pending = (name: string) => h.root().find((node) => node.props['data-summary'] === name && node.type === 'li').props['data-pending'];
+      expect(h.byData('data-summary', 'record')).toBe('New personal best (provisional, until the server checks your run)Best score, most correct answers and highest level for runs from level 1.');
+      expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (provisional, until the server checks your run)You can now start a run at level 2.');
+      expect([pending('record'), pending('unlock')]).toEqual(['true', 'true']);
 
       const { decision, processed } = trustedFor(h);
       if (decision.result.validity !== 'valid') throw new Error('expected a valid result');
@@ -572,6 +574,7 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-result', 'speed-bonus')).toBe(`+${format(321)}`);
       expect(h.byData('data-summary', 'record')).toBe('New personal bestBest score, most correct answers and highest level for runs from level 1.');
       expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlockedYou can now start a run at level 2.');
+      expect([pending('record'), pending('unlock')]).toEqual(['false', 'false']);
       expect(h.byData('data-total', 'runs-completed')).toBe('1');
       expect(textOf(h.root())).not.toMatch(/EEG|µV|alpha|theta|focus/i);
 

@@ -595,6 +595,16 @@
   color: var(--status-completed);
 }
 
+/* Predicted by the provisional preview: the same words, drawn as not yet final. */
+.mm-highlight-achieved.mm-highlight-pending {
+  border-style: dashed;
+  background-color: var(--surface-patient-card);
+}
+
+.mm-highlight-achieved.mm-highlight-pending .mm-highlight-icon {
+  background-color: var(--status-completed-bg);
+}
+
 .mm-highlight-muted .mm-highlight-title {
   color: var(--text-secondary);
 }
@@ -661,6 +671,12 @@
 .mm-best-row:last-child,
 .mm-history-row:last-child {
   border-bottom: 0;
+}
+
+.mm-history-row:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .mm-best-level {

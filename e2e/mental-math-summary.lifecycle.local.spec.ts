@@ -88,8 +88,12 @@ test('the summary shows a provisional score at once, then the server score, its 
   await expect(page.locator('[data-summary="caption"]')).toHaveText('Provisional. Your run will be checked once it uploads.');
   const provisional = await shownScore(page).innerText();
   await expect(record(page)).toContainText('New personal best');
-  await expect(record(page)).toContainText('Confirmed once the server checks your run.');
   await expect(unlock(page)).toContainText('Level 2 unlocked');
+  await expect(record(page)).toHaveAttribute('data-pending', 'true');
+  await expect(unlock(page)).toHaveAttribute('data-pending', 'true');
+  const layout = async () => page.evaluate(() => ['.mm-score', '.mm-highlights', '.mm-panel-compact']
+    .map((selector) => document.querySelector(selector)!.getBoundingClientRect()).map(({ top, height }) => [Math.round(top), Math.round(height)]));
+  const provisionalLayout = await layout();
   expect(await readGameSessions(uid)).toHaveLength(0);
 
   // Back online: the run uploads, onGameSessionCreated scores it, and the result replaces the preview.
@@ -100,6 +104,10 @@ test('the summary shows a provisional score at once, then the server score, its 
   await expect(shownScore(page)).toHaveText(format(result.score));
   expect(provisional).toBe(format(result.score));
   await expect(page.locator('[data-summary="caption"]')).toHaveText('Checked and confirmed by the server.');
+  // The trusted result replaced the preview in place: the predictions are now confirmed, and nothing moved.
+  await expect(record(page)).toHaveAttribute('data-pending', 'false');
+  await expect(unlock(page)).toHaveAttribute('data-pending', 'false');
+  expect(await layout()).toEqual(provisionalLayout);
 
   // 2. The difficulty points and speed bonus come from the server's result.metrics.
   await expect(page.locator('[data-result="difficulty-points"]')).toHaveText(format(result.metrics.difficultyPoints));
@@ -112,7 +120,6 @@ test('the summary shows a provisional score at once, then the server score, its 
   expect(result.personalBest).toBe(true);
   expect(result.unlocked).toEqual([{ modeId: 'timed-90', startLevel: 2 }]);
   await expect(record(page)).toContainText('New personal best');
-  await expect(record(page)).not.toContainText('Confirmed once');
   await expect(unlock(page)).toHaveText('Level 2 unlockedYou can now start a run at level 2.');
   await expect(page.locator('[data-total="runs-completed"]')).toHaveText('1');
 

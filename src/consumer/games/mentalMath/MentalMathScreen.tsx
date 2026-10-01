@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, Lock, Pause, Trophy } from 'lucide-react';
 import { mentalMath, type GameProgress } from '@nfct/shared';
 import type { GameClock } from '../../clock/gameClock';
@@ -81,6 +81,11 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
 
   // Leaving the screen mid-run keeps nothing.
   useEffect(() => discardActiveRun, [discardActiveRun]);
+
+  // Each screen starts at its top: the summary scrolls on a phone, and the next screen must not open part-way down.
+  useLayoutEffect(() => {
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+  }, [stage.kind]);
 
   // A run whose screen is gone is torn down, so it can never keep playing unseen.
   useEffect(() => {
