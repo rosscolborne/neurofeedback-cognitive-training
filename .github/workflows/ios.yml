@@ -25,6 +25,8 @@ concurrency:
 jobs:
   release-bundle:
     name: Release-bundle safety
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -46,6 +48,8 @@ jobs:
 
   webkit:
     name: WebKit iPhone (Playwright)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -78,6 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      code: ${{ steps.filter.outputs.code }}
       native: ${{ steps.filter.outputs.native }}
     steps:
       - uses: actions/checkout@v4
@@ -87,16 +92,31 @@ jobs:
       # when they change something the Xcode build or the Simulator smoke
       # test depends on. Web-only changes cannot break the native compile and
       # are covered by the jobs above and ci.yml. Manual runs always run it.
+      # Pull requests that change only documentation or agent instructions
+      # also skip the release-bundle and WebKit jobs; any other change or a
+      # failed diff runs them. Keep docs_paths in step with ci.yml.
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" != pull_request ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
             echo "native=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # The checkout is the PR merged into its base: HEAD^1 is the base.
-          git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          if ! git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "native=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_paths='^(docs/|\.agents/|\.claude/|[^/]+\.md$)|(^|/)README\.md$'
+          if grep -vqE "$docs_paths" "$RUNNER_TEMP/changed.txt"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Documentation or agent instructions only; the release-bundle and WebKit jobs are skipped."
+          fi
           native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
           if grep -qE "$native_paths" "$RUNNER_TEMP/changed.txt"; then
             echo "native=true" >> "$GITHUB_OUTPUT"

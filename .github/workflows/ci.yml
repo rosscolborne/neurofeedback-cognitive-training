@@ -20,6 +20,41 @@ concurrency:
 # repository, which runs its pytest suite; it is not tested here.
 
 jobs:
+  changes:
+    name: Code changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      # Pull requests that change only documentation or agent instructions
+      # skip the emulator job; `web` always runs, since check:isolation scans
+      # every tracked file. Any other change, a failed diff and manual runs
+      # run it. Keep docs_paths in step with ios.yml.
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The checkout is the PR merged into its base: HEAD^1 is the base.
+          if ! git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_paths='^(docs/|\.agents/|\.claude/|[^/]+\.md$)|(^|/)README\.md$'
+          if grep -vqE "$docs_paths" "$RUNNER_TEMP/changed.txt"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Documentation or agent instructions only; the emulator job is skipped."
+          fi
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -48,7 +83,8 @@ jobs:
 
   emulators:
     runs-on: ubuntu-latest
-    needs: web
+    needs: [changes, web]
+    if: needs.changes.outputs.code == 'true'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
