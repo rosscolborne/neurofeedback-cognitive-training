@@ -6,6 +6,7 @@ import {
   readGameSession,
   readGameSessionFor,
   serverResultWriteSchema,
+  SESSION_SEED_MAX,
 } from '@nfct/shared';
 import { at, fixtureGame, storedSession, unprocessedSession } from './fixtures';
 
@@ -95,6 +96,20 @@ describe('game session schema', () => {
 
     expect(() => readGameSession(withoutStart)).toThrow(DomainReadError);
     expect(() => readGameSession({ ...storedSession(), startLevel: 4, peakLevel: 3 })).toThrow(/peakLevel/);
+  });
+
+  it('requires an unsigned 32-bit integer seed, on write and on read', () => {
+    const { seed: _seed, ...withoutSeed } = storedSession();
+
+    expect(gameSessionWriteSchema.safeParse(withoutSeed).success).toBe(false);
+    expect(() => readGameSession(withoutSeed)).toThrow(DomainReadError);
+    for (const seed of [0, 1, SESSION_SEED_MAX]) {
+      expect(gameSessionWriteSchema.parse({ ...storedSession(), seed }).seed).toBe(seed);
+    }
+    for (const seed of [-1, SESSION_SEED_MAX + 1, 1.5, '42', null, Number.NaN]) {
+      expect(gameSessionWriteSchema.safeParse({ ...storedSession(), seed }).success).toBe(false);
+      expect(() => readGameSession({ ...storedSession(), seed })).toThrow(DomainReadError);
+    }
   });
 
   it('refuses a schema version it cannot read', () => {

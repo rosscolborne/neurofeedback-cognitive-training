@@ -80,6 +80,7 @@ export function sessionData(userId: string, overrides: Record<string, unknown> =
         gameVersion: 1,
         modeId: 'timed-90',
         startLevel: 1,
+        seed: 2_654_435_761,
         peakLevel: 3,
         status: 'completed',
         startedAt: minutesAgo(3),

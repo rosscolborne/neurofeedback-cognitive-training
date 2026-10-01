@@ -113,6 +113,17 @@ describe('users/{uid}/gameSessions: create', () => {
         await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 1 })));
     });
 
+    it('requires the session seed to be an unsigned 32-bit integer', async () => {
+        const database = await as(players.a);
+        for (const [index, seed] of [0, 1, 4_294_967_295].entries()) {
+            await assertSucceeds(setDoc(doc(database, sessionPath(players.a, `session-seed-ok-00000${index}`)), sessionData(players.a, { seed })));
+        }
+        for (const seed of [-1, 4_294_967_296, 1.5, '42', null, true, [1], { value: 1 }]) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { seed })));
+        }
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), without(sessionData(players.a), 'seed')));
+    });
+
     it('accepts an offline session played long ago', async () => {
         const database = await as(players.a);
         const daysAgo = (days: number) => minutesAgo(days * 24 * 60);
