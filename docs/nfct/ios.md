@@ -156,6 +156,12 @@ Alongside these, `ios.yml` `release-bundle` runs on every PR. It builds and
 syncs the production bundle, runs `verify:ios-release`, and shows that the
 check fails on the emulator bundle.
 
+Known intermittent failure until NFCT-44 is fixed: the inherited role
+lookup gives up after 1.8 s and sends a signed-in user to role selection. A
+slow first Firestore connection in WebKit occasionally hits it, in the WebKit
+job and in the Simulator smoke relaunch. That is a product bug, not test
+flakiness, so it is not retried away.
+
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView. It does not
 prove older iOS versions, the `capacitor://` origin, suspension, the software
 keyboard, safe areas or Bluetooth. Layer 3 adds the real WKWebView and origin.

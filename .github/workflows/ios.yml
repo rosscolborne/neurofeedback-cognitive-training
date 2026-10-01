@@ -11,7 +11,9 @@ permissions:
 
 concurrency:
   group: ios-${{ github.ref }}
-  # Superseded PR pushes are cancelled; every main commit gets its own check.
+  # Superseded PR pushes are cancelled. A running main check is never
+  # cancelled, though GitHub still drops a queued one if several merges land
+  # at once.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # iOS build checks (NFCT-31); docs/nfct/ios.md explains each layer.
