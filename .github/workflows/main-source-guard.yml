@@ -1,0 +1,27 @@
+name: Main source guard
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+# main is the TestFlight release branch (Xcode Cloud builds every main
+# commit). Full CI runs on development; this check only lets the main
+# ruleset refuse pull requests from any branch other than development.
+
+jobs:
+  require-development-source:
+    name: Require development source
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Head branch must be development
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" != "development" ]; then
+            echo "::error::Only development may be merged into main (head branch: $HEAD_REF)"
+            exit 1
+          fi
+          echo "Head branch is development."

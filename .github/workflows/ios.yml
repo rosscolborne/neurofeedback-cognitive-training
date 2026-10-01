@@ -2,8 +2,9 @@ name: iOS
 
 on:
   pull_request:
+    branches: [development]
   push:
-    branches: [main]
+    branches: [development]
   workflow_dispatch:
 
 permissions:
@@ -11,7 +12,7 @@ permissions:
 
 concurrency:
   group: ios-${{ github.ref }}
-  # Superseded PR pushes are cancelled. A running main check is never
+  # Superseded PR pushes are cancelled. A running development check is never
   # cancelled, though GitHub still drops a queued one if several merges land
   # at once.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -88,8 +89,8 @@ jobs:
       # macOS minutes are expensive, so pull requests run the native job only
       # when they change something the Xcode build or the Simulator smoke
       # test depends on. Web-only changes cannot break the native compile and
-      # are covered by the jobs above and ci.yml. Pushes to main and manual
-      # runs always run it, so drift is caught on main.
+      # are covered by the jobs above and ci.yml. Pushes to development and
+      # manual runs always run it, so drift is caught on development.
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
