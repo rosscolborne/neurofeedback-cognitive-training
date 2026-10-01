@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { Calculator, ChevronRight, Flame, Play } from 'lucide-react';
 import { mentalMath, type LocalDate, type StatsSummary } from '@nfct/shared';
 import { gameSessionRepository, profileRepository, statsRepository } from '../repositories';
-import type { GameSessionRepository } from '../repositories/gameSessionRepository';
 import { HistoryItem } from '../games/mentalMath/MentalMathProgress';
 import { formatPlayTime, historyRow, isTimed90, type HistoryRow } from '../games/mentalMath/progressSummary';
 import {
@@ -29,11 +28,7 @@ import './overview.css';
 /** Recent runs shown on Home. */
 export const HOME_RECENT_RUNS = 3;
 
-export interface HomeOverviewSources extends OverviewSources {
-  readonly gameSessions: Pick<GameSessionRepository, 'subscribeToGameSessionHistory'>;
-}
-
-const defaultSources: HomeOverviewSources = { stats: statsRepository, profile: profileRepository, gameSessions: gameSessionRepository };
+const defaultSources: OverviewSources = { stats: statsRepository, profile: profileRepository, gameSessions: gameSessionRepository };
 
 export interface HomeOverviewProps {
   /** The signed-in player: every read is keyed by it. */
@@ -44,7 +39,7 @@ export interface HomeOverviewProps {
   readonly onOpenAchievements: () => void;
   /** Opens Mental Math's records and run history. */
   readonly onOpenGameProgress: () => void;
-  readonly sources?: HomeOverviewSources;
+  readonly sources?: OverviewSources;
   readonly clock?: OverviewClock;
 }
 

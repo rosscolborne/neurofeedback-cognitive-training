@@ -13,6 +13,7 @@ import {
   fakeSources,
   missing,
   readable,
+  runEntry,
   summaryWith,
   textOf,
   TODAY,
@@ -130,6 +131,12 @@ describe('Progress', () => {
     expect(one(r, 'longest-streak')).toBe('1 day');
   });
 
+  it('tells a player whose runs predate the aggregates that the next run brings them up to date', async () => {
+    const { r } = await renderProgress({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA1')] });
+    expect(byData(r, 'progress-empty')).toHaveLength(0);
+    expect(visibleText(r)).toContain('Your streak and all-time figures catch up after your next finished run.');
+  });
+
   it('waits for the connection rather than calling an offline player new', async () => {
     const { r } = await renderProgress({ summary: missing(true) });
     expect(byData(r, 'progress-empty')).toHaveLength(0);
@@ -143,7 +150,7 @@ describe('Progress', () => {
     await act(async () => {
       renderer = create(
         <ProgressOverview playerId="player-1" sources={sources} clock={utcClock} onPlay={vi.fn()} games={null} focusSection="achievements" onSectionFocused={onSectionFocused} />,
-        { createNodeMock: (element) => (element.props.id === 'ov-achievements-title' ? heading : null) },
+        { createNodeMock: (element) => ((element.props as { id?: string }).id === 'ov-achievements-title' ? heading : null) },
       );
     });
     expect(heading.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });

@@ -17,8 +17,7 @@ import type { AchievementsRead, DailyStatsRead } from '../../repositories/statsR
 import { clientSessionDocument } from '../../games/mentalMath/runSummary';
 import { previewDecision } from '../../games/mentalMath/startLevel';
 import { playRun } from '../../games/mentalMath/__tests__/fixtures';
-import type { HomeOverviewSources } from '../HomeOverview';
-import type { OverviewClock } from '../usePlayerOverview';
+import type { OverviewClock, OverviewSources } from '../usePlayerOverview';
 
 // Fakes for Home and Progress (NFCT-13 part 2): the player's own aggregates
 // as the repositories would report them, and a fixed clock.
@@ -107,7 +106,7 @@ export interface FakeState {
 /** Repositories that answer at once with `state`; each subscription's calls are recorded. */
 export function fakeSources(state: FakeState) {
   const dailyRanges: LocalDateRange[] = [];
-  const sources: HomeOverviewSources = {
+  const sources: OverviewSources = {
     stats: {
       subscribeToSummary: vi.fn((onNext: (read: DocumentRead<StatsSummary>) => void, onError: (error: Error) => void) => {
         if (state.summary === 'error') onError(new Error('permission-denied'));

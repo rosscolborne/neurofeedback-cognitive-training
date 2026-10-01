@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
-import { addDays, type LocalDate } from '@nfct/shared';
-import { profileRepository, statsRepository } from '../repositories';
+import { addDays, mentalMath, type LocalDate } from '@nfct/shared';
+import { gameSessionRepository, profileRepository, statsRepository } from '../repositories';
 import { formatPlayTime } from '../games/mentalMath/progressSummary';
 import {
   achievementLists,
@@ -15,7 +15,7 @@ import {
   type ActivityPeriod,
 } from './overviewModel';
 import { AchievementRow, GoalMeter } from './OverviewParts';
-import { browserOverviewClock, usePlayerOverview, type OverviewClock, type OverviewSources } from './usePlayerOverview';
+import { browserOverviewClock, usePlayerOverview, useRecentRuns, type OverviewClock, type OverviewSources } from './usePlayerOverview';
 import '../games/mentalMath/mentalMath.css';
 import './overview.css';
 
@@ -26,7 +26,7 @@ import './overview.css';
 // catalogue, earned or not yet. Nothing here is EEG-derived, and no domain
 // index is shown (NFCT-26).
 
-const defaultSources: OverviewSources = { stats: statsRepository, profile: profileRepository };
+const defaultSources: OverviewSources = { stats: statsRepository, profile: profileRepository, gameSessions: gameSessionRepository };
 
 const numberFormat = new Intl.NumberFormat();
 
@@ -78,8 +78,11 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
     () => (achievements.status === 'ready' ? achievementLists(achievements.value.achievements) : null),
     [achievements],
   );
-  // No summary from the server: no run has counted yet (a missing summary served from this device's cache may only mean offline).
-  const noRunsYet = summaryRead?.status === 'missing' && !summaryRead.fromCache;
+  // Whether the player has played at all: a missing summary alone does not say (runs scored before the
+  // aggregates existed have none until the next run rebuilds it, and offline it may just not be cached).
+  const newest = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, 1);
+  const hasRuns = newest.status === 'ready' ? newest.value.entries.length > 0 : newest.status === 'loading' ? null : false;
+  const noRunsYet = summaryRead?.status === 'missing' && !summaryRead.fromCache && hasRuns === false;
   // Focused only once everything above it has loaded, so the section does not move after the scroll.
   const achievementsHeading = useRef<HTMLHeadingElement>(null);
   const settled = summaryState.status !== 'loading' && achievements.status !== 'loading'
@@ -130,9 +133,10 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
             </dl>
           ) : (
             <p className="ov-help">
-              {summaryState.status === 'loading' || todayState === 'loading' ? 'Loading your progress…'
-                : summaryRead?.status === 'missing' ? 'Your progress will show when you’re back online.'
-                  : 'Your progress couldn’t be loaded right now.'}
+              {summaryState.status === 'loading' || todayState === 'loading' || (summaryRead?.status === 'missing' && hasRuns === null) ? 'Loading your progress…'
+                : summaryRead?.status === 'missing' && summaryRead.fromCache ? 'Your progress will show when you’re back online.'
+                  : summaryRead?.status === 'missing' ? 'Your streak and all-time figures catch up after your next finished run.'
+                    : 'Your progress couldn’t be loaded right now.'}
             </p>
           )}
           {view?.kind === 'today-unknown' && (

@@ -22,6 +22,8 @@ const LOADING: Loaded<never> = { status: 'loading' };
 export interface OverviewSources {
   readonly stats: Pick<StatsRepository, 'subscribeToSummary' | 'subscribeToDailyStats' | 'subscribeToAchievements'>;
   readonly profile: Pick<ProfileRepository, 'getProfile'>;
+  /** The newest runs: whether the player has played at all, and Home's recent runs. */
+  readonly gameSessions: Pick<GameSessionRepository, 'subscribeToGameSessionHistory'>;
 }
 
 export interface OverviewClock {
