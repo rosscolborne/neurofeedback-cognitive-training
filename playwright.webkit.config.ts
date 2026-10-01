@@ -31,6 +31,9 @@ const IOS_WEBKIT_SPECS = [
   // fonts; the run screen's touch handling, HUD widths and keypad.
   'iphone-forms.auth-handoffs.local.spec.ts',
   'mental-math-touch.lifecycle.local.spec.ts',
+  // NFCT-13: Home's Play, streak and achievements, and Progress, after a run
+  // scored by trusted scoring.
+  'home-progress.lifecycle.local.spec.ts',
 ];
 
 export default defineConfig({
