@@ -266,17 +266,19 @@ export const SCENARIOS = {
       const seconds = (ms) => `${(ms / 1_000).toFixed(1)} s`;
       const timeline = lifecycle.filter(({ at }) => at >= backgroundAt)
         .map(({ type, visibility, at }) => `${type}${type === 'visibilitychange' ? `:${visibility}` : ''} +${seconds(at - backgroundAt)}`).join(', ');
-      ctx.note(`Lifecycle events after simctl sent the app to the background (t = 0; brought back at +${seconds(foregroundAt - backgroundAt)}): ${timeline || 'none'}.`);
+      ctx.note(`Lifecycle events after the simctl command that opens Settings (t = 0; the app is brought back at +${seconds(foregroundAt - backgroundAt)}): ${timeline || 'none'}.`);
       ctx.check('iOS hides the page in the background and shows it again on return (visibilitychange)', Boolean(hidden && visible),
-        hidden ? `hidden ${seconds(hidden.at - backgroundAt)} after the background command` : 'no hidden event');
-      // The clock may run from the read until the page is hidden; none of the time hidden may count.
+        hidden ? `hidden ${seconds(hidden.at - backgroundAt)} after the simctl command` : 'no hidden event');
+      // iOS's own signal that the app left the foreground: Capacitor's native 'pause', or the window's blur.
+      const native = [firstAfter(backgroundAt, ({ type }) => type === 'pause'), firstAfter(backgroundAt, ({ type }) => type === 'blur')]
+        .filter(Boolean).sort((a, b) => a.at - b.at)[0];
+      ctx.check('The page is hidden as soon as iOS backgrounds the app (within 1 s of its native signal)', Boolean(hidden && native && hidden.at - native.at <= 1_000),
+        native && hidden ? `${native.type} at +${seconds(native.at - backgroundAt)}, visibilitychange:hidden ${hidden.at - native.at} ms later` : 'no native signal or no hidden event');
+      // The clock may run from the read until the page is hidden (while Settings opens, the app is still in front); none of the time hidden may count.
       const runningMs = (hidden?.at ?? foregroundAt) - readAt;
       const lost = before - after;
       ctx.check('The run clock stops when the page is hidden and does not run in the background', lost <= runningMs / 1_000 + 1,
         `${before} s left before, ${after} s after; the page stayed visible ${seconds(runningMs)} after the clock was read, then was hidden ${hidden && visible ? seconds(visible.at - hidden.at) : '?'}`);
-      if (hidden && hidden.at - backgroundAt > 1_000) {
-        ctx.note(`The run clock kept running for about ${seconds(hidden.at - backgroundAt)} after the app was sent to the background, until iOS hid the page (reported, not failed: NFCT-32 adds a pause on the native inactive state).`);
-      }
       await sleep(3_000);
       const later = clockSeconds((await app.read(HUD_TIME)).text);
       const stillPaused = await app.waitIfAny({ target: heading('Paused') }, { timeout: 1_000 });

@@ -236,7 +236,13 @@ UI, with no dependency beyond Node and Xcode:
 | --- | --- | --- |
 | `smoke` | Sign-up and the role choice (a Firestore write) through the real UI; a cold relaunch restores the session and role, or names the screen it landed on (role selection, "Your account couldn't be loaded", signed out); light and Dark Mode screenshots | Real touches or typing through the software keyboard |
 | `mental-math` | Train tab, Mental Math, level 1; a whole 90-second run answered on the on-screen keypad by reading and solving each question (one answer deliberately wrong); the end-of-run screen (`#mm-handoff-title`); exactly one session in the Firestore emulator: completed, 90 s active, `client.platform` `ios`, its answered trials exactly the responses typed, each marked correct or wrong as answered | Trusted scoring (the Functions emulator does not run here; `test:functions` covers it), the post-run summary's content (NFCT-22), real performance |
-| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the 8 s away counts, the run stays paused until the player resumes, and Resume shows a new question. It times iOS's events (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`) against the `simctl` command and reports how long the clock ran before the page was hidden. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
+| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the 8 s away counts, the run stays paused until the player resumes, and Resume shows a new question. It records when iOS's events arrive (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`, on the wall clock the host shares) and checks that the page is hidden within a second of iOS's native signal. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
+
+On an app switch in the Simulator, iOS sends the page Capacitor's `pause`,
+the window's `blur` and `visibilitychange` (hidden) together, so NFCT-21's
+visibility-based pause holds there. `lifecycle` checks they stay within a
+second of each other. The interruptions that make the app inactive without
+hiding the page stay on NFCT-32's device checklist.
 
 The scenarios use what a user sees plus a few stable hooks: the Mental Math
 HUD's `data-hud` attributes, `.mm-question`, `.mm-feedback`, `.mm-paused` and
@@ -292,7 +298,11 @@ pull requests. On demand, for any branch:
 gh workflow run ios.yml --ref "$branch" -f ios_runtimes='16.4 17.5 18.6' -f scenarios=smoke
 ```
 
-MIN_RUNTIME_RESULT
+The first run (1 October 2026, run 36837500419) installed iOS 16.4 (20E247)
+with Xcode 26.5 on `macos-26` in about three and a half minutes, and all
+three scenarios passed on an iPhone SE (3rd generation) in iOS 16.4's
+WKWebView. The weekly run uses `smoke` only, to stay short; run all three on
+demand after an upgrade of Vite, Capacitor or the build target.
 
 ### Real touch, the keyboard and system UI
 
