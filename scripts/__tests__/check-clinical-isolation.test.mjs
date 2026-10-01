@@ -35,7 +35,6 @@ describe('check:isolation', () => {
   it.each([
     ['the Waveable bundle ID', 'ios/App/App.xcodeproj/project.pbxproj', 'PRODUCT_BUNDLE_IDENTIFIER = com.waveable.app;'],
     ['an earlier Waveable bundle ID', 'capacitor.config.ts', "appId: 'com.brainswell.app'"],
-    ['the Waveable Apple team', 'build/ExportOptions.plist', '<key>teamID</key><string>XY542W88W6</string>'],
     ['the clinical Firebase project', 'src/config.ts', "projectId: 'brainwell-327dc'"],
   ])('fails on %s', (_name, path, content) => {
     const { status, output } = runCheck({ [path]: content });
@@ -57,7 +56,7 @@ describe('check:isolation', () => {
   });
 
   it('lets the check itself name the identifiers it refuses', () => {
-    expect(runCheck({ 'scripts/check-clinical-isolation.mjs': '// refuses com.waveable.app and XY542W88W6' }).status).toBe(0);
+    expect(runCheck({ 'scripts/check-clinical-isolation.mjs': '// refuses com.waveable.app and com.brainswell.app' }).status).toBe(0);
     expect(runCheck({ 'scripts/other.mjs': '// refuses com.waveable.app' }).status).toBe(1);
   });
 });

@@ -18,7 +18,7 @@ still needed for the checks listed under
 | --- | --- | --- |
 | Bundle ID | `io.github.rosscolborne.nfct` | Working placeholder under the repository owner's GitHub namespace |
 | Display name | `NFCT` | Working name |
-| Apple team | none committed | Set locally ([Signing](#signing-on-your-mac)) |
+| Apple team | none committed | The existing Apple Developer account's team, set outside the repo: [locally](#signing-on-your-mac) or in [Xcode Cloud](#xcode-cloud) |
 | Version / build | `1.0` / `1` | `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` |
 
 NFCT-34 replaces the working identity with the public one (bundle ID, name,
@@ -34,11 +34,25 @@ user installs a build, changing the bundle ID costs nothing:
 After users have installed it, a new bundle ID is a new app with empty
 storage.
 
-Nothing of Waveable's Apple identity remains: its bundle IDs, team, upload
-scripts, export options and Xcode Cloud hooks were removed in NFCT-30, and
-`npm run check:isolation` fails if its identifiers or any signing material
-(`*.p12`, `*.cer`, `*.mobileprovision`, `*.provisionprofile`, `AuthKey_*.p8`,
-`ios/signing.local.xcconfig`) are committed.
+NFCT is a new app in the same Apple Developer account that holds Waveable's
+app, so only the app's own identity had to change. NFCT-30 replaced
+Waveable's bundle ID and name, and kept the reusable deployment pieces in
+product-neutral form:
+
+| Inherited | Now |
+| --- | --- |
+| Waveable bundle ID and display name | NFCT working identity (above) |
+| `DEVELOPMENT_TEAM` in the project | Set outside the repo; the account's team is unchanged |
+| `ios/App/ci_scripts/ci_post_clone.sh` (Xcode Cloud hook) | Kept: locked install, production sync and the release check ([Xcode Cloud](#xcode-cloud)) |
+| `ci_scripts/ci_post_clone.sh` (identical copy) | Delegates to the hook above |
+| `build/package-mac.sh` and `build/ExportOptions.plist` | `npm run ios:archive` (`scripts/ios/archive.sh`) and `ios/ExportOptions-AppStoreConnect.plist`, with no team or product name |
+| `build/ExportOptions-macOS-*.plist` | Removed: the app is not distributed for Mac |
+
+`npm run check:isolation` fails if Waveable's bundle IDs or any signing
+material (`*.p12`, `*.cer`, `*.mobileprovision`, `*.provisionprofile`,
+`AuthKey_*.p8`, `ios/signing.local.xcconfig`) are committed. Waveable's own
+Xcode Cloud workflow and app record belong to Waveable; NFCT gets its own
+([Xcode Cloud](#xcode-cloud)) and never builds into Waveable's.
 
 ## Platform settings
 
@@ -152,7 +166,8 @@ Layer 4 adds what only a device shows.
 It runs on a pinned image and Xcode (`macos-26`, Xcode 26.5) and logs the
 Xcode version and Simulator runtimes. In order:
 
-1. `npm run sync:ios`, which includes the release check;
+1. the Xcode Cloud post-clone hook, which runs `npm ci` and `npm run sync:ios`
+   with the release check, exactly as Xcode Cloud does;
 2. Swift package resolution (cached), then an unsigned Release build for the
    Simulator, which is what an archive compiles;
 3. `scripts/ios/check-built-app.mjs` on the built Release app: bundle ID,
@@ -205,32 +220,70 @@ npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-pr
 npm run sync:ios   # leave a production bundle behind
 ```
 
-## Releases (NFCT-34, not built yet)
+## Xcode Cloud
 
-The intended release model has no long-lived release or beta branch:
+TestFlight builds come from an Xcode Cloud workflow, the path the Apple
+account already uses. NFCT needs its own workflow and app record; it must
+never build into Waveable's.
+
+What the repository provides, and CI proves on every native run:
+
+- `ios/App/ci_scripts/ci_post_clone.sh`. Xcode Cloud runs it after cloning;
+  it is the only place Xcode Cloud looks, next to `App.xcodeproj`. It installs
+  the locked dependencies, builds and syncs the production web bundle, and
+  runs `verify:ios-release`. The GitHub macOS job runs this same hook.
+- The shared `App` scheme, which Xcode Cloud requires.
+- An archive is a Release build, so the guard build phase also refuses a
+  development bundle.
+- Optional `NFCT_DEVELOPMENT_TEAM` workflow variable: the hook writes it to
+  the gitignored `ios/signing.local.xcconfig`. Set it only if Xcode Cloud's
+  archive reports that no team is selected; Xcode Cloud normally signs with
+  the app record's team.
+
+## Releases
+
+The release model has no long-lived release or beta branch:
 
 - feature PRs merge to `main`;
-- a TestFlight build is a manually dispatched workflow (for example "Deploy
-  to TestFlight", `workflow_dispatch` with a `ref` input) that builds one
-  specific `main` commit or release tag, so nothing is merged or squashed
-  only for a release;
-- the job runs in a protected GitHub environment with a required reviewer.
-  Its secrets are the App Store Connect API key (issuer ID, key ID, `.p8`)
-  and the team ID. They never enter the repository, which
-  `check:isolation` enforces;
-- it reuses this page's steps: `npm run sync:ios` (with the release check),
-  then `xcodebuild archive` (Release, so the guard build phase applies),
-  `-exportArchive` with export options generated at run time, and upload. The
-  build number comes from the run, and the commit is tagged with the version.
+- a TestFlight build is started deliberately from a specific `main` commit or
+  release tag: an Xcode Cloud workflow with a manual or tag start condition
+  (for example tags `ios/v*`), so nothing is merged or squashed only for a
+  release;
+- `npm run ios:archive -- --upload` is the owner-run fallback from a Mac, with
+  the same release check;
+- a GitHub Actions "Deploy to TestFlight" workflow (`workflow_dispatch` on a
+  ref, in a protected environment, with an App Store Connect API key) is an
+  alternative for NFCT-34 if Xcode Cloud is ever dropped. Its secrets would
+  never enter the repository, which `check:isolation` enforces.
 
-The account-dependent parts (the App Store Connect record, the team, signing,
-App Attest) are NFCT-34's and are created by the owner, never by an agent.
+### Apple-side setup (owner, Apple account)
+
+These need the live Apple account and are done by the owner, never by an
+agent. Nothing else in NFCT-30 or NFCT-31 waits for them.
+
+1. Confirm the bundle ID: keep `io.github.rosscolborne.nfct`, or choose
+   another and change it as described in [Identity](#identity).
+2. Register it as an App ID (Certificates, Identifiers & Profiles). It needs
+   no extra capabilities: Bluetooth needs no entitlement.
+3. Create the NFCT app record in App Store Connect with that bundle ID.
+4. In Xcode, Integrate > Create Workflow for this repository's
+   `ios/App/App.xcodeproj` and the `App` scheme, connected to
+   `rosscolborne/neurofeedback-cognitive-training`. Give it an Archive (iOS)
+   action, TestFlight internal testing as the post-action, and a manual or
+   tag start condition on `main`. Use Xcode 26.
+5. Start one build and confirm it reaches TestFlight. If the archive reports
+   that no team is selected, add `NFCT_DEVELOPMENT_TEAM` to the workflow's
+   environment.
+6. Leave Waveable's existing workflow and app record unchanged.
+
+NFCT-34 still owns the public name, icon, App Review, privacy labels and App
+Attest.
 
 ## What still needs a person
 
 | Needs | For | Card |
 | --- | --- | --- |
-| An Apple Developer account | The final bundle ID and team, TestFlight, App Store Connect, App Attest | NFCT-34 |
+| The Apple account | [Apple-side setup](#apple-side-setup-owner-apple-account): the App ID, app record and Xcode Cloud workflow; later the public identity and App Attest | NFCT-30 setup, NFCT-34 |
 | A physical iPhone (a free personal team is enough for Debug installs) | Suspension, interruptions, offline durability, keyboard, safe areas, real performance | NFCT-32, NFCT-33 |
 | A Muse headset | Bluetooth and EEG on iPhone | NFCT-15 |
 | A Mac (optional) | Interactive debugging when a native CI step fails; Safari Web Inspector on a Debug build; Xcode-only edits such as the app icon | — |

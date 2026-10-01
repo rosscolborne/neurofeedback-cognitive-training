@@ -17,9 +17,9 @@ concurrency:
 #
 # No secrets, no signing and no Firebase configuration: the app is built
 # unsigned for the Simulator, and every Firebase-backed step runs against
-# local emulators. Nothing here archives, signs or uploads. TestFlight
-# (NFCT-34) will be a separate, manually dispatched workflow that reuses
-# scripts/ios/ and verify:ios-release.
+# local emulators. Nothing here archives, signs or uploads: TestFlight builds
+# come from NFCT's Xcode Cloud workflow, whose post-clone hook the macOS job
+# runs, or from the owner-run `npm run ios:archive` (docs/nfct/ios.md#releases).
 
 jobs:
   release-bundle:
@@ -97,7 +97,7 @@ jobs:
           fi
           # The checkout is the PR merged into its base: HEAD^1 is the base.
           git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
-          native_paths='^(ios/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
+          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
           if grep -qE "$native_paths" "$RUNNER_TEMP/changed.txt"; then
             echo "native=true" >> "$GITHUB_OUTPUT"
             grep -E "$native_paths" "$RUNNER_TEMP/changed.txt"
@@ -145,11 +145,15 @@ jobs:
           path: ${{ runner.temp }}/SourcePackages
           key: spm-${{ runner.os }}-xcode26.5-${{ hashFiles('ios/App/CapApp-SPM/Package.swift', 'ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'package-lock.json') }}
           restore-keys: spm-${{ runner.os }}-xcode26.5-
-      - run: npm ci --legacy-peer-deps
 
       # 1. What an archive would build: the production bundle in Release.
-      - name: Sync the production bundle (runs verify:ios-release)
-        run: npm run sync:ios
+      # The Xcode Cloud post-clone hook itself installs the locked
+      # dependencies, builds and syncs the production bundle, and runs
+      # verify:ios-release, so every run here also proves that hook.
+      - name: Run the Xcode Cloud post-clone hook
+        env:
+          CI_PRIMARY_REPOSITORY_PATH: ${{ github.workspace }}
+        run: ios/App/ci_scripts/ci_post_clone.sh
       - name: Resolve Swift packages
         run: npm run ios:build -- resolve
       - name: Build Release for the Simulator, unsigned

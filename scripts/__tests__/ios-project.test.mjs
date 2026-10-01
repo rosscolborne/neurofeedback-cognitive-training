@@ -26,7 +26,11 @@ describe('iOS identity and signing', () => {
   });
 
   it('commits no signing team; signing is local and gitignored', () => {
-    for (const { settings } of configurations) expect(settings).not.toHaveProperty('DEVELOPMENT_TEAM');
+    // The owner may later decide to commit the team; then change this test.
+    for (const { settings } of configurations) {
+      expect(settings, 'Set the team in ios/signing.local.xcconfig or Xcode Cloud\'s NFCT_DEVELOPMENT_TEAM (docs/nfct/ios.md)')
+        .not.toHaveProperty('DEVELOPMENT_TEAM');
+    }
     for (const file of ['debug.xcconfig', 'release.xcconfig']) {
       expect(read(`ios/${file}`)).toMatch(/^#include\? "signing\.local\.xcconfig"$/m);
     }
@@ -102,6 +106,34 @@ describe('Info.plist', () => {
     expect(read('ios/debug.xcconfig')).toMatch(/^CAPACITOR_DEBUG = true$/m);
     expect(read('ios/release.xcconfig')).not.toMatch(/CAPACITOR_DEBUG\s*=/);
     expect(infoPlist).not.toHaveProperty('NSAppTransportSecurity');
+  });
+});
+
+describe('Xcode Cloud and manual archive paths', () => {
+  it('shares the App scheme, which Xcode Cloud requires, and archives Release', () => {
+    const scheme = read('ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme');
+    const appTargetId = pbxproj.match(/\t\t(\w{24}) \/\* App \*\/ = \{\n\t\t\tisa = PBXNativeTarget;/)[1];
+    expect(scheme).toContain(`BlueprintIdentifier = "${appTargetId}"`);
+    expect(scheme).toMatch(/<ArchiveAction\s+buildConfiguration = "Release"/);
+  });
+
+  it('keeps the Xcode Cloud post-clone hook: locked install, production sync and release check, no committed team', () => {
+    const hook = 'ios/App/ci_scripts/ci_post_clone.sh';
+    accessSync(root + hook, constants.X_OK);
+    expect(read(hook)).toMatch(/^npm ci --legacy-peer-deps$/m);
+    expect(read(hook)).toMatch(/^npm run sync:ios$/m);
+    expect(read(hook)).not.toMatch(/DEVELOPMENT_TEAM = [A-Z0-9]{10}/);
+    // The inherited root copy only delegates, so the two cannot drift.
+    accessSync(root + 'ci_scripts/ci_post_clone.sh', constants.X_OK);
+    expect(read('ci_scripts/ci_post_clone.sh')).toContain('exec "$(cd "$(dirname "$0")/.." && pwd)/ios/App/ci_scripts/ci_post_clone.sh"');
+  });
+
+  it('archives through the release check and exports without a committed team', () => {
+    accessSync(root + 'scripts/ios/archive.sh', constants.X_OK);
+    expect(read('scripts/ios/archive.sh')).toMatch(/^npm run sync:ios$/m);
+    const exportOptions = parsePlist(read('ios/ExportOptions-AppStoreConnect.plist'));
+    expect(exportOptions).toMatchObject({ method: 'app-store-connect', destination: 'upload', signingStyle: 'automatic' });
+    expect(exportOptions).not.toHaveProperty('teamID');
   });
 });
 

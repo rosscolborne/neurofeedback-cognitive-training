@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Fails if any tracked file references the Waveable clinical product's Firebase
-// project, credentials, auto-deploy workflow or Apple identity, or if Apple
-// signing material is tracked. Run in CI on every PR.
+// project, credentials, auto-deploy workflow or app bundle IDs, or if Apple
+// signing material is tracked. Run in CI on every PR. The Apple team is not
+// listed: it is the Apple account, which also holds the NFCT app.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, lstatSync, readlinkSync } from 'node:fs';
 
@@ -12,7 +13,6 @@ const FORBIDDEN = [
   /waveable-e2e@/,                    // clinical E2E service account
   /com\.waveable/,                    // Waveable's iOS bundle IDs
   /com\.brainswell/,                  // Waveable's earlier bundle IDs
-  /XY542W88W6/,                       // Waveable's Apple Developer team
 ];
 // The fail-closed deny-list must name the clinical identifiers it refuses.
 const ALLOWED = new Map([
