@@ -81,6 +81,9 @@ jobs:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npm ci --legacy-peer-deps
+      # Trusted scoring runs in the Functions emulator, which the Mental Math
+      # summary spec needs; test:e2e:webkit builds it.
+      - run: npm ci --prefix functions
       # Only WebKit: the other suites use the runner's Google Chrome.
       - run: npx playwright install --with-deps webkit
       - run: npm run test:e2e:webkit

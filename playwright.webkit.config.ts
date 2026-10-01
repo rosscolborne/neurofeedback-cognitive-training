@@ -22,6 +22,9 @@ const IOS_WEBKIT_SPECS = [
   'mental-math.lifecycle.local.spec.ts',
   'cache-isolation.persistence.local.spec.ts',
   'offline-cache.persistence.local.spec.ts',
+  // NFCT-22: the post-session summary and progress, through trusted scoring
+  // (needs the Functions emulator, which test:e2e:webkit starts).
+  'mental-math-summary.lifecycle.local.spec.ts',
   // NFCT-12: the Train game catalogue, the way into every game, at phone widths.
   'train-catalogue.self-directed.local.spec.ts',
 ];
