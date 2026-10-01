@@ -252,8 +252,15 @@ function observed(summary: StatsSummary | null, days: Iterable<DailyStats>) {
   };
 }
 
+/**
+ * The property test plays and scores about 1,600 sessions and processes each
+ * set eleven times: about 2 s alone and 3.5 s under the full unit suite
+ * locally, and over Vitest's 5 s default on a slower CI runner.
+ */
+const PROPERTY_TEST_TIMEOUT_MS = 60_000;
+
 describe('order-independent stats', () => {
-  it('converge to the same summary, days and achievements whatever order sessions are processed in, and equal a rebuild', () => {
+  it('converge to the same summary, days and achievements whatever order sessions are processed in, and equal a rebuild', { timeout: PROPERTY_TEST_TIMEOUT_MS }, () => {
     const random = prng(0x5747_0013);
     let upgradesSeen = 0;
     let achievementsSeen = 0;
