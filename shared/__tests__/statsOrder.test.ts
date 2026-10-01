@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACHIEVEMENT_CATALOGUE,
   applyCountedSession,
   applyValidUpgrade,
   compareTimestamps,
@@ -7,15 +8,14 @@ import {
   decideSession,
   evaluateSession,
   GAME_MODULE_REGISTRY,
-  isTrainingDay,
   mentalMathV1 as mm,
   readSessionAggregateFields,
   rebuildStats,
-  trainingDatesIn,
   upgradeBlocker,
   upgradeScanLevels,
   upgradeSession,
   type DailyStats,
+  type FirestoreTimestamp,
   type GameProgress,
   type ServerResult,
   type SessionEvaluation,
@@ -168,6 +168,90 @@ function daysContent(days: Iterable<DailyStats>) {
   return [...days].map(({ updatedAt: _updatedAt, ...rest }) => rest).sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
+/**
+ * The stats from first principles, over the final results: an oracle that
+ * shares no code with the reducers (no countsInStats, isTrainingDay, streak
+ * runs or achievement criteria helpers), only the catalogue's thresholds.
+ */
+function oracle(docs: readonly Doc[], results: ReadonlyMap<string, ServerResult>) {
+  const sessions = docs.flatMap((doc) => {
+    const result = results.get(doc.id);
+    if (result === undefined || result.validity === 'invalid') return [];
+    return [{
+      gameId: doc.raw.gameId as string,
+      status: doc.raw.status as string,
+      activeMs: doc.raw.activeDurationMs as number,
+      endedAt: doc.raw.endedAt as FirestoreTimestamp,
+      localDate: doc.raw.localDate as string,
+      result,
+    }];
+  });
+  if (sessions.length === 0) return { summary: null, days: [] };
+
+  const tally = (group: typeof sessions) => ({
+    sessions: group.length,
+    sessionsCompleted: group.filter(({ status }) => status === 'completed').length,
+    activeMs: group.reduce((sum, { activeMs }) => sum + activeMs, 0),
+  });
+  const dates = [...new Set(sessions.map(({ localDate }) => localDate))].sort();
+  const days = dates.map((date) => {
+    const onDay = sessions.filter(({ localDate }) => localDate === date);
+    const games = [...new Set(onDay.map(({ gameId }) => gameId))];
+    return { date, ...tally(onDay), games: Object.fromEntries(games.map((gameId) => [gameId, tally(onDay.filter((entry) => entry.gameId === gameId))])) };
+  });
+
+  const validRuns = sessions.filter(({ status, result }) => result.validity === 'valid' && status === 'completed');
+  const bestPeakLevel: Record<string, number> = {};
+  for (const { gameId, result } of validRuns) {
+    if (result.validity === 'valid') bestPeakLevel[gameId] = Math.max(bestPeakLevel[gameId] ?? 0, result.peakLevel);
+  }
+  const unverified = ['local-date-mismatch', 'unknown-timezone', 'reasons-truncated'];
+  const ordinal = (date: string) => Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / DAY_MS;
+  const trainingDays = [...new Set(validRuns.filter(({ result }) => !result.reasons.some((code) => unverified.includes(code))).map(({ localDate }) => localDate))]
+    .sort();
+  const runs: { start: string; end: string }[] = [];
+  for (const date of trainingDays) {
+    const last = runs.at(-1);
+    if (last && ordinal(date) === ordinal(last.end) + 1) last.end = date;
+    else runs.push({ start: date, end: date });
+  }
+  const length = ({ start, end }: { start: string; end: string }) => ordinal(end) - ordinal(start) + 1;
+  const streak = {
+    runs,
+    current: runs.length > 0 ? length(runs.at(-1)!) : 0,
+    longest: Math.max(0, ...runs.map(length)),
+    lastActiveDate: runs.at(-1)?.end ?? null,
+  };
+  const lastPlayedAt = sessions.reduce((latest, { endedAt }) => (endedAt.toMillis() > latest.toMillis() ? endedAt : latest), sessions[0]!.endedAt);
+  const achievements = ACHIEVEMENT_CATALOGUE.filter(({ criterion }) => (
+    criterion.kind === 'valid-runs' ? validRuns.length >= criterion.atLeast
+      : criterion.kind === 'streak' ? streak.longest >= criterion.days
+        : (bestPeakLevel[criterion.gameId] ?? 0) >= criterion.atLeast
+  )).map(({ id }) => id).sort();
+  return {
+    summary: { ...tally(sessions), lastPlayedAt, validRuns: validRuns.length, bestPeakLevel, streak, achievements },
+    days,
+  };
+}
+
+/** The oracle's view of reducer output: the same fields, achievements as a sorted set. */
+function observed(summary: StatsSummary | null, days: Iterable<DailyStats>) {
+  return {
+    summary: summary === null ? null : {
+      sessions: summary.sessions,
+      sessionsCompleted: summary.sessionsCompleted,
+      activeMs: summary.activeMs,
+      lastPlayedAt: summary.lastPlayedAt,
+      validRuns: summary.validRuns,
+      bestPeakLevel: summary.bestPeakLevel,
+      streak: summary.streak,
+      achievements: [...summary.achievements].sort(),
+    },
+    days: [...days].sort((a, b) => (a.date < b.date ? -1 : 1))
+      .map(({ date, sessions, sessionsCompleted, activeMs, games }) => ({ date, sessions, sessionsCompleted, activeMs, games })),
+  };
+}
+
 describe('order-independent stats', () => {
   it('converge to the same summary, days and achievements whatever order sessions are processed in, and equal a rebuild', () => {
     const random = prng(0x5747_0013);
@@ -175,7 +259,7 @@ describe('order-independent stats', () => {
     let achievementsSeen = 0;
     let unverifiedDates = 0;
     let streaksSeen = 0;
-    for (let run = 0; run < 150; run += 1) {
+    for (let run = 0; run < 200; run += 1) {
       const docs = randomSessions(random);
       const playOrder = [...docs.keys()].sort((a, b) => compareTimestamps(
         docs[a]!.raw.endedAt as TestTimestamp, docs[b]!.raw.endedAt as TestTimestamp,
@@ -204,16 +288,14 @@ describe('order-independent stats', () => {
         }
       }
 
-      // What the stats count, from first principles over the final results.
-      const final = docs.map((doc) => ({ fields: readSessionAggregateFields({ ...doc.raw, result: reference.results.get(doc.id) }), result: reference.results.get(doc.id)! }));
-      const counted = final.filter(({ result }) => countsInStats(result));
-      const validRuns = counted.filter(({ fields, result }) => result.validity === 'valid' && fields.status === 'completed');
-      const trainingDays = new Set(counted.filter(({ fields, result }) => isTrainingDay(fields, result)).map(({ fields }) => fields.localDate));
-      expect(reference.summary?.sessions ?? 0).toBe(counted.length);
-      expect(reference.summary?.validRuns ?? 0).toBe(validRuns.length);
-      expect(reference.summary ? trainingDatesIn(reference.summary.streak, { from: '2026-01-01', to: '2027-12-31' }) : [])
-        .toEqual([...trainingDays].sort());
-      unverifiedDates += validRuns.length - validRuns.filter(({ fields, result }) => isTrainingDay(fields, result)).length;
+      // The independent oracle: every summary field, every day and game bucket, and the achievement set.
+      const expected = oracle(docs, reference.results);
+      expect(observed(reference.summary, reference.days.values()), `run ${run}`).toEqual(expected);
+      expect(reference.earned.map(({ achievementId }) => achievementId).sort(), `run ${run}`).toEqual(expected.summary?.achievements ?? []);
+      unverifiedDates += docs.filter((doc) => {
+        const result = reference.results.get(doc.id);
+        return result?.validity === 'valid' && doc.raw.status === 'completed' && result.reasons.includes('local-date-mismatch');
+      }).length;
       achievementsSeen += reference.earned.length;
       streaksSeen += (reference.summary?.streak.longest ?? 0) >= 3 ? 1 : 0;
     }

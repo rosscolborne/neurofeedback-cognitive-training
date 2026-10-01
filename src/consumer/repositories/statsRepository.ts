@@ -82,7 +82,11 @@ export interface DailyStatsRead {
 }
 
 export interface AchievementsRead {
-  /** In the order they were earned. */
+  /**
+   * In the order they were earned (`earnedAt`). Achievements earned in the
+   * same commit share `earnedAt` and come back in document-ID order;
+   * `summary.achievements` keeps the exact order they were earned in.
+   */
   readonly achievements: Achievement[];
   readonly unreadable: UnreadableDocument[];
   readonly fromCache: boolean;
@@ -91,8 +95,18 @@ export interface AchievementsRead {
 export interface StatsRepository {
   getSummary(): Promise<DocumentRead<StatsSummary>>;
   subscribeToSummary(onNext: (summary: DocumentRead<StatsSummary>) => void, onError: (error: Error) => void): Unsubscribe;
-  /** The daily stats of an inclusive range of local dates, at most MAX_DAILY_STATS_RANGE_DAYS (31) days. */
+  /**
+   * The daily stats of an inclusive range of local dates, at most
+   * MAX_DAILY_STATS_RANGE_DAYS (31) days. Rejects a range that is not ordered,
+   * too long or not made of real dates (a caller error).
+   */
   getDailyStats(range: LocalDateRange): Promise<DailyStatsRead>;
+  /**
+   * Follows the daily stats of a range. Like the other subscriptions with a
+   * missing sign-in, a caller error (a range getDailyStats would reject)
+   * throws synchronously instead of reaching `onError`, which reports
+   * Firestore errors.
+   */
   subscribeToDailyStats(
     range: LocalDateRange,
     onNext: (days: DailyStatsRead) => void,

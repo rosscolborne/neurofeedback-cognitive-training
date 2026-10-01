@@ -83,6 +83,21 @@ describe('stats compatibility', () => {
     expect(await readDoc(db, achievementPath(uid, 'runs-100'))).toBeUndefined();
   });
 
+  it('rebuilds, rather than failing every session, when the version bump also changed the shape', async () => {
+    const expected = await reference();
+    const uid = newUid();
+    for (const index of [0, 1]) await runSessionPipeline(context, uid, (await write(uid, index)).id);
+    const today = Object.keys(expected.days).sort().at(-1)!;
+    // What an aggregateVersion 1 build with another shape left: this build's reader rejects both documents.
+    await db.doc(statsPath(uid)).set({ schemaVersion: 1, aggregateVersion: 1, totals: { runs: 2 }, streak: 2, badges: ['first-run'] });
+    await db.doc(dailyStatsPath(uid, today)).set({ schemaVersion: 1, aggregateVersion: 1, day: today, count: 7 });
+
+    await runSessionPipeline(context, uid, (await write(uid, 2)).id);
+
+    expect((await readDoc(db, sessionPath(uid, 'compat-2-session-document')))?.processing).toBeUndefined();
+    expect(await statsContent(db, uid)).toEqual(expected);
+  });
+
   it("rebuilds when only the session's day is from an older reducer", async () => {
     const expected = await reference();
     const uid = newUid();

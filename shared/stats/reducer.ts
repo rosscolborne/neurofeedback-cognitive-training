@@ -276,13 +276,15 @@ export function rebuildStats(sessions: readonly StoredStatsSession[], appliedAt:
  * Whether this build may apply sessions to a stored stats document:
  *
  * - 'missing': no document;
- * - 'current': this build's schema and aggregate version;
- * - 'older': an older aggregateVersion: rebuild from the stored results;
+ * - 'current': this build's schema and aggregate version, and readable;
+ * - 'older': an older aggregateVersion or schemaVersion: rebuild from the
+ *   stored results. Decided from the versions alone, before the shape is
+ *   read, because a version bump may change the shape this build reads
+ *   (derived data is never upcast, only rebuilt);
  * - 'newer': a newer schemaVersion or aggregateVersion, written by newer
  *   code (a rollback or a mixed deploy): never written by this build;
- * - 'unreadable': neither newer nor readable.
- *
- * Versions are compared before the shape is read, like classifyProgress.
+ * - 'unreadable': this build's versions (or versions it cannot make sense
+ *   of), but not readable.
  */
 export type StatsDocumentState<T> =
   | { readonly kind: 'missing' }
@@ -298,20 +300,22 @@ function classifyVersioned<T>(
   read: (raw: unknown) => T,
 ): StatsDocumentState<T> {
   if (raw === undefined) return { kind: 'missing' };
+  // The versions are read tolerantly, before the shape: newer first (never written), then older (rebuilt).
   const versions = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   const newer = (value: unknown, known: number) => typeof value === 'number' && value > known;
+  const older = (value: unknown, known: number) => Number.isInteger(value) && (value as number) >= 1 && (value as number) < known;
   if (newer(versions.schemaVersion, schemaVersion) || (aggregateVersion !== null && newer(versions.aggregateVersion, aggregateVersion))) {
     return { kind: 'newer' };
   }
-  let value: T;
+  if (older(versions.schemaVersion, schemaVersion) || (aggregateVersion !== null && older(versions.aggregateVersion, aggregateVersion))) {
+    return { kind: 'older' };
+  }
   try {
-    value = read(raw);
+    return { kind: 'current', value: read(raw) };
   } catch (error) {
     if (error instanceof DomainReadError) return { kind: 'unreadable', detail: error.message };
     throw error;
   }
-  if (aggregateVersion !== null && (value as { aggregateVersion: number }).aggregateVersion < aggregateVersion) return { kind: 'older' };
-  return { kind: 'current', value };
 }
 
 /** Classifies stored stats/summary data (`undefined` when there is no document). */
