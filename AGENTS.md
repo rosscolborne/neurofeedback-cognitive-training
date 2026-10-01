@@ -100,18 +100,22 @@ Do not hold your final response waiting for GitHub CI:
 
 1. Run every required local check before pushing.
 2. Push, or open or update the PR.
-3. Confirm CI has started for the pushed commit with
-   `gh run list --branch <branch> --commit <sha>`. A new run can take up to
-   a minute to appear; if none does, start it with
-   `gh workflow run ci.yml --ref <branch>`.
+3. Once a PR targeting `development` is open or updated, confirm CI has
+   started for the pushed commit with
+   `gh run list --branch <branch> --commit <sha>`; a new run can take up to
+   a minute to appear. A branch without a PR targeting `development` gets no
+   automatic CI run. Do not start full CI by hand merely because no run
+   exists; use `gh workflow run` only for a specific reason to validate
+   outside the normal PR flow.
 4. Report the PR URL and the current CI state, including *pending*, and
    finish. Do not poll or `--watch` the run.
 
-Every push to a PR reruns its CI, so avoid incremental pushes: work and test
-locally, batch related changes, and push when the work is ready for CI or
-review or when a remote checkpoint is genuinely useful, not after each small
-edit. After a CI failure, diagnose and fix it locally and batch the next push
-where practical.
+Plain branch pushes do not run CI, but once a PR targeting `development` is
+open, each push to it can rerun the full suite. From then on, avoid
+incremental pushes: test locally, batch related changes, and push when ready
+for CI or review or when a remote checkpoint is genuinely useful, not after
+each small edit. After a CI failure, diagnose and fix it locally and batch
+the next push where practical.
 
 With CI pending, the report says so plainly, for example:
 
