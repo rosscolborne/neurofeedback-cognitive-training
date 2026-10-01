@@ -16,7 +16,7 @@ const client = (assignment?: ClientProfile['assignedDevice']): ClientProfile => 
 });
 const session = (index: number, score?: number): SessionRecord => ({
   id: `session-${index}`, patientId: 'patient', patientName: 'Patient', clinicId: 'clinic',
-  date: 'Sep 27, 2026', timestamp: 1000 + index, protocol: 'theta-beta-ratio', experience: 'tidal-garden',
+  date: 'Sep 27, 2026', timestamp: 1000 + index, protocol: 'theta-beta-ratio', experience: 'neuro-gambit',
   durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 0,
   finalThreshold: 0, learningRateScore: score,
   averageBands: { delta: 1, theta: 2, alpha: 3, smr: 0, beta: 4, gamma: 0 },

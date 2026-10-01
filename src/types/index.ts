@@ -6,20 +6,10 @@ export type ProtocolType =
   | 'beta-downtraining'
   | 'individualized-upper-alpha';
 
-export type ExperienceType =
-  | 'skyline-drift'
-  | 'tidal-garden'
-  | 'breath-weave'
-  | 'signal-sort'
-  | 'rhythm-lock'
-  | 'media-mode'
-  | 'soundscape-mode'
-  | 'mandala'
-  | 'eeg-mandala'
-  | 'immersive-3d'
-  | 'generative-music'
-  | 'narrative-story'
-  | 'neuro-gambit';
+// NeuroGambit is the only remaining EEG experience; the other legacy
+// neurofeedback experiences were retired. Brain-training games are defined in
+// shared/ (@nfct/shared), not here (ADR-001).
+export type ExperienceType = 'neuro-gambit';
 
 export type SessionPhase = 'calibration' | 'warmup' | 'training' | 'cooldown' | 'debrief';
 

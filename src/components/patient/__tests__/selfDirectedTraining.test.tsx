@@ -28,7 +28,6 @@ vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../EducationHub', () => ({ EducationHub: 'education-hub' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
@@ -93,7 +92,7 @@ describe('self-directed patient shell', () => {
   it('gives an unlinked patient a clean five-tab shell with the default protocol and no care-team gaps', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked())); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(text(renderer)).toContain('Self-directed');
     expect(button(renderer, 'Change training setup')).toBeDefined();
     tab(renderer, 'Train');
@@ -110,7 +109,7 @@ describe('self-directed patient shell', () => {
   it('shows Messages and Visits only while linked, following relationship changes and falling back to Home', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(linked())); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Messages', 'Visits', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Messages', 'Visits', 'Profile']);
     expect(text(renderer)).toContain('Clinician-managed');
     expect(button(renderer, 'Change training setup')).toBeUndefined();
     tab(renderer, 'Profile');
@@ -123,7 +122,7 @@ describe('self-directed patient shell', () => {
 
     // The clinician removes the relationship (Firestore writes null link fields).
     await act(async () => { renderer.update(shell({ ...linked(), clinicianId: null as never, clinicId: null as never })); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-messages')).toHaveLength(0);
     expect(renderer.root.findAllByType(HomeScreen)).toHaveLength(1);
     expect(button(renderer, 'Change training setup')).toBeDefined();
@@ -142,12 +141,11 @@ describe('self-directed patient shell', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('saves a protocol choice with its canonical defaults and blocks stale starts of dropped experiences', async () => {
+  it('saves a protocol choice with its canonical defaults and starts sessions from the persisted list', async () => {
     const saved = { ...unlinked(), assignedProtocol: 'alpha-enhancement' as const, allowedExperiences: [...alpha] };
     state.saveSelfDirectedTrainingSetup.mockResolvedValueOnce(saved);
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked())); });
-    const staleStart = renderer.root.findByType(HomeScreen).props.onStartSession;
     act(() => button(renderer, 'Change training setup')!.props.onClick());
     const modal = renderer.root.findByType(SelfDirectedSetupModal);
     act(() => modal.findAll((node) => node.type === 'input' && node.props.value === 'alpha-enhancement')[0].props.onChange());
@@ -157,46 +155,35 @@ describe('self-directed patient shell', () => {
     expect(renderer.root.findAllByType(SelfDirectedSetupModal)).toHaveLength(0);
 
     await act(async () => { renderer.update(shell(saved)); });
-    expect(text(renderer)).not.toContain('Skyline Drift');
-    act(() => staleStart('skyline-drift'));
-    act(() => staleStart('neuro-gambit'));
-    expect(sessionRunners(renderer)).toHaveLength(0);
     tab(renderer, 'Train');
     expect(trainCards(renderer)).toHaveLength(alpha.length);
     // Session start uses the same persisted list: the first Train card starts its own experience.
     act(() => trainCards(renderer)[0].props.onClick());
-    expect(sessionRunners(renderer)[0].props.selectedExperience).toBe('immersive-3d');
+    expect(sessionRunners(renderer)[0].props.selectedExperience).toBe('neuro-gambit');
     await act(async () => { renderer.unmount(); });
   });
 
-  it('saves an exact customized list, offers a defaults reset, and requires at least one experience', async () => {
+  it('requires at least one experience when customizing and offers a defaults reset', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<SelfDirectedSetupModal client={unlinked()} onSave={onSave} onClose={vi.fn()} />); });
-    expect(text(renderer)).toContain(`Using the ${tbr.length} defaults for this protocol`);
+    expect(text(renderer)).toContain('Using the 1 default for this protocol');
     act(() => button(renderer, 'Customize experiences')!.props.onClick());
     const checkbox = (name: string) => renderer.root.findAll((node) => node.type === 'label' && hasText(node, name))[0].findByType('input');
     expect(checkbox('NeuroGambit').props.checked).toBe(true);
     act(() => checkbox('NeuroGambit').props.onChange());
-    act(() => checkbox('Tidal Garden').props.onChange());
-    expect(text(renderer)).toContain(`Customized: ${tbr.length} of 13 experiences`);
-    expect(button(renderer, 'Use protocol defaults')).toBeDefined();
-    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
-    const custom = [...tbr.filter((id) => id !== 'neuro-gambit'), 'tidal-garden'];
-    expect(onSave).toHaveBeenCalledWith({ assignedProtocol: 'theta-beta-ratio', allowedExperiences: expect.arrayContaining(custom) });
-    expect(onSave.mock.calls[0][0].allowedExperiences).toHaveLength(custom.length);
-
-    const checked = () => renderer.root.findAll((node) => node.type === 'input' && node.props.type === 'checkbox' && node.props.checked);
-    while (checked().length > 0) act(() => checked()[0].props.onChange());
+    expect(text(renderer)).toContain('Customized: 0 of 1 experience');
     expect(button(renderer, 'Save setup')!.props.disabled).toBe(true);
     expect(text(renderer)).toContain('Choose at least one training experience.');
     act(() => button(renderer, 'Use protocol defaults')!.props.onClick());
-    expect(text(renderer)).toContain(`Using the ${tbr.length} defaults for this protocol`);
+    expect(text(renderer)).toContain('Using the 1 default for this protocol');
+    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
+    expect(onSave).toHaveBeenCalledWith({ assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['neuro-gambit'] });
     await act(async () => { renderer.unmount(); });
   });
 
   it('keeps a customized self-directed list when the assessment is re-run with the same protocol', async () => {
-    const customized = { ...unlinked(), allowedExperiences: ['signal-sort', 'tidal-garden'] as ClientProfile['allowedExperiences'] };
+    const customized = { ...unlinked(), allowedExperiences: [] as ClientProfile['allowedExperiences'] };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(customized)); });
     tab(renderer, 'Profile');
@@ -319,7 +306,7 @@ describe('clinician relationship lifecycle', () => {
     expect(renderer.root.findAllByType(DisconnectClinicianDialog)).toHaveLength(0);
 
     await act(async () => { renderer.update(shell(disconnected)); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(button(renderer, 'Change Training Setup')).toBeDefined();
     expect(button(renderer, 'Disconnect from Clinician')).toBeUndefined();
     expect(text(renderer)).not.toContain('Connected to your clinician');

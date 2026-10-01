@@ -21,15 +21,14 @@ describe('clinician protocol experience assignment', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('submits the selected template list without NeuroGambit', async () => {
+  it('replaces the stored experience list with the selected template list', async () => {
     const client: ClientProfile = {
       id: 'patient-one', name: 'Patient One', email: 'patient@example.test', status: 'active',
-      assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['skyline-drift', 'neuro-gambit'],
+      assignedProtocol: 'theta-beta-ratio', allowedExperiences: [],
       brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
     };
     const onUpdateClient = vi.fn(async (_updated: ClientProfile) => {});
     const template = getClinicalProtocolTemplate('alpha-enhancement')!;
-    expect(template.recommendedExperiences).not.toContain('neuro-gambit');
     let renderer!: ReactTestRenderer;
     await act(async () => {
       renderer = create(<ClientDetailView client={client} brand={{ name: 'Clinic' } as ClinicBrandConfig}
@@ -41,7 +40,7 @@ describe('clinician protocol experience assignment', () => {
     expect(onUpdateClient).toHaveBeenCalledOnce();
     const saved = onUpdateClient.mock.calls[0][0];
     expect(saved.allowedExperiences).toEqual(template.recommendedExperiences);
-    expect(readClientProfile(saved).allowedExperiences).not.toContain('neuro-gambit');
+    expect(readClientProfile(saved).allowedExperiences).toEqual(['neuro-gambit']);
     await act(async () => { renderer.unmount(); });
   });
 });

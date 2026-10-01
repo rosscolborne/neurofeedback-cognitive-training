@@ -13,7 +13,6 @@ import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { SelfDirectedSetupModal } from './SelfDirectedSetupModal';
 import { DisconnectClinicianDialog } from './DisconnectClinicianDialog';
-import { EducationHub } from './EducationHub';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
 import { PatientMessagingView } from './PatientMessagingView';
@@ -21,7 +20,7 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
 import { FactGrid, type Fact } from '../ui/FactGrid';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
@@ -86,19 +85,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationAccepted,
   onInvitationDismissed,
 }) => {
-  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [mentalMathOwnerId, setMentalMathOwnerId] = useState<string | null>(null);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
-  const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
-  const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
-  const [gardenOpeningOwnerId, setGardenOpeningOwnerId] = useState<string | null>(null);
-  const [gardenOpeningError, setGardenOpeningError] = useState<string | null>(null);
-  const gardenRequestSequence = useRef(0);
   const currentClientId = useRef(client.id);
-  const currentClient = useRef(client);
   const currentAllowedExperiences = useRef(client.allowedExperiences);
-  useLayoutEffect(() => { currentClient.current = client; }, [client]);
   useLayoutEffect(() => { currentAllowedExperiences.current = client.allowedExperiences; }, [client.allowedExperiences]);
   useEffect(() => {
     currentClientId.current = client.id;
@@ -311,53 +303,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </form>
   ));
 
-  const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
+  const handleStartSession = (exp: ExperienceType) => {
     if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
-    if (exp !== 'tidal-garden' || client.tidalGardenState) {
-      setSessionClient(null);
-      setSessionOwnerId(client.id);
-      setActiveSessionExp(exp);
-      return;
-    }
-    setGardenOpeningOwnerId(client.id);
-    setGardenOpening('pending');
-    setGardenOpeningError(null);
-    const requestSequence = ++gardenRequestSequence.current;
-    return (async () => {
-      try {
-        const ensured = await storageEngine.ensureTidalGardenState(client.id);
-        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
-        const latestClient = currentClient.current;
-        if (!canStartAssignedExperience(latestClient.allowedExperiences, exp)) {
-          setGardenOpening('idle');
-          return;
-        }
-        const assignmentChangedSinceRequest = latestClient.allowedExperiences.length !== client.allowedExperiences.length
-          || latestClient.allowedExperiences.some((id, index) => id !== client.allowedExperiences[index]);
-        const resolvedClient = latestClient === client
-          ? ensured
-          : {
-            ...latestClient,
-            allowedExperiences: assignmentChangedSinceRequest
-              ? latestClient.allowedExperiences : ensured.allowedExperiences,
-            tidalGardenState: latestClient.tidalGardenState ?? ensured.tidalGardenState,
-          };
-        onClientPersistedElsewhere(resolvedClient);
-        setGardenOpening('idle');
-        if (!canStartAssignedExperience(ensured.allowedExperiences, exp)) return;
-        setSessionClient(resolvedClient);
-        setSessionOwnerId(client.id);
-        setActiveSessionExp(exp);
-      } catch (error) {
-        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
-        if (!canStartAssignedExperience(currentClient.current.allowedExperiences, exp)) {
-          setGardenOpening('idle');
-          return;
-        }
-        setGardenOpeningError(error instanceof Error ? error.message : 'Tidal Garden could not be opened.');
-        setGardenOpening('error');
-      }
-    })();
+    setSessionOwnerId(client.id);
+    setActiveSessionExp(exp);
   };
 
   const handleSessionComplete = async (session: SessionRecord) => {
@@ -434,23 +383,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   if (activeSessionExp && sessionOwnerId === client.id) {
     return (
       <SessionRunner
-        client={sessionClient?.id === client.id ? sessionClient : client}
+        client={client}
         onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
-        onCancel={() => { setActiveSessionExp(null); setSessionClient(null); }}
+        onCancel={() => setActiveSessionExp(null)}
       />
     );
-  }
-
-  if (gardenOpening !== 'idle' && gardenOpeningOwnerId === client.id) {
-    return <div style={{ padding: '24px' }}>
-      {gardenOpening === 'pending' ? <p>Opening Tidal Garden…</p> : <>
-        <p role="alert">{gardenOpeningError}</p>
-        <button className="btn btn-primary" onClick={() => void handleStartSession('tidal-garden')}>Retry</button>
-        <button className="btn btn-ghost" onClick={() => setGardenOpening('idle')}>Back</button>
-      </>}
-    </div>;
   }
 
   if (client.accountDeletionStartedAt) {
@@ -563,7 +502,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           <HomeScreen
             client={client}
             onStartSession={handleStartSession}
-            onNavigateTab={setActiveTab}
             onOpenProtocolDetails={() => setShowProtocolDetails(true)}
             onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
           />
@@ -601,18 +539,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     <p id={`train-desc-${exp.id}`} className="train-card-desc">{exp.description}</p>
                     <div className="train-card-foot">
                       <span className="status-tag status-tag-active train-card-tag">{exp.badge}</span>
-                      {exp.researchUrl && (
-                        <a
-                          href={exp.researchUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="train-card-research"
-                          aria-label={`Research for ${exp.name} (opens in a new tab)`}
-                        >
-                          <BookOpen size={12} aria-hidden="true" /> Research
-                        </a>
-                      )}
                     </div>
                   </div>
                 );
@@ -642,8 +568,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             </section>
           </div>
         )}
-
-        {activeTab === 'education' && <EducationHub />}
 
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
@@ -903,7 +827,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {[
           { id: 'home', label: 'Home', icon: Home },
           { id: 'sessions', label: 'Train', icon: Compass },
-          { id: 'education', label: 'Science', icon: BookOpen },
           { id: 'progress', label: 'Progress', icon: Activity },
           { id: 'messages', label: 'Messages', icon: MessageSquare },
           { id: 'appointments', label: 'Visits', icon: CalendarDays },

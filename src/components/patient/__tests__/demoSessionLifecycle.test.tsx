@@ -29,20 +29,8 @@ const repository = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../services/eegEngine', () => ({ eegEngine: engine }));
-vi.mock('../../../services/audioEngine', () => ({ audioEngine: { playChime: vi.fn(), stopAll: vi.fn(), setMuted: vi.fn() } }));
+vi.mock('../../../services/audioEngine', () => ({ audioEngine: { playChime: vi.fn(), setMuted: vi.fn() } }));
 vi.mock('../../../services/storageEngine', () => ({ storageEngine: repository, INITIAL_BADGES: [] }));
-vi.mock('../../experiences/SkylineDriftCanvas', () => ({ SkylineDriftCanvas: 'experience-view' }));
-vi.mock('../../experiences/TidalGardenCanvas', () => ({ TidalGardenCanvas: 'experience-view' }));
-vi.mock('../../experiences/BreathWeaveCanvas', () => ({ BreathWeaveCanvas: 'experience-view' }));
-vi.mock('../../experiences/SignalSortGame', () => ({ SignalSortGame: 'experience-view' }));
-vi.mock('../../experiences/RhythmLockGame', () => ({ RhythmLockGame: 'experience-view' }));
-vi.mock('../../experiences/MediaModePlayer', () => ({ MediaModePlayer: 'experience-view' }));
-vi.mock('../../experiences/SoundscapePlayer', () => ({ SoundscapePlayer: 'experience-view' }));
-vi.mock('../../experiences/MandalaBreathing', () => ({ MandalaBreathing: 'experience-view' }));
-vi.mock('../../experiences/EegMandalaCanvas', () => ({ EegMandalaCanvas: 'experience-view' }));
-vi.mock('../../experiences/GenerativeWebXRCanvas', () => ({ GenerativeWebXRCanvas: 'experience-view' }));
-vi.mock('../../experiences/GenerativeMusicMode', () => ({ GenerativeMusicMode: 'experience-view' }));
-vi.mock('../../experiences/NarrativeTherapyMode', () => ({ NarrativeTherapyMode: 'experience-view' }));
 vi.mock('../../experiences/NeuroGambitExperience', () => ({ NeuroGambitExperience: 'experience-view' }));
 vi.mock('../HeadsetFitModal', () => ({ HeadsetFitModal: 'headset-fit' }));
 
@@ -54,7 +42,7 @@ const client = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', avatarUrl: '',
   condition: 'Generalized Anxiety', status: 'active', assignedProtocol: 'alpha-enhancement',
   clinicId: 'clinic-1', clinicianId: 'clinician-1',
-  prescribedSessionsPerWeek: 2, brainMaps: [], allowedExperiences: ['tidal-garden'],
+  prescribedSessionsPerWeek: 2, brainMaps: [], allowedExperiences: ['neuro-gambit'],
   completedSessionsCount: 0, currentStreak: 0, streakFreezeRemaining: 0,
   brainCapacityScore: 0, lastSessionDate: '', nextSessionDate: '',
   tidalGardenState: { stage: 0, plantsUnlocked: [], growthPoints: 0, lastWatered: '' },
@@ -94,18 +82,6 @@ describe('mounted patient Demo session lifecycle', () => {
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
   });
 
-  it('mounts a stage-one garden for an initialized account with an honest zero-point projection', async () => {
-    let runner!: ReactTestRenderer;
-    const initialized = { ...client, tidalGardenState: { stage: 1, growthPoints: 0, plantsUnlocked: [], lastWatered: '' } };
-    await act(async () => { runner = create(<SessionRunner client={initialized} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={vi.fn()} />); });
-    await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
-    const garden = runner.root.find((node) => (node.type as unknown) === 'experience-view');
-    expect(garden.props.stage).toBe(1);
-    expect(garden.props.growthPoints).toBe(0);
-    expect(text(runner)).not.toContain('Garden progress is unavailable');
-    await act(async () => { runner.unmount(); });
-  });
-
   it('uses self-guided provenance only for an unlinked patient', () => {
     expect(resolveSessionCareProvenance({ ...client, clinicId: undefined, clinicianId: undefined, linkedClinicianCode: undefined }))
       .toEqual({ clinicId: 'self-guided', clinicianId: undefined });
@@ -135,7 +111,7 @@ describe('mounted patient Demo session lifecycle', () => {
     const renderTelemetry = async (profile: ClientProfile, measured: number, inZone = true) => {
       let runner!: ReactTestRenderer;
       await act(async () => {
-        runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={vi.fn()} />);
+        runner = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />);
       });
       await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
       await act(async () => {
@@ -198,7 +174,7 @@ describe('mounted patient Demo session lifecycle', () => {
   it('saves and reloads one synthetic session, labels it in history, then restores the next headset gate', async () => {
     let runner!: ReactTestRenderer;
     await act(async () => {
-      runner = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={(session) => repository.createSession(session).then(() => undefined)} onCancel={vi.fn()} />);
+      runner = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={(session) => repository.createSession(session).then(() => undefined)} onCancel={vi.fn()} />);
     });
     expect(text(runner)).toContain('Connect Muse Headband');
 
@@ -228,7 +204,7 @@ describe('mounted patient Demo session lifecycle', () => {
 
     engine.isDemoMode = true; // Simulate any stale singleton value before the next ordinary run.
     let nextRunner!: ReactTestRenderer;
-    await act(async () => { nextRunner = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={vi.fn()} />); });
+    await act(async () => { nextRunner = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />); });
     expect(engine.isDemoMode).toBe(false);
     expect(text(nextRunner)).toContain('Connect Muse Headband');
     await act(async () => { nextRunner.unmount(); });
@@ -242,7 +218,7 @@ describe('mounted patient Demo session lifecycle', () => {
       ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
     } };
     let runner!: ReactTestRenderer;
-    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
     await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
     await act(async () => {
       stream.callback?.({
@@ -256,8 +232,6 @@ describe('mounted patient Demo session lifecycle', () => {
       });
       vi.advanceTimersByTime(59_000);
     });
-    const garden = runner.root.find((node) => (node.type as unknown) === 'experience-view');
-    expect(garden.props.growthPoints).toBe(147);
     expect(onComplete).not.toHaveBeenCalled();
     await act(async () => { vi.advanceTimersByTime(1_000); });
     expect(onComplete).toHaveBeenCalledOnce();
@@ -281,7 +255,7 @@ describe('mounted patient Demo session lifecycle', () => {
       ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
     } };
     let runner!: ReactTestRenderer;
-    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
     await act(async () => { runner.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
     await act(async () => { button(runner, 'Begin Training').props.onClick(); });
     for (let second = 0; second < 60; second++) {
@@ -303,7 +277,7 @@ describe('mounted patient Demo session lifecycle', () => {
     expect(button(runner, 'Save & View Summary').props.disabled).toBe(false);
     expect(text(runner)).toContain("We couldn't confirm this session was saved");
     engine.isHardwareConnected = false;
-    await act(async () => { runner.update(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner.update(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
     expect(button(runner, 'Save & View Summary').props.disabled).toBe(false);
     expect(text(runner)).not.toContain('Connect Muse Headband');
     await act(async () => { await button(runner, 'Save & View Summary').props.onClick(); });
@@ -323,7 +297,7 @@ describe('mounted patient Demo session lifecycle', () => {
     const onComplete = vi.fn(async () => undefined);
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<SessionRunner client={legacyLinkedClient} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer = create(<SessionRunner client={legacyLinkedClient} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     await act(async () => {
       renderer.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady();
@@ -343,7 +317,7 @@ describe('mounted patient Demo session lifecycle', () => {
     const onComplete = vi.fn(async () => undefined);
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     await act(async () => {
       renderer.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady();
@@ -351,7 +325,7 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { button(renderer, 'Begin Training').props.onClick(); });
     engine.isHardwareConnected = false;
     await act(async () => {
-      renderer.update(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer.update(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     expect(text(renderer)).toContain('Your session is paused — reconnect the headband to continue.');
     expect(text(renderer)).not.toContain('Try Demo Mode');
@@ -367,7 +341,7 @@ describe('mounted patient Demo session lifecycle', () => {
     const onComplete = vi.fn(async () => undefined);
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     await act(async () => {
       renderer.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady();
@@ -412,7 +386,7 @@ describe('mounted patient Demo session lifecycle', () => {
     } };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<SessionRunner client={profile} selectedExperience="tidal-garden" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     await act(async () => { button(renderer, 'Try Demo Mode').props.onClick(); });
     await act(async () => {
@@ -427,8 +401,6 @@ describe('mounted patient Demo session lifecycle', () => {
       });
       vi.advanceTimersByTime(30_000);
     });
-    const garden = renderer.root.find((node) => (node.type as unknown) === 'experience-view');
-    expect(garden.props.growthPoints).toBe(75);
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
     await act(async () => { await button(renderer, 'Save & View Summary').props.onClick(); });
     expect(text(renderer)).toContain("We couldn't confirm this session was saved");
@@ -436,7 +408,6 @@ describe('mounted patient Demo session lifecycle', () => {
     expect(() => button(renderer, 'Continue Training')).toThrow();
     expect(button(renderer, 'Return to Dashboard').props.disabled).toBe(false);
     await act(async () => { vi.advanceTimersByTime(10_000); });
-    expect(garden.props.growthPoints).toBe(75);
     await act(async () => { await button(renderer, 'Save & View Summary').props.onClick(); });
     expect(onComplete).toHaveBeenCalledTimes(2);
     expect(attempts[0].id).toMatch(/^sess-[0-9a-f-]{36}$/i);
@@ -448,7 +419,7 @@ describe('mounted patient Demo session lifecycle', () => {
   it('clears Demo acquisition on cancellation and unmount', async () => {
     const onCancel = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<SessionRunner client={client} selectedExperience="tidal-garden" onComplete={vi.fn()} onCancel={onCancel} />); });
+    await act(async () => { renderer = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={onCancel} />); });
     await act(async () => { button(renderer, 'Try Demo Mode').props.onClick(); });
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
     await act(async () => { button(renderer, 'Exit Without Saving').props.onClick(); });

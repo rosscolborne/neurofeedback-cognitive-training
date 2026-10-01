@@ -12,7 +12,7 @@ import { ClientDetailView } from '../ClientDetailView';
 import { ClinicianSessionDetail } from '../ClinicianSessionDetail';
 
 const client = (id: string): ClientProfile => ({ id, name: `Patient ${id}`, email: `${id}@example.test`, status: 'active', assignedProtocol: 'theta-beta-ratio', allowedExperiences: [], brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0 });
-const session = (id: string, patientId = 'a'): SessionRecord => ({ id, patientId, patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27', timestamp: 100, protocol: 'alpha-enhancement', experience: 'tidal-garden', durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 2, finalThreshold: 0.7 });
+const session = (id: string, patientId = 'a'): SessionRecord => ({ id, patientId, patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27', timestamp: 100, protocol: 'alpha-enhancement', experience: 'neuro-gambit', durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 2, finalThreshold: 0.7 });
 const props = { brand: { name: 'Clinic' } as ClinicBrandConfig, onBack: vi.fn(), onUpdateClient: vi.fn(), onSendMessage: vi.fn() };
 const text = (r: ReactTestRenderer) => JSON.stringify(r.toJSON());
 const click = async (r: ReactTestRenderer, label: string) => {

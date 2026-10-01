@@ -40,7 +40,7 @@ export async function seedLinkedPatient(extra: Record<string, unknown> = {}): Pr
     adminDb.doc(`clients/${patientUid}`).set({
       id: patientUid, name, email: patient.email, status: 'active',
       clinicianId: clinicianUid, clinicId: clinicianUid,
-      condition: 'ADHD (Inattentive)', allowedExperiences: ['skyline-drift'],
+      condition: 'ADHD (Inattentive)', allowedExperiences: ['neuro-gambit'],
       prescribedSessionsPerWeek: 3, completedSessionsCount: 0, currentStreak: 0,
       brainMaps: [], badges: [], isDemo: false, ...extra,
     }),
@@ -66,7 +66,7 @@ export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture):
     adminDb.doc(`clients/${patient.uid}`).set({
       id: patient.uid, name, email: patient.email, status: 'active',
       clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
-      condition: 'ADHD (Inattentive)', allowedExperiences: ['skyline-drift'],
+      condition: 'ADHD (Inattentive)', allowedExperiences: ['neuro-gambit'],
       prescribedSessionsPerWeek: 3, completedSessionsCount: 0, currentStreak: 0,
       brainMaps: [], badges: [], isDemo: false,
     }),
@@ -74,7 +74,7 @@ export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture):
   return { clinician: fixture.clinician, patient, name };
 }
 
-export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'skyline-drift', timestamp = Date.now()) {
+export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'neuro-gambit', timestamp = Date.now()) {
   const id = `review-${randomUUID().replaceAll('-', '')}`;
   await adminDb.doc(`sessions/${id}`).set({
     id, patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
@@ -235,7 +235,7 @@ export async function seedSelfDirectedHistory(patientUid: string) {
     adminDb.doc(`sessions/${sessionId}`).set({
       id: sessionId, patientId: patientUid, clinicId: 'self-guided', schemaVersion: 2,
       timestamp, date: new Date(timestamp).toLocaleDateString(),
-      experience: 'breath-weave', protocol: 'alpha-enhancement', durationSeconds: 600,
+      experience: 'neuro-gambit', protocol: 'alpha-enhancement', durationSeconds: 600,
       isDemo: false, patientNotes: 'Self-directed reflection', moodRating: 4,
       timeSeries: [{ t: 5, alpha: 8, inZone: true }],
     }),

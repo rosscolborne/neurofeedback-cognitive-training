@@ -76,31 +76,6 @@
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 }
 
-.eeg-mandala-experience {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 280px;
-  overflow: hidden;
-  border-radius: 24px;
-  background: #d4b895;
-  box-shadow: inset 0 0 0 1px rgba(96, 108, 56, 0.2);
-}
-
-.eeg-mandala-experience canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.eeg-mandala-vignette {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  box-shadow: inset 0 0 70px rgba(96, 108, 56, 0.24);
-}
-
 /* Base Reset */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -1483,7 +1458,7 @@ input, select, textarea, button {
   border: 0;
 }
 
-/* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
+/* Train catalogue: one card per experience or game. */
 .train-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1584,31 +1559,6 @@ input, select, textarea, button {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   transition: border-color 0.2s ease;
-}
-
-.train-card-research {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  /* A utility link: quieter than the category tag and pushed to the far edge, away from the choice itself. */
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 500;
-  text-decoration: none;
-}
-
-.train-card-research:hover {
-  color: var(--brand-primary);
-}
-
-.train-card-research:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 1px;
 }
 
 /* Narrow phones: one experience per row, icon beside the text, so names and descriptions stay readable. */
@@ -1816,10 +1766,6 @@ input, select, textarea, button {
 @keyframes gentleFloat {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
-}
-
-.animate-breathe {
-  animation: breathingPulse 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 .animate-float {

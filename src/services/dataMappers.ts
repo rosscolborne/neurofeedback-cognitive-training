@@ -8,10 +8,6 @@ import type {
 import { inferProtocolTypeForTemplate } from './protocols';
 import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 
-const LEGACY_EXPERIENCE_RENAMES: Record<string, string> = {
-  'spatial-audio': 'generative-music',
-};
-
 export function timestampToMillis(value: PersistedTimestamp | null | undefined): number | null {
   if (value == null) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -82,9 +78,7 @@ export function readClientProfile(data: unknown, documentId?: string): ClientPro
   // A missing legacy field retains the former open catalogue. A present empty
   // list is an intentional assignment of no experiences.
   const allowed = Array.isArray(raw.allowedExperiences)
-    ? raw.allowedExperiences.map((experience) =>
-        (LEGACY_EXPERIENCE_RENAMES[experience] ?? experience) as ClientProfile['allowedExperiences'][number]
-      )
+    ? [...raw.allowedExperiences]
     : Object.prototype.hasOwnProperty.call(raw, 'allowedExperiences') ? [] : [...DEFAULT_ALLOWED_EXPERIENCES];
 
   // Custom protocol IDs were historically generated as `custom-*`, so older
@@ -239,7 +233,7 @@ export function applySessionCompletionToClient(
     session.timeInZonePercent >= 60
   ) addBadge('still-waters');
 
-  if (client.tidalGardenState && (session.experience === 'tidal-garden' || session.protocol === 'alpha-enhancement')) {
+  if (client.tidalGardenState && session.protocol === 'alpha-enhancement') {
     const earnedXp = session.inZoneSeconds !== undefined && session.configuredDurationSeconds !== undefined
       ? getTidalGardenSessionXp(session.inZoneSeconds, session.configuredDurationSeconds, session.durationSeconds)
       : session.inZoneSeconds === undefined && session.configuredDurationSeconds === undefined
@@ -259,6 +253,5 @@ export function applySessionCompletionToClient(
     if (client.tidalGardenState.stage >= 3) addBadge('garden-keeper');
   }
 
-  if ((client.skylineBiomesUnlocked?.length ?? 0) >= 5) addBadge('skyline-explorer');
   return client;
 }

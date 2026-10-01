@@ -27,7 +27,7 @@ describe('patient training authority', () => {
   });
 
   it('hides only clinician-dependent destinations while self-directed', () => {
-    for (const tab of ['home', 'sessions', 'education', 'progress', 'profile']) {
+    for (const tab of ['home', 'sessions', 'progress', 'profile']) {
       expect(isPatientTabAvailable(tab, 'self-directed')).toBe(true);
       expect(isPatientTabAvailable(tab, 'clinician')).toBe(true);
     }
@@ -57,13 +57,13 @@ describe('patient training authority', () => {
       assignedProtocol: 'alpha-enhancement',
       allowedExperiences: getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences,
     });
-    expect(alpha.allowedExperiences).not.toContain('neuro-gambit');
+    expect(alpha.allowedExperiences).toEqual(['neuro-gambit']);
     expect(() => buildSelfDirectedTrainingSetup('individualized-upper-alpha')).toThrow('not available for self-directed training');
   });
 
   it('persists an exact customized list in catalogue order and refuses an empty or unknown one', () => {
-    expect(buildSelfDirectedTrainingSetup('smr-enhancement', ['signal-sort', 'tidal-garden', 'signal-sort']))
-      .toEqual({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['tidal-garden', 'signal-sort'] });
+    expect(buildSelfDirectedTrainingSetup('smr-enhancement', ['neuro-gambit', 'neuro-gambit']))
+      .toEqual({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit'] });
     expect(() => buildSelfDirectedTrainingSetup('smr-enhancement', [])).toThrow('Choose at least one training experience.');
     expect(() => buildSelfDirectedTrainingSetup('smr-enhancement', ['spatial-audio' as never])).toThrow('not available');
     expect(normalizeExperienceSelection([...EXPERIENCE_IDS].reverse())).toEqual(EXPERIENCE_IDS);
@@ -72,14 +72,15 @@ describe('patient training authority', () => {
     expect(buildSelfDirectedTrainingSetup('beta-downtraining', [...beta].reverse()).allowedExperiences).toEqual(beta);
   });
 
-  it('recognises canonical defaults regardless of stored order, and customized or legacy lists as custom', () => {
+  it('recognises canonical defaults regardless of stored order, and customized lists as custom', () => {
     const tbr = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
     expect(usesProtocolDefaultExperiences('theta-beta-ratio', [...tbr].reverse())).toBe(true);
     expect(usesProtocolDefaultExperiences('theta-beta-ratio', tbr.slice(1))).toBe(false);
     expect(usesProtocolDefaultExperiences('theta-beta-ratio', [])).toBe(false);
     const legacy = { ...blank() } as Partial<ClientProfile>;
     delete legacy.allowedExperiences;
-    expect(usesProtocolDefaultExperiences('theta-beta-ratio', readClientProfile(legacy).allowedExperiences)).toBe(false);
+    // A field-missing legacy record falls back to the whole catalogue, which is now every protocol's default.
+    expect(usesProtocolDefaultExperiences('theta-beta-ratio', readClientProfile(legacy).allowedExperiences)).toBe(true);
     expect(usesProtocolDefaultExperiences('individualized-upper-alpha', tbr)).toBe(false);
   });
 
