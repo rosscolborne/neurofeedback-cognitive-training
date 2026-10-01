@@ -28,6 +28,7 @@ import {
 } from '../../src/consumer/repositories/gameSessionRepository';
 import { createProfileRepository, type UserProfileDraft } from '../../src/consumer/repositories/profileRepository';
 import { createProgressRepository } from '../../src/consumer/repositories/progressRepository';
+import { createStatsRepository } from '../../src/consumer/repositories/statsRepository';
 import type {
   EegRecordingDraft,
   EegRecordingRepositoryOptions,
@@ -77,6 +78,7 @@ export interface Device {
   readonly sessions: ReturnType<typeof createGameSessionRepository>;
   readonly eeg: ReturnType<typeof createEegRecordingRepository>;
   readonly progress: ReturnType<typeof createProgressRepository>;
+  readonly stats: ReturnType<typeof createStatsRepository>;
 }
 
 export interface Player {
@@ -111,6 +113,7 @@ export function newDevice(options: DeviceOptions = {}): Device {
     profiles: createProfileRepository(context),
     sessions: createGameSessionRepository(context, options.sessionOptions),
     progress: createProgressRepository(context),
+    stats: createStatsRepository(context),
   };
 }
 

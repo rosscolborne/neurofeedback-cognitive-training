@@ -4,7 +4,7 @@ import {
   decideSession,
   evaluateSession,
   processingRecord,
-  readSessionProgressFields,
+  readSessionAggregateFields,
   sessionProcessingWriteSchema,
   type ProcessingReason,
   type ServerResult,
@@ -13,6 +13,7 @@ import {
 import { accountDeleted, progressRef, sessionRef, type ProcessingContext } from './context';
 import { applicableProgress, rebuildInTransaction } from './progress';
 import { upgradeInTransaction, type ReconcileTarget } from './reconcile';
+import { planStatsForProcessing, writeStats, type StatsEvent } from './stats';
 
 // Processing one session (NFCT-19): the exactly-once transaction.
 //
@@ -36,8 +37,12 @@ import { upgradeInTransaction, type ReconcileTarget } from './reconcile';
 //    start-level unlock against it, and, when the decision raised the
 //    unlocked start level (or progress was rebuilt), upgrade the
 //    start-level-locked sessions it unlocks (upgradeInTransaction, bounded);
-// 6. write the result, progress, the upgraded results and the removal of any
-//    stale `processing` in one commit.
+// 6. plan the cross-game stats (NFCT-13): the session's activity and, for a
+//    valid one, its valid-only effects, then the valid-only effects of every
+//    session upgraded here, and the achievements they earn (stats.ts; it
+//    rebuilds stats from an older aggregate version, and refuses newer ones);
+// 7. write the result, progress, the upgraded results, the stats and the
+//    removal of any stale `processing` in one commit.
 //
 // Processing order never matters: each session is judged against the progress
 // its transaction reads, a session flagged only because its start level was
@@ -112,7 +117,7 @@ export async function processSession(context: ProcessingContext, uid: string, se
     // cascade as a pending candidate, so an unlock the cascade reaches upgrades it in this same commit,
     // just as it would have been had it been processed after that cascade.
     const pending = decision.result.validity === 'flagged'
-      ? [{ id: sessionId, fields: readSessionProgressFields({ ...judged.session, result: decision.result }) }]
+      ? [{ id: sessionId, fields: readSessionAggregateFields({ ...judged.session, result: decision.result }) }]
       : [];
     const planned = decision.unlockRaised || rebuilt
       ? await upgradeInTransaction(context, transaction, uid, target, decision.progress, processedAt, pending)
@@ -121,12 +126,21 @@ export async function processSession(context: ProcessingContext, uid: string, se
     const others = planned.upgrades.filter(({ sessionId: upgradedId }) => upgradedId !== sessionId);
     const result = own?.result ?? decision.result;
 
-    // Every read is done; write the session, progress and the upgrades together.
+    // The stats see the session counted with its final result (valid, if this commit upgraded it), then the others' upgrades.
+    const events: StatsEvent[] = [
+      { kind: 'counted', sessionId, session: judged.session, result },
+      ...others.map(({ sessionId: upgradedId, fields, result: upgradedResult }): StatsEvent => (
+        { kind: 'upgraded', sessionId: upgradedId, session: fields, result: upgradedResult })),
+    ];
+    const stats = await planStatsForProcessing(context, transaction, uid, events, processedAt);
+
+    // Every read is done; write the session, progress, the upgrades and the stats together.
     transaction.update(ref, { result, processing: FieldValue.delete() });
     transaction.set(progressRef(context.db, uid, gameId), planned.progress);
     for (const { sessionId: upgradedId, result: upgradedResult } of others) {
       transaction.update(sessionRef(context.db, uid, upgradedId), { result: upgradedResult });
     }
+    writeStats(transaction, context.db, uid, stats);
     return {
       status: 'processed',
       validity: result.validity,

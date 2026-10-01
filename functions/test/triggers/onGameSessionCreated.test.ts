@@ -3,7 +3,9 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { handleSessionCreated } from '../../src/pipeline';
 import { coreContext, minutesAgo } from '../helpers/core';
 import {
+  achievementPath,
   content,
+  dailyStatsPath,
   emulatorFirestore,
   newSessionId,
   newUid,
@@ -12,6 +14,8 @@ import {
   sessionDoc,
   sessionPath,
   settled,
+  statsContent,
+  statsPath,
   TRIGGER_PROJECT,
   waitFor,
   type Plan,
@@ -48,6 +52,24 @@ describe('onGameSessionCreated', () => {
       sessionsCompleted: 1, activeMs: 90_000, bestPeakLevel: { 'timed-90': 4 }, unlocked: { 'timed-90': 3 },
       bests: { 'timed-90:1': { score: { value: result.score, sessionId: id } } },
     });
+  });
+
+  it('maintains the stats, the day and the achievements in the same commit (NFCT-13), and a replay changes nothing', async () => {
+    const uid = newUid();
+    const id = await createSession(uid, { seed: 116, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(3) });
+
+    const { result, localDate } = await processed(uid, id);
+
+    expect(await readDoc(db, statsPath(uid))).toMatchObject({
+      sessions: 1, validRuns: 1, bestPeakLevel: { 'mental-math': 5 }, streak: { current: 1, lastActiveDate: localDate },
+      achievements: ['first-run', 'mental-math-level-5'], updatedAt: result.processedAt,
+    });
+    expect(await readDoc(db, dailyStatsPath(uid, localDate))).toMatchObject({ sessions: 1, activeMs: 90_000, updatedAt: result.processedAt });
+    expect(await readDoc(db, achievementPath(uid, 'first-run'))).toMatchObject({ sessionId: id, earnedAt: result.processedAt, localDate });
+
+    const before = await statsContent(db, uid);
+    await handleSessionCreated(coreContext(db), { params: { uid, sessionId: id }, time: new Date().toISOString() });
+    expect(await statsContent(db, uid)).toEqual(before);
   });
 
   it('flags a first session at level 2 start-level-locked', async () => {
@@ -152,6 +174,8 @@ describe('onGameSessionCreated', () => {
       expect([[], ['start-level-unlocked-later']]).toContainEqual(laterResult.reasons);
       expect((await readDoc(db, sessionPath(uid, earlier)))?.result).toMatchObject({ validity: 'valid' });
       expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 2, activeMs: 180_000, unlocked: { 'timed-90': 5 } });
+      // Both counted once in the stats, and both valid runs, whichever commit upgraded which.
+      expect(await readDoc(db, statsPath(uid))).toMatchObject({ sessions: 2, validRuns: 2, bestPeakLevel: { 'mental-math': 6 } });
     });
 
     it('delivered one at a time in reverse play order: the unlocking commit upgrades the later session in the same write', async () => {

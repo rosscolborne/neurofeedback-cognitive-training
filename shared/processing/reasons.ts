@@ -91,6 +91,10 @@ export const PROCESSING_REASONS = Object.freeze({
   progressUnreadable: 'progress-unreadable',
   /** A processed session needed for a rebuild cannot be read. */
   sessionUnreadable: 'session-unreadable',
+  /** The user's stats (summary, a day or an achievement) were written by newer code (schema or aggregate version); this build never overwrites them (NFCT-13). */
+  statsNewerThanCode: 'stats-newer-than-code',
+  /** A stats document cannot be read and is not from newer code; the admin rebuild replaces it (NFCT-13). */
+  statsUnreadable: 'stats-unreadable',
   /** Anything else: a bug or an infrastructure failure. */
   internalError: 'internal-error',
 } as const);
