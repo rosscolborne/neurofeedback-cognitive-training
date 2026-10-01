@@ -93,9 +93,21 @@ describe('Release configuration check', () => {
 
   it('fails CAPACITOR_DEBUG in an xcconfig that Release reads, including local signing', () => {
     for (const file of ['release.xcconfig', 'signing.local.xcconfig']) {
-      const problems = checkReleaseProject({ ...project, xcconfigs: { ...project.xcconfigs, [file]: 'CAPACITOR_DEBUG = true' } });
-      expect(problems).toEqual([expect.stringMatching(new RegExp(`ios/${file} sets CAPACITOR_DEBUG`))]);
+      for (const line of ['CAPACITOR_DEBUG = true', 'CAPACITOR_DEBUG[sdk=iphoneos*] = true']) {
+        const problems = checkReleaseProject({ ...project, xcconfigs: { ...project.xcconfigs, [file]: line } });
+        expect(problems).toEqual([expect.stringMatching(new RegExp(`ios/${file} sets CAPACITOR_DEBUG`))]);
+      }
     }
+  });
+
+  it('fails a Release xcconfig that includes debug.xcconfig', () => {
+    const problems = checkReleaseProject({ ...project, xcconfigs: { ...project.xcconfigs, 'release.xcconfig': '#include "debug.xcconfig"' } });
+    expect(problems).toEqual([expect.stringMatching(/includes debug\.xcconfig/)]);
+  });
+
+  it('fails an SDK-conditional CAPACITOR_DEBUG in a Release configuration', () => {
+    const conditional = project.pbxproj.replace('VALIDATE_PRODUCT = YES;', 'VALIDATE_PRODUCT = YES;\n\t\t\t\t"CAPACITOR_DEBUG[sdk=iphoneos*]" = true;');
+    expect(checkReleaseProject({ ...project, pbxproj: conditional })).toEqual([expect.stringMatching(/sets CAPACITOR_DEBUG/)]);
   });
 
   it('fails an App Transport Security exception in the shared Info.plist', () => {
@@ -108,7 +120,7 @@ describe('Xcode Release guard (ios/scripts/release-web-bundle-guard.sh)', () => 
   const dirs = [];
   afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-  function guard(configuration, files) {
+  function guard(configuration, files, env = {}) {
     const srcroot = mkdtempSync(join(tmpdir(), 'nfct-guard-'));
     dirs.push(srcroot);
     for (const [path, content] of Object.entries(files)) {
@@ -116,7 +128,7 @@ describe('Xcode Release guard (ios/scripts/release-web-bundle-guard.sh)', () => 
       writeFileSync(join(srcroot, 'App/public', path), content);
     }
     return spawnSync('sh', [root + 'ios/scripts/release-web-bundle-guard.sh'], {
-      env: { ...process.env, CONFIGURATION: configuration, SRCROOT: srcroot },
+      env: { ...process.env, CAPACITOR_DEBUG: '', CONFIGURATION: configuration, SRCROOT: srcroot, ...env },
       encoding: 'utf8',
     });
   }
@@ -135,6 +147,12 @@ describe('Xcode Release guard (ios/scripts/release-web-bundle-guard.sh)', () => 
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^error: /);
     expect(result.stderr).toMatch(message);
+  });
+
+  it('refuses a Release build whose resolved settings set CAPACITOR_DEBUG', () => {
+    const result = guard('Release', { 'index.html': PRODUCTION_HTML, 'assets/index.js': PRODUCTION_JS }, { CAPACITOR_DEBUG: 'true' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/^error: CAPACITOR_DEBUG is set/);
   });
 
   it('does not check Debug builds', () => {

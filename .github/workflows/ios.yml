@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR pushes are cancelled; every main commit gets its own check.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # iOS build checks (NFCT-31); docs/nfct/ios.md explains each layer.
 #

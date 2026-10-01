@@ -12,6 +12,14 @@ set -eu
 
 [ "${CONFIGURATION:-}" = "Release" ] || exit 0
 
+# CAPACITOR_DEBUG makes the web view inspectable and forwards console output.
+# Xcode resolves it from every xcconfig, include and SDK-conditional setting,
+# so check the resolved value, not the files.
+if [ -n "${CAPACITOR_DEBUG:-}" ]; then
+  echo "error: CAPACITOR_DEBUG is set (${CAPACITOR_DEBUG}) in a Release build; only ios/debug.xcconfig may set it (docs/nfct/ios.md)." >&2
+  exit 1
+fi
+
 public="${SRCROOT:?}/App/public"
 fail() {
   echo "error: $1 Run npm run sync:ios before a Release build (docs/nfct/ios.md)." >&2

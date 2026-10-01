@@ -98,14 +98,18 @@ export function checkReleaseProject({ pbxproj, xcconfigs, infoPlist }) {
   for (const { id, base, settings } of releases) {
     const where = `${targetIds.has(id) ? 'App target' : 'Project'} Release configuration`;
     if (base !== 'release.xcconfig') problems.push(`${where} must be based on release.xcconfig, not ${base ?? 'nothing'}.`);
-    if ('CAPACITOR_DEBUG' in settings) problems.push(`${where} sets CAPACITOR_DEBUG.`);
+    if (Object.keys(settings).some((key) => /^"?CAPACITOR_DEBUG(\[|"?$)/.test(key))) problems.push(`${where} sets CAPACITOR_DEBUG.`);
     if (/\bDEBUG=1\b/.test(settings.GCC_PREPROCESSOR_DEFINITIONS ?? '')) problems.push(`${where} defines DEBUG=1.`);
     if (/\bDEBUG\b/.test(settings.SWIFT_ACTIVE_COMPILATION_CONDITIONS ?? '')) problems.push(`${where} compiles Swift with DEBUG.`);
     if (/-D\s*"?DEBUG\b/.test(settings.OTHER_SWIFT_FLAGS ?? '')) problems.push(`${where} passes -DDEBUG to Swift.`);
   }
   for (const [file, text] of Object.entries(xcconfigs)) {
-    if (file !== 'debug.xcconfig' && /^\s*CAPACITOR_DEBUG\s*=/m.test(text)) {
+    if (file === 'debug.xcconfig') continue;
+    if (/^\s*CAPACITOR_DEBUG\s*(\[[^\]]*\]\s*)?=/m.test(text)) {
       problems.push(`ios/${file} sets CAPACITOR_DEBUG, which Release builds read.`);
+    }
+    if (/^\s*#include\??\s*"[^"]*debug\.xcconfig"/m.test(text)) {
+      problems.push(`ios/${file} includes debug.xcconfig, which Release builds would then read.`);
     }
   }
   const plist = parsePlist(infoPlist);

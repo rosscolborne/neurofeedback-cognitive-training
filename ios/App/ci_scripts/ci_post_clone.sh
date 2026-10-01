@@ -10,10 +10,15 @@
 # `npm run sync:ios` builds the production bundle, syncs it and runs the
 # release check, so an archive can never package a development bundle.
 #
-# Optional workflow environment variable (Xcode Cloud > Workflow >
-# Environment): NFCT_DEVELOPMENT_TEAM, the Apple team ID. When it is set, the
-# hook writes the gitignored ios/signing.local.xcconfig, so the team never has
-# to be committed. It is not a secret.
+# Workflow environment variables (Xcode Cloud > Workflow > Environment):
+# - VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID
+#   and VITE_FIREBASE_APP_ID (plus the optional storage bucket and sender ID):
+#   the NFCT project's web config, read by `vite build`. Without them the build
+#   succeeds, but the app refuses to start Firebase (firebaseConfig.ts fails
+#   closed). They are not secret.
+# - NFCT_DEVELOPMENT_TEAM (optional): the Apple team ID. When it is set, the
+#   hook writes the gitignored ios/signing.local.xcconfig, so the team never
+#   has to be committed. It is not a secret.
 
 set -e
 
@@ -63,6 +68,10 @@ npm ci --legacy-peer-deps
 if [ -n "${NFCT_DEVELOPMENT_TEAM:-}" ]; then
     printf 'DEVELOPMENT_TEAM = %s\n' "$NFCT_DEVELOPMENT_TEAM" > "$REPO_ROOT/ios/signing.local.xcconfig"
     echo "Wrote ios/signing.local.xcconfig for team $NFCT_DEVELOPMENT_TEAM"
+fi
+
+if [ -z "${VITE_FIREBASE_PROJECT_ID:-}" ]; then
+    echo "WARNING: VITE_FIREBASE_* is not set. This build will not connect to Firebase (see docs/nfct/ios.md#xcode-cloud)."
 fi
 
 # Build the production web bundle, sync Capacitor iOS, and run the release check

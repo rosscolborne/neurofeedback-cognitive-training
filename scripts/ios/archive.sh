@@ -15,6 +15,8 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 archive="$root/build/NFCT.xcarchive"
 export_dir="$root/build/output"
+# Bash 3.2 (macOS /bin/bash) treats an empty array as unbound under set -u,
+# so it is expanded below as ${team[@]+"${team[@]}"}.
 team=()
 if [ -n "${DEVELOPMENT_TEAM:-}" ]; then
   team=(DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM")
@@ -37,7 +39,7 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$archive" \
   -allowProvisioningUpdates \
-  "${team[@]}"
+  ${team[@]+"${team[@]}"}
 echo "Archive: $archive"
 
 if [ "${1:-}" = --upload ]; then

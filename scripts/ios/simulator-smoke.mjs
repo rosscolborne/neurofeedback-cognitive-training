@@ -125,13 +125,19 @@ async function run(app, udid, out) {
     // Page errors, from the probe and from Capacitor's own window.onerror bridge.
     ['No uncaught JavaScript errors in the page', !events(all).some(({ event }) => event === 'uncaught-error')
       && !/STARTUP JS ERROR/.test(all)],
+    ['No failed native-to-web evaluations after the page loaded', nativeEvalErrors.every(({ late }) => late === 0)],
   ];
   const consoleErrors = [...all.matchAll(/\[error\] - (.*)/g)].map(([, line]) => line.slice(0, 300));
   // Capacitor evaluates JS from native code, for example its document
   // 'resume' event when the scene enters the foreground at launch, before the
-  // page has loaded. Such failures are reported, not failed: they are not
-  // errors in the app's code.
-  const nativeEvalErrors = (all.match(/JS Eval error/g) ?? []).length;
+  // page has loaded. Failures before "WebView loaded" are reported, not
+  // failed: they are not errors in the app's code. Any later one fails.
+  const evalErrors = (log) => {
+    const loaded = log.indexOf('WebView loaded');
+    const all = [...log.matchAll(/JS Eval error/g)].map(({ index }) => index);
+    return { early: all.filter((index) => loaded < 0 || index < loaded).length, late: all.filter((index) => loaded >= 0 && index > loaded).length };
+  };
+  const nativeEvalErrors = [first.log, second.log].map(evalErrors);
   const runtime = Object.entries(JSON.parse(xcrun('simctl', 'list', 'devices', '--json')).devices)
     .find(([, devices]) => devices.some((device) => device.udid === udid))?.[0].split('.').pop() ?? 'unknown runtime';
   const summary = [
@@ -147,7 +153,7 @@ async function run(app, udid, out) {
     `Relaunch: \`${JSON.stringify(relaunch ?? { timedOut: second.timedOut })}\``,
     '',
     consoleErrors.length ? `Console errors (reported, not failed):\n\n${consoleErrors.map((line) => `- \`${line}\``).join('\n')}` : 'No console errors.',
-    `Capacitor native-to-web evaluations that failed before the page loaded (reported, not failed): ${nativeEvalErrors}.`,
+    `Capacitor native-to-web evaluations that failed before the page loaded (reported, not failed): ${nativeEvalErrors.reduce((sum, { early }) => sum + early, 0)}.`,
     '',
     'Screenshots and full logs are in the `ios-simulator-smoke` artifact.',
   ].join('\n');

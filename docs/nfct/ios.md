@@ -235,6 +235,15 @@ What the repository provides, and CI proves on every native run:
 - The shared `App` scheme, which Xcode Cloud requires.
 - An archive is a Release build, so the guard build phase also refuses a
   development bundle.
+- The Firebase web config comes from workflow environment variables:
+  `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`,
+  `VITE_FIREBASE_PROJECT_ID` and `VITE_FIREBASE_APP_ID`, and optionally the
+  storage bucket and sender ID. `vite build` compiles them in. Without them
+  the archive still succeeds and passes the release check, but the app
+  refuses to start Firebase at launch (`firebaseConfig.ts` fails closed), and
+  the hook prints a warning. They are not secret. Until NFCT-24 deploys the
+  consumer rules, `nfct-dev` denies all reads and writes, so a TestFlight
+  build can launch but cannot sign in or sync.
 - Optional `NFCT_DEVELOPMENT_TEAM` workflow variable: the hook writes it to
   the gitignored `ios/signing.local.xcconfig`. Set it only if Xcode Cloud's
   archive reports that no team is selected; Xcode Cloud normally signs with
@@ -270,7 +279,9 @@ agent. Nothing else in NFCT-30 or NFCT-31 waits for them.
    `ios/App/App.xcodeproj` and the `App` scheme, connected to
    `rosscolborne/neurofeedback-cognitive-training`. Give it an Archive (iOS)
    action, TestFlight internal testing as the post-action, and a manual or
-   tag start condition on `main`. Use Xcode 26.
+   tag start condition on `main`. Use Xcode 26. Add the NFCT Firebase web
+   config as environment variables ([Xcode Cloud](#xcode-cloud)); a build
+   without them cannot use Firebase.
 5. Start one build and confirm it reaches TestFlight. If the archive reports
    that no team is selected, add `NFCT_DEVELOPMENT_TEAM` to the workflow's
    environment.
