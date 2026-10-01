@@ -17,7 +17,7 @@ import {
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { mentalMath } from '@nfct/shared';
 import { auth, db } from '../../src/services/firebase';
-import { gameSessionRepository, profileRepository, type EegRecordingDraft } from '../../src/consumer/repositories';
+import { eegRecordingRepository, gameSessionRepository, profileRepository, type EegRecordingDraft } from '../../src/consumer/repositories';
 
 // In-page helpers for the cache isolation specs. Specs load this module with
 // `page.evaluate(() => import('/e2e/helpers/cacheIsolation.ts'))`, which the
@@ -121,27 +121,27 @@ export async function createConsentedProfile(): Promise<void> {
 }
 
 /**
- * Saves a finished Mental Math session through the app's repository, with a
- * measured EEG recording in the same batch when `withEeg` is set. Waits for
- * the server unless `waitForServer` is false (an offline save stays queued).
+ * Saves a finished Mental Math session through the app's repositories as the
+ * consumer app does: the session first, on its own, then (with `withEeg`) its
+ * measured EEG recording as a separate write, which needs consent confirmed by
+ * the server and so waits for the server's verdict. Waits for the session to
+ * reach the server unless `waitForServer` is false (an offline save stays
+ * queued); an EEG recording needs a connection either way.
  */
 export async function saveGameSession({ withEeg, waitForServer = true }: { withEeg: boolean; waitForServer?: boolean }) {
     const game = gameSessionRepository.startGameSession();
-    const saved = await game.save({
-        definition: mentalMath.definition,
-        session: sessionDraft(),
-        eegRecording: withEeg ? measuredEegDraft() : null,
-    });
-    if (withEeg && saved.eegRecording.status !== 'included') {
-        throw new Error(`The EEG recording was not included: ${JSON.stringify(saved.eegRecording)}`);
-    }
+    const saved = await game.save({ definition: mentalMath.definition, session: sessionDraft() });
     if (waitForServer) await saved.acknowledged;
     else void saved.acknowledged.catch(() => {});
-    return {
-        uid: game.userId,
-        sessionId: saved.sessionId,
-        recordingId: saved.eegRecording.status === 'included' ? saved.eegRecording.recordingId : null,
-    };
+    let recordingId: string | null = null;
+    if (withEeg) {
+        const recording = await eegRecordingRepository.saveRecording(saved, measuredEegDraft());
+        if (recording.status !== 'queued') throw new Error(`The EEG recording was not saved: ${JSON.stringify(recording)}`);
+        const outcome = await recording.serverOutcome;
+        if (outcome.status !== 'acknowledged') throw new Error(`The server refused the EEG recording: ${JSON.stringify(outcome)}`);
+        recordingId = recording.recordingId;
+    }
+    return { uid: saved.userId, sessionId: saved.sessionId, recordingId };
 }
 
 /** Reads the signed-in user's inherited clinical document (clients/{uid}) as the patient app does. */
