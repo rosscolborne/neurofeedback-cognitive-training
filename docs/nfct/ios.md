@@ -157,6 +157,10 @@ Alongside these, `ios.yml` `release-bundle` runs on every PR. It builds and
 syncs the production bundle, runs `verify:ios-release`, and shows that the
 check fails on the emulator bundle.
 
+A signed-in account whose role has not been read yet stays on the loading
+screen; a failed read, or none within 15 s, shows a retryable error, never role
+selection (NFCT-44). A failure there is a product bug, so it is not retried away.
+
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView. It does not
 prove older iOS versions, the `capacitor://` origin, suspension, the software
 keyboard, safe areas or Bluetooth. Layer 3 adds the real WKWebView, the

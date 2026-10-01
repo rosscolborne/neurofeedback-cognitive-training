@@ -30,6 +30,7 @@ vi.mock('../components/clinician/ClinicianShell', () => ({ ClinicianShell: 'clin
 vi.mock('../components/patient/PatientShell', () => ({ PatientShell: 'patient-shell' }));
 vi.mock('../components/brand/ClinicCustomizerModal', () => ({ ClinicCustomizerModal: 'brand-modal' }));
 vi.mock('../components/brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
+vi.mock('../components/account/UnsyncedSignOutDialog', () => ({ UnsyncedSignOutDialog: 'unsynced-dialog' }));
 vi.mock('../pages/onboarding/Welcome', () => ({ Welcome: 'welcome-page' }));
 vi.mock('../pages/onboarding/SignUp', () => ({ SignUp: 'signup-page' }));
 vi.mock('../pages/onboarding/Login', () => ({ Login: 'login-page' }));
@@ -444,7 +445,7 @@ describe('mounted App account/workspace lifecycle', () => {
 
   it('keeps a signed-in account whose role is unknown on the loading screen with a retry, never role selection (NFCT-44)', async () => {
     const retryRoleLookup = vi.fn();
-    const logout = vi.fn().mockResolvedValue('signed-out');
+    const logout = vi.fn().mockResolvedValueOnce('unsynced');
     const labels = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button').map((button) => button.children.join(''));
     const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
     // Still reading the role: the plain loading screen, nothing to act on.
@@ -464,8 +465,26 @@ describe('mounted App account/workspace lifecycle', () => {
     const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
     await act(async () => { button('Try again').props.onClick(); });
     expect(retryRoleLookup).toHaveBeenCalledOnce();
+
+    // Sign-out found unsynced writes and asks: a retry must not close that question.
+    const unsyncedDialog = () => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
     await act(async () => { button('Sign out').props.onClick(); await flush(); });
     expect(logout).toHaveBeenCalledOnce();
+    expect(unsyncedDialog()).toHaveLength(1);
+    expect(button('Try again').props.disabled).toBe(true);
+    await act(async () => { unsyncedDialog()[0].props.onStaySignedIn(); });
+    expect(unsyncedDialog()).toHaveLength(0);
+    expect(button('Try again').props.disabled).toBe(false);
+
+    // Nor while a sign-out runs.
+    let finish!: (outcome: string) => void;
+    logout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(button('Try again').props.disabled).toBe(true);
+    expect(button('Sign out').props.disabled).toBe(true);
+    await act(async () => { finish('signed-out'); await flush(); });
+    expect(logout).toHaveBeenCalledTimes(2);
+    expect(retryRoleLookup).toHaveBeenCalledOnce();
     renderer.unmount();
   });
 });
