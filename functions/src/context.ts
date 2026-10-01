@@ -19,7 +19,20 @@ export interface ProcessingContext {
   readonly now: () => Timestamp;
   readonly log: Logger;
   readonly limits: ProcessingLimits;
+  /**
+   * Test-only interleaving seam: awaited at a named point inside a transaction,
+   * so a test can commit a concurrent write at exactly that point and prove the
+   * transaction loses no update. Production never sets it (the trigger, the
+   * sweep and the admin scripts build their context without it, and a test
+   * checks that), so in production it is always undefined and never awaited.
+   */
+  readonly interleave?: (point: InterleavePoint) => Promise<void>;
 }
+
+/** Where a test may interleave a concurrent write. */
+export type InterleavePoint =
+  /** The admin rebuild has read progress and every session, and has not written progress yet. */
+  | 'rebuild-before-write';
 
 export function processingContext(
   db: Firestore,
@@ -31,6 +44,7 @@ export function processingContext(
     now: overrides.now ?? (() => Timestamp.now()),
     log: overrides.log ?? consoleLogger,
     limits: { ...PROCESSING_LIMITS, ...overrides.limits },
+    ...(overrides.interleave ? { interleave: overrides.interleave } : {}),
   };
 }
 

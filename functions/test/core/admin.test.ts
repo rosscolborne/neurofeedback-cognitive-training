@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { resolveTarget, runRebuildProgress, runRedriveSessions } from '../../scripts/cli';
+import { processingContext } from '../../src/context';
 import { runSessionPipeline } from '../../src/pipeline';
 import { rebuildUserProgress } from '../../src/rebuild';
 import { coreContext, deliver, minutesAgo, withRedelivery, writeSession } from '../helpers/core';
@@ -109,6 +111,46 @@ describe('rebuild-progress', () => {
       // Whatever interleaving happened, progress is exactly what the stored results rebuild to.
       await rebuildUserProgress(context, uid, 'mental-math');
       expect(content(raced), `round ${round}`).toEqual(content(await readDoc(db, progressPath(uid))));
+    }
+  });
+
+  it('loses no update when a live delivery commits between the rebuild\'s reads and its write (deterministic interleaving)', async () => {
+    for (let round = 0; round < 2; round += 1) {
+      const uid = newUid();
+      for (let index = 0; index < 3; index += 1) {
+        const { id } = await writeSession(db, uid, { seed: 440 + 10 * round + index, startLevel: 1, targetPeak: 2 + index, endedAtMs: minutesAgo(60 - index), order: index });
+        await runSessionPipeline(context, uid, id);
+      }
+      const live = await writeSession(db, uid, { seed: 449 + 10 * round, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(5), order: 9 });
+      let interleaved = 0;
+      let delivery: Promise<unknown> | undefined;
+      // At the seam the rebuild has read progress and every session (live is still pending) and has not written.
+      // The live delivery starts there; the rebuild goes on once it has committed, or after a moment if the
+      // rebuild's transaction holds it off. Either way, no update may be lost.
+      const seamed = coreContext(db, {
+        interleave: async (point) => {
+          if (point !== 'rebuild-before-write' || interleaved++ > 0) return;
+          delivery = deliver(context, uid, live.id);
+          await Promise.race([delivery, new Promise((resolve) => setTimeout(resolve, 1_500))]);
+        },
+      });
+
+      await withRedelivery(() => rebuildUserProgress(seamed, uid, 'mental-math'));
+      await delivery;
+
+      expect(interleaved, `round ${round}`).toBeGreaterThanOrEqual(1);
+      expect((await readDoc(db, sessionPath(uid, live.id)))?.result.validity, `round ${round}`).toBe('valid');
+      const raced = await readDoc(db, progressPath(uid));
+      expect(raced, `round ${round}`).toMatchObject({ sessionsCompleted: 4, activeMs: 360_000, bestPeakLevel: { 'timed-90': 5 } });
+      await rebuildUserProgress(context, uid, 'mental-math');
+      expect(content(raced), `round ${round}`).toEqual(content(await readDoc(db, progressPath(uid))));
+    }
+  });
+
+  it('never sets the test-only interleaving seam in production contexts', () => {
+    expect(processingContext(db)).not.toHaveProperty('interleave');
+    for (const file of ['../../src/index.ts', '../../scripts/cli.ts']) {
+      expect(readFileSync(new URL(file, import.meta.url), 'utf8'), file).not.toMatch(/interleave/);
     }
   });
 

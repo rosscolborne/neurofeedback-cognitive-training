@@ -37,6 +37,7 @@ export async function rebuildUserProgress(context: ProcessingContext, uid: strin
       throw new ProcessingError(PROCESSING_REASONS.progressNewerThanCode, `progress/${gameId} was written by newer code`);
     }
     const progress = await rebuildInTransaction(context, transaction, uid, gameId);
+    await context.interleave?.('rebuild-before-write');
     if (progress !== null) {
       transaction.set(ref, progress);
       return { gameId, progress, written: 'set' as const };

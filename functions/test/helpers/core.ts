@@ -9,7 +9,12 @@ export const quietLogger: Logger = { info: () => undefined, warn: () => undefine
 
 export function coreContext(
   db: Firestore,
-  options: { limits?: Partial<ProcessingLimits>; registry?: GameModuleRegistry; now?: () => Timestamp } = {},
+  options: {
+    limits?: Partial<ProcessingLimits>;
+    registry?: GameModuleRegistry;
+    now?: () => Timestamp;
+    interleave?: ProcessingContext['interleave'];
+  } = {},
 ): ProcessingContext {
   return processingContext(db, { log: quietLogger, ...options });
 }
