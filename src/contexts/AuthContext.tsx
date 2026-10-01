@@ -52,6 +52,14 @@ interface AuthContextType {
    * writes to upload and returns `unsynced` (doing nothing) if some remain.
    */
   logout: (options?: { discardUnsyncedWrites?: boolean }) => Promise<LogoutOutcome>;
+  /**
+   * The signed-in account's role could not be read: the read failed, or had
+   * no answer within `ROLE_LOOKUP_RETRY_AFTER_MS`. `loading` stays true,
+   * because an unknown role is not the same as having none.
+   */
+  roleLookupFailed: boolean;
+  /** Reads the signed-in account's role again after `roleLookupFailed`. */
+  retryRoleLookup: () => void;
   /** The Firestore cache lifecycle's state, for the loading screen. */
   cacheStatus: CacheStatus;
   /** Why the session is ending, while `cacheStatus` is `ending`. */
@@ -75,25 +83,35 @@ const AuthContext = createContext<AuthContextType>({
   selectRole: async () => {},
   loginAsDemoClinician: async () => {},
   logout: async () => 'signed-out',
+  roleLookupFailed: false,
+  retryRoleLookup: () => {},
   cacheStatus: 'idle',
   cacheEndingReason: null,
   signOutWithoutFirestore: async () => {},
 });
 
-// Reliable Firestore role fetcher with timeout protection
-const fetchUserRole = async (uid: string): Promise<UserRole> => {
-  try {
-    const snap = await Promise.race([
-      getDoc(doc(db, 'users', uid)),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
-    ]);
-    if (snap && snap.exists()) {
-      return (snap.data()?.role as UserRole) || null;
-    }
-  } catch (err) {
-    console.warn('Failed to fetch user role from Firestore:', err);
+/**
+ * How long a role read may run before the loading screen offers a retry. It
+ * is longer than the Firestore SDK's own offline detection (about 10 s), so a
+ * device without a connection first gets the role from its persistent cache.
+ * The read keeps running after it, and a late answer still opens the app.
+ */
+export const ROLE_LOOKUP_RETRY_AFTER_MS = 15_000;
+
+/**
+ * Reads the account's role from `users/{uid}`. Resolves `null` only when the
+ * server confirms that the account has no role. Rejects when the role is
+ * unknown: the read failed (offline with nothing cached, getDoc rejects with
+ * `unavailable`), or only this device's cache answered and shows no role,
+ * which may predate a role chosen since.
+ */
+const readUserRole = async (uid: string): Promise<UserRole> => {
+  const snap = await getDoc(doc(db, 'users', uid));
+  const role = snap.exists() ? (snap.data()?.role as UserRole) || null : null;
+  if (role === null && snap.metadata.fromCache) {
+    throw new Error('Only the device cache answered, and it shows no role.');
   }
-  return null;
+  return role;
 };
 
 const DEMO_CLINICIAN_USER = {
@@ -124,7 +142,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
+  const [roleLookupFailed, setRoleLookupFailed] = useState(false);
   const authGenerationRef = useRef(0);
+  const roleLookupRef = useRef(0);
   const mountedRef = useRef(true);
   const demoTransitionRef = useRef<'entering' | 'restoring' | null>(null);
   const identityRef = useRef<{ kind: 'production'; uid: string } | { kind: 'demo' } | null>(null);
@@ -136,6 +156,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     && identityRef.current?.kind === 'production'
     && identityRef.current.uid === uid
   );
+
+  // Only a read that establishes the role ends loading; until then the app
+  // stays on the loading screen and never routes to role selection. A failed
+  // or slow read offers a retry there instead.
+  const lookUpRole = async (generation: number, uid: string) => {
+    const lookup = ++roleLookupRef.current;
+    const isCurrent = () => roleLookupRef.current === lookup && isCurrentProductionIdentity(generation, uid);
+    setRoleLookupFailed(false);
+    setLoading(true);
+    const slow = setTimeout(() => { if (isCurrent()) setRoleLookupFailed(true); }, ROLE_LOOKUP_RETRY_AFTER_MS);
+    try {
+      const userRole = await readUserRole(uid);
+      if (!isCurrent()) return;
+      setRole(userRole);
+      setRoleLookupFailed(false);
+      setLoading(false);
+    } catch (error) {
+      if (!isCurrent()) return;
+      console.warn('Could not read the account role:', error);
+      setRoleLookupFailed(true);
+    } finally {
+      clearTimeout(slow);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -188,6 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         identityRef.current = null;
         setUser(null);
         setRole(null);
+        setRoleLookupFailed(false);
         if (currentUser) setLoading(true);
         const preparation = await firestoreCache.prepareForUser(currentUser?.uid ?? null);
         if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
@@ -208,10 +253,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRole(null);
 
         if (currentUser) {
-          setLoading(true);
-          const userRole = await fetchUserRole(currentUser.uid);
-          if (!isCurrentProductionIdentity(generation, currentUser.uid)) return;
-          setRole(userRole);
+          await lookUpRole(generation, currentUser.uid);
+          return;
         }
 
         if (isMounted && mountedRef.current && authGenerationRef.current === generation) {
@@ -390,6 +433,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return 'signed-out';
   };
 
+  const retryRoleLookup = () => {
+    const identity = identityRef.current;
+    if (identity?.kind !== 'production' || demoTransitionRef.current) return;
+    void lookUpRole(authGenerationRef.current, identity.uid);
+  };
+
   const demoWorkspace = isClinicianDemoWorkspace();
   const cacheStatus = useSyncExternalStore(firestoreCache.subscribe, firestoreCache.getStatus, firestoreCache.getStatus);
   // Read in the same render as the status change that accompanies it.
@@ -406,7 +455,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, isDemoWorkspace: demoWorkspace }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, roleLookupFailed, retryRoleLookup, cacheStatus, cacheEndingReason, signOutWithoutFirestore, isDemoWorkspace: demoWorkspace }}>
       {children}
     </AuthContext.Provider>
   );
