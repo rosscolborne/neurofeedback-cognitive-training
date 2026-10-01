@@ -30,6 +30,7 @@ vi.mock('../components/clinician/ClinicianShell', () => ({ ClinicianShell: 'clin
 vi.mock('../components/patient/PatientShell', () => ({ PatientShell: 'patient-shell' }));
 vi.mock('../components/brand/ClinicCustomizerModal', () => ({ ClinicCustomizerModal: 'brand-modal' }));
 vi.mock('../components/brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
+vi.mock('../components/account/UnsyncedSignOutDialog', () => ({ UnsyncedSignOutDialog: 'unsynced-dialog' }));
 vi.mock('../pages/onboarding/Welcome', () => ({ Welcome: 'welcome-page' }));
 vi.mock('../pages/onboarding/SignUp', () => ({ SignUp: 'signup-page' }));
 vi.mock('../pages/onboarding/Login', () => ({ Login: 'login-page' }));
@@ -439,6 +440,51 @@ describe('mounted App account/workspace lifecycle', () => {
     await act(async () => { retry!.props.onClick(); await flush(); });
     expect(shell(renderer).props.patientInvitations).toEqual([{ id: 'retry-invitation' }]);
     expect(JSON.stringify(renderer.toJSON())).not.toContain('invitation query offline');
+    renderer.unmount();
+  });
+
+  it('keeps a signed-in account whose role is unknown on the loading screen with a retry, never role selection (NFCT-44)', async () => {
+    const retryRoleLookup = vi.fn();
+    const logout = vi.fn().mockResolvedValueOnce('unsynced');
+    const labels = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button').map((button) => button.children.join(''));
+    const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
+    // Still reading the role: the plain loading screen, nothing to act on.
+    authState.value = { user: { uid: 'patient-a' }, role: null, loading: true, roleLookupFailed: false, retryRoleLookup, isDemoWorkspace: false, logout, cacheStatus: 'idle' };
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(rolePages(renderer)).toHaveLength(0);
+    expect(labels(renderer)).toEqual([]);
+
+    authState.value = { ...authState.value, roleLookupFailed: true };
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(rolePages(renderer)).toHaveLength(0);
+    expect(renderer.root.findByProps({ role: 'alert' }).findByType('strong').children.join('')).toBe('Your account couldn’t be loaded.');
+    expect(labels(renderer)).toEqual(['Try again', 'Sign out']);
+    expect(storage.getCurrentClient).not.toHaveBeenCalled();
+
+    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
+    await act(async () => { button('Try again').props.onClick(); });
+    expect(retryRoleLookup).toHaveBeenCalledOnce();
+
+    // Sign-out found unsynced writes and asks: a retry must not close that question.
+    const unsyncedDialog = () => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(logout).toHaveBeenCalledOnce();
+    expect(unsyncedDialog()).toHaveLength(1);
+    expect(button('Try again').props.disabled).toBe(true);
+    await act(async () => { unsyncedDialog()[0].props.onStaySignedIn(); });
+    expect(unsyncedDialog()).toHaveLength(0);
+    expect(button('Try again').props.disabled).toBe(false);
+
+    // Nor while a sign-out runs.
+    let finish!: (outcome: string) => void;
+    logout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(button('Try again').props.disabled).toBe(true);
+    expect(button('Sign out').props.disabled).toBe(true);
+    await act(async () => { finish('signed-out'); await flush(); });
+    expect(logout).toHaveBeenCalledTimes(2);
+    expect(retryRoleLookup).toHaveBeenCalledOnce();
     renderer.unmount();
   });
 });
