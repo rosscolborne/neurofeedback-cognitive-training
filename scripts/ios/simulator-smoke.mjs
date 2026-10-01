@@ -169,7 +169,10 @@ export async function runScenario(name, { device, channel, emulators, out }) {
   }
 
   for (const step of steps.filter(({ stalledMs }) => stalledMs >= 2_000)) {
-    notes.push(`The page's JavaScript stalled for ${(step.stalledMs / 1_000).toFixed(1)} s during ${step.action} ${step.target} (reported, not failed).`);
+    const stall = `The page's JavaScript stalled for ${(step.stalledMs / 1_000).toFixed(1)} s during ${step.action} ${step.target}`;
+    notes.push(`${stall} (reported, not failed).`);
+    // An annotation on the checks, so a green run with a freeze is still visible.
+    console.log(`::warning title=Simulator page stall (${name})::${stall}`);
   }
   const launchesJudged = evaluateLaunches(logs.map(({ log }) => log));
   const allChecks = [

@@ -104,12 +104,20 @@ describe('the page channel', () => {
     await page.stop();
   });
 
-  it('answers CORS preflights and refuses unknown paths', async () => {
+  it('answers only the app\'s own origin, and refuses unknown paths', async () => {
     channel = new PageChannel({ port: 0, pollHoldMs: 100 });
     const port = await channel.start();
-    const preflight = await fetch(`http://127.0.0.1:${port}/result`, { method: 'OPTIONS' });
+    const preflight = await fetch(`http://127.0.0.1:${port}/result`, { method: 'OPTIONS', headers: { Origin: 'capacitor://localhost' } });
     expect(preflight.status).toBe(204);
-    expect(preflight.headers.get('access-control-allow-origin')).toBe('*');
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('capacitor://localhost');
+    // Another page in a browser on the same machine can neither drive nor answer the driver.
+    for (const path of ['/hello', '/result']) {
+      const foreign = await fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers: { Origin: 'https://example.com' }, body: JSON.stringify({ launch: 'evil' }) });
+      expect(foreign.status).toBe(403);
+      expect(foreign.headers.get('access-control-allow-origin')).toBeNull();
+    }
+    expect((await fetch(`http://127.0.0.1:${port}/poll?launch=evil`, { headers: { Origin: 'null' } })).status).toBe(403);
+    expect(channel.launches.size).toBe(0);
     expect((await fetch(`http://127.0.0.1:${port}/elsewhere`)).status).toBe(404);
   });
 

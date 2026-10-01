@@ -195,16 +195,24 @@ Xcode version and Simulator runtimes. In order:
    checkpoint), and overall `summary.md` and `results.json`. The summary is
    also on the run page.
 
-Pull requests run it only when they change native-relevant paths:
+Pull requests run it only when they change native-relevant paths (unit tests
+in `__tests__/` do not count):
 
 - `ios/`, `capacitor.config.*`, `package-lock.json`, `vite.config.ts`;
 - the iOS scripts and the workflow;
 - what the scenarios drive: the Firebase setup, `src/App.tsx` and
-  `AuthContext.tsx`, the onboarding screens, the patient shell's Train tab
-  (`PatientShell.tsx`) and Mental Math (`src/consumer/games/mentalMath/`).
+  `AuthContext.tsx`, the onboarding screens and Mental Math
+  (`src/consumer/games/mentalMath/`).
 
-Pushes to `main`, manual runs and the weekly run always run it. A skipped job
-reports success, so the job can be a required check.
+A pull request runs every scenario when it changes Mental Math, the iOS
+scripts or the workflow, and only `smoke` otherwise. Pushes to `main` and
+manual runs run every scenario; the weekly run runs `smoke` on the oldest
+supported iOS. A skipped job reports success, so the job can be a required
+check.
+
+Changing the Train tab or navigation (for example `PatientShell.tsx`) does
+not start the macOS job: dispatch `-f scenarios=mental-math` for that branch
+([below](#running-scenarios-from-an-agent-or-a-terminal)).
 
 To move to a newer Xcode, change `XCODE_APP` and the Swift package cache key
 in `ios.yml` to a version that has a Simulator runtime on the image
@@ -236,7 +244,7 @@ UI, with no dependency beyond Node and Xcode:
 | --- | --- | --- |
 | `smoke` | Sign-up and the role choice (a Firestore write) through the real UI; a cold relaunch restores the session and role, or names the screen it landed on (role selection, "Your account couldn't be loaded", signed out); light and Dark Mode screenshots | Real touches or typing through the software keyboard |
 | `mental-math` | Train tab, Mental Math, level 1; a whole 90-second run answered on the on-screen keypad by reading and solving each question (one answer deliberately wrong); the end-of-run screen (`#mm-handoff-title`); exactly one session in the Firestore emulator: completed, 90 s active, `client.platform` `ios`, its answered trials exactly the responses typed, each marked correct or wrong as answered | Trusted scoring (the Functions emulator does not run here; `test:functions` covers it), the post-run summary's content (NFCT-22), real performance |
-| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the 8 s away counts, the run stays paused until the player resumes, and Resume shows a new question. It records when iOS's events arrive (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`, on the wall clock the host shares) and checks that the page is hidden within a second of iOS's native signal. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
+| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the time the page is hidden counts, the run stays paused until the player resumes, and Resume shows a different question from the one the pause discarded. It records when iOS's events arrive (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`, on the wall clock the host shares) and checks that the page is hidden within a second of iOS's native signal. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
 
 On an app switch in the Simulator, iOS sends the page Capacitor's `pause`,
 the window's `blur` and `visibilitychange` (hidden) together, so NFCT-21's

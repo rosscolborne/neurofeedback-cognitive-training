@@ -16,6 +16,8 @@ import { writeFileSync } from 'node:fs';
 
 /** The page agent's fixed host port; simulator-probe.js uses the same one. */
 export const AGENT_PORT = 8735;
+/** Browsers may reach the driver only from the app's own origin (ADR-002). */
+export const APP_ORIGIN = 'capacitor://localhost';
 const DELIVERY_MARGIN_MS = 30_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,9 +31,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * means the page reloaded or the app restarted, and fails that command.
  */
 export class PageChannel {
-  constructor({ port = AGENT_PORT, pollHoldMs = 10_000 } = {}) {
+  constructor({ port = AGENT_PORT, pollHoldMs = 10_000, origins = [APP_ORIGIN] } = {}) {
     this.port = port;
     this.pollHoldMs = pollHoldMs;
+    this.origins = origins;
     this.launches = new Map();
     this.current = null;
     this.poll = null;
@@ -105,18 +108,23 @@ export class PageChannel {
 
   reply({ response }, body, status = 200) {
     if (response.writableEnded) return;
+    const { origin } = response;
     response.writeHead(status, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      Vary: 'Origin',
+      ...(origin ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } : {}),
     });
     response.end(JSON.stringify(body));
   }
 
   handle(request, response) {
     const url = new URL(request.url, 'http://127.0.0.1');
+    // A browser always names the page's origin: only the app's own page may drive or answer the driver.
+    // Local non-browser clients (the Linux tests) send none.
+    const { origin } = request.headers;
+    if (origin !== undefined && !this.origins.includes(origin)) return this.reply({ response }, { error: 'origin not allowed' }, 403);
+    response.origin = origin;
     if (request.method === 'OPTIONS') return this.reply({ response }, {}, 204);
     if (request.method === 'GET' && url.pathname === '/poll') return this.onPoll(url.searchParams.get('launch'), response);
     if (request.method === 'POST' && (url.pathname === '/hello' || url.pathname === '/result')) {

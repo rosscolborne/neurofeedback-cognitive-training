@@ -33,10 +33,17 @@ export function pickDeviceType(runtime, knownTypes = []) {
 const xcrun = (...args) => execFileSync('xcrun', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const listRuntimes = () => JSON.parse(xcrun('simctl', 'list', 'runtimes', '--json')).runtimes;
 
+/** Each runtime download may take this long before the next runtime is tried. */
+const DOWNLOAD_MINUTES = 15;
+
 /** Runs a long command with its output on stderr (stdout carries only the UDID). */
 function run(command, args, timeoutMinutes) {
   const result = spawnSync(command, args, { stdio: ['ignore', process.stderr, process.stderr], timeout: timeoutMinutes * 60_000 });
-  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed (${result.error?.message ?? `exit ${result.status}`})`);
+  if (result.status === 0) return;
+  const timedOut = result.error?.code === 'ETIMEDOUT';
+  const error = new Error(`${command} ${args.join(' ')} ${timedOut ? `timed out after ${timeoutMinutes} min` : `failed (${result.error?.message ?? `exit ${result.status}`})`}`);
+  error.timedOut = timedOut;
+  throw error;
 }
 
 function attempt(version) {
@@ -44,11 +51,12 @@ function attempt(version) {
   if (!runtime) {
     console.error(`Downloading the iOS ${version} Simulator runtime…`);
     try {
-      run('xcodebuild', ['-downloadPlatform', 'iOS', '-buildVersion', version], 45);
+      run('xcodebuild', ['-downloadPlatform', 'iOS', '-buildVersion', version], DOWNLOAD_MINUTES);
     } catch (error) {
-      // Some images need an administrator to install runtimes.
+      // A hung download moves on to the next runtime; any other failure may need an administrator.
+      if (error.timedOut) throw error;
       console.error(`${error.message}; retrying with sudo.`);
-      run('sudo', ['-n', 'xcodebuild', '-downloadPlatform', 'iOS', '-buildVersion', version], 45);
+      run('sudo', ['-n', 'xcodebuild', '-downloadPlatform', 'iOS', '-buildVersion', version], DOWNLOAD_MINUTES);
     }
     runtime = findRuntime(listRuntimes(), version);
     if (!runtime) throw new Error(`iOS ${version} is not listed as an available runtime after the download.`);

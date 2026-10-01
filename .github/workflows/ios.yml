@@ -97,6 +97,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       native: ${{ steps.filter.outputs.native }}
+      scenarios: ${{ steps.filter.outputs.scenarios }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -115,11 +116,19 @@ jobs:
             exit 0
           fi
           # The checkout is the PR merged into its base: HEAD^1 is the base.
-          git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
-          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/App\.tsx$|src/contexts/AuthContext\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/|src/components/patient/PatientShell\.tsx$|src/consumer/games/mentalMath/)'
+          # Unit tests next to the code cannot change what the Simulator runs.
+          git diff --name-only HEAD^1 HEAD | grep -v '/__tests__/' > "$RUNNER_TEMP/changed.txt" || true
+          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/App\.tsx$|src/contexts/AuthContext\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/|src/consumer/games/mentalMath/)'
           if grep -qE "$native_paths" "$RUNNER_TEMP/changed.txt"; then
             echo "native=true" >> "$GITHUB_OUTPUT"
             grep -E "$native_paths" "$RUNNER_TEMP/changed.txt"
+            # Every scenario when Mental Math or the driver changes; otherwise the smoke scenario
+            # (sign-up and relaunch) is enough. Dispatch the others for anything else they drive.
+            if grep -qE '^(src/consumer/games/mentalMath/|scripts/ios/|\.github/workflows/ios\.yml$)' "$RUNNER_TEMP/changed.txt"; then
+              echo "scenarios=" >> "$GITHUB_OUTPUT"
+            else
+              echo "scenarios=smoke" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "native=false" >> "$GITHUB_OUTPUT"
             echo "No native-relevant changes; the macOS job is skipped."
@@ -132,7 +141,7 @@ jobs:
     # Pinned image and Xcode. Capacitor 8.5 needs Xcode 26; 26.5 matches an
     # installed iOS 26.5 Simulator runtime on this image.
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 50
     env:
       XCODE_APP: /Applications/Xcode_26.5.app
       # The weekly run checks the oldest supported iOS (16.4, ADR-002) with
@@ -140,7 +149,7 @@ jobs:
       # this is the only automated check that the bundle runs on it. The
       # runtime is a multi-gigabyte download: never on pull requests.
       IOS_RUNTIMES: ${{ github.event_name == 'schedule' && '16.4 17.5 18.6' || inputs.ios_runtimes }}
-      REQUESTED_SCENARIOS: ${{ github.event_name == 'schedule' && 'smoke' || inputs.scenarios }}
+      REQUESTED_SCENARIOS: ${{ github.event_name == 'schedule' && 'smoke' || github.event_name == 'pull_request' && needs.changes.outputs.scenarios || inputs.scenarios }}
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -209,6 +218,8 @@ jobs:
           node scripts/ios/simulator-smoke.mjs list $REQUESTED_SCENARIOS
       - name: Pick an iPhone Simulator
         id: simulator
+        # Bounds the runtime downloads (15 min each) on the minimum-iOS path.
+        timeout-minutes: 35
         run: |
           mkdir -p "$SIMULATOR_OUT"
           if [ -n "$IOS_RUNTIMES" ]; then
@@ -228,6 +239,8 @@ jobs:
           npm run ios:build -- Debug "$DESTINATION"
           node scripts/ios/check-built-app.mjs "$IOS_DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app" Debug
       - name: Simulator scenarios against the emulators
+        # All three scenarios take about 6 minutes; this also bounds every simctl call.
+        timeout-minutes: 20
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
         run: >-

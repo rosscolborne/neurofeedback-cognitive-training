@@ -225,7 +225,7 @@ export const SCENARIOS = {
   },
 
   lifecycle: {
-    summary: 'Background mid-run (simctl launches Settings): iOS hides the page, the run pauses, the time away never counts and the run waits for the player; a kill mid-run then relaunch writes no session; a quit run is still saved.',
+    summary: 'Background mid-run (simctl launches Settings): iOS hides the page, the run pauses, none of the time the page is hidden counts, and the run waits for the player; a kill mid-run then relaunch writes no session; a quit run is still saved.',
     async run(ctx) {
       const { app, device } = ctx;
       await ctx.launch();
@@ -238,13 +238,15 @@ export const SCENARIOS = {
 
       // 1. Background and foreground, with a question on screen and the clock running.
       await app.wait(QUESTION_READY);
+      const discarded = (await app.read(QUESTION)).text;
       await sleep(2_000);
       const before = clockSeconds((await app.read(HUD_TIME)).text);
       const readAt = Date.now();
       const launchBefore = ctx.channel.current;
       const backgroundAt = Date.now();
       await device.background();
-      const backgroundMs = 8_000;
+      // Settings takes a few seconds to come forward (3.9 to 5.1 s seen), so the page is hidden for at least 10 s of this.
+      const backgroundMs = 15_000;
       await sleep(backgroundMs);
       await ctx.checkpoint('in-background');
       const foregroundAt = Date.now();
@@ -284,7 +286,9 @@ export const SCENARIOS = {
       const stillPaused = await app.waitIfAny({ target: heading('Paused') }, { timeout: 1_000 });
       ctx.check('Returning does not resume the run; the clock stays frozen while paused', Boolean(stillPaused) && later === after, `${later} s left 3 s later`);
       await app.tap(button('Resume'), { then: QUESTION_READY });
-      ctx.check('Resume shows a new question', true);
+      // The game never repeats the question a pause discarded (shared/games/mental-math/v1/run.ts).
+      const fresh = (await app.read(QUESTION)).text;
+      ctx.check('Resume shows a different question from the one the pause discarded', fresh !== discarded, `"${discarded}" then "${fresh}"`);
 
       // 2. Kill mid-run, then relaunch.
       await answer(ctx);

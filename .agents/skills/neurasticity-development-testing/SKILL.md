@@ -42,7 +42,7 @@ NFCT ships as a responsive web app and as an iPhone app. Coverage runs in five l
 4. **A physical iPhone**: suspension, interruptions, the keyboard and offline durability (NFCT-32's checklist).
 5. **A real Muse headset**: the hardware layer above.
 
-Playwright WebKit is current WebKit on Linux, not iOS WKWebView: never report it as iOS or Simulator evidence. Simulator evidence is not device evidence. When a change alters a screen the Simulator scenarios drive (onboarding, the Train tab, Mental Math), update `scripts/ios/simulator-scenarios.mjs` in the same PR, as for `e2e/helpers/auth.ts`.
+Playwright WebKit is current WebKit on Linux, not iOS WKWebView: never report it as iOS or Simulator evidence. Simulator evidence is not device evidence. When a change alters a screen the Simulator scenarios drive (onboarding, the Train tab, Mental Math), update `scripts/ios/simulator-scenarios.mjs` in the same PR, as for `e2e/helpers/auth.ts`. Changing the Train tab or navigation does not start the macOS job on a pull request: dispatch `gh workflow run ios.yml --ref <branch> -f scenarios=mental-math`.
 
 For user-facing UI work:
 
