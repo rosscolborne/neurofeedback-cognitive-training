@@ -10,9 +10,12 @@ import {
 } from '@nfct/shared';
 import { forgedEverything } from '../../../shared/__tests__/processingFixtures';
 import { handleSessionCreated, runSessionPipeline } from '../../src/pipeline';
-import { recordProcessingState } from '../../src/processSession';
-import { redriveSessions } from '../../src/redrive';
-import { coreContext, minutesAgo, writeSession } from '../helpers/core';
+import { processSession, recordProcessingState } from '../../src/processSession';
+import { rebuildUserProgress } from '../../src/rebuild';
+import { reconcileUpgrades } from '../../src/reconcile';
+import { reconcileUser, redriveSessions } from '../../src/redrive';
+import { sweepSessions } from '../../src/sweep';
+import { coreContext, minutesAgo, writeSession, writeSessionAt } from '../helpers/core';
 import {
   content,
   CORE_PROJECT,
@@ -54,7 +57,8 @@ describe('trusted session processing', () => {
       personalBest: true,
     });
     expect(session?.processing).toBeUndefined();
-    expect(await readDoc(db, progressPath(uid))).toMatchObject({
+    const progress = await readDoc(db, progressPath(uid));
+    expect(progress).toMatchObject({
       schemaVersion: 1,
       aggregateVersion: 1,
       gameId: 'mental-math',
@@ -64,6 +68,40 @@ describe('trusted session processing', () => {
       bestPeakLevel: { 'timed-90': 4 },
       unlocked: { 'timed-90': 3 },
     });
+    // Written by one transaction: progress was updated at the instant the result was processed.
+    expect(progress?.updatedAt).toEqual(session?.result.processedAt);
+  });
+
+  it('writes nothing when processing fails inside the transaction before it commits; a later delivery applies it once', async () => {
+    const uid = newUid();
+    const locked = await writeSession(db, uid, { seed: 16, startLevel: 2, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
+    await runSessionPipeline(context, uid, locked.id);
+    const unlocking = await writeSession(db, uid, { seed: 17, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 2 });
+    const before = { locked: await readDoc(db, sessionPath(uid, locked.id)), progress: await readDoc(db, progressPath(uid)) };
+    // A fault after the decision, while the transaction plans the upgrade its unlock makes possible.
+    const faulty = coreContext(db, {
+      registry: createGameModuleRegistry([{
+        ...mentalMathV1Module,
+        recordValuesFromStored: () => { throw new Error('fault inside the transaction'); },
+      }]),
+    });
+
+    await expect(handleSessionCreated(faulty, { params: { uid, sessionId: unlocking.id }, time: new Date().toISOString() }))
+      .rejects.toThrow(/fault inside the transaction/);
+
+    expect(await readDoc(db, sessionPath(uid, unlocking.id))).toEqual(unlocking.doc);
+    expect(await readDoc(db, sessionPath(uid, locked.id))).toEqual(before.locked);
+    expect(await readDoc(db, progressPath(uid))).toEqual(before.progress);
+
+    // The redelivery commits everything at once; a delivery after that commit changes nothing.
+    await runSessionPipeline(context, uid, unlocking.id);
+    const committed = { progress: await readDoc(db, progressPath(uid)), unlocking: await readDoc(db, sessionPath(uid, unlocking.id)) };
+    expect(committed.unlocking?.result.validity).toBe('valid');
+    expect((await readDoc(db, sessionPath(uid, locked.id)))?.result.validity).toBe('valid');
+    expect(committed.progress).toMatchObject({ sessionsCompleted: 2, activeMs: 180_000 });
+    expect((await runSessionPipeline(context, uid, unlocking.id)).outcome.status).toBe('already-processed');
+    expect(await readDoc(db, progressPath(uid))).toEqual(committed.progress);
+    expect(await readDoc(db, sessionPath(uid, unlocking.id))).toEqual(committed.unlocking);
   });
 
   it('rescores from the trials: the client summary and peak level are never trusted', async () => {
@@ -132,7 +170,7 @@ describe('trusted session processing', () => {
     expect(await readDoc(db, progressPath(uid))).toBeUndefined();
   });
 
-  it('records a forged session raising every reason: the result stays within 20 reasons and is written once', async () => {
+  it('records a forged session raising every reason: the result is cut to 20 reasons and written once', async () => {
     const uid = newUid();
     await db.doc(sessionPath(uid, 'bad')).set(forgedEverything(ts, minutesAgo(5)));
 
@@ -141,6 +179,7 @@ describe('trusted session processing', () => {
     const { result } = (await readDoc(db, sessionPath(uid, 'bad')))!;
     expect(result.validity).toBe('invalid');
     expect(result.reasons).toHaveLength(MAX_RESULT_REASONS);
+    expect(result.reasons.at(-1)).toBe('reasons-truncated');
     expect(result.reasons).toEqual(expect.arrayContaining([...Object.keys(mm.REASON_OUTCOMES), 'user-id-mismatch', 'session-id-invalid']));
   });
 
@@ -213,6 +252,66 @@ describe('trusted session processing', () => {
       expect(await readDoc(db, progressPath(uid))).toMatchObject({ gameVersion: 2, sessionsCompleted: 1 });
     });
 
+    it('judges a late session of an earlier game version with that version\'s own frozen module', async () => {
+      // A build that registers v1 and a v2 whose checks flag every session and whose scoringVersion differs.
+      const v2 = defineGameVersionModule({
+        definition: defineGame({ ...mm.definition, gameVersion: 2, scoringVersion: 7 }),
+        reasonOutcomes: mm.REASON_OUTCOMES,
+        check: () => ({ outcome: 'flagged', reasons: ['rt-below-floor'] }),
+      });
+      const both = coreContext(db, { registry: createGameModuleRegistry([mentalMathV1Module, v2]) });
+      const uid = newUid();
+      const newer = newSessionId(2);
+      await db.doc(sessionPath(uid, newer)).set({
+        ...sessionDoc(uid, { seed: 18, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(5), createdAt: ts(Date.now()) }), gameVersion: 2,
+      });
+      await runSessionPipeline(both, uid, newer);
+      expect((await readDoc(db, sessionPath(uid, newer)))?.result).toMatchObject({ validity: 'flagged', scoringVersion: 7, reasons: ['rt-below-floor'] });
+
+      // A v1 session queued offline arrives after the v2 one.
+      const late = await writeSession(db, uid, { seed: 19, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(30), order: 1 });
+      await runSessionPipeline(both, uid, late.id);
+
+      const result = (await readDoc(db, sessionPath(uid, late.id)))?.result;
+      expect(result).toMatchObject({ validity: 'valid', scoringVersion: 1, reasons: [], recordKey: 'timed-90:1' });
+      expect(result.score).toBe(mm.score(late.doc.trials as mm.MentalMathTrial[], { modeId: 'timed-90', startLevel: 1 }).score);
+      const progress = await readDoc(db, progressPath(uid));
+      // Its records go to its own version's (archived) record set; the unlock it earned carries over.
+      expect(progress).toMatchObject({ gameVersion: 2, sessionsCompleted: 2, bests: {}, bestPeakLevel: { 'timed-90': 5 }, unlocked: { 'timed-90': 4 } });
+      expect(progress?.bestsArchive['1']['timed-90:1'].score.sessionId).toBe(late.id);
+    });
+
+    it('records a scorer fault as failed after the retry window; a later re-drive applies the session exactly once', async () => {
+      const uid = newUid();
+      const { id } = await writeSession(db, uid, { seed: 20, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(5) });
+      const broken = coreContext(db, {
+        registry: createGameModuleRegistry([defineGameVersionModule({
+          definition: mm.definition,
+          reasonOutcomes: mm.REASON_OUTCOMES,
+          check: () => { throw new Error('scorer fault'); },
+        })]),
+      });
+      const event = (ageMs: number) => ({ params: { uid, sessionId: id }, time: new Date(Date.now() - ageMs).toISOString() });
+
+      await expect(handleSessionCreated(broken, event(0))).rejects.toThrow(/scorer fault/);
+      expect((await readDoc(db, sessionPath(uid, id)))?.processing).toBeUndefined();
+      await handleSessionCreated(broken, event(broken.limits.retryWindowMs + 1_000));
+      const failed = await readDoc(db, sessionPath(uid, id));
+      expect(failed?.result).toBeUndefined();
+      expect(failed?.processing).toMatchObject({ state: 'failed', reason: 'internal-error', attempts: 1 });
+      expect(await readDoc(db, progressPath(uid))).toBeUndefined();
+
+      // The fix is deployed; the re-drive processes it, and any later re-drive or delivery is a no-op.
+      const options = { states: ['failed', 'pending'] as const, uid, createdAfter: ts(0), createdBefore: ts(Date.now() + 60_000), limit: 10, scanBudget: 100, dryRun: false };
+      expect((await redriveSessions(context, options)).results).toMatchObject([{ sessionId: id, state: 'failed', now: 'valid' }]);
+      const once = { session: await readDoc(db, sessionPath(uid, id)), progress: await readDoc(db, progressPath(uid)) };
+      expect(once.session?.processing).toBeUndefined();
+      expect(once.progress).toMatchObject({ sessionsCompleted: 1, activeMs: 90_000 });
+      expect((await redriveSessions(context, options)).targets).toEqual([]);
+      expect((await runSessionPipeline(context, uid, id)).outcome.status).toBe('already-processed');
+      expect({ session: await readDoc(db, sessionPath(uid, id)), progress: await readDoc(db, progressPath(uid)) }).toEqual(once);
+    });
+
     it('never records processing metadata on a session that already has a result', async () => {
       const uid = newUid();
       const { id } = await writeSession(db, uid, { seed: 9, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(5) });
@@ -267,6 +366,71 @@ describe('trusted session processing', () => {
       });
       expect(results).toContainEqual(expect.objectContaining({ uid, sessionId: id, state: 'pending', now: 'valid' }));
     });
+  });
+
+  describe('the deletion ledger', () => {
+    const ledger = (uid: string) => db.doc(`accountDeletions/${uid}`).set({ status: 'requested', requestedAt: ts(Date.now()) });
+
+    it('stops processing from writing anything for an account being deleted: no result, no processing, no progress', async () => {
+      const uid = newUid();
+      const { id, doc } = await writeSession(db, uid, { seed: 90, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(5) });
+      await ledger(uid);
+
+      expect((await runSessionPipeline(context, uid, id)).outcome).toEqual({ status: 'account-deleted' });
+      // Past the retry window a failing delivery would record 'failed'; not for a deleted account.
+      await handleSessionCreated(context, { params: { uid, sessionId: id }, time: new Date(0).toISOString() });
+      expect(await recordProcessingState(context, uid, id, 'failed', 'internal-error')).toBe('account-deleted');
+      const { results } = await redriveSessions(context, {
+        states: ['pending'], uid, createdAfter: ts(0), createdBefore: ts(Date.now() + 60_000), limit: 10, scanBudget: 100, dryRun: false,
+      });
+      expect(results).toMatchObject([{ sessionId: id, now: 'account-deleted' }]);
+
+      expect(await readDoc(db, sessionPath(uid, id))).toEqual(doc);
+      expect(await readDoc(db, progressPath(uid))).toBeUndefined();
+    });
+
+    it('stops upgrades, reconciles and rebuilds once the ledger exists', async () => {
+      const uid = newUid();
+      const locked = await writeSession(db, uid, { seed: 91, startLevel: 2, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
+      await runSessionPipeline(context, uid, locked.id);
+      const unlocking = await writeSession(db, uid, { seed: 92, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 2 });
+      // Committed with its upgrade left to the post-commit reconcile, which has not run when deletion starts.
+      await processSession(coreContext(db, { limits: { transactionUpgradeScanBudget: 0 } }), uid, unlocking.id);
+      await ledger(uid);
+      const before = { locked: await readDoc(db, sessionPath(uid, locked.id)), progress: await readDoc(db, progressPath(uid)) };
+
+      expect(await reconcileUpgrades(context, uid, { gameId: 'mental-math', modeId: 'timed-90' })).toEqual({ upgraded: [], stopped: 'account-deleted' });
+      expect((await runSessionPipeline(context, uid, unlocking.id)).reconciled).toMatchObject([{ report: { stopped: 'account-deleted' } }]);
+      expect((await reconcileUser(context, uid)).map(({ report }) => report.stopped)).toEqual(['account-deleted']);
+      expect(await rebuildUserProgress(context, uid, 'mental-math')).toMatchObject({ written: 'account-deleted' });
+
+      expect(await readDoc(db, sessionPath(uid, locked.id))).toEqual(before.locked);
+      expect(before.locked?.result.validity).toBe('flagged');
+      expect(await readDoc(db, progressPath(uid))).toEqual(before.progress);
+    });
+  });
+
+  it('never reprocesses an invalid session: no redelivery, reconcile, rebuild, re-drive or sweep changes it', async () => {
+    const uid = newUid();
+    const createdAtMs = Date.UTC(2001, 2, 1);
+    const { id } = await writeSessionAt(db, uid, createdAtMs, { seed: 93, startLevel: 1, targetPeak: 3 }, { seed: 94 });
+    await runSessionPipeline(context, uid, id);
+    const invalid = await readDoc(db, sessionPath(uid, id));
+    expect(invalid?.result).toMatchObject({ validity: 'invalid' });
+
+    await handleSessionCreated(context, { params: { uid, sessionId: id }, time: new Date(0).toISOString() });
+    await runSessionPipeline(context, uid, id);
+    await reconcileUser(context, uid);
+    expect(await rebuildUserProgress(context, uid, 'mental-math')).toMatchObject({ written: 'unchanged', progress: null });
+    const { targets } = await redriveSessions(context, {
+      states: ['pending', 'failed', 'unsupported'], uid, createdAfter: ts(0), createdBefore: ts(Date.now() + 60_000), limit: 10, scanBudget: 100, dryRun: false,
+    });
+    expect(targets).toEqual([]);
+    const swept = await sweepSessions(coreContext(db, { now: () => ts(createdAtMs + 2 * 60 * 60_000) }));
+    expect(swept.targets.map(({ sessionId }) => sessionId)).not.toContain(id);
+
+    expect(await readDoc(db, sessionPath(uid, id))).toEqual(invalid);
+    expect(await readDoc(db, progressPath(uid))).toBeUndefined();
   });
 
   describe('EEG is never an input', () => {

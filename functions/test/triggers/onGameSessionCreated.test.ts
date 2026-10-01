@@ -129,8 +129,8 @@ describe('onGameSessionCreated', () => {
     expect(session.processing).toMatchObject({ state: 'unsupported', reason: 'unknown-game-version', attempts: 1 });
   });
 
-  describe('two queued sessions processed out of order are not wrongly flagged', () => {
-    it('queued offline and delivered together: the later one is never flagged', async () => {
+  describe('two queued sessions processed out of order are not wrongly flagged (end state)', () => {
+    it('queued offline and delivered together: both end valid, whichever trigger commits first', async () => {
       const uid = newUid();
       const [earlier, later] = [newSessionId(1), newSessionId(2)];
       const batch = db.batch();
@@ -143,24 +143,28 @@ describe('onGameSessionCreated', () => {
       }));
       await batch.commit();
 
-      const laterResult = (await processed(uid, later)).result;
       await processed(uid, earlier);
+      // The later session is valid once the earlier one is processed: either it was processed second, or the
+      // earlier session's commit upgraded it. Only the point-in-time note tells which.
+      const laterResult = (await waitFor(db, sessionPath(uid, later), (data) => data?.result?.validity === 'valid'))!.result;
 
-      expect(laterResult).toMatchObject({ validity: 'valid', reasons: [], recordKey: 'timed-90:3' });
+      expect(laterResult).toMatchObject({ validity: 'valid', recordKey: 'timed-90:3' });
+      expect([[], ['start-level-unlocked-later']]).toContainEqual(laterResult.reasons);
       expect((await readDoc(db, sessionPath(uid, earlier)))?.result).toMatchObject({ validity: 'valid' });
       expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 2, activeMs: 180_000, unlocked: { 'timed-90': 5 } });
     });
 
-    it('delivered one at a time in reverse play order: the end state is the same', async () => {
+    it('delivered one at a time in reverse play order: the unlocking commit upgrades the later session in the same write', async () => {
       const uid = newUid();
       const later = await createSession(uid, { seed: 113, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(10) }, {}, newSessionId(2));
-      expect((await processed(uid, later)).result.validity).toBe('flagged');
+      const flagged = (await processed(uid, later)).result;
+      expect(flagged.validity).toBe('flagged');
       const earlier = await createSession(uid, { seed: 114, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(20) }, {}, newSessionId(1));
       await processed(uid, earlier);
 
-      const upgraded = (await waitFor(db, sessionPath(uid, later), (data) => data?.result?.validity === 'valid'))!.result;
-
-      expect(upgraded.reasons).toEqual(['start-level-unlocked-later']);
+      // No waiting: the upgrade was part of the commit that wrote the earlier session's result.
+      const upgraded = (await readDoc(db, sessionPath(uid, later)))?.result;
+      expect(upgraded).toMatchObject({ validity: 'valid', reasons: ['start-level-unlocked-later'], processedAt: flagged.processedAt });
       expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 2, activeMs: 180_000, unlocked: { 'timed-90': 5 } });
     });
   });

@@ -1,12 +1,12 @@
-import { PROCESSING_REASONS, type GameProgress } from '@nfct/shared';
-import { progressRef, sessionsOf, type ProcessingContext } from './context';
+import { classifyProgress, PROCESSING_REASONS, type GameProgress } from '@nfct/shared';
+import { accountDeleted, progressRef, sessionsOf, type ProcessingContext } from './context';
 import { ProcessingError } from './errors';
-import { classifyProgress, rebuildInTransaction } from './progress';
+import { rebuildInTransaction } from './progress';
 
 // The admin rebuild (card NFCT-19, design section F `rebuildUserAggregates`):
-// replays one user's processed sessions of a game, in play order (endedAt,
-// then session ID), through the same reducer trusted scoring uses, from their
-// stored trusted results. Never rescoring, never revalidating: rescoring
+// replays one user's processed sessions of a game through the same reducer
+// trusted scoring uses, from their stored trusted results, in a fixed replay
+// order (endedAt, then session ID) that the result does not depend on. Never rescoring, never revalidating: rescoring
 // stored trials is a deliberate, separate job (ADR-001 decision 8). Sessions
 // without a result are skipped (re-drive them first). Deterministic, so it can
 // be re-run. Used for repair and after an aggregateVersion change; trusted
@@ -15,17 +15,21 @@ import { classifyProgress, rebuildInTransaction } from './progress';
 export type RebuildReport = {
   readonly gameId: string;
   readonly progress: GameProgress | null;
-  readonly written: 'set' | 'deleted' | 'unchanged';
+  /** 'account-deleted': the user's deletion ledger exists, so nothing was written. */
+  readonly written: 'set' | 'deleted' | 'unchanged' | 'account-deleted';
 };
 
 /**
  * Rebuilds progress/{gameId} for one user in one transaction (so no session is
- * processed half-way through it). Progress written by newer code is refused,
- * never overwritten; unreadable progress is replaced (that is a repair).
+ * processed half-way through it, and a session processed concurrently is
+ * either in the rebuild or applied after it, never lost). Progress written by
+ * newer code is refused, never overwritten; unreadable progress is replaced
+ * (that is a repair). A user whose deletion ledger exists is left alone.
  */
 export async function rebuildUserProgress(context: ProcessingContext, uid: string, gameId: string): Promise<RebuildReport> {
   if (!context.registry.current(gameId)) throw new ProcessingError(PROCESSING_REASONS.unknownGame, `no module for '${gameId}'`);
   return context.db.runTransaction(async (transaction) => {
+    if (await accountDeleted(transaction, context.db, uid)) return { gameId, progress: null, written: 'account-deleted' as const };
     const ref = progressRef(context.db, uid, gameId);
     const stored = await transaction.get(ref);
     if (classifyProgress(stored.data(), gameId, context.registry).kind === 'newer') {

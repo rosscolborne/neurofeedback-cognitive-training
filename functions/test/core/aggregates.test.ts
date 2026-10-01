@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { decideSession, evaluateSession, GAME_MODULE_REGISTRY, PROGRESS_AGGREGATE_VERSION, type GameProgress } from '@nfct/shared';
 import { handleSessionCreated, runSessionPipeline } from '../../src/pipeline';
-import { coreContext, minutesAgo, writeSession } from '../helpers/core';
+import { coreContext, deliver, minutesAgo, writeSession } from '../helpers/core';
 import { CORE_PROJECT, emulatorFirestore, newSessionId, newUid, progressPath, readDoc, sessionDoc, sessionPath, ts } from '../helpers/emulator';
 
 // Aggregate compatibility. This file runs as a build whose progress reducer is
@@ -54,6 +54,25 @@ describe('aggregate compatibility', () => {
     });
     expect(progress.bests['timed-90:1']?.peakLevel?.sessionId).toBe(first);
     expect(progress.bests['timed-90:3']?.score?.sessionId).toBe(id);
+  });
+
+  it('rebuilds older progress exactly once when several sessions race to apply to it', async () => {
+    const uid = newUid();
+    await storedProcessedSession(uid, { seed: 66, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(50), order: 1 });
+    await db.doc(progressPath(uid)).set({
+      schemaVersion: 1, aggregateVersion: 1, updatedAt: ts(0), gameId: 'mental-math', gameVersion: 1,
+      sessionsCompleted: 99, activeMs: 1, lastPlayedAt: ts(0), bestPeakLevel: {}, unlocked: {}, bests: {}, bestsArchive: {},
+    });
+    const racing = await Promise.all([2, 3, 4].map((order) =>
+      writeSession(db, uid, { seed: 66 + order, startLevel: order === 4 ? 3 : 1, targetPeak: order + 1, endedAtMs: minutesAgo(50 - order), order })));
+
+    await Promise.all(racing.map(({ id }) => deliver(context, uid, id)));
+
+    // One rebuild (from the one stored result), then each racing session applied once on top of it.
+    expect(await readDoc(db, progressPath(uid))).toMatchObject({
+      aggregateVersion: 2, sessionsCompleted: 4, activeMs: 360_000, bestPeakLevel: { 'timed-90': 5 },
+    });
+    for (const { id } of racing) expect((await readDoc(db, sessionPath(uid, id)))?.result.validity).toBe('valid');
   });
 
   it.each([

@@ -91,9 +91,7 @@ describe('firestore.indexes.json', () => {
         ]));
     });
 
-    it("covers trusted scoring's per-user scans (NFCT-19) with single-field indexes", () => {
-        // Pending-predecessor scan: createdAt >= T, orderBy createdAt desc.
-        expect(override('gameSessions', 'createdAt')?.indexes).toContainEqual({ order: 'DESCENDING', queryScope: 'COLLECTION' });
+    it("covers trusted scoring's per-user rebuild (NFCT-19) with a single-field index", () => {
         // Rebuild: gameId ==, no order; gameId keeps its automatic single-field index.
         expect(override('gameSessions', 'gameId')).toBeUndefined();
     });

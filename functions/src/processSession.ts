@@ -1,128 +1,136 @@
-import { FieldValue, Timestamp, type DocumentData } from 'firebase-admin/firestore';
+import { FieldValue, type DocumentData, type DocumentSnapshot } from 'firebase-admin/firestore';
 import {
-  compareTimestamps,
+  classifyProgress,
   decideSession,
   evaluateSession,
-  findMode,
   processingRecord,
   sessionProcessingWriteSchema,
-  unlockedStartLevel,
-  type FirestoreTimestamp,
   type ProcessingReason,
-  type SessionEvaluation,
+  type ServerResult,
   type SessionProcessingState,
 } from '@nfct/shared';
-import { progressRef, sessionRef, sessionsOf, type ProcessingContext } from './context';
-import { describeError } from './errors';
-import { applicableProgress, classifyProgress, rebuildInTransaction } from './progress';
+import { accountDeleted, progressRef, sessionRef, type ProcessingContext } from './context';
+import { applicableProgress, rebuildInTransaction } from './progress';
+import { upgradeInTransaction, type ReconcileTarget } from './reconcile';
 
 // Processing one session (NFCT-19): the exactly-once transaction.
 //
-// One transaction: read the session and skip it if `result` exists (so a
-// duplicate or concurrent delivery never applies it twice); evaluate exactly
-// the document it read (pure: its version's schemas, rescoring, the version's
-// checks, clock diagnostics); with no module for its version, record
-// processing.state = 'unsupported' and stop; otherwise read progress, rebuild
-// it if an older reducer maintained it, decide the start-level unlock against
-// it, and write `result`, progress and the removal of any stale `processing`
-// together.
+// Before the transaction, with no locks held and never repeated when the
+// transaction retries on contention: resolve the session's frozen game-version
+// module, parse its envelope and trials strictly and its display summary
+// loosely, rescore it from its trials and run the version's plausibility
+// checks and trusted scoring's own (evaluateSession: pure).
 //
-// Out-of-order delivery: before a session would be flagged
-// 'start-level-locked', its truly pending earlier sessions of the same game
-// (no result and no processing) are processed first, each by this same
-// function in its own transaction, so a session an earlier one unlocked is
-// not flagged. Anything this cannot see (another device's session that
-// arrives later, more than the scan budget) is repaired by the start-level
-// upgrade in reconcile.ts.
-
-/** Which (game, mode) may have start-level-locked sessions to upgrade after this run. */
-export type ReconcileTarget = { readonly gameId: string; readonly modeId: string };
+// Inside one transaction:
+// 1. re-read the session and stop if it already has a result (so a duplicate
+//    or concurrent delivery never applies it twice);
+// 2. stop, writing nothing, if the user's deletion ledger exists;
+// 3. use the evaluation only if the document is exactly the one evaluated
+//    (same updateTime), otherwise evaluate what the transaction read;
+// 4. unsupported: record processing.state = 'unsupported' and stop;
+//    invalid: write the result alone (it counts nowhere, so progress is not
+//    read);
+// 5. otherwise classify progress (apply, rebuild an older aggregate inside
+//    this transaction, or refuse progress from newer code), decide the
+//    start-level unlock against it, and, when the decision raised the
+//    unlocked start level (or progress was rebuilt), upgrade the
+//    start-level-locked sessions it unlocks (upgradeInTransaction, bounded);
+// 6. write the result, progress, the upgraded results and the removal of any
+//    stale `processing` in one commit.
+//
+// Processing order never matters: each session is judged against the progress
+// its transaction reads, a session flagged only because its start level was
+// still locked is upgraded once progress unlocks it, and that is the only
+// later change a result can undergo. Nothing here reads a device clock to
+// decide what to process first.
 
 export type ProcessOutcome =
   | { readonly status: 'missing' }
+  /** The user's account is being deleted: nothing was written. */
+  | { readonly status: 'account-deleted' }
+  /** The session already has a result. `reconcile` is set when it is valid (see reconcileAfterRedelivery). */
   | { readonly status: 'already-processed'; readonly reconcile: ReconcileTarget | null }
   | { readonly status: 'unsupported'; readonly reason: ProcessingReason }
   | {
     readonly status: 'processed';
-    readonly validity: 'valid' | 'flagged' | 'invalid';
+    readonly validity: ServerResult['validity'];
+    /** Sessions upgraded from flagged to valid in the same commit. */
+    readonly upgraded: readonly string[];
+    /** Set when the commit's own upgrade budget ran out: the post-commit reconcile must finish it. */
     readonly reconcile: ReconcileTarget | null;
-    /** Pending earlier sessions processed first (inline), and what each needs reconciled. */
-    readonly predecessors: readonly { readonly sessionId: string; readonly outcome: ProcessOutcome }[];
   };
 
-export type ProcessOptions = {
-  /** Process truly pending earlier sessions first when this one would be start-level-locked. */
-  readonly predecessors: boolean;
-};
+/** Whether two snapshots are the same version of the document (nothing written in between). */
+function sameVersion(a: DocumentSnapshot, b: DocumentSnapshot): boolean {
+  return a.updateTime !== undefined && b.updateTime !== undefined && a.updateTime.isEqual(b.updateTime);
+}
 
-export async function processSession(
-  context: ProcessingContext,
-  uid: string,
-  sessionId: string,
-  options: ProcessOptions = { predecessors: true },
-): Promise<ProcessOutcome> {
+export async function processSession(context: ProcessingContext, uid: string, sessionId: string): Promise<ProcessOutcome> {
   const ref = sessionRef(context.db, uid, sessionId);
   const snapshot = await ref.get();
   if (!snapshot.exists) return { status: 'missing' };
   const data = snapshot.data()!;
   if (data.result !== undefined) return { status: 'already-processed', reconcile: reconcileAfterRedelivery(data) };
+  const evaluation = evaluateSession(data, { uid, sessionId }, context.registry);
 
-  // A first evaluation decides only whether pending predecessors need processing first.
-  const preview = evaluateSession(data, { uid, sessionId }, context.registry);
-  const predecessors = options.predecessors && preview.kind === 'scored'
-    ? await processPendingPredecessors(context, uid, sessionId, preview)
-    : [];
-
-  return context.db.runTransaction(async (transaction) => {
+  return context.db.runTransaction<ProcessOutcome>(async (transaction) => {
     const current = await transaction.get(ref);
-    if (!current.exists) return { status: 'missing' } as const;
+    if (!current.exists) return { status: 'missing' };
     const stored = current.data()!;
-    if (stored.result !== undefined) {
-      return { status: 'already-processed', reconcile: reconcileAfterRedelivery(stored) } as const;
-    }
+    if (stored.result !== undefined) return { status: 'already-processed', reconcile: reconcileAfterRedelivery(stored) };
+    if (await accountDeleted(transaction, context.db, uid)) return { status: 'account-deleted' };
     // The decision is made on exactly the document this transaction read.
-    const evaluation = evaluateSession(stored, { uid, sessionId }, context.registry);
-    if (evaluation.kind === 'unsupported') {
-      const processing = processingRecord(stored.processing, 'unsupported', evaluation.reason, context.now());
+    const judged = sameVersion(current, snapshot) ? evaluation : evaluateSession(stored, { uid, sessionId }, context.registry);
+
+    if (judged.kind === 'unsupported') {
+      const processing = processingRecord(stored.processing, 'unsupported', judged.reason, context.now());
       transaction.update(ref, { processing: sessionProcessingWriteSchema.parse(processing) });
-      return { status: 'unsupported', reason: evaluation.reason } as const;
+      return { status: 'unsupported', reason: judged.reason };
     }
-    const { gameId } = evaluation.module;
+    const processedAt = context.now();
+    const decisionContext = { sessionId, processedAt, registry: context.registry };
+    if (judged.kind === 'invalid') {
+      // Counts nowhere, so it needs no progress, whatever state progress is in.
+      const { result } = decideSession(judged, null, decisionContext);
+      transaction.update(ref, { result, processing: FieldValue.delete() });
+      return { status: 'processed', validity: 'invalid', upgraded: [], reconcile: null };
+    }
+
+    const { gameId } = judged.module;
+    const target = { gameId, modeId: judged.session.modeId };
     const storedProgress = await transaction.get(progressRef(context.db, uid, gameId));
     const applicable = applicableProgress(classifyProgress(storedProgress.data(), gameId, context.registry), gameId);
     const rebuilt = applicable === 'rebuild';
-    const progress = rebuilt ? await rebuildInTransaction(context, transaction, uid, gameId) : applicable;
+    const base = rebuilt ? await rebuildInTransaction(context, transaction, uid, gameId) : applicable;
+    const decision = decideSession(judged, base, decisionContext);
+    // A valid or flagged session counts in totals, so progress exists after it.
+    if (decision.progress === null) throw new Error('A counted session must leave progress');
 
-    const decision = decideSession(evaluation, progress, {
-      sessionId,
-      processedAt: context.now(),
-      registry: context.registry,
-    });
+    // A raised unlock can make stored start-level-locked sessions upgradable; so can a rebuild.
+    const planned = decision.unlockRaised || rebuilt
+      ? await upgradeInTransaction(context, transaction, uid, target, decision.progress, processedAt)
+      : { progress: decision.progress, upgrades: [], complete: true };
+
+    // Every read is done; write the session, progress and the upgrades together.
     transaction.update(ref, { result: decision.result, processing: FieldValue.delete() });
-    // An invalid session changes nothing, unless the progress it was checked against was just rebuilt.
-    if (decision.result.validity !== 'invalid' || rebuilt) {
-      if (decision.progress !== null) {
-        transaction.set(progressRef(context.db, uid, gameId), decision.progress);
-      } else if (storedProgress.exists) {
-        // Only a rebuild can find that nothing counts any more.
-        transaction.delete(progressRef(context.db, uid, gameId));
-      }
+    transaction.set(progressRef(context.db, uid, gameId), planned.progress);
+    for (const { sessionId: upgradedId, result } of planned.upgrades) {
+      transaction.update(sessionRef(context.db, uid, upgradedId), { result });
     }
-    const modeId = evaluation.kind === 'scored' ? evaluation.session.modeId : null;
     return {
       status: 'processed',
       validity: decision.result.validity,
-      // A raised unlock may make start-level-locked sessions upgradable; so may a rebuild.
-      reconcile: modeId !== null && (decision.unlockRaised || rebuilt) ? { gameId, modeId } : null,
-      predecessors,
-    } as const;
+      upgraded: planned.upgrades.map(({ sessionId: upgradedId }) => upgradedId),
+      reconcile: planned.complete ? null : target,
+    };
   });
 }
 
 /**
  * A redelivered session that is already valid reconciles its mode again, in
- * case the delivery that processed it failed after committing, before its
- * upgrades ran. Cheap when there is nothing to upgrade.
+ * case the delivery that processed it ran out of its in-transaction upgrade
+ * budget and failed after committing, before its post-commit reconcile ran.
+ * Cheap when there is nothing to upgrade.
  */
 function reconcileAfterRedelivery(data: DocumentData): ReconcileTarget | null {
   const { result, gameId, modeId } = data as { result?: { validity?: unknown }; gameId?: unknown; modeId?: unknown };
@@ -131,9 +139,9 @@ function reconcileAfterRedelivery(data: DocumentData): ReconcileTarget | null {
 
 /**
  * Records why a session has no result, in a transaction that re-checks it has
- * none: processing metadata never coexists with, or replaces, a result. A
- * later successful processing deletes it in the same write that adds the
- * result.
+ * none and that the account is not being deleted: processing metadata never
+ * coexists with, or replaces, a result. It is not a terminal state: a later
+ * successful processing deletes it in the same write that adds the result.
  */
 export async function recordProcessingState(
   context: ProcessingContext,
@@ -141,99 +149,16 @@ export async function recordProcessingState(
   sessionId: string,
   state: SessionProcessingState,
   reason: ProcessingReason,
-): Promise<'recorded' | 'already-processed' | 'missing'> {
+): Promise<'recorded' | 'already-processed' | 'missing' | 'account-deleted'> {
   const ref = sessionRef(context.db, uid, sessionId);
   return context.db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return 'missing' as const;
     const data = snapshot.data()!;
     if (data.result !== undefined) return 'already-processed' as const;
+    if (await accountDeleted(transaction, context.db, uid)) return 'account-deleted' as const;
     const processing = sessionProcessingWriteSchema.parse(processingRecord(data.processing, state, reason, context.now()));
     transaction.update(ref, { processing });
     return 'recorded' as const;
   });
-}
-
-type Scored = Extract<SessionEvaluation, { kind: 'scored' }>;
-
-/**
- * Processes the session's truly pending earlier sessions of the same game
- * (no result, no processing), oldest in play order first, when the session
- * would otherwise be flagged start-level-locked under the progress stored
- * now. Bounded: it reads at most `predecessorScanBudget` recent sessions
- * (projected, newest first, created within `predecessorLookbackMs`; pending
- * sessions are recent by nature) and processes at most
- * `maxInlinePredecessors`, each with this same pipeline minus this step.
- * A predecessor that fails is left to its own trigger: the upgrade repairs
- * this session if the predecessor later unlocks it.
- */
-async function processPendingPredecessors(
-  context: ProcessingContext,
-  uid: string,
-  sessionId: string,
-  evaluation: Scored,
-): Promise<{ sessionId: string; outcome: ProcessOutcome }[]> {
-  const { module, session } = evaluation;
-  const mode = findMode(module.definition, session.modeId);
-  const stored = await progressRef(context.db, uid, module.gameId).get();
-  const state = classifyProgress(stored.data(), module.gameId, context.registry);
-  const progress = state.kind === 'current' ? state.progress : null;
-  // Only the start-level check depends on order; nothing to do if it passes (or cannot be judged yet).
-  if (!mode || state.kind !== 'current' || session.startLevel <= unlockedStartLevel(mode, progress)) return [];
-
-  const ids = await findPendingPredecessors(context, uid, sessionId, module.gameId, session.endedAt);
-  const processed: { sessionId: string; outcome: ProcessOutcome }[] = [];
-  for (const id of ids) {
-    try {
-      processed.push({ sessionId: id, outcome: await processSession(context, uid, id, { predecessors: false }) });
-    } catch (error) {
-      context.log.warn('pending predecessor not processed; its own trigger retries it', {
-        uid, sessionId, predecessor: id, error: describeError(error),
-      });
-    }
-  }
-  return processed;
-}
-
-async function findPendingPredecessors(
-  context: ProcessingContext,
-  uid: string,
-  sessionId: string,
-  gameId: string,
-  endedAt: FirestoreTimestamp,
-): Promise<string[]> {
-  const { limits } = context;
-  const since = Timestamp.fromMillis(context.now().toMillis() - limits.predecessorLookbackMs);
-  let query = sessionsOf(context.db, uid)
-    .where('createdAt', '>=', since)
-    .orderBy('createdAt', 'desc')
-    .select('createdAt', 'gameId', 'endedAt', 'result.processedAt', 'processing.state');
-  const pending: { id: string; endedAt: FirestoreTimestamp }[] = [];
-  let read = 0;
-  let exhausted = true;
-  while (read < limits.predecessorScanBudget) {
-    const pageLimit = Math.min(limits.scanPageSize, limits.predecessorScanBudget - read);
-    const page = await query.limit(pageLimit).get();
-    read += page.size;
-    for (const document of page.docs) {
-      const data = document.data();
-      const candidateEnd = data.endedAt as FirestoreTimestamp | undefined;
-      if (document.id === sessionId || data.gameId !== gameId || data.result !== undefined || data.processing !== undefined) continue;
-      if (!candidateEnd || typeof candidateEnd.toMillis !== 'function') continue;
-      const order = compareTimestamps(candidateEnd, endedAt) || (document.id < sessionId ? -1 : 1);
-      if (order < 0) pending.push({ id: document.id, endedAt: candidateEnd });
-    }
-    if (page.size < pageLimit) {
-      exhausted = false;
-      break;
-    }
-    query = query.startAfter(page.docs[page.docs.length - 1]!);
-  }
-  if (exhausted) {
-    context.log.warn('pending predecessor scan budget reached; the upgrade path covers the rest', { uid, sessionId, read });
-  }
-  return pending
-    .sort((a, b) => compareTimestamps(a.endedAt, b.endedAt) || (a.id < b.id ? -1 : 1))
-    .slice(0, limits.maxInlinePredecessors)
-    .map(({ id }) => id);
 }

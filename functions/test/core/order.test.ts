@@ -2,11 +2,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { runSessionPipeline } from '../../src/pipeline';
 import { processSession } from '../../src/processSession';
 import { reconcileUser } from '../../src/redrive';
-import { coreContext, minutesAgo, writeSession, type Written } from '../helpers/core';
+import { coreContext, deliver, minutesAgo, writeSession, type Written } from '../helpers/core';
 import { content, CORE_PROJECT, emulatorFirestore, newUid, progressPath, readDoc, sessionPath, type Plan } from '../helpers/emulator';
 
-// Out-of-order delivery and the start-level upgrade, against Firestore. The
-// end state must not depend on the order sessions are processed in.
+// Order-independent processing and the start-level upgrade, against
+// Firestore. Sessions are processed independently, in whatever order they
+// arrive; a session flagged only because its start level was still locked is
+// upgraded once progress unlocks it, in the same commit as the unlock. The end
+// state must not depend on the order, or on concurrency.
 
 const { db, close } = emulatorFirestore(CORE_PROJECT);
 const context = coreContext(db);
@@ -16,39 +19,55 @@ async function resultOf(uid: string, id: string) {
   return (await readDoc(db, sessionPath(uid, id)))?.result;
 }
 
-describe('out-of-order processing', () => {
-  it('processes a truly pending earlier session first, so a session it unlocked is never flagged', async () => {
+async function validitiesOf(uid: string, ids: readonly string[]) {
+  const validities: string[] = [];
+  for (const id of ids) validities.push((await resultOf(uid, id))?.validity);
+  return validities;
+}
+
+/** Writes the plans for a fresh user (fixed session IDs, so records compare across users) and processes them in `order`. */
+async function processedInOrder(plans: readonly Plan[], prefix: string, order: readonly number[]) {
+  const uid = newUid();
+  const ids = plans.map((_, index) => `${prefix}-${String(index).padStart(2, '0')}-session-document`);
+  for (const index of order) {
+    await writeSession(db, uid, { ...plans[index]!, id: ids[index] });
+    await runSessionPipeline(context, uid, ids[index]!);
+  }
+  return { uid, ids, progress: content(await readDoc(db, progressPath(uid))), validities: await validitiesOf(uid, ids) };
+}
+
+/** Writes every plan for a fresh user, then delivers them all at once (redelivering any that fail, like the platform). */
+async function processedConcurrently(plans: readonly Plan[], prefix: string) {
+  const uid = newUid();
+  const ids = plans.map((_, index) => `${prefix}-${String(index).padStart(2, '0')}-session-document`);
+  await Promise.all(plans.map((plan, index) => writeSession(db, uid, { ...plan, id: ids[index] })));
+  const deliveries = await Promise.all(ids.map((id) => deliver(context, uid, id)));
+  return {
+    uid,
+    ids,
+    progress: content(await readDoc(db, progressPath(uid))),
+    validities: await validitiesOf(uid, ids),
+    redeliveries: deliveries.reduce((sum, { redeliveries }) => sum + redeliveries, 0),
+  };
+}
+
+describe('two queued sessions processed out of order are not wrongly flagged (end state)', () => {
+  const earlierPlan: Plan = { seed: 21, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(20) };
+  const laterPlan: Plan = { seed: 22, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(10) };
+
+  it('flags the later session while its level is locked, then upgrades it in the commit of the session that unlocks it', async () => {
     const uid = newUid();
-    // Two sessions queued offline, delivered together; the later one is processed first.
-    const earlier = await writeSession(db, uid, { seed: 21, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(20), order: 1 });
-    const later = await writeSession(db, uid, { seed: 22, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(10), order: 2 });
-
-    const report = await runSessionPipeline(context, uid, later.id);
-
-    expect(report.outcome).toMatchObject({ status: 'processed', validity: 'valid' });
-    expect(report.outcome.status === 'processed' && report.outcome.predecessors.map(({ sessionId }) => sessionId)).toEqual([earlier.id]);
-    expect(await resultOf(uid, later.id)).toMatchObject({ validity: 'valid', reasons: [], recordKey: 'timed-90:3' });
-    expect(await resultOf(uid, earlier.id)).toMatchObject({ validity: 'valid', reasons: [] });
-    // The earlier session's own delivery then finds it processed.
-    expect((await runSessionPipeline(context, uid, earlier.id)).outcome.status).toBe('already-processed');
-    expect(await readDoc(db, progressPath(uid))).toMatchObject({
-      sessionsCompleted: 2, activeMs: 180_000, bestPeakLevel: { 'timed-90': 6 }, unlocked: { 'timed-90': 5 },
-    });
-  });
-
-  it('upgrades a session flagged start-level-locked when a session it could not see unlocks its level (another device)', async () => {
-    const uid = newUid();
-    const later = await writeSession(db, uid, { seed: 23, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(10), order: 2 });
+    const later = await writeSession(db, uid, { ...laterPlan, id: 'queued-later-session' });
     await runSessionPipeline(context, uid, later.id);
     const flagged = await resultOf(uid, later.id);
     expect(flagged).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked'] });
     const flaggedProgress = await readDoc(db, progressPath(uid));
 
-    // The earlier session arrives later, from another device's offline queue.
-    const earlier = await writeSession(db, uid, { seed: 24, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(20), order: 1 });
-    const report = await runSessionPipeline(context, uid, earlier.id);
+    const earlier = await writeSession(db, uid, { ...earlierPlan, id: 'queued-earlier-session' });
+    // The processing transaction alone, with no post-commit step: the upgrade is part of its commit.
+    const outcome = await processSession(context, uid, earlier.id);
 
-    expect(report.reconciled).toMatchObject([{ gameId: 'mental-math', modeId: 'timed-90', report: { upgraded: [later.id] } }]);
+    expect(outcome).toEqual({ status: 'processed', validity: 'valid', upgraded: [later.id], reconcile: null });
     const upgraded = await resultOf(uid, later.id);
     const { validity: _validity, reasons: _reasons, ...stored } = flagged;
     expect(upgraded).toMatchObject({
@@ -58,28 +77,39 @@ describe('out-of-order processing', () => {
       recordKey: 'timed-90:3',
       personalBest: true,
     });
-    const progress = await readDoc(db, progressPath(uid));
+    expect(upgraded.processedAt).toEqual(flagged.processedAt);
     // Totals were counted once, when the session was processed as flagged.
     expect(flaggedProgress).toMatchObject({ sessionsCompleted: 1, activeMs: 90_000 });
+    const progress = await readDoc(db, progressPath(uid));
     expect(progress).toMatchObject({ sessionsCompleted: 2, activeMs: 180_000, bestPeakLevel: { 'timed-90': 6 }, unlocked: { 'timed-90': 5 } });
     expect(progress?.bests['timed-90:3'].score.sessionId).toBe(later.id);
     expect(progress?.bests['timed-90:1'].score.sessionId).toBe(earlier.id);
+    // One commit: the unlocking result, the upgrade and progress share one write time.
+    expect((await resultOf(uid, earlier.id)).processedAt).toEqual(progress?.updatedAt);
+
+    // The same end state as processing them in play order.
+    const inOrder = await processedInOrder([earlierPlan, laterPlan], 'queued', [0, 1]);
+    const reversed = await processedInOrder([earlierPlan, laterPlan], 'queued', [1, 0]);
+    expect(reversed.progress).toEqual(inOrder.progress);
+    expect(reversed.validities).toEqual(['valid', 'valid']);
+    expect(inOrder.validities).toEqual(['valid', 'valid']);
   });
 
-  it('cascades: each upgrade can unlock the next', async () => {
+  it('cascades in one commit: each upgrade can unlock the next', async () => {
     const uid = newUid();
     const c = await writeSession(db, uid, { seed: 25, startLevel: 5, targetPeak: 7, endedAtMs: minutesAgo(30), order: 1 });
     await runSessionPipeline(context, uid, c.id);
     const b = await writeSession(db, uid, { seed: 26, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(20), order: 2 });
     await runSessionPipeline(context, uid, b.id);
-    expect((await resultOf(uid, c.id)).validity).toBe('flagged');
-    expect((await resultOf(uid, b.id)).validity).toBe('flagged');
+    expect(await validitiesOf(uid, [c.id, b.id])).toEqual(['flagged', 'flagged']);
 
     const a = await writeSession(db, uid, { seed: 27, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(10), order: 3 });
     const report = await runSessionPipeline(context, uid, a.id);
 
-    expect(report.reconciled[0]?.report.upgraded).toEqual([b.id, c.id]);
-    for (const id of [a.id, b.id, c.id]) expect((await resultOf(uid, id)).validity).toBe('valid');
+    // Scan order: start level, then session ID (never a device clock).
+    expect(report.outcome).toMatchObject({ status: 'processed', validity: 'valid', upgraded: [b.id, c.id], reconcile: null });
+    expect(report.reconciled).toEqual([]);
+    expect(await validitiesOf(uid, [a.id, b.id, c.id])).toEqual(['valid', 'valid', 'valid']);
     expect(await readDoc(db, progressPath(uid))).toMatchObject({
       sessionsCompleted: 3, activeMs: 270_000, bestPeakLevel: { 'timed-90': 7 }, unlocked: { 'timed-90': 6 },
     });
@@ -94,16 +124,41 @@ describe('out-of-order processing', () => {
 
     const unlocking = await writeSession(db, uid, { seed: 29, startLevel: 1, targetPeak: 6, endedAtMs: minutesAgo(20), order: 1 });
     await runSessionPipeline(context, uid, unlocking.id);
+    await reconcileUser(context, uid);
 
     expect(await resultOf(uid, fast.id)).toEqual(flagged);
     expect((await readDoc(db, progressPath(uid)))?.bests['timed-90:3']).toBeUndefined();
   });
 
+  it('upgrades a session whose other reasons are only diagnostics, keeping them: the same end state as play order', async () => {
+    // A disagreeing client summary and peak are diagnostics. They never decide validity, so they must not block the upgrade.
+    const noisy = { 'summary.score': 1, peakLevel: 9 };
+    const lockedPlan: Plan = { seed: 30, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(10) };
+    const unlockingPlan: Plan = { seed: 31, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(20) };
+    const run = async (order: readonly ('locked' | 'unlocking')[]) => {
+      const uid = newUid();
+      for (const which of order) {
+        const plan = which === 'locked' ? lockedPlan : unlockingPlan;
+        const { id } = await writeSession(db, uid, { ...plan, id: `noisy-${which}-session` });
+        if (which === 'locked') await db.doc(sessionPath(uid, id)).update(noisy);
+        await runSessionPipeline(context, uid, id);
+      }
+      return { uid, result: await resultOf(uid, 'noisy-locked-session'), progress: content(await readDoc(db, progressPath(uid))) };
+    };
+
+    const lockedFirst = await run(['locked', 'unlocking']);
+    const inPlayOrder = await run(['unlocking', 'locked']);
+
+    expect(inPlayOrder.result).toMatchObject({ validity: 'valid', reasons: ['peak-level-mismatch', 'summary-mismatch'] });
+    expect(lockedFirst.result).toMatchObject({ validity: 'valid', reasons: ['peak-level-mismatch', 'summary-mismatch', 'start-level-unlocked-later'] });
+    expect(lockedFirst.progress).toEqual(inPlayOrder.progress);
+  });
+
   it('never downgrades: replays and reconciles leave valid sessions and progress as they are', async () => {
     const uid = newUid();
-    const later = await writeSession(db, uid, { seed: 30, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(10), order: 2 });
+    const later = await writeSession(db, uid, { seed: 32, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(10), order: 2 });
     await runSessionPipeline(context, uid, later.id);
-    const earlier = await writeSession(db, uid, { seed: 31, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
+    const earlier = await writeSession(db, uid, { seed: 33, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
     await runSessionPipeline(context, uid, earlier.id);
     expect((await resultOf(uid, later.id)).validity).toBe('valid');
     const progress = await readDoc(db, progressPath(uid));
@@ -118,28 +173,93 @@ describe('out-of-order processing', () => {
   });
 });
 
-describe('bounded work', () => {
-  it('stops looking for pending predecessors at its read budget; the upgrade repairs what it missed', async () => {
-    const uid = newUid();
-    const pending = await writeSession(db, uid, { seed: 40, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(60), order: 0 });
-    for (let index = 1; index <= 4; index += 1) {
-      const other = await writeSession(db, uid, { seed: 40 + index, startLevel: 1, targetPeak: 2, endedAtMs: minutesAgo(50 - index), order: index });
-      await runSessionPipeline(context, uid, other.id);
+describe('mutually locked sessions', () => {
+  // A (start 3, peak 6) would unlock B; B (start 5, peak 7) would unlock A. Neither may bootstrap the other.
+  const a: Plan = { seed: 34, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(30) };
+  const b: Plan = { seed: 35, startLevel: 5, targetPeak: 7, endedAtMs: minutesAgo(20) };
+  // C (start 1, peak 4) legitimately unlocks A, and A then unlocks B.
+  const c: Plan = { seed: 36, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(10) };
+
+  it('stay flagged in every order and concurrently, whatever reconcile runs', async () => {
+    for (const run of [
+      await processedInOrder([a, b], 'pair', [0, 1]),
+      await processedInOrder([a, b], 'pair', [1, 0]),
+      await processedConcurrently([a, b], 'pair'),
+    ]) {
+      await reconcileUser(context, run.uid);
+      expect(await validitiesOf(run.uid, run.ids)).toEqual(['flagged', 'flagged']);
+      expect(await readDoc(db, progressPath(run.uid))).toMatchObject({ sessionsCompleted: 2, bestPeakLevel: {}, bests: {}, unlocked: {} });
     }
-    const locked = await writeSession(db, uid, { seed: 49, startLevel: 3, targetPeak: 4, endedAtMs: minutesAgo(5), order: 9 });
-
-    const tight = coreContext(db, { limits: { predecessorScanBudget: 3, scanPageSize: 2 } });
-    const outcome = await processSession(tight, uid, locked.id);
-    expect(outcome).toMatchObject({ status: 'processed', validity: 'flagged', predecessors: [] });
-
-    await runSessionPipeline(context, uid, pending.id);
-    expect(await resultOf(uid, locked.id)).toMatchObject({ validity: 'valid', reasons: ['start-level-unlocked-later'] });
-    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 6 });
   });
 
-  it('pages past sessions flagged for other reasons at the same start level, so none can hide an upgradable one', async () => {
+  it('are both upgraded once a third session unlocks one of them, and repeating the upgrade changes nothing', async () => {
+    const run = await processedInOrder([a, b, c], 'unlocked-pair', [0, 1, 2]);
+    expect(run.validities).toEqual(['valid', 'valid', 'valid']);
+    const sessions = [];
+    for (const id of run.ids) sessions.push(await readDoc(db, sessionPath(run.uid, id)));
+    const progress = await readDoc(db, progressPath(run.uid));
+    expect(progress).toMatchObject({ sessionsCompleted: 3, activeMs: 270_000, bestPeakLevel: { 'timed-90': 7 }, unlocked: { 'timed-90': 6 } });
+
+    // Redeliveries and admin reconciles find nothing left to do.
+    for (const id of run.ids) expect((await runSessionPipeline(context, run.uid, id)).outcome.status).toBe('already-processed');
+    expect((await reconcileUser(context, run.uid)).map(({ report }) => report)).toEqual([{ upgraded: [], stopped: 'fixpoint' }]);
+
+    const after = [];
+    for (const id of run.ids) after.push(await readDoc(db, sessionPath(run.uid, id)));
+    expect(after).toEqual(sessions);
+    expect(await readDoc(db, progressPath(run.uid))).toEqual(progress);
+    // Every processing order reaches the same end state.
+    expect((await processedInOrder([a, b, c], 'unlocked-pair', [2, 1, 0])).progress).toEqual(run.progress);
+    expect((await processedInOrder([a, b, c], 'unlocked-pair', [1, 2, 0])).progress).toEqual(run.progress);
+  });
+});
+
+describe('concurrent processing', () => {
+  it('reaches the sequential end state when a session and the session it unlocks are processed at once', async () => {
+    const earlier: Plan = { seed: 37, startLevel: 1, targetPeak: 5, endedAtMs: minutesAgo(20) };
+    const later: Plan = { seed: 38, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(10) };
+    const sequential = await processedInOrder([earlier, later], 'ab', [0, 1]);
+    for (let round = 0; round < 5; round += 1) {
+      const concurrent = await processedConcurrently([earlier, later], 'ab');
+      expect(concurrent.validities, `round ${round}`).toEqual(['valid', 'valid']);
+      expect(concurrent.progress, `round ${round}`).toEqual(sequential.progress);
+      // Whichever transaction committed first decides only the point-in-time note.
+      expect([[], ['start-level-unlocked-later']]).toContainEqual((await resultOf(concurrent.uid, concurrent.ids[1]!)).reasons);
+    }
+  });
+
+  it('converges, counting totals once, when a chain of unlocking sessions and a locked pair are created at the same moment', async () => {
+    const plans: Plan[] = [
+      // A chain: each session unlocks the next one's start level.
+      { seed: 60, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(50) },
+      { seed: 61, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(40) },
+      { seed: 62, startLevel: 3, targetPeak: 6, endedAtMs: minutesAgo(30) },
+      { seed: 63, startLevel: 5, targetPeak: 7, endedAtMs: minutesAgo(20) },
+      { seed: 64, startLevel: 6, targetPeak: 8, endedAtMs: minutesAgo(10) },
+      // A pair that only unlock each other, above what the chain unlocks (7).
+      { seed: 65, startLevel: 8, targetPeak: 10, endedAtMs: minutesAgo(45) },
+      { seed: 66, startLevel: 9, targetPeak: 10, endedAtMs: minutesAgo(5) },
+    ];
+    const sequential = await processedInOrder(plans, 'chain', plans.map((_, index) => index));
+    expect(sequential.validities).toEqual(['valid', 'valid', 'valid', 'valid', 'valid', 'flagged', 'flagged']);
+    expect(sequential.progress).toMatchObject({ sessionsCompleted: 7, activeMs: 630_000, bestPeakLevel: { 'timed-90': 8 }, unlocked: { 'timed-90': 7 } });
+    const reverse = await processedInOrder(plans, 'chain', plans.map((_, index) => plans.length - 1 - index));
+    expect(reverse.progress).toEqual(sequential.progress);
+    expect(reverse.validities).toEqual(sequential.validities);
+
+    for (let round = 0; round < 3; round += 1) {
+      const concurrent = await processedConcurrently(plans, 'chain');
+      // Contention is resolved by transaction retries (and, past them, redelivery), never by losing an update.
+      expect(concurrent.validities, `round ${round} (${concurrent.redeliveries} redeliveries)`).toEqual(sequential.validities);
+      expect(concurrent.progress, `round ${round} (${concurrent.redeliveries} redeliveries)`).toEqual(sequential.progress);
+    }
+  });
+});
+
+describe('bounded work', () => {
+  it('pages past sessions flagged for other reasons at the same start level, inside the processing transaction', async () => {
     const uid = newUid();
-    // More sessions flagged for another reason at level 2 than the old per-level cap (20), all sorting first.
+    // More sessions flagged for another reason at level 2 than one page, all sorting first.
     for (let index = 0; index < 22; index += 1) {
       const fast = await writeSession(db, uid, { seed: 300 + index, startLevel: 2, targetPeak: 3, rtMs: 200, endedAtMs: minutesAgo(90 - index), order: index });
       await runSessionPipeline(context, uid, fast.id);
@@ -151,12 +271,13 @@ describe('bounded work', () => {
     const paged = coreContext(db, { limits: { scanPageSize: 5 } });
     const report = await runSessionPipeline(paged, uid, unlocking.id);
 
-    expect(report.reconciled[0]?.report).toEqual({ upgraded: [locked.id], stopped: 'fixpoint' });
+    expect(report.outcome).toMatchObject({ status: 'processed', upgraded: [locked.id], reconcile: null });
+    expect(report.reconciled).toEqual([]);
     expect(await resultOf(uid, locked.id)).toMatchObject({ validity: 'valid', reasons: ['start-level-unlocked-later'] });
     expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 24, bestPeakLevel: { 'timed-90': 4 } });
   });
 
-  it("stops at an invocation's scan budget and says so; the admin reconcile, which has no budget, finishes it", async () => {
+  it("leaves what the transaction's own budget cannot reach to the post-commit reconcile", async () => {
     const uid = newUid();
     for (let index = 0; index < 5; index += 1) {
       const fast = await writeSession(db, uid, { seed: 340 + index, startLevel: 2, targetPeak: 3, rtMs: 200, endedAtMs: minutesAgo(60 - index), order: index });
@@ -166,7 +287,25 @@ describe('bounded work', () => {
     await runSessionPipeline(context, uid, locked.id);
     const unlocking = await writeSession(db, uid, { seed: 351, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 9_000 });
 
-    const tight = coreContext(db, { limits: { reconcileScanBudget: 3, scanPageSize: 2 } });
+    const tight = coreContext(db, { limits: { transactionUpgradeScanBudget: 3, scanPageSize: 2 } });
+    const report = await runSessionPipeline(tight, uid, unlocking.id);
+
+    expect(report.outcome).toMatchObject({ status: 'processed', upgraded: [], reconcile: { gameId: 'mental-math', modeId: 'timed-90' } });
+    expect(report.reconciled).toMatchObject([{ report: { upgraded: [locked.id], stopped: 'fixpoint' } }]);
+    expect((await resultOf(uid, locked.id)).validity).toBe('valid');
+  });
+
+  it("stops at an invocation's budgets and says so; the admin reconcile, which has no budget, finishes it", async () => {
+    const uid = newUid();
+    for (let index = 0; index < 5; index += 1) {
+      const fast = await writeSession(db, uid, { seed: 360 + index, startLevel: 2, targetPeak: 3, rtMs: 200, endedAtMs: minutesAgo(60 - index), order: index });
+      await runSessionPipeline(context, uid, fast.id);
+    }
+    const locked = await writeSession(db, uid, { seed: 370, startLevel: 2, targetPeak: 4, endedAtMs: minutesAgo(30), order: 9_999 });
+    await runSessionPipeline(context, uid, locked.id);
+    const unlocking = await writeSession(db, uid, { seed: 371, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 9_000 });
+
+    const tight = coreContext(db, { limits: { transactionUpgradeScanBudget: 3, reconcileScanBudget: 3, scanPageSize: 2 } });
     const report = await runSessionPipeline(tight, uid, unlocking.id);
     expect(report.reconciled[0]?.report).toEqual({ upgraded: [], stopped: 'budget' });
     expect((await resultOf(uid, locked.id)).validity).toBe('flagged');
@@ -177,13 +316,14 @@ describe('bounded work', () => {
     expect((await resultOf(uid, locked.id)).validity).toBe('valid');
   });
 
-  it('reconciles again when an already-valid session is redelivered (a reconcile lost after its commit)', async () => {
+  it('loses no upgrade when a delivery dies between its commit and its post-commit reconcile: the redelivery finishes it', async () => {
     const uid = newUid();
-    const locked = await writeSession(db, uid, { seed: 360, startLevel: 2, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
+    const locked = await writeSession(db, uid, { seed: 380, startLevel: 2, targetPeak: 3, endedAtMs: minutesAgo(20), order: 1 });
     await runSessionPipeline(context, uid, locked.id);
-    const unlocking = await writeSession(db, uid, { seed: 361, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 2 });
-    // The first delivery commits, then dies before its reconcile.
-    expect(await processSession(context, uid, unlocking.id)).toMatchObject({ status: 'processed', validity: 'valid' });
+    const unlocking = await writeSession(db, uid, { seed: 381, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(10), order: 2 });
+    // A transaction budget of nothing forces the overflow; the delivery commits, then dies before its reconcile.
+    const starved = coreContext(db, { limits: { transactionUpgradeScanBudget: 0 } });
+    expect(await processSession(starved, uid, unlocking.id)).toMatchObject({ status: 'processed', validity: 'valid', upgraded: [] });
     expect((await resultOf(uid, locked.id)).validity).toBe('flagged');
 
     const redelivery = await runSessionPipeline(context, uid, unlocking.id);
@@ -191,9 +331,10 @@ describe('bounded work', () => {
     expect(redelivery.outcome.status).toBe('already-processed');
     expect(redelivery.reconciled[0]?.report.upgraded).toEqual([locked.id]);
     expect((await resultOf(uid, locked.id)).validity).toBe('valid');
+    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 2, bestPeakLevel: { 'timed-90': 3 } });
   });
 
-  it('caps upgrades per reconcile; the next reconcile finishes them', async () => {
+  it('caps upgrades per transaction and per reconcile; the admin reconcile finishes them', async () => {
     const uid = newUid();
     const locked: Written[] = [];
     for (let index = 0; index < 3; index += 1) {
@@ -203,9 +344,10 @@ describe('bounded work', () => {
     }
     const unlocking = await writeSession(db, uid, { seed: 59, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(5), order: 9 });
 
-    const tight = coreContext(db, { limits: { maxUpgradesPerReconcile: 1, upgradeBatchSize: 1 } });
+    const tight = coreContext(db, { limits: { transactionUpgradeLimit: 1, maxUpgradesPerReconcile: 1, upgradeBatchSize: 1 } });
     const report = await runSessionPipeline(tight, uid, unlocking.id);
-    expect(report.reconciled[0]?.report).toEqual({ upgraded: [locked[0]!.id], stopped: 'budget' });
+    expect(report.outcome).toMatchObject({ upgraded: [locked[0]!.id] });
+    expect(report.reconciled[0]?.report).toEqual({ upgraded: [locked[1]!.id], stopped: 'budget' });
 
     await reconcileUser(context, uid);
     for (const { id } of locked) expect((await resultOf(uid, id)).validity).toBe('valid');
@@ -236,10 +378,10 @@ function prng(seed: number) {
 }
 
 describe('order independence against Firestore', () => {
-  it('reaches the same progress and validities for random session sets in random orders', async () => {
+  it('reaches the same progress and validities for random session sets in random orders, and concurrently', async () => {
     const random = prng(0x19_2026);
     for (let run = 0; run < 5; run += 1) {
-      const plans: (Plan & { order: number })[] = Array.from({ length: random.int(3, 5) }, (_, index) => {
+      const plans: Plan[] = Array.from({ length: random.int(3, 5) }, (_, index) => {
         const startLevel = random.next() < 0.4 ? 1 : random.int(1, 4);
         return {
           seed: random.int(0, 0xffff_ffff),
@@ -247,25 +389,19 @@ describe('order independence against Firestore', () => {
           targetPeak: random.int(startLevel, startLevel + 4),
           rtMs: random.next() < 0.15 ? 200 : 1_300,
           endedAtMs: minutesAgo(60 - index * 5),
-          order: index,
         };
       });
-      const outcomes = [];
-      for (const order of [plans.map((_, index) => index), random.shuffle(plans.map((_, index) => index)), random.shuffle(plans.map((_, index) => index))]) {
-        const uid = newUid();
-        const ids: string[] = [];
-        // Each session is written just before it is processed, as if it arrived from another device then.
-        for (const index of order) {
-          const { id } = await writeSession(db, uid, { ...plans[index]!, id: `session-${run}-${index}-order` });
-          ids[index] = id;
-          await runSessionPipeline(context, uid, id);
-        }
-        const validities = [];
-        for (const id of ids) validities.push((await resultOf(uid, id)).validity);
-        outcomes.push({ progress: content(await readDoc(db, progressPath(uid))), validities });
+      const indices = plans.map((_, index) => index);
+      // Each session is written just before it is processed, as if it arrived from another device then.
+      const reference = await processedInOrder(plans, `random-${run}`, indices);
+      for (const order of [random.shuffle(indices), random.shuffle(indices)]) {
+        const shuffled = await processedInOrder(plans, `random-${run}`, order);
+        expect(shuffled.progress, `run ${run} order ${order.join(',')}`).toEqual(reference.progress);
+        expect(shuffled.validities, `run ${run} order ${order.join(',')}`).toEqual(reference.validities);
       }
-      expect(outcomes[1], `run ${run}`).toEqual(outcomes[0]);
-      expect(outcomes[2], `run ${run}`).toEqual(outcomes[0]);
+      const concurrent = await processedConcurrently(plans, `random-${run}`);
+      expect(concurrent.progress, `run ${run} concurrent`).toEqual(reference.progress);
+      expect(concurrent.validities, `run ${run} concurrent`).toEqual(reference.validities);
     }
   });
 });
