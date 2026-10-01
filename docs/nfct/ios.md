@@ -67,6 +67,7 @@ Xcode Cloud workflow and app record belong to Waveable; NFCT gets its own
 | Devices | iPhone only | `TARGETED_DEVICE_FAMILY = 1` | Not Mac ("Designed for iPhone") or Vision Pro |
 | Orientation | Portrait on iPhone | `Info.plist` | The iPad key keeps all four, for later |
 | Appearance | Light | `UIUserInterfaceStyle`, `SystemBars.style` | Keeps the status bar legible in Dark Mode; the app has no dark theme |
+| Pinch-zoom | On | `ios.zoomEnabled` in `capacitor.config.ts`; the viewport in `index.html` | Capacitor disables web-view zoom by default; both settings are needed (NFCT-33) |
 | Bluetooth | Optional | `NSBluetoothAlwaysUsageDescription` | Not a required capability: EEG is optional |
 | Camera | On request | `NSCameraUsageDescription` | The profile picture's Take Photo |
 | Web inspection | Debug only | `ios/debug.xcconfig` sets `CAPACITOR_DEBUG` | Release builds are not inspectable and do not log |

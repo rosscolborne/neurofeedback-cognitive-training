@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import capacitorConfig from '../../capacitor.config.ts';
 
 // The web shell iOS loads (NFCT-33): zoom stays available and the fonts ship
 // with the app (index.html, src/styles/fonts.css, public/fonts). e2e/iphone-forms.auth-handoffs.local.spec.ts checks the same
@@ -14,6 +15,8 @@ describe('iPhone web shell', () => {
   it('lets the user pinch-zoom and draws under the notch and home indicator', () => {
     const viewport = indexHtml.match(/<meta name="viewport" content="([^"]+)"/)?.[1];
     expect(viewport).toBe('width=device-width, initial-scale=1.0, viewport-fit=cover');
+    // Capacitor's iOS web view refuses to zoom unless the app turns it on.
+    expect(capacitorConfig.ios?.zoomEnabled).toBe(true);
   });
 
   it('loads every font from the app bundle, never from a third party', () => {

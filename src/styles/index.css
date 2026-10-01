@@ -97,7 +97,8 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* iOS keeps text at the size the CSS sets; pinch-zoom enlarges it (NFCT-33). */
+/* iOS keeps text at the size the CSS sets; pinch-zoom enlarges it (NFCT-33:
+   index.html's viewport and capacitor.config.ts's ios.zoomEnabled). */
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
