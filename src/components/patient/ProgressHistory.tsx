@@ -19,6 +19,8 @@ import { MOODS } from './sessionMoods';
 
 interface ProgressHistoryProps {
   client: ClientProfile;
+  /** Game progress (NFCT-22), shown under the title, before the neurofeedback period views. */
+  gamesSection?: React.ReactNode;
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
@@ -86,7 +88,7 @@ const ZoneRing: React.FC<{ percent: number | null }> = ({ percent }) => (
   </div>
 );
 
-export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
+export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesSection }) => {
   const [period, setPeriod] = useState<ProgressPeriod>('month');
   const [sessionState, setSessionState] = useState<{
     clientId: string;
@@ -184,6 +186,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
             : 'Complete your first session to start tracking progress.'}
         </p>
       </div>
+
+      {gamesSection}
 
       {/* Period Selector Pills */}
       <div

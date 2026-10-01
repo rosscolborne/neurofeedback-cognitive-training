@@ -42,6 +42,8 @@ import {
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
 import { MentalMathGame } from '../../consumer/games/mentalMath/MentalMathGame';
+import { MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
+import type { MentalMathView } from '../../consumer/games/mentalMath/MentalMathScreen';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
 
 // NFCT-21: Mental Math is reached from the Train tab until the consumer shell
@@ -89,6 +91,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [mentalMathOwnerId, setMentalMathOwnerId] = useState<string | null>(null);
+  const [mentalMathView, setMentalMathView] = useState<MentalMathView>('picker');
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
   const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
   const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
@@ -428,7 +431,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   if (mentalMathOwnerId === client.id) {
-    return <MentalMathGame eegProvider={demoModeEegProvider} onExit={() => setMentalMathOwnerId(null)} />;
+    return <MentalMathGame eegProvider={demoModeEegProvider} initialView={mentalMathView} onExit={() => setMentalMathOwnerId(null)} />;
   }
 
   if (activeSessionExp && sessionOwnerId === client.id) {
@@ -625,7 +628,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cognitive games. No headset needed.</p>
               </div>
               <div className="train-grid">
-                <div className="train-game-card" onClick={() => setMentalMathOwnerId(client.id)}>
+                <div className="train-game-card" onClick={() => { setMentalMathView('picker'); setMentalMathOwnerId(client.id); }}>
                   <div className="train-card-icon" aria-hidden="true">
                     <Calculator size={22} />
                   </div>
@@ -645,7 +648,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'education' && <EducationHub />}
 
-        {activeTab === 'progress' && <ProgressHistory client={client} />}
+        {activeTab === 'progress' && (
+          <ProgressHistory
+            client={client}
+            gamesSection={<MentalMathProgressCard onOpen={() => { setMentalMathView('progress'); setMentalMathOwnerId(client.id); }} />}
+          />
+        )}
 
         {activeTab === 'messages' && (
           <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
