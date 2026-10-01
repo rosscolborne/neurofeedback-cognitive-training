@@ -18,8 +18,10 @@ const cache = vi.hoisted(() => ({
   isEnding: vi.fn(() => false),
   hasUnsyncedWrites: vi.fn(),
   endSession: vi.fn(),
+  signOutWithoutFirestore: vi.fn(),
   subscribe: () => () => {},
   getStatus: () => 'idle',
+  getEndingReason: () => null,
 }));
 
 vi.mock('../../services/firebase', () => ({
@@ -175,6 +177,20 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     await act(async () => { await observed.logout(); });
     expect(cache.hasUnsyncedWrites).toHaveBeenCalledOnce();
     expect(cache.endSession).toHaveBeenCalledWith({ reason: 'sign-out', signOut: true, destination: '/' });
+    renderer.unmount();
+  });
+
+  it('signs out without Firestore while the cache is held up, hiding the account first', async () => {
+    cache.signOutWithoutFirestore.mockResolvedValue(undefined);
+    const renderer = await mount();
+    await act(async () => { await firebaseAuth.callback!({ uid: 'alice', email: 'alice@example.com' }); });
+
+    await act(async () => { await observed.signOutWithoutFirestore(); });
+    expect(cache.signOutWithoutFirestore).toHaveBeenCalledOnce();
+    expect(cache.hasUnsyncedWrites).not.toHaveBeenCalled();
+    expect(cache.endSession).not.toHaveBeenCalled();
+    expect(observed.user).toBeNull();
+    expect(observed.loading).toBe(true);
     renderer.unmount();
   });
 

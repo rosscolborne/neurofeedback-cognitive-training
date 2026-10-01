@@ -24,7 +24,9 @@ export const players = {
 export const acceptedConsentVersion = 'placeholder-1';
 
 export const seededSessionId = 'session-seeded-00000001';
-export const seededRecordingId = 'recording-seeded-000001';
+/** A second session of player A that already has its recording; a recording's ID is its session's ID. */
+export const recordedSessionId = 'session-recorded-000001';
+export const seededRecordingId = recordedSessionId;
 
 export function minutesAgo(minutes: number): Timestamp {
     return Timestamp.fromMillis(Date.now() - minutes * 60_000);
@@ -176,7 +178,8 @@ export async function resetConsumerWorld(): Promise<void> {
         [`users/${players.legacy}`]: { email: 'legacy-user@example.test', displayName: 'Legacy', createdAt: '2026-01-15T12:00:00.000Z', role: 'patient' },
         [`users/${players.a}/gameSessions/${seededSessionId}`]: storedSession(players.a),
         [`users/${players.b}/gameSessions/${seededSessionId}`]: storedSession(players.b),
-        [`users/${players.a}/eegRecordings/${seededRecordingId}`]: recordingData(players.a, seededSessionId, { createdAt: past }),
+        [`users/${players.a}/gameSessions/${recordedSessionId}`]: storedSession(players.a),
+        [`users/${players.a}/eegRecordings/${seededRecordingId}`]: recordingData(players.a, recordedSessionId, { createdAt: past }),
         [`accountDeletions/${players.a}`]: {
             status: 'requested', requestedAt: past, updatedAt: past, attempts: 0, lastError: null,
             finalSweepAfter: past, expireAt: past,

@@ -41,7 +41,7 @@ function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.Ref
 }
 
 export function App() {
-  const { user, role, loading, logout, isDemoWorkspace, cacheStatus } = useAuth();
+  const { user, role, loading, logout, isDemoWorkspace, cacheStatus, cacheEndingReason, signOutWithoutFirestore } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
@@ -215,16 +215,19 @@ export function App() {
     }
   }, [accountIdentity, isDemoWorkspace, loading, role, user, visibleCurrentClient?.clinicId]);
 
-  if (loading) {
-    // The persistent cache is being cleared for an account change. Nothing of
-    // the previous account is shown meanwhile, only what is happening.
-    const notice = cacheStatus === 'ending' ? { title: 'Signing out…' }
+  // While the cache is being cleared for an account change, nothing of any
+  // account is shown, only what is happening. `ending` replaces the account's
+  // screens before the page navigates away, so a page kept by the browser's
+  // back/forward cache holds none of its data either.
+  if (loading || cacheStatus === 'ending') {
+    const waiting = cacheStatus === 'blocked' || cacheStatus === 'failed';
+    const notice = cacheStatus === 'ending' ? { title: cacheEndingReason === 'account-deleted' ? 'Finishing account deletion…' : 'Signing out…' }
       : cacheStatus === 'blocked' ? {
         title: 'Finishing sign-out on this device…',
         detail: 'Close any other tabs or windows with this app open to continue.',
       }
         : cacheStatus === 'failed' ? {
-          title: 'This device’s saved data couldn’t be cleared.',
+          title: 'Sign-out couldn’t finish on this device.',
           detail: 'Close any other tabs or windows with this app open, then try again.',
           retry: true,
         }
@@ -236,7 +239,13 @@ export function App() {
           <div role={notice.retry ? 'alert' : 'status'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', maxWidth: '360px' }}>
             <strong style={{ color: 'var(--text-primary)' }}>{notice.title}</strong>
             {notice.detail && <span>{notice.detail}</span>}
-            {notice.retry && <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>}
+          </div>
+        )}
+        {waiting && (
+          // Signing out needs no Firestore, so it works while the cache is held open.
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {cacheStatus === 'failed' && <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>}
+            <button type="button" className="btn btn-secondary" onClick={() => void signOutWithoutFirestore()}>Sign out</button>
           </div>
         )}
       </div>

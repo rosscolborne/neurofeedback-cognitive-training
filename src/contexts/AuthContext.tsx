@@ -12,7 +12,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, db, firestoreCache } from '../services/firebase';
-import type { CacheStatus } from '../services/firestoreCacheLifecycle';
+import type { CacheEndReason, CacheStatus } from '../services/firestoreCacheLifecycle';
 import { clearPendingInvitation } from '../services/pendingInvitation';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
@@ -54,6 +54,13 @@ interface AuthContextType {
   logout: (options?: { discardUnsyncedWrites?: boolean }) => Promise<LogoutOutcome>;
   /** The Firestore cache lifecycle's state, for the loading screen. */
   cacheStatus: CacheStatus;
+  /** Why the session is ending, while `cacheStatus` is `ending`. */
+  cacheEndingReason: CacheEndReason | null;
+  /**
+   * Signs out without touching Firestore and loads the app afresh: the way
+   * out while the cache cannot be cleared yet (`blocked` or `failed`).
+   */
+  signOutWithoutFirestore: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -69,6 +76,8 @@ const AuthContext = createContext<AuthContextType>({
   loginAsDemoClinician: async () => {},
   logout: async () => 'signed-out',
   cacheStatus: 'idle',
+  cacheEndingReason: null,
+  signOutWithoutFirestore: async () => {},
 });
 
 // Reliable Firestore role fetcher with timeout protection
@@ -383,9 +392,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const demoWorkspace = isClinicianDemoWorkspace();
   const cacheStatus = useSyncExternalStore(firestoreCache.subscribe, firestoreCache.getStatus, firestoreCache.getStatus);
+  // Read in the same render as the status change that accompanies it.
+  const cacheEndingReason = cacheStatus === 'ending' ? firestoreCache.getEndingReason() : null;
+
+  const signOutWithoutFirestore = async () => {
+    ++authGenerationRef.current;
+    clearPendingInvitation();
+    identityRef.current = null;
+    setUser(null);
+    setRole(null);
+    setLoading(true);
+    await firestoreCache.signOutWithoutFirestore();
+  };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, cacheStatus, isDemoWorkspace: demoWorkspace }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, isDemoWorkspace: demoWorkspace }}>
       {children}
     </AuthContext.Provider>
   );

@@ -16,7 +16,12 @@
  * - **Start-up:** an unfinished cleanup, or a cache whose owner is not known,
  *   is cleared before anything uses Firestore. Signed-in UI waits for
  *   `prepareForUser` (AuthContext), so no read for an account can run before
- *   the cache is known to be that account's or empty.
+ *   the cache is known to be that account's or empty. A sign-out that did not
+ *   finish is completed first (its marker stays until it succeeds), and while
+ *   the deletion is held up the user can still sign out without Firestore.
+ * - **Back/forward cache:** the account's screens are replaced (status
+ *   `ending`) before the page navigates away, and a page restored from the
+ *   cache after its session ended loads the app afresh (`pageshow`).
  *
  * App-owned browser state: one localStorage key, `FIRESTORE_CACHE_STATE_KEY`
  * (`nfct.firestoreCache.v1`), holding `{ v: 1, owner, cleanup? }`:
@@ -154,6 +159,8 @@ export interface FirestoreCacheLifecycleDeps {
   readonly navigate: (destination: string) => void;
   /** Calls the listener with the changed key when another tab changes localStorage (`null`: cleared). */
   readonly subscribeToStorageChanges?: (listener: (key: string | null) => void) => () => void;
+  /** Calls the listener on every `pageshow`, with whether the page came back from the back/forward cache. */
+  readonly subscribeToPageShow?: (listener: (persisted: boolean) => void) => () => void;
   readonly newId?: () => string;
   readonly now?: () => number;
   readonly timeouts?: Partial<CacheTimeouts>;
@@ -183,9 +190,18 @@ export interface FirestoreCacheLifecycle {
    * and navigates. Concurrent calls share the first call's run.
    */
   endSession(options: EndSessionOptions): Promise<void>;
+  /**
+   * Signs out of Firebase Auth without touching Firestore, then loads the app
+   * afresh: the way out while the cache is still being deleted (`blocked`) or
+   * could not be (`failed`). The cleanup marker stays, so the next start keeps
+   * deleting the cache before any Firestore use.
+   */
+  signOutWithoutFirestore(): Promise<void>;
   /** True while this tab is ending its session; auth events then belong to that run. */
   isEnding(): boolean;
   getStatus(): CacheStatus;
+  /** Why this tab is ending its session, while `getStatus()` is `ending`. */
+  getEndingReason(): CacheEndReason | null;
   subscribe(listener: () => void): () => void;
 }
 
@@ -259,6 +275,14 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
   let pendingClear: Promise<'cleared' | 'started' | 'failed'> | null = null;
   /** The cleanup marker found at start-up: its sign-out intent applies to the first auth state only. */
   let startupCleanup: CacheCleanup | null = null;
+  /**
+   * A start-up cleanup with a sign-out intent is not marked done when its
+   * deletion finishes, only once that intent is settled: the account signed
+   * out, or the first auth state shows it does not apply. Until then the
+   * marker stays, so a start that cannot sign out leaves it for the next.
+   */
+  let deferredCompletion: CacheCleanup | null = null;
+  let endingReason: CacheEndReason | null = null;
   let firstPreparation = true;
   /** The user this tab last prepared Firestore for (undefined: none yet). */
   let preparedUid: string | null | undefined;
@@ -343,7 +367,7 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
    * Deletes the cache while this tab's Firestore instance has not started.
    * `started` means it has, and only terminate-and-reload can clear it.
    */
-  async function clearInPlace(cleanup: CacheCleanup): Promise<'cleared' | 'started' | 'failed'> {
+  async function clearInPlace(cleanup: CacheCleanup, completeWhenCleared = true): Promise<'cleared' | 'started' | 'failed'> {
     let clearing: Promise<void>;
     try {
       clearing = deps.clearPersistence();
@@ -360,7 +384,7 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
       return 'failed';
     }
     clearedThisPage = true;
-    complete(cleanup.id);
+    if (completeWhenCleared) complete(cleanup.id);
     return 'cleared';
   }
 
@@ -379,6 +403,7 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
   /** Releases this tab's instance and reloads; another tab or the next start does the clearing. */
   function reloadOnly(): Promise<void> {
     if (ending) return ending;
+    endingReason = 'signed-out-elsewhere';
     setStatus('ending');
     ending = (async () => {
       await step(() => deps.terminate(), timeouts.terminateMs, 'terminate');
@@ -388,8 +413,13 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
   }
 
   async function runEndSession(options: EndSessionOptions): Promise<void> {
-    setStatus('ending');
     if (options.before) await options.before();
+    // From here the session is over: the app replaces the account's screens
+    // (AuthContext and App watch the status) before anything else happens, so
+    // the page that navigates away shows none of the account's data, even if
+    // the back/forward cache keeps it.
+    endingReason = options.reason;
+    setStatus('ending');
     const previousOwner = preparedUid ?? readState()?.owner ?? null;
     const cleanup = announce(options.reason, previousOwner, options.signOut);
     // If sign-out does not finish, the marker (with its sign-out intent) is
@@ -420,6 +450,7 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
       // Only `before` can throw: nothing was cleared, the session goes on.
       if (ending === run) {
         ending = null;
+        endingReason = null;
         setStatus('idle');
       }
       throw error;
@@ -444,6 +475,16 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
   async function prepare(uid: string | null): Promise<CachePreparation> {
     const intent = firstPreparation ? startupCleanup : null;
     firstPreparation = false;
+    // The start-up sign-out intent applies only if this first auth state is
+    // the account the user signed out of; otherwise its cleanup is just a
+    // deletion, done once that deletion finishes.
+    const signOutIntent = intent?.signOut === true && intent.previousOwner === uid && uid !== null;
+    if (deferredCompletion && !signOutIntent) {
+      const settled = deferredCompletion;
+      deferredCompletion = null;
+      const clear = pendingClear;
+      if (clear) void clear.then((result) => { if (result === 'cleared') complete(settled.id); });
+    }
 
     if (inUse && preparedUid !== uid) return dropSession(uid);
 
@@ -472,9 +513,16 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
 
     // A sign-out that could not finish last time: the account the user signed
     // out of is still signed in, so sign it out now. A later, deliberate
-    // sign-in (not the first auth state of this page) is left alone.
-    if (intent?.signOut && intent.previousOwner === uid) {
-      await step(() => deps.signOut(), timeouts.signOutMs, 'sign-out');
+    // sign-in (not the first auth state of this page) is left alone. The
+    // marker stays until the sign-out succeeds, so if it fails again the next
+    // start tries again instead of accepting the account.
+    if (signOutIntent && intent) {
+      if (await step(() => deps.signOut(), timeouts.signOutMs, 'sign-out')) {
+        if (deferredCompletion?.id === intent.id) complete(intent.id);
+        deferredCompletion = null;
+      } else {
+        setStatus('failed');
+      }
       return { status: 'signing-out' };
     }
 
@@ -512,6 +560,19 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
     return { status: 'ready' };
   }
 
+  /**
+   * A page restored from the back/forward cache keeps the JavaScript state
+   * and screens it had when it navigated away. If its session ended since
+   * (here or in another tab), load the app afresh instead of showing it.
+   */
+  function onPageShow(persisted: boolean) {
+    if (!persisted) return;
+    const state = readState();
+    const changed = preparedUid !== undefined
+      && (state === undefined || state.cleanup !== undefined || state.owner !== preparedUid);
+    if (ending !== null || status === 'ending' || changed) deps.navigate(IDENTITY_CHANGE_DESTINATION);
+  }
+
   function onStorageChange(key: string | null) {
     if (key !== null && key !== FIRESTORE_CACHE_STATE_KEY) return;
     if (ending || !inUse) return;
@@ -529,9 +590,11 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
       if (state === undefined || state.cleanup) {
         startupCleanup = state?.cleanup ?? null;
         const cleanup = state?.cleanup ?? announce('unknown-owner', null, false);
-        pendingClear = clearInPlace(cleanup);
+        if (cleanup.signOut) deferredCompletion = cleanup;
+        pendingClear = clearInPlace(cleanup, !cleanup.signOut);
       }
       deps.subscribeToStorageChanges?.(onStorageChange);
+      deps.subscribeToPageShow?.(onPageShow);
     },
 
     prepareForUser(uid) {
@@ -557,8 +620,20 @@ export function createFirestoreCacheLifecycle(deps: FirestoreCacheLifecycleDeps)
 
     endSession,
 
+    signOutWithoutFirestore() {
+      if (ending) return ending;
+      endingReason = 'sign-out';
+      setStatus('ending');
+      ending = (async () => {
+        await step(() => deps.signOut(), timeouts.signOutMs, 'sign-out');
+        deps.navigate(IDENTITY_CHANGE_DESTINATION);
+      })();
+      return ending;
+    },
+
     isEnding: () => ending !== null,
     getStatus: () => status,
+    getEndingReason: () => (status === 'ending' ? endingReason : null),
     subscribe(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };

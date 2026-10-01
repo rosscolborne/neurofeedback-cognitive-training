@@ -211,7 +211,7 @@ test('signing out in one tab reloads the other tabs, which do not hold the delet
     await expectNoTrace(second, [a.patient.uid, a.name, a.patient.email, aData.sessionId]);
 });
 
-test('if the cache cannot be deleted, sign-out still completes and the next account waits until it is', async ({ page, context, permissionErrorGuard }) => {
+test('if the cache cannot be deleted, sign-out still completes, and the next account waits until it is or signs out', async ({ page, context, permissionErrorGuard }) => {
     permissionErrorGuard.expectDenialsIn(context);
     const a = await seedLinkedPatient();
     const b = await seedAdditionalLinkedPatient(a);
@@ -253,8 +253,16 @@ test('if the cache cannot be deleted, sign-out still completes and the next acco
     expect(waitingScreen).not.toContain(a.patient.email);
     expect(firestoreRequests).toEqual([]);
 
+    // The waiting account can sign out of this device without Firestore; the cleanup stays recorded.
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
+    expect(await currentUid(page)).toBeNull();
+    expect((await cacheState(page))?.cleanup).toMatchObject({ reason: 'sign-out', previousOwner: a.patient.uid });
+    expect(firestoreRequests).toEqual([]);
+
     // Once the database is released, the deletion completes and the account opens on an empty cache.
     await holder.evaluate(() => (window as unknown as { held: IDBDatabase }).held.close());
+    await loginThroughUi(page, b.patient);
     await arriveAtPatientDashboard(page);
     expect(await cacheState(page)).toEqual({ v: 1, owner: b.patient.uid });
     await expectNoTrace(page, [a.patient.uid, a.name, a.patient.email]);
