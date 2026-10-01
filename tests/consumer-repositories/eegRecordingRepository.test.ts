@@ -425,7 +425,8 @@ describe('what the rules refuse, and the repository therefore never sends', () =
   it('a recording whose session does not exist', async () => {
     const device = await signedInDevice();
     await withProfile(device, { eegConsent: true });
-    const path = `users/${device.player.uid}/eegRecordings/lonely-recording-000001`;
+    // Under its session's ID, as every recording must be, so only the missing session refuses it.
+    const path = `users/${device.player.uid}/eegRecordings/never-written-session-01`;
 
     await expectDenied(rawClientWrite(device, path, storedRecording(device.player.uid, 'never-written-session-01', { createdAt: serverTimestamp() })));
   });
@@ -436,7 +437,7 @@ describe('what the rules refuse, and the repository therefore never sends', () =
     const started = device.sessions.startGameSession();
     await (await started.save({ definition: testGame, session: sessionDraft() })).acknowledged;
 
-    await expectDenied(rawClientWrite(device, `users/${device.player.uid}/eegRecordings/no-consent-recording-01`,
+    await expectDenied(rawClientWrite(device, `users/${device.player.uid}/eegRecordings/${started.sessionId}`,
       storedRecording(device.player.uid, started.sessionId, { createdAt: serverTimestamp() })));
   });
 
@@ -447,5 +448,15 @@ describe('what the rules refuse, and the repository therefore never sends', () =
     const path = `users/${device.player.uid}/eegRecordings/${recordingId}`;
 
     await expectDenied(rawClientWrite(device, path, { ...(await serverRead(path)), source: 'measured' }));
+  });
+
+  it('a second recording for a session under another ID', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const { sessionId } = await sessionWithEeg(device);
+
+    // A recording's ID must be its session's ID, so no crafted write adds another.
+    await expectDenied(rawClientWrite(device, `users/${device.player.uid}/eegRecordings/another-recording-0001`,
+      storedRecording(device.player.uid, sessionId, { createdAt: serverTimestamp() })));
   });
 });

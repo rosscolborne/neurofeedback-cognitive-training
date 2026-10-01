@@ -493,9 +493,13 @@ service cloud.firestore {
           .get('eeg', {}).get('consent', null) != null;
       }
 
+      // A recording's ID is its session's ID, so a session has at most one
+      // recording: a second create under that ID is an update, which is
+      // refused, and no other ID can link to the session.
       match /eegRecordings/{recordingId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) && validDocumentId(recordingId) &&
+          recordingId == request.resource.data.gameSessionId &&
           validEegRecordingCreate(request.resource.data) &&
           linkedSessionExistsAfter(request.resource.data.gameSessionId) &&
           hasEegConsentAfter();
