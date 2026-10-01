@@ -22,6 +22,8 @@ const IOS_WEBKIT_SPECS = [
   'mental-math.lifecycle.local.spec.ts',
   'cache-isolation.persistence.local.spec.ts',
   'offline-cache.persistence.local.spec.ts',
+  // NFCT-12: the Train game catalogue, the way into every game, at phone widths.
+  'train-catalogue.self-directed.local.spec.ts',
 ];
 
 export default defineConfig({

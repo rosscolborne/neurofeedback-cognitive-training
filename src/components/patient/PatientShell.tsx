@@ -20,9 +20,10 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink } from 'lucide-react';
 import { FactGrid, type Fact } from '../ui/FactGrid';
-import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
+import { canStartAssignedExperience } from './experienceCatalogue';
+import { TrainTab } from './TrainTab';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
@@ -40,12 +41,12 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { MentalMathGame } from '../../consumer/games/mentalMath/MentalMathGame';
+import { GameScreen } from '../../consumer/games/GameScreen';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
 
-// NFCT-21: Mental Math is reached from the Train tab until the consumer shell
-// exists (NFCT-6). Demo Mode's synthetic EEG is offered as an optional,
-// clearly simulated recording; the game never needs it.
+// NFCT-21, NFCT-12: games open from the Train tab's catalogue until the
+// consumer shell exists (NFCT-6). Demo Mode's synthetic EEG is offered as an
+// optional, clearly simulated recording; a game never needs it.
 const demoModeEegProvider = createDemoModeEegProvider();
 
 // Same day-month-year style as session history, so dates read alike across Profile and Progress.
@@ -87,7 +88,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 }) => {
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
-  const [mentalMathOwnerId, setMentalMathOwnerId] = useState<string | null>(null);
+  const [openGame, setOpenGame] = useState<{ gameId: string; ownerId: string } | null>(null);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
   const currentClientId = useRef(client.id);
   const currentAllowedExperiences = useRef(client.allowedExperiences);
@@ -376,8 +377,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     exportPatientSessionCsv(allSessions, setExportStatus);
   };
 
-  if (mentalMathOwnerId === client.id) {
-    return <MentalMathGame eegProvider={demoModeEegProvider} onExit={() => setMentalMathOwnerId(null)} />;
+  if (openGame && openGame.ownerId === client.id) {
+    return <GameScreen gameId={openGame.gameId} eegProvider={demoModeEegProvider} onExit={() => setOpenGame(null)} />;
   }
 
   if (activeSessionExp && sessionOwnerId === client.id) {
@@ -508,65 +509,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         )}
 
         {activeTab === 'sessions' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '30px' }}>
-            <div>
-              <h1 className="font-display" style={{ fontSize: '28px', fontWeight: 400 }}>
-                Training Modalities
-              </h1>
-              <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                Choose your experience and begin training.
-              </p>
-            </div>
-
-            <div className="train-grid">
-              {getAssignedExperienceIds(client.allowedExperiences).map(id => {
-                const exp = EXPERIENCE_CATALOGUE[id];
-                const Icon = exp.icon;
-                return (
-                  <div
-                    key={exp.id}
-                    onClick={() => handleStartSession(exp.id)}
-                    className="card-patient"
-                    style={{ background: exp.gradient }}
-                  >
-                    <div className="train-card-icon" aria-hidden="true">
-                      <Icon size={22} />
-                    </div>
-                    {/* The whole card starts the session; this button makes it reachable by keyboard and assistive tech. */}
-                    <button type="button" className="train-card-name" aria-describedby={`train-desc-${exp.id}`}>
-                      {exp.name}
-                    </button>
-                    <p id={`train-desc-${exp.id}`} className="train-card-desc">{exp.description}</p>
-                    <div className="train-card-foot">
-                      <span className="status-tag status-tag-active train-card-tag">{exp.badge}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <section aria-labelledby="train-games-title" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-              <div>
-                <h2 id="train-games-title" style={{ fontSize: '18px', fontWeight: 700 }}>Games</h2>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cognitive games. No headset needed.</p>
-              </div>
-              <div className="train-grid">
-                <div className="train-game-card" onClick={() => setMentalMathOwnerId(client.id)}>
-                  <div className="train-card-icon" aria-hidden="true">
-                    <Calculator size={22} />
-                  </div>
-                  {/* The whole card opens the game; this button makes it reachable by keyboard and assistive tech. */}
-                  <button type="button" className="train-card-name" aria-describedby="train-desc-mental-math">
-                    Mental Math
-                  </button>
-                  <p id="train-desc-mental-math" className="train-card-desc">A 90-second arithmetic run that adapts as you play.</p>
-                  <div className="train-card-foot">
-                    <span className="status-tag status-tag-neutral train-card-tag">Game</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
+          <TrainTab
+            allowedExperiences={client.allowedExperiences}
+            onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: client.id })}
+            onStartExperience={handleStartSession}
+          />
         )}
 
         {activeTab === 'progress' && <ProgressHistory client={client} />}
