@@ -324,12 +324,14 @@ export interface StoredGameSession {
 
 /**
  * Rebuilds one game's progress from its stored sessions. Each processed
- * session is replayed once from its stored trusted result, in a fixed replay
- * order (endedAt, then ID) that only makes the replay deterministic: the
- * result is the same for any order. Nothing is revalidated or rescored, so
- * sessions of earlier game versions keep the outcome they were given and
- * their records stay in the archive. Sessions without a result are skipped;
- * trusted scoring applies them when it processes them.
+ * session is replayed once from its stored trusted result, in session ID
+ * order. That order only makes the replay deterministic, and it is never a
+ * device clock: the result is the same for any order (totals are sums;
+ * records, best peak level and unlocks are maxima, and `endedAt` only breaks
+ * record ties as the earlier achievement). Nothing is revalidated or
+ * rescored, so sessions of earlier game versions keep the outcome they were
+ * given and their records stay in the archive. Sessions without a result are
+ * skipped; trusted scoring applies them when it processes them.
  */
 export function rebuildProgress<Trial, Metrics extends object>(
   definition: GameDefinition<Trial, Metrics>,
@@ -338,7 +340,7 @@ export function rebuildProgress<Trial, Metrics extends object>(
 ): GameProgress | null {
   return sessions
     .filter(({ session }) => session.result !== undefined)
-    .sort((a, b) => compareTimestamps(a.session.endedAt, b.session.endedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .reduce<GameProgress | null>((progress, { id, session }) => applySession(progress, {
       definition,
       sessionId: id,

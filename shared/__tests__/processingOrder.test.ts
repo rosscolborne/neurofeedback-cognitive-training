@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applySession,
   compareTimestamps,
   decideSession,
   evaluateSession,
   GAME_MODULE_REGISTRY,
   mentalMathV1 as mm,
+  outcomeFromResult,
   readSessionProgressFields,
   rebuildProgress,
   upgradeBlocker,
@@ -215,6 +217,25 @@ describe('order-independent processing', () => {
     expect(upgradesSeen).toBeGreaterThan(50);
     expect(overflows).toBeGreaterThan(20);
     expect(budgetHits).toBeGreaterThan(20);
+  });
+
+  it('rebuilds the same progress whatever order the stored sessions are given or replayed in', () => {
+    const random = prng(0x0eb1_0019);
+    for (let run = 0; run < 60; run += 1) {
+      const docs = randomSessions(random);
+      const { results } = processInOrder(docs, random.shuffle([...docs.keys()]));
+      const stored = docs.map((doc) => ({ id: doc.id, session: readSessionProgressFields({ ...doc.raw, result: results.get(doc.id) }) }));
+      const expected = content(rebuildProgress(mm.definition, stored, ts(T0)));
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const shuffled = random.shuffle(stored);
+        expect(content(rebuildProgress(mm.definition, shuffled, ts(T0))), `run ${run}`).toEqual(expected);
+        // Replaying the stored results in this shuffled order, with no sort at all, gives the same progress.
+        const folded = shuffled.reduce<GameProgress | null>((progress, { id, session }) => applySession(progress, {
+          definition: mm.definition, sessionId: id, session, outcome: outcomeFromResult(session.result!), appliedAt: ts(T0),
+        }), null);
+        expect(content(folded), `run ${run} fold`).toEqual(expected);
+      }
+    }
   });
 
   it('never downgrades: a valid session stays valid whatever is processed after it', () => {

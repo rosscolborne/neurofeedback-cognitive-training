@@ -41,11 +41,11 @@ export function applicableProgress(state: ProgressCompatibility, gameId: string)
 /**
  * Rebuilds one game's progress inside `transaction` from the user's stored
  * trusted results (rebuildProgress: stored results, never rescoring, replayed
- * in a fixed order the result does not depend on; sessions without a result
- * are skipped). It reads every session
- * of the game through a projection of the fields progress depends on, so no
- * trials are loaded (about 1 KB per session), and the transaction holds them
- * all, so no session can be processed concurrently with the rebuild.
+ * in session ID order, which the result does not depend on; sessions without
+ * a result are skipped). It reads every session of the game through a
+ * projection of the fields progress depends on, so no trials are loaded
+ * (about 1 KB per session), and the transaction holds them all, so no session
+ * can be processed concurrently with the rebuild.
  *
  * Limit: the read grows with the user's history of the game. It runs only
  * when the aggregate version changes (or the admin rebuild script runs); a
