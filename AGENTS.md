@@ -144,10 +144,19 @@ Deploys to `nfct-dev` are manual, run by the owner after tests pass, and always
 name it (`--project dev`). Never run `firebase use dev`: it saves an active
 project for this directory, which a bare deploy would then use.
 
-Run the app against the emulators:
+Run the app against the emulators. Trusted scoring runs in the Functions
+emulator: without `functions`, sessions never get a `result` and progress is
+never written. Build it first (after the installs in [Checks](#checks)), and
+again after changing `functions/` or `shared/`:
 
 ```bash
-npx firebase emulators:start --only auth,firestore --project demo-neurasticity-protocol-e2e
+npm run functions:build
+npx firebase emulators:start --only auth,firestore,functions --project demo-neurasticity-protocol-e2e
 VITE_E2E_EMULATORS=true VITE_FIREBASE_PROJECT_ID=demo-neurasticity-protocol-e2e \
   VITE_FIREBASE_API_KEY=local-test-key npx vite --host 127.0.0.1 --port 5193
 ```
+
+The scheduled sweep does not run locally, because there is no Pub/Sub
+emulator. The CLI's Node-version and Application Default Credentials warnings
+are expected: with a `demo-` project, anything not emulated fails rather than
+reaching a real project.
