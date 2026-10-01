@@ -1,8 +1,13 @@
 name: CI
 
 on:
+  # Draft PRs report every job as skipped. Marking one ready for review
+  # (ready_for_review) runs the suite on its head; later pushes to a ready PR
+  # (synchronize) rerun it. converted_to_draft is not a trigger, so pushes
+  # after converting back to draft skip again.
   pull_request:
     branches: [development]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +27,8 @@ concurrency:
 jobs:
   changes:
     name: Code changes
+    # Draft pull requests skip the whole workflow; see the comment under `on:`.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -56,6 +63,8 @@ jobs:
           fi
 
   web:
+    # Draft pull requests skip the whole workflow; see the comment under `on:`.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

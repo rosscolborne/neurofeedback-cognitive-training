@@ -91,31 +91,35 @@ higher-value work.
 Finishing an agent task and a PR being ready to merge are separate states:
 
 - **Agent task complete**: the implementation or integration work is
-  finished, the required local checks have passed, the PR is pushed, its CI
-  has started, and known findings are reported.
+  finished, the required local checks have passed, the PR is pushed and
+  marked ready for review, its CI has started, and known findings are
+  reported.
 - **Merge-ready**: every required merge gate is satisfied on the PR's current
   head, including green remote CI and any required review and QA.
 
 Do not hold your final response waiting for GitHub CI:
 
 1. Run every required local check before pushing.
-2. Push, or open or update the PR.
-3. Once a PR targeting `development` is open or updated, confirm CI has
-   started for the pushed commit with
+2. Push, or open or update the PR, and mark it ready for review
+   (`gh pr ready <n>`) if it is still a draft.
+3. Once a ready PR targeting `development` is opened or updated, confirm CI
+   has started for the pushed commit with
    `gh run list --branch <branch> --commit <sha>`; a new run can take up to
-   a minute to appear. A branch without a PR targeting `development` gets no
-   automatic CI run. Do not start full CI by hand merely because no run
+   a minute to appear. A branch without a ready PR targeting `development`
+   gets no automatic CI run. Do not start full CI by hand merely because no run
    exists; use `gh workflow run` only for a specific reason to validate
    outside the normal PR flow.
 4. Report the PR URL and the current CI state, including *pending*, and
    finish. Do not poll or `--watch` the run.
 
-Plain branch pushes do not run CI, but once a PR targeting `development` is
-open, each push to it can rerun the full suite. From then on, avoid
-incremental pushes: test locally, batch related changes, and push when ready
-for CI or review or when a remote checkpoint is genuinely useful, not after
-each small edit. After a CI failure, diagnose and fix it locally and batch
-the next push where practical.
+Plain branch pushes and draft PRs do not run CI. Open a PR targeting
+`development` as a draft (`gh pr create --draft`) once a remote PR is useful,
+and keep it draft while implementation, review and local testing continue.
+Mark it ready for review only when the branch is ready to consume CI, never
+just for an early CI signal. Once a PR is ready, each push to it reruns the
+full suite: test locally, batch related changes, and push when a coherent
+batch is ready, not after each small edit. After a CI failure, diagnose and
+fix it locally and batch the next push where practical.
 
 With CI pending, the report says so plainly, for example:
 
