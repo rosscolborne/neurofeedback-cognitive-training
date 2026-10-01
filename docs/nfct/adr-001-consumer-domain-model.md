@@ -5,7 +5,7 @@
 - **Design baseline:** [NFCT Consumer Firestore & Domain Model — Stage 1 Design](https://claude.ai/code/artifact/bd8c450e-199f-42ea-ba59-60ddcf7758cb).
   This ADR is the durable summary; the design holds the full reasoning, rules sketch, index plan and card sequence.
 - **Code:** [`shared/`](../../shared/index.ts), imported as `@nfct/shared`; trusted scoring in [`functions/`](../../functions/src/index.ts)
-- **Amended:** NFCT-17 (session seed, validity classification); NFCT-19 (decision 12, trusted session processing, and the notes it adds to decisions 2, 5, 6 and 8). Items marked **owner confirmation** are provisional until the owner confirms them.
+- **Amended:** NFCT-17 (session seed, validity classification); NFCT-19 (decision 12, trusted session processing, and the notes it adds to decisions 2, 5, 6, 7 and 8). Items marked **owner confirmation** are provisional until the owner confirms them.
 
 ## Context
 
@@ -71,7 +71,7 @@ The client generates the session ID when the game starts, so an EEG recording ca
 3. run plausibility checks and set `validity`;
 4. write both documents.
 
-It aims to process a user's sessions in play order, and its final progress does not depend on the order it actually processes them in (decision 12, NFCT-19).
+It processes each session independently, in whatever order sessions arrive, and its final progress does not depend on that order: no device clock decides what is processed first (decision 12, NFCT-19).
 
 | Validity | History | Totals | Records and unlocks |
 | --- | --- | --- | --- |
@@ -103,10 +103,10 @@ It aims to process a user's sessions in play order, and its final progress does 
 - **Deterministic and non-mutating.** It reads no clock and never mutates its inputs.
 - **Not idempotent.** Applying the same session twice adds its totals twice (records, best peak level and unlocks are max-based and unaffected). Progress stores no session ledger. Exactly-once application is the caller's responsibility:
   - **Trusted scoring (NFCT-19)** reads the session inside the transaction and skips it when `result.processedAt` is already set. `result` and `progress` are then written in that same transaction. The start-level upgrade applies only `applyValidEffects`, which is idempotent and never touches totals (decision 12).
-  - **Rebuilds** start from empty progress and replay each stored session once, in play order.
+  - **Rebuilds** start from empty progress and replay each stored session once, in a fixed replay order (`endedAt`, then session ID) that the result does not depend on.
   - **The client preview (NFCT-20, NFCT-22)** de-duplicates pending sessions in transient client state, never in persisted progress. Progress and a session's `result` land in one commit but may arrive through separate listeners. To avoid a transient double preview, treat a session as pending only until its trusted `result` is observed, and coordinate the two listeners (for example with `onSnapshotsInSync`) before combining cached progress with pending sessions.
 - **Missing progress.** An invalid session on missing progress leaves it missing. The first valid or flagged session creates the document.
-- **Deterministic ties.** A higher value takes a record. On an equal value the earlier achievement (`endedAt`) keeps it, and then the lower session ID. The result never depends on the order in which triggers or a rebuild apply sessions.
+- **Deterministic ties.** A higher value takes a record. On an equal value the earlier achievement (`endedAt`) keeps it, and then the lower session ID. The result never depends on the order in which triggers or a rebuild apply sessions. This tie-break, and `lastPlayedAt`, are the only uses of `endedAt` in progress; it never decides the order sessions are processed in.
 - **Unknown aggregates.** `canApplyToProgress(progress, definition)` is false when progress was maintained by a different `aggregateVersion` or a newer `gameVersion`. Reading such progress still works. Trusted scoring then rebuilds before applying; a client preview declines to preview and shows the trusted server state as it is. `applySession` refuses rather than reinterpret it.
 
 ### 7. Deletion: hard delete, server-driven
@@ -125,6 +125,7 @@ Then:
 - **Ledger.** The ledger holds only the uid and timestamps, and a TTL removes it after 30 days.
 - **What is kept.** No game or EEG data is retained. The user can also delete any EEG recording at any time.
 - **Inherited code.** WB-97's tombstoning deletion does not carry over; only its reauthentication UI and error mapping are reused.
+- **Trusted scoring stops at the ledger** (NFCT-19). Every transaction that writes a session's `result` or `processing`, or progress, reads `accountDeletions/{uid}` and writes nothing once it exists (decision 12). Because that read is part of the transaction, a processing commit either precedes the ledger write or sees the ledger, so the ledger must be written before the recursive delete (step 1 before step 3, as listed) and no processing commit can recreate data after the delete has listed it.
 
 ### 8. Versioning: four integers, each with one job
 
@@ -132,7 +133,7 @@ Then:
 | --- | --- | --- | --- |
 | `schemaVersion` | Every document | A field is changed, removed or repurposed, or an existing enum gains a value (the domain catalogue excepted). Adding an optional field is not a bump. | Readers upcast in memory via one mapper per collection (`readUserProfile`, `readGameSession`, `readEegRecording`, `readGameProgress`). Rules accept current and current − 1. |
 | `gameVersion` | Catalogue and each session | Scores stop being comparable (new levels, changed ramp) | A new record set starts; the previous one moves to `progress.bestsArchive`. Earned unlocks carry over. |
-| `scoringVersion` | Catalogue and `result` | `score()` or the performance index changes | New sessions use it. Stored results stay as written (except the start-level upgrade, decision 12, which never rescores); rescoring them is a deliberate, separate job. |
+| `scoringVersion` | Catalogue and `result` | `score()`, the performance index, or any plausibility check or threshold that can change a session's validity changes (a game version's checks, or trusted scoring's own validity-changing checks) | New sessions use it. Stored results stay as written (except the start-level upgrade, decision 12, which never rescores and refuses a result written under another `scoringVersion`); rescoring them is a deliberate, separate job. |
 | `aggregateVersion` | Each aggregate | A reducer changes | That user's aggregates are rebuilt from sessions. Derived data is never migrated. |
 
 **Strict writes, tolerant reads.**
@@ -144,12 +145,12 @@ Then:
 
 **Rebuilds across game versions.** `rebuildProgress(definition, sessions, appliedAt)` is the pure rebuild:
 
-- **Stored results, not rescoring.** It replays each processed session once, in play order (`endedAt`, then session ID), from its stored trusted result.
+- **Stored results, not rescoring.** It replays each processed session once from its stored trusted result, in a fixed replay order (`endedAt`, then session ID). The order only makes the replay deterministic: totals are sums, and records, best peak level and unlocks are maxima with deterministic ties, so any order gives the same progress (a property test checks it against live processing in random orders).
 - **Old sessions are never re-checked.** A session is never revalidated against, or rescored with, a later game version's schemas or scoring. `readGameSessionFor(definition)` applies only to the definition's exact `gameVersion`; older sessions are read with `readGameSession`.
 - **Old records stay archived.** Records stay in the record set of the session's own `gameVersion`, so earlier sets move into `bestsArchive` rather than disappear. A late session of an earlier version lands in that version's archived set.
 - **Unlocks survive by default.** `bestPeakLevel` spans every game version, and `unlockedStartLevel` clamps it to the current mode's levels, so a routine rebuild or version bump never revokes an earned unlock. A future version whose levels change meaning must define an explicit migration instead, for example a new mode ID.
 - **Unprocessed sessions are skipped.** Trusted scoring applies them when it processes them. Sessions with `processing` metadata (failed or unsupported) have no result and are skipped too; re-drive them first (decision 12).
-- **Where it runs.** Trusted scoring rebuilds inside its processing transaction when it meets progress from an older `aggregateVersion`; the admin script `functions/scripts/rebuild-progress.ts` runs the same rebuild on demand (decision 12).
+- **Where it runs.** Trusted scoring rebuilds inside its processing transaction when it meets progress from an older `aggregateVersion`; the admin script `functions/scripts/rebuild-progress.ts` runs the same rebuild on demand, in one transaction, so a session processed concurrently is either in the rebuild or applied after it (decision 12).
 
 Two catalogue identifiers are also versioned:
 
@@ -208,15 +209,35 @@ So:
 
 ### 12. Trusted session processing (NFCT-19)
 
-`onGameSessionCreated` is a 2nd-gen Firestore `onDocumentCreated` trigger on `users/{uid}/gameSessions/{sessionId}`, TypeScript on Node 22, in `northamerica-northeast2`, with retries enabled. Its decisions are pure functions in `shared/processing/` (`evaluateSession`, `decideSession`, `upgradeSession`), so the client preview could run the same checks; `functions/src/` only reads documents, runs those functions inside transactions and writes what they return. It never reads `eegRecordings`.
+`onGameSessionCreated` is a 2nd-gen Firestore `onDocumentCreated` trigger on `users/{uid}/gameSessions/{sessionId}`, TypeScript on Node 22, in `northamerica-northeast2`, with retries enabled. A scheduled sweep, `sweepUnprocessedSessions`, finishes what a trigger could not. The decisions are pure functions in `shared/processing/` (`evaluateSession`, `decideSession`, `upgradeSession`, `classifyProgress`), so the client preview could run the same checks; `functions/src/` only reads documents, runs those functions inside transactions and writes what they return. It never reads `eegRecordings`, and EEG is never an input to any of it.
 
-**Pipeline, per session** (card order):
+**Invariants.**
 
-1. **Validate** the client-written fields (any `result` or `processing` is ignored) with the session's own game version's schema, `trustedGameSessionSchemaFor(definition)`: strict, trials checked by the version's trial schema, the mode and the start level checked against the version's catalogue. The display `summary` is checked only for the structure the rules enforce (keys, types, at most 32 metrics; any number the rules accept, NaN and the infinities included). A failure is `invalid` with `schema-invalid`, with one exception: a session whose only fault is fields this build does not know in the envelope, `client` or `summary` is `unsupported` (`unknown-session-field`), not invalid. The rules gate those with exact key sets, so only a rules or client deploy that ran ahead of Functions can produce one; it is re-driven once Functions know the field (owner confirmation). An unknown *trial* field stays `schema-invalid`: the rules do not check trials, and a version's trial shape is frozen. **Deploy order: Functions first, then rules, then clients.**
-2. **Rescore** with the version's pure `score()`, which also replays the trusted peak level.
-3. **Check** with the version's frozen plausibility checks (Mental Math v1: `checkSession`, including seed reproduction), trusted scoring's path checks (`userId` equals the path uid, a valid session ID) and its clock diagnostics.
-4. **Decide the start-level unlock** inside the transaction: `startLevel` above `unlockedStartLevel(mode, progress | null)` adds the flag `start-level-locked`.
-5. **Write** `result` (with `performanceIndex: null`) and `progress/{gameId}` in one transaction, removing any stale `processing` in the same write.
+- Processing is order-independent. Each session is processed on its own, whenever it arrives; no device clock (`endedAt`) ever decides what is processed first, and the final progress and validities are the same for every order and under concurrency.
+- Totals enter progress exactly once per counted session. Reapplying the valid-only effects cannot add them again.
+- No automatic transition lowers validity. The one later change a result can undergo is the start-level upgrade, flagged to valid.
+- Rebuilds use stored trusted results and never rescore; each game version is only ever judged by its own frozen module.
+- A build never writes progress written by newer code, and never judges a session of a version it cannot process.
+- Client summary and client peak mismatches are diagnostics only.
+- `personalBest` and `unlocked` on a result describe the session's effect when it was processed or upgraded (below).
+
+**Pipeline, per session.** Before the transaction, with no locks held and never repeated when the transaction retries on contention:
+
+1. **Resolve** the session's frozen game-version module (`GAME_MODULE_REGISTRY`); none means `unsupported`.
+2. **Validate** the client-written fields (any `result` or `processing` is ignored) with that version's `trustedGameSessionSchemaFor(definition)`: the envelope and trials strictly, the mode and start level against the version's catalogue, and the display `summary` only for the structure the rules enforce (keys, types, at most 32 metrics; any number the rules accept, NaN and the infinities included). A failure is `invalid` with `schema-invalid`, with one exception: a session whose only fault is fields this build does not know in the envelope, `client` or `summary` is `unsupported` (`unknown-session-field`), not invalid. The rules gate those with exact key sets, so only a rules or client deploy that ran ahead of Functions can produce one; it is re-driven once Functions know the field (owner confirmation). An unknown *trial* field stays `schema-invalid`: the rules do not check trials, and a version's trial shape is frozen. **Deploy order: Functions first, then rules, then clients.**
+3. **Rescore** with the version's pure `score()`, which also replays the trusted peak level.
+4. **Check** with the version's frozen plausibility checks (Mental Math v1: `checkSession`, including seed reproduction), trusted scoring's path checks (`userId` equals the path uid, a valid session ID) and its clock diagnostics.
+
+Then one transaction:
+
+5. Re-read the session and stop if it already has a `result`.
+6. Stop, writing nothing, if `accountDeletions/{uid}` exists (decision 7).
+7. Use the evaluation only if the document is exactly the version evaluated (same `updateTime`); otherwise evaluate what the transaction read.
+8. `unsupported`: record `processing.state = 'unsupported'` and stop. `invalid`: write the result alone; it counts nowhere, so progress is not even read.
+9. Classify progress (below): apply it, rebuild an older aggregate inside the transaction, or refuse progress from newer code.
+10. **Decide the start-level unlock:** `startLevel` above `unlockedStartLevel(mode, progress | null)` adds the flag `start-level-locked`.
+11. If the decision raised the unlocked start level (or progress was rebuilt), **upgrade**, in this same transaction, the start-level-locked sessions the new progress unlocks (below).
+12. **Write** the `result` (with `performanceIndex: null`), progress and every upgraded result in one commit, removing any stale `processing` in the same write.
 
 **Validity.** The worst outcome among all reasons: a game version's own table (`REASON_OUTCOMES`) for its codes, and trusted scoring's `SERVER_REASON_OUTCOMES` for its own:
 
@@ -224,53 +245,129 @@ So:
 | --- | --- |
 | `schema-invalid`, `user-id-mismatch`, `session-id-invalid` | invalid |
 | `start-level-locked` | flagged |
-| `start-level-unlocked-later`, `device-clock-ahead`, `late-upload`, `wall-clock-short`, `local-date-mismatch`, `unknown-timezone`, `reasons-truncated` | diagnostic |
+| `start-level-unlocked-later`, `device-clock-ahead`, `late-upload`, `wall-clock-short`, `local-date-mismatch`, `local-date-inconsistent`, `unknown-timezone`, `reasons-truncated` | diagnostic |
 
 - **Client summary and client `peakLevel` are diagnostics only.** A summary that disagrees with trusted scoring, or that the game's own summary schema rejects, is the game's `summary-mismatch`; a client peak that disagrees with the replayed one, even below the start level or beyond the mode, is `peak-level-mismatch`. The shared session schema therefore no longer refuses `peakLevel < startLevel` or a peak beyond the mode; it keeps the rules' 1–50 bound, and now refuses a *start* level beyond the mode (scoring and the staircase run from it).
-- **Clock diagnostics** (owner confirmation): device clocks drift and offline sessions arrive late, so none of these changes validity. `device-clock-ahead`: `endedAt` more than 60 s after the server's `createdAt` (rules allow 5 min). `late-upload`: `createdAt` more than 7 days after `endedAt`. `wall-clock-short`: `endedAt − startedAt` more than 1 s shorter than `activeDurationMs`. `local-date-mismatch`: `localDate` more than one day from `endedAt`'s date in `timezone` (`unknown-timezone` when the zone is not recognised). What is clearly impossible is already refused by the rules and the schema (`endedAt <= startedAt`, `endedAt` beyond `request.time + 5 min`). Stage 2 may exclude `local-date-mismatch` sessions from streaks. Note (owner review): this check compares `localDate` with the device's `endedAt`, because offline sessions legitimately arrive days later; design section F compares it with the server's `createdAt`, which is what stops streak backfilling, so Stage 2 streak rules must use `createdAt` (a device clock can be set back).
-- **Bounded reasons.** `result.reasons` holds at most 20. Trusted scoring merges each code once, most severe first (invalid, flagged, diagnostic; the version's canonical order, then its own), and a longer list keeps 19 and ends with `reasons-truncated`, so a result write can never fail validation and loop on retries. Validity is computed before any cut. Today the most a forged session can raise is exactly 20.
+- **Clock diagnostics** (owner confirmation). Device clocks drift and offline sessions arrive late, so none of these changes validity:
+  - `device-clock-ahead`: `endedAt` more than 60 s after the server's `createdAt` (the rules allow 5 min);
+  - `late-upload`: `createdAt` more than 7 days after `endedAt`;
+  - `wall-clock-short`: `endedAt − startedAt` more than 1 s shorter than `activeDurationMs`;
+  - `local-date-mismatch` (design section F): `localDate` more than one day from the date of the server's `createdAt` in `timezone`. The server clock cannot be set back, so this is the anti-backfill signal Stage 2 streak rules should use. An honest session played offline and uploaded more than a day later raises it too, because from the server's point of view its date really is in the past;
+  - `local-date-inconsistent`: `localDate` more than one day from the date of the device's own `endedAt` in `timezone`. The client's fields disagree with each other (a date or time-zone bug, or an edited `localDate`), whatever the server clock says. It catches a device clock set back with today's `localDate`, which `local-date-mismatch` cannot;
+  - `unknown-timezone` replaces both date checks when the zone is not recognised.
 
-**Processing metadata.** `processing` is server-owned like `result` (rules forbid clients to write it): `{ state, reason, attempts, updatedAt }`. Writes accept only these states; reads accept any kebab-case state, so a build keeps reading sessions annotated by a newer server.
+  What is clearly impossible is already refused by the rules and the schema (`endedAt <= startedAt`, `endedAt` beyond `request.time + 5 min`).
+- **Bounded reasons.** `result.reasons` holds at most 20. Trusted scoring merges each code once, most severe first (invalid, flagged, diagnostic; the version's canonical order, then its own), and a longer list keeps 19 and ends with `reasons-truncated`, so a result write can never fail validation and loop on retries. Validity is computed before any cut, and severity order means only diagnostics are ever cut. Today the most a forged session can raise is 21 codes, which makes it invalid and cuts its stored list; a valid or flagged session raises at most 11.
+- **Thresholds are versioned.** A change to any check or threshold that can change validity, in a game version's module or in trusted scoring, bumps `scoringVersion` (decision 8), so sessions judged under the old rule are never upgraded under the new one. Reason codes are append-only: a stored result keeps its codes, and the upgrade looks each one up.
+
+**Processing metadata.** `processing` is server-owned like `result` (rules forbid clients to write it): `{ state, reason, attempts, updatedAt }`. Writes accept only these states; reads accept any kebab-case state, so a build keeps reading sessions annotated by a newer server. It is never terminal: it says why there is no result yet, and the next successful processing deletes it in the same write that adds the result.
 
 | State | Meaning | Set when | Cleared |
 | --- | --- | --- | --- |
 | none (pending) | no `result`, no `processing` | the client creates the session | when either is written |
-| `unsupported` | no frozen module for its `gameId`/`gameVersion` (or its `schemaVersion`), or envelope fields this build does not know (`unknown-session-field`); never a judgement on the session | processing finds no module, or only unknown envelope fields | by the re-drive, once a deploy adds the module or the field |
-| `failed` | processing kept failing past its retry window | the trigger's retry window ends (reason: `progress-newer-than-code`, `progress-unreadable`, `session-unreadable` or `internal-error`) | by a successful re-drive |
+| `unsupported` | no frozen module for its `gameId`/`gameVersion` (or its `schemaVersion`), or envelope fields this build does not know (`unknown-session-field`); never a judgement on the session | processing finds no module, or only unknown envelope fields | by the sweep or the re-drive, once a deploy adds the module or the field |
+| `failed` | processing kept failing past its retry window | the trigger's retry window ends, or a sweep or re-drive fails (reason: `progress-newer-than-code`, `progress-unreadable`, `session-unreadable` or `internal-error`) | by a successful sweep or re-drive |
 
-- `processing` is only ever written in a transaction that re-checks the session has no `result`, so it never replaces or coexists with one. A success deletes it in the same write that adds `result`. `attempts` counts each recorded state.
-- **Retries** (owner confirmation). Any processing error is rethrown while the trigger event is younger than 30 minutes, so the platform redelivers it with backoff; after that the reason is recorded as `failed` and the delivery ends. The re-drive script (`functions/scripts/redrive-sessions.ts`) finds pending sessions with the collection-group `createdAt` index and failed or unsupported ones with the (`processing.state`, `createdAt`) index, and runs them through the same pipeline in play order per user. A scheduled sweep can call the same function later; none is deployed in Stage 1.
+- `processing` is only ever written in a transaction that re-checks the session has no `result` and the account is not being deleted, so it never replaces or coexists with a result. `attempts` counts each recorded state.
+- **Retries** (owner confirmation). Any processing error is rethrown while the trigger event is younger than 30 minutes, and nothing is written, so the platform redelivers it with backoff: a transient fault, contention past the SDK's own retries, or progress written by newer code. After that the reason is recorded as `failed` and the delivery ends.
 
-**Exactly once.** The processing transaction reads the session and exits if `result` exists; otherwise it evaluates exactly the document it read, reads progress, and writes `result` and progress together. Duplicate or concurrent deliveries serialise on the session and skip, so totals are applied exactly once.
+**State machine.** For `users/{uid}/gameSessions/{id}`; `processedAt` is the trusted server clock when the result was first written.
 
-**Out-of-order delivery** (owner confirmation; replaces the card's "throw a retryable error"). When a session would be flagged `start-level-locked` under the progress stored now, trusted scoring first processes the user's *truly pending* earlier sessions of the same game (no `result` and no `processing`, earlier in play order), oldest first, each through the same pipeline in its own transaction, then decides with fresh progress. So a session an earlier, still-unprocessed session unlocked is not flagged, which is the card's intent, without depending on redelivery (the Functions emulator never retries, and platform backoff can take minutes) and without ever waiting on a session that is stuck, failed or unsupported, so it cannot deadlock. The scan reads at most 200 recent sessions (newest `createdAt` first, within 24 hours, projected without trials) and processes at most 10. What it cannot see, such as another device's session that arrives later or anything past the budget, is repaired by the upgrade below.
+| From | To | When | `processedAt` |
+| --- | --- | --- | --- |
+| pending, `failed`, `unsupported` | `result` valid, flagged or invalid; `processing` deleted in the same write | processing succeeds | set, once |
+| pending, `unsupported` | `processing.state = 'unsupported'` | no module, or only unknown envelope fields | none (no result) |
+| pending, `failed` | `processing.state = 'failed'` | an error still failing after the retry window, or a failed sweep or re-drive | none |
+| pending (any state) | unchanged | a transient error or progress from newer code inside the retry window; or the account is being deleted | none |
+| flagged, only `start-level-locked` plus diagnostics | valid | progress now unlocks its start level (the upgrade, below) | unchanged |
+| invalid | never changes | no automatic or admin path reprocesses it; only the deliberate rescoring job of decision 8 could | unchanged |
 
-**The start-level upgrade** (owner confirmation; deliberately amends "processed exactly once" in decision 6 and "stored results stay as written" in decision 8). A session flagged *only* because its start level was locked when it was processed becomes valid once progress unlocks that level, whichever session unlocked it and in whatever order they were processed.
+**Exactly once.** The processing transaction reads the session and exits if `result` exists; otherwise it decides on exactly the document version it read, reads progress, and writes `result` and progress together. Duplicate or concurrent deliveries serialise on the session and skip, so totals are applied exactly once.
 
-- **Upgradable:** its stored result is flagged with `start-level-locked`; every other reason is a diagnostic of its own game version or of trusted scoring (`reasons-truncated` does not count); its own version's module is registered and wrote the result with the module's current `scoringVersion` (after a `scoringVersion` bump older flagged sessions stay flagged until a deliberate rescoring job); its start level is now at or below `unlockedStartLevel(mode, progress)`.
-- **What changes:** `validity` becomes `valid`; `start-level-locked` leaves the reasons and the diagnostic `start-level-unlocked-later` joins them; `recordKey` and `recordValues` are computed by the session's own version's module from the stored trusted values (never by rescoring), and `personalBest` and `unlocked` as of the upgrade; progress gains only the session's valid-only effects through `applyValidEffects` (records in the session's own game version's record set, best peak level, cached unlocks).
-- **What never changes:** `processedAt`, `scoringVersion`, the stored scored values (score, accuracy, response times, trusted peak, metrics, performance index, domain contributions), and the totals, which were counted once when the session was processed as flagged. Nothing ever downgrades a session.
-- **When:** after any processing transaction that raised the unlocked start level (the only event that can make a stored session upgradable), after a rebuild, on redelivery of an already-valid session, and from the admin scripts.
-- **How:** it queries the merged index (`gameId`, `modeId`, `result.validity == 'flagged'`, `startLevel == level`) for each start level up to the unlocked level, through a projection without trials, paging with cursors to the end of each level, so sessions flagged for other reasons cannot hide an upgradable one (`result.reasons` is index-exempt, so they cannot be filtered out in the query). It re-checks each candidate in its transaction (at most 20 per transaction) and repeats for the newly unlocked levels while its own upgrades raise the unlocked level, to a fixpoint. Each flagged session is read at most once per call.
-- **Budgets, and what is guaranteed:** a trigger's reconcile reads at most 1,000 flagged documents and makes at most 100 upgrades per call. When it runs out it stops, reports `budget` and logs a warning; nothing is lost, but the rest is only finished by another reconcile, and a trigger reconciles again only when an unlock rises or a valid session is redelivered. The admin scripts (`rebuild-progress`, and `redrive-sessions`, for every user they touch or the one given with `--uid`) reconcile with **no budget**, examining every flagged session at every unlocked level, so they always complete it. Reaching the budget needs more than 1,000 sessions flagged for other reasons at or below the user's unlocked level.
-- **Why this is order-independent:** totals are counted once per counted session whatever the order, and a session is marked valid only when progress already justifies it. When every reconcile has run to its fixpoint (no call stopped at its budget), every start-level-locked session the final progress unlocks has been upgraded, so the valid set, and with it every max-based record, best peak and unlock, is the same fixpoint for every order. If a trigger's reconcile stopped at its budget, that holds once the admin reconcile has run. A property test checks both over random session sets and orders (with and without a tight scan budget), and a rebuild from the stored results reproduces live progress. Session results stay point-in-time facts: `personalBest`, `unlocked` and the `start-level-unlocked-later` note depend on when a session was processed.
+**Order independence** (owner decision; supersedes the card's "throw a retryable error so sessions are processed in play order" and "replay in `endedAt` order"). Sessions are processed independently, in whatever order they arrive. A session whose start level is still locked when it is processed is flagged `start-level-locked`; when a later commit unlocks that level, the upgrade makes it valid. The card's "two queued sessions processed out of order are not wrongly flagged" holds as an end state: once both are processed, the later session is valid, whichever was processed first.
+
+- **Why not wait for earlier sessions.** Ordering by `endedAt` trusts a device clock, cannot see another device's offline queue, and waiting on an earlier session that is failed or unsupported would block later ones. A build that processed "earlier" pending sessions inline was considered and removed: correctness never depended on it (the upgrade already reaches the same end state), it ordered by `endedAt`, and it cost up to 200 reads and 10 extra transactions per locked session. What it improved, the transient flag and the point-in-time fields, is not part of the end state.
+- **Why the end state is unique.** A session becomes valid only when the progress its transaction reads already justifies it (directly at processing, or through the upgrade). So the valid set is the least fixpoint: the sessions valid on their own merits at the initially unlocked level, plus, repeatedly, every start-level-locked session the valid set's best peak unlocks. Sessions that could only unlock each other never bootstrap each other and stay flagged. Every upgrade applies only max-based effects, and totals were counted at processing, so progress is the same fixpoint for every order.
+
+**The start-level upgrade** (owner confirmation; deliberately amends "processed exactly once" in decision 6 and "stored results stay as written" in decision 8).
+
+- **Upgradable:**
+  - its stored result is flagged with `start-level-locked`;
+  - every other reason is a diagnostic of its own game version or of trusted scoring;
+  - its own version's module is registered and wrote the result with the module's current `scoringVersion` (after a `scoringVersion` bump, older flagged sessions stay flagged until a deliberate rescoring job);
+  - its start level is now at or below `unlockedStartLevel(mode, progress)`.
+
+  `reasons-truncated`, any other flag, and any code the module does not know block it. The plan said "exactly `['start-level-locked']`". This deliberately accepts diagnostics as well, because diagnostics never change validity. A session with, say, `summary-mismatch` processed after the session that unlocked it is valid; under the narrower rule the same session processed before it would stay flagged forever, so a diagnostic would decide validity and the end state would depend on order. `reasons-truncated` still blocks because a cut list might have hidden a flag (unreachable today: only invalid sessions can raise more than 20 codes).
+- **What changes:**
+  - `validity` becomes `valid`;
+  - `start-level-locked` leaves the reasons and the diagnostic `start-level-unlocked-later` joins them;
+  - `recordKey` and `recordValues` are computed by the session's own version's module from the stored trusted values (never by rescoring);
+  - `personalBest` and `unlocked` are as of the upgrade;
+  - progress gains only the session's valid-only effects through `applyValidEffects` (records in the session's own game version's record set, best peak level, cached unlocks).
+- **What never changes:** `processedAt`, `scoringVersion`, the stored scored values (score, accuracy, response times, trusted peak, metrics, performance index, domain contributions), and the totals, which were counted once when the session was processed as flagged. Nothing ever downgrades a session. The upgrade time is not stored on the result; `start-level-unlocked-later` records that it happened.
+- **Where it runs, in order of preference:**
+  1. **Inside the processing transaction whose decision raised the unlocked start level, or rebuilt progress.** That is the only event that can make a stored session upgradable. The transaction reads the candidates and writes them in its own commit, so there is no window in which progress unlocks a level while a session it unlocked is still flagged, and no crash can separate the two.
+  2. Only when that transaction's bounded budget runs out, a **post-commit reconcile** in separate transactions.
+  3. On **redelivery** of an already-valid session (covering a delivery that died between its commit and that reconcile), after an admin rebuild, and from the admin scripts with no budget.
+- **How:**
+  - It queries the merged index (`gameId`, `modeId`, `result.validity == 'flagged'`, `startLevel == level`) for each level from the lowest lockable one (above `initiallyUnlockedStartLevel`) up to the unlocked level, through a projection without trials. It pages with cursors to the end of each level, so sessions flagged for other reasons cannot hide an upgradable one (`result.reasons` is index-exempt, so they cannot be filtered out in the query).
+  - It repeats for newly unlocked levels while its own upgrades raise the unlocked level, to a fixpoint.
+  - Candidates are upgraded in scan order (start level, then session ID), never by a device clock. Final progress does not depend on that order; only the point-in-time `personalBest` and `unlocked` of each upgraded result do.
+  - The post-commit reconcile re-checks each candidate in its own transaction, at most 20 per transaction.
+- **Budgets, and what is guaranteed:**
+  - The processing transaction reads at most 100 flagged documents and makes at most 20 upgrades.
+  - A post-commit reconcile reads at most 1,000 and makes at most 100. When it runs out it stops, reports `budget` and logs a warning. Nothing is lost, but the rest is finished only by another reconcile: a later unlock, a redelivery, or the admin scripts (`rebuild-progress`, and `redrive-sessions` for every user it touches or the one given with `--uid`), which reconcile with **no budget**.
+  - Reaching the transaction's budget needs more than 100 flagged sessions at or below the user's unlocked level; reaching the reconcile's needs more than 1,000. The sweep does not track budget-stopped reconciles (that would need a new marker or index). Such accounts are confined to the forger's own data and logged.
+  - A property test checks convergence over random session sets and orders, with random tight transaction and reconcile budgets and the admin path, and checks that a rebuild from the stored results reproduces live progress.
+- **What results mean.** Progress is order-independent; individual results are point-in-time facts. A result's `personalBest` says whether the session held a record in its own record set right after its commit (processing or upgrade), and `unlocked` lists the start levels that commit newly unlocked. Neither is updated when a later session takes the record, and an upgraded session's values reflect the progress at its upgrade.
 
 **`applyValidEffects(progress, input)`** (shared) is the valid-only half of `applySession`: pure, idempotent (applying it twice equals once, including `updatedAt` for the same `appliedAt`), and it never touches totals. `applySession` is now the session's totals followed, for a valid session, by `applyValidEffects`; its behaviour is unchanged.
 
-**Game-version module registry.** `GAME_MODULE_REGISTRY` maps (`gameId`, `gameVersion`) to the frozen module that validates, rescores and checks sessions of exactly that version (Mental Math v1: an adapter over `mentalMathV1`). A session is only ever judged by its own version's module; progress is maintained with the game's newest registered version. A test keeps the rules' `supportedGameVersions()` window inside the registry.
+**Concurrency and locking.**
 
-**Aggregate compatibility.** Before applying a session, trusted scoring classifies the stored progress by its versions before reading its shape:
+- All of one user's processing transactions for a game read and then write that game's progress document, so they serialise on it. Firestore transactions are serializable: with the server SDK's locks, a conflict aborts one transaction, and the SDK retries it with backoff. So contention delays a delivery but never loses an update. A transaction that still gives up after its SDK retries is rethrown and redelivered by the platform within the retry window.
+- The in-transaction upgrade adds reads of at most 100 flagged documents and their query ranges. Every transaction that could write one of them (another processing transaction or an upgrade) also writes that progress document. So it adds no new conflict between transactions, only a longer lock hold, and it cannot create a deadlock cycle that the progress document did not already create.
+- Emulator tests show it:
+  - 2 sessions of one user, where one unlocks the other, delivered at once (5 rounds);
+  - 7 sessions created at the same moment: a chain of 5 unlocks plus a pair that only unlock each other (3 rounds);
+  - random sets processed concurrently.
+
+  Each reaches exactly the sequential end state, with totals counted once. Two admin rebuilds racing three live deliveries lose no update, and several sessions racing to rebuild older progress rebuild it once.
+
+**Deletion.** Every transaction that writes a session's `result` or `processing`, an upgrade, or progress (processing, `recordProcessingState`, the reconcile's upgrade batches, the admin rebuild) first reads `accountDeletions/{uid}` and, if it exists, writes nothing and records no state. A session of a deleted account is left as it is for the recursive delete. See decision 7 for why this also closes the race with the recursive delete.
+
+**Game-version module registry.** `GAME_MODULE_REGISTRY` maps (`gameId`, `gameVersion`) to the frozen module that validates, rescores and checks sessions of exactly that version (Mental Math v1: an adapter over `mentalMathV1`). A session is only ever judged by its own version's module, including a late session of an earlier version, whose records go to that version's archived record set. Progress is maintained with the game's newest registered version. A session of a version this build has no module for is `unsupported`, never invalid, and is processed once a build registers it. A test keeps the rules' `supportedGameVersions()` window inside the registry.
+
+**Aggregate compatibility** (`classifyProgress`, shared). Before applying a session, trusted scoring classifies the stored progress by its versions before reading its shape:
 
 - same `aggregateVersion`, `gameVersion` no newer than the newest registered module: apply;
 - older `aggregateVersion`: rebuild it inside the processing transaction from the stored trusted results (`rebuildProgress`, a projection without trials, never rescoring), then apply;
-- newer `schemaVersion`, `aggregateVersion` or `gameVersion` than this build knows (a rollback or a mixed deploy): never written. The delivery is retried, and the session marked `failed` with `progress-newer-than-code` after the window, for newer code to re-drive;
+- newer `schemaVersion`, `aggregateVersion` or `gameVersion` than this build knows (a rollback or a mixed deploy): never written. The delivery is retried, and after the window the session is marked `failed` with `progress-newer-than-code` for newer code to re-drive. An older build therefore never overwrites progress, or an aggregate version, that a newer build wrote;
 - unreadable but not newer: `failed` with `progress-unreadable`. The admin rebuild replaces it (a repair).
 
-The rebuild reads every processed session of the game in one transaction (about 1 KB each, no trials). That only happens after an `aggregateVersion` bump or an admin rebuild; a very long history would need a paged rebuild (follow-up).
+An invalid session needs none of this: it is written whatever state progress is in. The rebuild reads every processed session of the game in one transaction (about 1 KB each, no trials). That only happens after an `aggregateVersion` bump or an admin rebuild; a very long history would need a paged rebuild (follow-up).
 
-**Admin scripts** (`functions/scripts/`, run with `npm run functions:rebuild-progress` and `npm run functions:redrive-sessions`) run on an operator's machine with the Admin SDK and are not deployed. There is no default project: `--project` is required, the emulator accepts only a `demo-*` project, and a real project needs `--live` and the operator's Application Default Credentials. Both scripts run the start-level upgrade with no budget.
+**The sweep.** `sweepUnprocessedSessions` (scheduled hourly; exported but not deployed by this repository) calls the same re-drive core as the admin script, bounded per run:
 
-**Bounded work per invocation.** Excluding the rare in-transaction rebuild, one trigger invocation reads at most about 1,450 documents, almost all projected without trials: about 35 for the session, its progress and up to 10 inline predecessors; 200 for the predecessor scan; and per reconciled game mode 1,000 flagged sessions, up to 10 progress reads and at most 200 in the upgrade transactions. It writes at most about 220: 11 sessions with their progress, and 100 upgrades, each batch also rewriting progress. The predecessor scan runs only when a session would be start-level-locked, and the reconcile only after an unlock rises, which happens at most once per level per mode, so a user who writes many sessions does not multiply this work.
+- pending sessions created more than 60 minutes ago, which missed their trigger (a delivery stops retrying after 30 minutes and records `failed`, so only a delivery that never ran leaves a session pending);
+- failed sessions with fewer than 5 recorded attempts;
+- unsupported sessions this build now has a module for, under the same cap;
+- at most 100 sessions per run, scanning at most 2,000 projected documents per state, within the last 7 days.
+
+Sessions at the attempt cap are left for the admin re-drive (which has no cap) and logged as an error, which is what alerting should watch. Within a user, sessions are re-driven in server arrival order (`createdAt`, then session ID); the order changes nothing in the result.
+
+**Admin scripts** (`functions/scripts/`, run with `npm run functions:rebuild-progress` and `npm run functions:redrive-sessions`) run on an operator's machine with the Admin SDK and are not deployed. There is no default project: `--project` is required, the emulator accepts only a `demo-*` project, and a real project needs `--live` and the operator's Application Default Credentials. Both scripts run the start-level upgrade with no budget. Neither reprocesses a session that has a result.
+
+**Bounded work per invocation.**
+
+- **Processing transaction** (excluding the rare in-transaction rebuild):
+  - reads: the session (twice), the ledger, progress, and at most 100 flagged sessions (projected, plus one minimum-charge read per empty level query);
+  - writes: at most 22 (the session, progress and 20 upgrades).
+- **Post-commit reconcile**, only past that budget or on redelivery of a valid session:
+  - reads: at most 1,000 flagged sessions, 10 progress reads and about 110 reads in its upgrade transactions;
+  - writes: at most 105 (100 upgrades and 5 progress writes).
+
+So one trigger invocation reads at most about 1,230 documents, almost all projected without trials, and writes at most about 130. The in-transaction upgrade runs only when the unlocked level rises, at most once per level per mode, or after a rebuild, and the reconcile only past the transaction's budget. A user who writes many sessions therefore pays about one small transaction per session. A sweep run reads at most 2,000 projected documents per state and processes at most 100 sessions.
 
 ## The shared package
 
@@ -285,7 +382,7 @@ The rebuild reads every processed session of the game in one transaction (about 
 | `schemas/*.ts` | Zod schemas and `read*` mappers for the profile, game session, EEG recording and progress |
 | `progress/unlocks.ts` | `unlockedStartLevel` |
 | `progress/applySession.ts` | The `applySession` reducer (totals, then `applyValidEffects`), `validOutcome` / `outcomeFromResult`, `canApplyToProgress` and `rebuildProgress` |
-| `processing/` | Trusted scoring's pure decisions (NFCT-19): the game-version module registry, `evaluateSession`, `decideSession`, `upgradeSession`, reason merging and clock diagnostics |
+| `processing/` | Trusted scoring's pure decisions (NFCT-19): the game-version module registry, `evaluateSession`, `decideSession`, `upgradeSession`, `upgradeScanLevels`, `classifyProgress` (aggregate compatibility), reason merging and clock diagnostics |
 
 `GameDefinition` fields:
 
