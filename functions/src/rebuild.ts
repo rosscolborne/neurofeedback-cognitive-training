@@ -6,11 +6,12 @@ import { rebuildInTransaction } from './progress';
 // The admin rebuild (card NFCT-19, design section F `rebuildUserAggregates`):
 // replays one user's processed sessions of a game through the same reducer
 // trusted scoring uses, from their stored trusted results, in a fixed replay
-// order (endedAt, then session ID) that the result does not depend on. Never rescoring, never revalidating: rescoring
-// stored trials is a deliberate, separate job (ADR-001 decision 8). Sessions
-// without a result are skipped (re-drive them first). Deterministic, so it can
-// be re-run. Used for repair and after an aggregateVersion change; trusted
-// scoring does the same rebuild itself when it meets older progress.
+// order (endedAt, then session ID) that the result does not depend on.
+// Never rescoring, never revalidating: rescoring stored trials is a
+// deliberate, separate job (ADR-001 decision 8). Sessions without a result are
+// skipped (re-drive them first). Deterministic, so it can be re-run. Used for
+// repair and after an aggregateVersion change; trusted scoring does the same
+// rebuild itself when it meets older progress.
 
 export type RebuildReport = {
   readonly gameId: string;
