@@ -22,13 +22,17 @@
 }
 
 .mm-back {
-  min-height: 44px;
   padding-left: var(--space-2);
 }
 
 .mm-topbar-action {
-  min-height: 44px;
   padding-right: var(--space-3);
+}
+
+/* .btn qualifies these so the phone-width .btn minimum (42 px) cannot shrink them below 44 px. */
+.btn.mm-back,
+.btn.mm-topbar-action {
+  min-height: 44px;
 }
 
 .mm-panel {
@@ -570,6 +574,10 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  /* Room for three lines: a one-line title over a two-line detail, or a title
+     that wraps over a one-line detail. The cards keep their height when the
+     records load in and replace "Loading…" (NFCT-52). */
+  min-height: calc(2 * 15px * 1.35 + 2px + 13px * 1.45);
 }
 
 .mm-highlight-title {
@@ -596,8 +604,11 @@
 }
 
 /* Predicted by the provisional preview: the same words, drawn as not yet final. */
-.mm-highlight-achieved.mm-highlight-pending {
+.mm-highlight-pending {
   border-style: dashed;
+}
+
+.mm-highlight-achieved.mm-highlight-pending {
   background-color: var(--surface-patient-card);
 }
 
@@ -644,6 +655,20 @@
   padding: var(--space-3) var(--space-4) max(var(--space-4), env(safe-area-inset-bottom, 16px));
   background-color: var(--surface-patient-base);
   border-top: 1px solid var(--border-subtle);
+}
+
+/* A value that counts a run the server hasn't checked yet: the pending highlight's dashed style, as a tag
+   that fits within a 13 px line (NFCT-52). */
+.status-tag.mm-provisional-tag {
+  padding: 0 6px;
+  border: 1px dashed var(--text-tertiary);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 /* ---- Per-game progress (NFCT-22) ---- */
@@ -694,6 +719,12 @@
   gap: 2px;
   min-width: 0;
   text-align: right;
+}
+
+.mm-best-score-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .mm-best-score,

@@ -1,13 +1,16 @@
 import { Timestamp } from 'firebase/firestore';
 import {
+  GAME_MODULE_REGISTRY,
   GAME_SESSION_SCHEMA_VERSION,
   maxLevelOf,
   mentalMath,
   unlockedStartLevel,
+  upgradeBlocker,
   type GameModeDefinition,
   type GameProgress,
   type ServerResult,
 } from '@nfct/shared';
+import type { GameSessionRecord } from '../../repositories/gameSessionRepository';
 import type { ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import type { RunOutcome } from './runController';
 import { buildSessionDraft, type SessionEnvironment } from './sessionDraft';
@@ -29,8 +32,12 @@ export type Verification =
   /** No trusted result yet; the values are this device's preview. */
   | { readonly kind: 'provisional'; readonly detail: 'saving' | 'on-device' | 'checking' | 'delayed' }
   | { readonly kind: 'verified' }
-  /** Counts in totals, never in records or unlocks. */
-  | { readonly kind: 'flagged'; readonly reasons: readonly string[] }
+  /**
+   * Counts in totals, not in records or unlocks. `upgradable`: only its start
+   * level was locked, so trusted scoring makes it valid once that level is
+   * unlocked (ADR-001 decision 12's upgrade).
+   */
+  | { readonly kind: 'flagged'; readonly reasons: readonly string[]; readonly upgradable: boolean }
   /** Counts nowhere. */
   | { readonly kind: 'invalid'; readonly reasons: readonly string[] }
   | { readonly kind: 'not-saved' };
@@ -64,7 +71,10 @@ export interface RunStats {
 export interface Totals {
   readonly sessionsCompleted: number;
   readonly activeMs: number;
-  /** Includes runs trusted scoring has not checked yet (this one or others on this device). */
+  /**
+   * The totals count a run trusted scoring has not checked yet: this one, when
+   * the preview counts it, or another still pending on this device.
+   */
   readonly includesUnverified: boolean;
 }
 
@@ -133,6 +143,12 @@ export function bestsFor(progress: GameProgress | null, startLevel: number): Par
 
 const RECORD_METRICS: readonly RecordMetric[] = ['score', 'correct', 'peakLevel'];
 
+/** A flagged run that the start-level upgrade can still make valid: its only flag is `start-level-locked`. */
+function upgradableLater(record: GameSessionRecord, progress: GameProgress | null): boolean {
+  const blocker = upgradeBlocker(record.session, progress, GAME_MODULE_REGISTRY);
+  return blocker === null || blocker === 'still-locked';
+}
+
 export interface RunSummaryInput {
   readonly outcome: RunOutcome;
   readonly environment: SessionEnvironment;
@@ -153,6 +169,8 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   const base = state === null ? null : currentProgress(state, run.sessionId);
   let shown: ServerResult | null = null;
   let after: GameProgress | null = base?.progress ?? null;
+  /** The preview counted this run in the totals (an invalid run, or one this build cannot preview, counts nowhere). */
+  let previewCounted = false;
   if (trusted) {
     // Trusted scoring wrote the result and progress in one commit, which the cached progress already holds.
     shown = trusted;
@@ -160,11 +178,12 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
     const decision = previewDecision(base.progress, run.sessionId, clientSessionDocument(outcome, environment, run));
     shown = decision?.result ?? null;
     after = decision?.progress ?? after;
+    previewCounted = decision !== null && decision.result.validity !== 'invalid';
   }
 
   const verification: Verification = save === 'failed' ? { kind: 'not-saved' }
     : trusted?.validity === 'valid' ? { kind: 'verified' }
-      : trusted?.validity === 'flagged' ? { kind: 'flagged', reasons: trusted.reasons }
+      : trusted?.validity === 'flagged' ? { kind: 'flagged', reasons: trusted.reasons, upgradable: upgradableLater(stored!, after) }
         : trusted?.validity === 'invalid' ? { kind: 'invalid', reasons: trusted.reasons }
           : {
             kind: 'provisional',
@@ -213,7 +232,7 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   const totals: Totals | null = state === null ? null : {
     sessionsCompleted: after?.sessionsCompleted ?? 0,
     activeMs: after?.activeMs ?? 0,
-    includesUnverified: (base?.previewed ?? false) || (!trusted && save !== 'failed'),
+    includesUnverified: (base?.previewed ?? false) || previewCounted,
   };
 
   return { status: outcome.status, startLevel, verification, score, breakdown, stats, record, unlock, totals };

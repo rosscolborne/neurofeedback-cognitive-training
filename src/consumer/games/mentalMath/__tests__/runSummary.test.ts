@@ -111,10 +111,43 @@ describe('post-session summary', () => {
     const decision = trusted(outcome, null);
     const flagged = { ...decision.result, validity: 'flagged', reasons: ['rt-below-floor'] } as ServerResult;
     const model = summary(outcome, 'confirmed', pickerState(progressWith(1), [stored(outcome, flagged)]));
-    expect(model.verification).toEqual({ kind: 'flagged', reasons: ['rt-below-floor'] });
+    expect(model.verification).toEqual({ kind: 'flagged', reasons: ['rt-below-floor'], upgradable: false });
     expect(model.score).toBe(decision.result.validity === 'valid' ? decision.result.score : null);
     expect(model.record).toMatchObject({ kind: 'ineligible', reason: 'flagged' });
     expect(model.unlock).toMatchObject({ kind: 'next', unlocked: 1 });
+  });
+
+  it('says a run flagged only for a locked start level can still count: trusted scoring upgrades it once the level unlocks', () => {
+    const outcome = playRun({ seed: SEED, startLevel: 2, correct: 3 });
+    const decision = trusted(outcome, null);
+    expect(decision.result).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked'] });
+    const lockedOnly = summary(outcome, 'confirmed', pickerState(null, [stored(outcome, decision.result)]));
+    expect(lockedOnly.verification).toEqual({ kind: 'flagged', reasons: ['start-level-locked'], upgradable: true });
+    // Another flag as well: the upgrade never applies (ADR-001 decision 12).
+    const alsoFast = { ...decision.result, reasons: ['start-level-locked', 'rt-below-floor'] } as ServerResult;
+    expect(summary(outcome, 'confirmed', pickerState(null, [stored(outcome, alsoFast)])).verification).toMatchObject({ upgradable: false });
+  });
+
+  it('says the totals include an unchecked run only when the preview counts this run, or another pending one', () => {
+    // Predicted invalid (its questions are not from the seed it names): counted nowhere, so the totals are all checked.
+    const outcome = climb();
+    const forged = runSummary({ outcome, environment: ENVIRONMENT, run: { ...RUN, seed: SEED + 1 }, save: 'confirmed', state: pickerState(progressWith(1), [stored(outcome)]) });
+    expect(forged.verification).toMatchObject({ kind: 'provisional' });
+    expect(forged.record).toMatchObject({ kind: 'ineligible', reason: 'invalid' });
+    expect(forged.totals).toEqual({ sessionsCompleted: 1, activeMs: 0, includesUnverified: false });
+
+    // Predicted flagged (start level 2 is still locked): it counts in the totals, so they include an unchecked run.
+    const locked = playRun({ seed: SEED, startLevel: 2, correct: 3 });
+    const flagged = summary(locked, 'confirmed', pickerState(null, [stored(locked)]));
+    expect(flagged.record).toMatchObject({ kind: 'ineligible', reason: 'flagged' });
+    expect(flagged.totals).toMatchObject({ sessionsCompleted: 1, includesUnverified: true });
+
+    // Checked by the server, with another run still pending on this device.
+    const older = weak(1_790_000_000_000);
+    const decision = trusted(outcome, null);
+    const withPending = summary(outcome, 'confirmed', pickerState(decision.progress, [stored(outcome, decision.result), stored(older, undefined, OLDER)]));
+    expect(withPending.totals).toMatchObject({ includesUnverified: true });
+    expect(summary(outcome, 'confirmed', pickerState(decision.progress, [stored(outcome, decision.result)])).totals).toMatchObject({ includesUnverified: false });
   });
 
   it('shows no score for a run trusted scoring found invalid', () => {

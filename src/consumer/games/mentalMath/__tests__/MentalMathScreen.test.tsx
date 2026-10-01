@@ -85,13 +85,16 @@ function harness({ state = pickerState(null), eegProvider = null, saveImpl, save
   /** Every live progress listener; `publish` sends them a new state, as Firestore would. */
   const progressListeners = new Set<(value: ProgressWithRecentSessions) => void>();
   let latest = state;
+  /** While set, new listeners get nothing until `publish`, as while Firestore is still reading. */
+  let holdProgress = false;
   const progress = {
     subscribeToProgressWithRecentSessions: vi.fn((_gameId: string, _options: object, onNext: (value: ProgressWithRecentSessions) => void) => {
       progressListeners.add(onNext);
-      onNext(latest);
+      if (!holdProgress) onNext(latest);
       return () => { progressListeners.delete(onNext); };
     }),
   };
+  const holdNewProgressListeners = (hold: boolean) => { holdProgress = hold; };
   const publish = (next: ProgressWithRecentSessions) => act(() => { latest = next; progressListeners.forEach((listener) => listener(next)); });
   const onExit = vi.fn();
   let renderer!: ReactTestRenderer;
@@ -144,7 +147,7 @@ function harness({ state = pickerState(null), eegProvider = null, saveImpl, save
   const eegStatus = () => root().findAll((node) => typeof node.props.className === 'string' && node.props.className.includes('mm-eeg-status')).map((node) => textOf(node))[0] ?? null;
   const enableEeg = () => act(() => { root().find((node) => node.type === 'input' && node.props.type === 'checkbox').props.onChange({ target: { checked: true } }); });
   const byData = (attribute: string, value: string) => root().findAll((node) => node.props[attribute] === value && typeof node.type === 'string').map((node) => textOf(node))[0] ?? null;
-  return { renderer, root, clock, visibility, save, saves, savedResults, events, recordingSaves, eegStatus, enableEeg, startGameSession, onExit, buttons, press, advance, question, hud, radio, typeAnswer, playToEnd, flush, title, saveStatus, publish, progress, gameSessions, byData };
+  return { renderer, root, clock, visibility, save, saves, savedResults, events, recordingSaves, eegStatus, enableEeg, startGameSession, onExit, buttons, press, advance, question, hud, radio, typeAnswer, playToEnd, flush, title, saveStatus, publish, holdNewProgressListeners, progress, gameSessions, byData };
 }
 
 const storageWrites = vi.fn();
@@ -559,7 +562,7 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-result', 'score')).toBe(format(local.score));
       // Predicted achievements read exactly as confirmed ones (no layout shift), marked provisional.
       const pending = (name: string) => h.root().find((node) => node.props['data-summary'] === name && node.type === 'li').props['data-pending'];
-      expect(h.byData('data-summary', 'record')).toBe('New personal best (provisional, until the server checks your run)Best score, most correct answers and highest level for runs from level 1.');
+      expect(h.byData('data-summary', 'record')).toBe('New personal best (provisional, until the server checks your run)From level 1: best score, most correct answers and highest level.');
       expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (provisional, until the server checks your run)You can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['true', 'true']);
 
@@ -572,7 +575,7 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-result', 'score')).toBe(format(4321));
       expect(h.byData('data-result', 'difficulty-points')).toBe(format(4000));
       expect(h.byData('data-result', 'speed-bonus')).toBe(`+${format(321)}`);
-      expect(h.byData('data-summary', 'record')).toBe('New personal bestBest score, most correct answers and highest level for runs from level 1.');
+      expect(h.byData('data-summary', 'record')).toBe('New personal bestFrom level 1: best score, most correct answers and highest level.');
       expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlockedYou can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['false', 'false']);
       expect(h.byData('data-total', 'runs-completed')).toBe('1');
@@ -654,6 +657,108 @@ describe('MentalMathScreen', () => {
       expect(textOf(h.root())).toContain('No runs yet.');
       h.press('Back');
       expect(h.onExit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('summary and progress polish (NFCT-52)', () => {
+    const format = (value: number) => new Intl.NumberFormat().format(value);
+    const climb = [true, true, true, true, true, true, true];
+    const highlight = (h: ReturnType<typeof harness>, name: string) => h.root().find((node) => node.props['data-summary'] === name && node.type === 'li');
+    const totalsNote = (h: ReturnType<typeof harness>) => textOf(h.root().find((node) => typeof node.props.className === 'string' && node.props.className.includes('mm-totals-note')));
+    const provisionalTags = (node: ReactTestInstance) => node.findAll((item) => item.props['data-provisional'] === 'true' && typeof item.type === 'string');
+
+    it('while the records load, says so in the cards and the totals, without claiming checked totals', async () => {
+      const h = harness();
+      h.press('Start at level 1');
+      h.holdNewProgressListeners(true);
+      h.playToEnd(climb);
+      await h.flush();
+      expect(h.byData('data-summary', 'record')).toBe('RecordsLoading your records…');
+      expect(h.byData('data-summary', 'unlock')).toBe('Start levelsLoading your start levels…');
+      expect(h.byData('data-total', 'runs-completed')).toBe('—');
+      expect(totalsNote(h)).toBe('Loading your totals…');
+
+      // The records arrive: the preview counts this run, and the note says so.
+      h.publish(pickerState(null));
+      expect(h.byData('data-total', 'runs-completed')).toBe('1');
+      expect(totalsNote(h)).toBe('Includes runs the server hasn’t checked yet.');
+    });
+
+    it('marks a predicted flag as provisional, like a predicted best, until the server decides', async () => {
+      const h = harness();
+      h.press('Start at level 1');
+      // Answers far faster than the 250 ms floor: the preview predicts the server's rt-below-floor flag.
+      h.playToEnd([true, true, true, true, true, true, true, true, true, true], 100);
+      await h.flush();
+      expect(h.byData('data-summary', 'verification')).toBe('Provisional');
+      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set records (provisional, until the server checks your run)No record yet from level 1.');
+      expect(highlight(h, 'record').props['data-pending']).toBe('true');
+
+      const document = { ...h.saves[0]!.session, schemaVersion: 1, userId: 'player-1', seed: SEED, createdAt: h.saves[0]!.session.endedAt } as unknown as ClientSessionDocument;
+      const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
+      expect(decision.result).toMatchObject({ validity: 'flagged', reasons: ['rt-below-floor'] });
+      h.publish(pickerState(decision.progress, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: decision.result } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
+      expect(h.byData('data-summary', 'verification')).toBe('Flagged');
+      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set recordsNo record yet from level 1.');
+      expect(highlight(h, 'record').props['data-pending']).toBe('false');
+    });
+
+    it('says a run flagged only for its locked start level counts toward records once that level is unlocked', async () => {
+      const h = harness();
+      h.press('Start at level 1');
+      h.playToEnd(climb);
+      await h.flush();
+      const document = { ...h.saves[0]!.session, schemaVersion: 1, userId: 'player-1', seed: SEED, createdAt: h.saves[0]!.session.endedAt } as unknown as ClientSessionDocument;
+      const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
+      const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
+      h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
+      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when the server checked your run. It counts toward your totals now, and toward your records and unlocks once that level is unlocked.');
+    });
+
+    it('marks the picker’s best as provisional while a run the server hasn’t checked holds it', () => {
+      const pending = sessionRecord('sessionBBBBBBBBBBBB1', playRun({ seed: SEED, startLevel: 1, correct: 7 }), { seed: SEED });
+      const h = harness({ state: pickerState(null, [pending]) });
+      const best = h.root().find((node) => node.props['data-picker'] === 'best');
+      expect(textOf(best)).toMatch(/^Your best from level 1: [\d,]+ Provisional$/);
+      expect(provisionalTags(best)).toHaveLength(1);
+
+      // Once the server has checked it, the same best is shown plainly.
+      const decision = previewDecision(null, pending.id, pending.session as unknown as ClientSessionDocument)!;
+      h.publish(pickerState(decision.progress, [{ ...pending, session: { ...pending.session, result: decision.result }, awaitingResult: false, hasPendingWrites: false }]));
+      expect(textOf(best)).toMatch(/^Your best from level 1: [\d,]+$/);
+      expect(provisionalTags(best)).toHaveLength(0);
+    });
+
+    it('keeps the picker’s level and EEG choice across Progress and Back', () => {
+      const eegProvider: EegCaptureProvider = { source: 'simulated', label: 'Simulated EEG (Demo Mode)', start: () => ({ finish: () => ({ source: 'simulated' } as EegRecordingDraft), cancel: vi.fn() }) };
+      const h = harness({ state: pickerState(progressWith(5)), eegProvider });
+      // Start level 4 is unlocked and is the default; the player picks level 2 and EEG.
+      expect(h.radio(4).props.checked).toBe(true);
+      act(() => { h.radio(2).props.onChange(); });
+      h.enableEeg();
+      h.press('Progress');
+      expect(textOf(h.root().findByProps({ id: 'mm-progress-title' }))).toBe('Your Mental Math');
+      h.press('Back');
+      expect(h.radio(2).props.checked).toBe(true);
+      expect(h.root().find((node) => node.type === 'input' && node.props.type === 'checkbox').props.checked).toBe(true);
+      expect(h.buttons('Start at level 2')).toHaveLength(1);
+    });
+
+    it('marks bests held by unchecked runs as provisional, and tags a verified record run “New best”', () => {
+      const pending = sessionRecord('sessionBBBBBBBBBBBB2', playRun({ seed: SEED, startLevel: 1, correct: 7, wallStartMs: 1_790_000_200_000 }), { seed: SEED });
+      const checked = playRun({ seed: SEED, startLevel: 1, correct: 3, wallStartMs: 1_790_000_000_000 });
+      const checkedDocument = clientSessionDocument(checked, { timezone: 'UTC', appVersion: '0.0.0', platform: 'web' }, { sessionId: 'sessionBBBBBBBBBBBB1', userId: 'player-1', seed: SEED });
+      const decision = previewDecision(null, 'sessionBBBBBBBBBBBB1', checkedDocument)!;
+      const entry: GameSessionHistoryEntry = { id: 'sessionBBBBBBBBBBBB1', session: readSessionProgressFields({ ...checkedDocument, result: decision.result }), awaitingResult: false, hasPendingWrites: false };
+      const h = harness({ initialView: 'progress', state: pickerState(decision.progress, [pending]), history: { entries: [entry], unreadable: [], nextCursor: null, fromCache: false } });
+      const levelOne = h.root().findByProps({ 'data-best-level': 1 });
+      expect(provisionalTags(levelOne)).toHaveLength(1);
+      expect(textOf(levelOne)).toMatch(/^Level 1Provisional[\d,]+7 correct · reached level 3$/);
+      // The history shows trusted results only: the checked run set a best when it was processed.
+      const row = h.root().findByProps({ 'data-history-row': 'sessionBBBBBBBBBBBB1' });
+      expect(textOf(row)).toContain('New best');
+      expect(textOf(row)).not.toContain('Personal best');
+      expect(textOf(row)).toContain(format(decision.result.validity === 'valid' ? decision.result.score : 0));
     });
   });
 });

@@ -80,7 +80,10 @@ function verificationCaption(verification: Verification): string {
     case 'verified':
       return 'Checked and confirmed by the server.';
     case 'flagged':
-      return `${flagExplanation(verification.reasons)} It counts toward your totals, but not your records or unlocks.`;
+      // ADR-001 decision 12: once the start level is unlocked, trusted scoring upgrades the run to valid.
+      return verification.upgradable
+        ? `${flagExplanation(verification.reasons)} It counts toward your totals now, and toward your records and unlocks once that level is unlocked.`
+        : `${flagExplanation(verification.reasons)} It counts toward your totals, but not your records or unlocks.`;
     case 'invalid':
       return 'This run didn’t pass the server’s checks, so it doesn’t count toward your progress.';
     case 'not-saved':
@@ -100,12 +103,8 @@ function listWords(words: readonly string[]): string {
   return `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 }
 
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 function bestSentence(startLevel: number, bestScore: number | null): string {
-  return bestScore === null ? `No record yet for runs from level ${startLevel}.` : `Your best from level ${startLevel} is ${numberFormat.format(bestScore)}.`;
+  return bestScore === null ? `No record yet from level ${startLevel}.` : `Your best from level ${startLevel} is ${numberFormat.format(bestScore)}.`;
 }
 
 interface Line {
@@ -113,9 +112,10 @@ interface Line {
   readonly detail: string;
   readonly tone: 'achieved' | 'neutral' | 'muted';
   /**
-   * An achievement from the provisional preview, not yet confirmed by the
-   * server. Its text is the same as once confirmed, so the layout never
-   * shifts; only its styling (and a screen-reader note) differs.
+   * A verdict from the provisional preview, not yet confirmed by the server:
+   * an achievement, or a flagged or invalid prediction. Its text is the same
+   * as once confirmed, so the layout never shifts; only its styling (and a
+   * screen-reader note) differs.
    */
   readonly pending?: boolean;
 }
@@ -129,13 +129,14 @@ function recordLine(record: RecordLine, provisional: boolean, unavailable: boole
     case 'pending':
       return { title: 'Records', detail: 'Your records update once the server checks this run.', tone: 'muted' };
     case 'new-best': {
-      const what = record.metrics.length > 0 ? `${capitalize(listWords(record.metrics.map((metric) => METRIC_WORDS[metric])))} for runs from level ${record.startLevel}.` : `For runs from level ${record.startLevel}.`;
+      // Kept to two lines at phone width, so the card never outgrows its reserved height (NFCT-52).
+      const what = record.metrics.length > 0 ? `From level ${record.startLevel}: ${listWords(record.metrics.map((metric) => METRIC_WORDS[metric]))}.` : `From level ${record.startLevel}.`;
       return { title: 'New personal best', detail: what, tone: 'achieved', pending: provisional };
     }
     case 'best-so-far':
       return {
         title: record.bestScore === null ? `No record yet from level ${record.startLevel}` : `Your best from level ${record.startLevel}: ${numberFormat.format(record.bestScore)}`,
-        detail: 'Records are kept separately for each start level.',
+        detail: 'Each start level has its own records.',
         tone: 'neutral',
       };
     case 'ineligible':
@@ -143,9 +144,9 @@ function recordLine(record: RecordLine, provisional: boolean, unavailable: boole
         case 'abandoned':
           return { title: 'Unfinished runs don’t set records', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted' };
         case 'flagged':
-          return { title: 'Flagged runs don’t set records', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted' };
+          return { title: 'Flagged runs don’t set records', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted', pending: provisional };
         case 'invalid':
-          return { title: 'Not counted', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted' };
+          return { title: 'Not counted', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted', pending: provisional };
         case 'not-saved':
           return { title: 'Not saved', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted' };
       }
@@ -193,6 +194,12 @@ const Highlight: React.FC<{ readonly icon: React.ReactNode; readonly line: Line;
     </span>
   </li>
 );
+
+/** What the totals include, or why there are none to show yet. */
+function totalsNote(totals: RunSummaryModel['totals'], unavailable: boolean): string {
+  if (totals === null) return unavailable ? 'Your totals couldn’t be loaded right now.' : 'Loading your totals…';
+  return totals.includesUnverified ? 'Includes runs the server hasn’t checked yet.' : 'Totals include every run the server has checked.';
+}
 
 const SCORING_HELP = `Each correct answer earns its level’s difficulty points: ${mentalMath.basePoints(mentalMath.MIN_LEVEL)} at level ${mentalMath.MIN_LEVEL}, rising to ${mentalMath.basePoints(mentalMath.MAX_LEVEL)} at level ${mentalMath.MAX_LEVEL}. A quick answer adds a speed bonus of up to half those points. Wrong answers and timeouts score nothing.`;
 
@@ -292,9 +299,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({ outcome, run, environmen
             { label: 'Time played', value: <span data-total="time-played">{totals ? formatPlayTime(totals.activeMs) : '—'}</span> },
           ]}
         />
-        <p className="mm-help mm-totals-note">
-          {totals?.includesUnverified ? 'Includes runs the server hasn’t checked yet.' : 'Totals include every run the server has checked.'}
-        </p>
+        <p className="mm-help mm-totals-note">{totalsNote(totals, unavailable)}</p>
         <button type="button" className="btn btn-ghost mm-link mm-link-row" onClick={onViewProgress}>
           Records and history <ChevronRight size={16} aria-hidden="true" />
         </button>

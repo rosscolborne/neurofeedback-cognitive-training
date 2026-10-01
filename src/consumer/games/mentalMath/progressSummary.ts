@@ -1,7 +1,7 @@
 import { maxLevelOf, mentalMath, unlockedStartLevel, type GameProgress } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../repositories/gameSessionRepository';
 import { bestsFor, nextUnlock, type UnlockLine } from './runSummary';
-import { timed90 } from './startLevel';
+import { timed90, type CurrentProgress } from './startLevel';
 
 // Mental Math's per-game progress (NFCT-22), as pure view models: bests per
 // start level (records are kept per mode + start level and never compared
@@ -12,6 +12,8 @@ export interface LevelBests {
   readonly startLevel: number;
   /** Null when no valid completed run from this start level has set a record yet. */
   readonly bests: { readonly score: number | null; readonly correct: number | null; readonly peakLevel: number | null } | null;
+  /** One of these bests is held by a run trusted scoring has not checked yet (the client preview). */
+  readonly provisional: boolean;
 }
 
 export interface GameOverview {
@@ -26,7 +28,11 @@ export interface GameOverview {
   readonly levels: readonly LevelBests[];
 }
 
-export function gameOverview(progress: GameProgress | null): GameOverview {
+/**
+ * `unchecked` names the sessions the client preview applied to `progress`
+ * (startLevel's currentProgress); a best one of them holds is provisional.
+ */
+export function gameOverview(progress: GameProgress | null, unchecked: ReadonlySet<string> = new Set()): GameOverview {
   const mode = timed90();
   const maxLevel = maxLevelOf(mode);
   const unlocked = unlockedStartLevel(mode, progress);
@@ -40,6 +46,7 @@ export function gameOverview(progress: GameProgress | null): GameOverview {
       bests: hasRecords
         ? { score: bests.score?.value ?? null, correct: bests.correct?.value ?? null, peakLevel: bests.peakLevel?.value ?? null }
         : null,
+      provisional: Object.values(bests).some((best) => unchecked.has(best.sessionId)),
     });
   }
   return {
@@ -50,6 +57,26 @@ export function gameOverview(progress: GameProgress | null): GameOverview {
     maxLevel,
     unlock: nextUnlock(progress),
     levels,
+  };
+}
+
+/** The Progress tab's one-line summary of the game. */
+export interface ProgressCardSummary {
+  readonly sessionsCompleted: number;
+  readonly unlocked: number;
+  readonly maxLevel: number;
+  /** The numbers count a run trusted scoring has not checked yet, so they are provisional. */
+  readonly provisional: boolean;
+}
+
+export function progressCardSummary(current: CurrentProgress): ProgressCardSummary {
+  const shown = gameOverview(current.progress);
+  const checked = gameOverview(current.checked);
+  return {
+    sessionsCompleted: shown.sessionsCompleted,
+    unlocked: shown.unlocked,
+    maxLevel: shown.maxLevel,
+    provisional: shown.sessionsCompleted !== checked.sessionsCompleted || shown.unlocked !== checked.unlocked,
   };
 }
 

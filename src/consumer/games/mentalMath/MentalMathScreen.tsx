@@ -8,6 +8,7 @@ import type { GameSessionRepository, SavedGameSession, StartedGameSession } from
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import { Keypad } from './Keypad';
 import { MentalMathProgress } from './MentalMathProgress';
+import { ProvisionalTag } from './ProvisionalTag';
 import { MentalMathRunController, type RunOutcome, type RunSnapshot } from './runController';
 import type { EegInfo, EegState, SaveState } from './runSave';
 import { RunSummary } from './RunSummary';
@@ -40,10 +41,17 @@ export interface MentalMathScreenProps {
   readonly onExit: () => void;
 }
 
+/** The picker's choices, kept while its Progress button shows the game's progress. */
+interface PickerChoice {
+  readonly level: number;
+  readonly withEeg: boolean;
+}
+
 type Stage =
-  | { readonly kind: 'picker' }
+  /** `restore`: the choices to show again. `focusProgress`: back from the progress screen, focus returns to the Progress button. */
+  | { readonly kind: 'picker'; readonly restore?: PickerChoice; readonly focusProgress?: boolean }
   /** `back` is where Back leads: the picker, or out of the game when it opened on this screen. */
-  | { readonly kind: 'progress'; readonly back: 'picker' | 'exit' }
+  | { readonly kind: 'progress'; readonly back: 'picker' | 'exit'; readonly restore?: PickerChoice }
   | { readonly kind: 'playing'; readonly controller: MentalMathRunController; readonly eeg: EegInfo | null }
   | { readonly kind: 'handoff'; readonly outcome: RunOutcome; readonly run: RunIdentity; readonly save: SaveState; readonly eeg: EegInfo | null }
   | { readonly kind: 'start-failed'; readonly message: string };
@@ -198,8 +206,10 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
         <StartLevelPicker
           progress={progress}
           eegProvider={eegProvider}
+          restore={stage.restore}
+          focusProgress={stage.focusProgress ?? false}
           onStart={startRun}
-          onViewProgress={() => setStage({ kind: 'progress', back: 'picker' })}
+          onViewProgress={(choice) => setStage({ kind: 'progress', back: 'picker', restore: choice })}
           onExit={onExit}
         />
       );
@@ -208,8 +218,8 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
         <MentalMathProgress
           progress={progress}
           gameSessions={gameSessions}
-          onBack={() => (stage.back === 'exit' ? onExit() : setStage({ kind: 'picker' }))}
-          onPlay={() => setStage({ kind: 'picker' })}
+          onBack={() => (stage.back === 'exit' ? onExit() : setStage({ kind: 'picker', restore: stage.restore, focusProgress: true }))}
+          onPlay={() => setStage({ kind: 'picker', restore: stage.restore })}
         />
       );
     case 'playing':
@@ -249,29 +259,45 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
 type PickerData =
   | { readonly status: 'loading' }
   /** `progress` is the cached progress with this device's pending runs applied, as the unlocks use it. */
-  | { readonly status: 'ready'; readonly choices: StartLevelChoices; readonly progress: GameProgress | null }
+  | { readonly status: 'ready'; readonly choices: StartLevelChoices; readonly progress: GameProgress | null; readonly unchecked: ReadonlySet<string> }
   | { readonly status: 'unavailable'; readonly choices: StartLevelChoices };
 
 const numberFormat = new Intl.NumberFormat();
 
-/** The selected start level's best score, from the same preview as the unlocks. */
-function bestLine(data: PickerData, level: number | null): string {
-  if (data.status !== 'ready' || level === null) return '\u00A0';
-  const best = bestsFor(data.progress, level).score?.value;
-  return best === undefined ? `No finished runs from level ${level} yet.` : `Your best from level ${level}: ${numberFormat.format(best)}`;
+/**
+ * The selected start level's best score, from the same preview as the
+ * unlocks: provisional when a run trusted scoring has not checked yet holds it.
+ */
+function bestLine(data: PickerData, level: number | null): { readonly text: string; readonly provisional: boolean } {
+  if (data.status !== 'ready' || level === null) return { text: '\u00A0', provisional: false };
+  const best = bestsFor(data.progress, level).score;
+  return best === undefined
+    ? { text: `No finished runs from level ${level} yet.`, provisional: false }
+    : { text: `Your best from level ${level}: ${numberFormat.format(best.value)}`, provisional: data.unchecked.has(best.sessionId) };
 }
 
 const StartLevelPicker: React.FC<{
   readonly progress: MentalMathScreenProps['progress'];
   readonly eegProvider: EegCaptureProvider | null;
+  /** Choices to show again (back from the game's progress); otherwise the defaults. */
+  readonly restore?: PickerChoice;
+  /** Focus the Progress button on mount, instead of the heading. */
+  readonly focusProgress: boolean;
   readonly onStart: (startLevel: number, withEeg: boolean) => void;
-  readonly onViewProgress: () => void;
+  readonly onViewProgress: (choice: PickerChoice | undefined) => void;
   readonly onExit: () => void;
-}> = ({ progress, eegProvider, onStart, onViewProgress, onExit }) => {
+}> = ({ progress, eegProvider, restore, focusProgress, onStart, onViewProgress, onExit }) => {
   const [data, setData] = useState<PickerData>({ status: 'loading' });
-  const [selected, setSelected] = useState<number | null>(null);
-  const [withEeg, setWithEeg] = useState(false);
-  const touched = useRef(false);
+  const [selected, setSelected] = useState<number | null>(restore?.level ?? null);
+  const [withEeg, setWithEeg] = useState(restore?.withEeg ?? false);
+  // A restored level counts as the player's own choice: it stays selected while it is unlocked.
+  const touched = useRef(restore !== undefined);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const progressButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus starts on the heading, or back on the Progress button when returning from the game's progress.
+  const initialFocus = useRef(focusProgress ? progressButtonRef : headingRef);
+  useEffect(() => { initialFocus.current.current?.focus(); }, []);
 
   useEffect(() => {
     let stop: () => void = () => {};
@@ -282,7 +308,8 @@ const StartLevelPicker: React.FC<{
     };
     try {
       stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, (state: ProgressWithRecentSessions) => {
-        apply({ status: 'ready', choices: startLevelChoices(state), progress: currentProgress(state).progress });
+        const current = currentProgress(state);
+        apply({ status: 'ready', choices: startLevelChoices(state), progress: current.progress, unchecked: current.unchecked });
       }, () => apply({ status: 'unavailable', choices: startLevelChoices(null) }));
     } catch {
       apply({ status: 'unavailable', choices: startLevelChoices(null) });
@@ -291,6 +318,7 @@ const StartLevelPicker: React.FC<{
   }, [progress]);
 
   const choices = data.status === 'loading' ? null : data.choices;
+  const best = bestLine(data, selected);
   const levels = Array.from({ length: choices?.maxLevel ?? mentalMath.MAX_LEVEL }, (_, index) => index + 1);
 
   return (
@@ -299,13 +327,18 @@ const StartLevelPicker: React.FC<{
         <button type="button" className="btn btn-ghost mm-back" onClick={onExit}>
           <ArrowLeft size={18} aria-hidden="true" /> Back
         </button>
-        <button type="button" className="btn btn-ghost mm-topbar-action" onClick={onViewProgress}>
+        <button
+          ref={progressButtonRef}
+          type="button"
+          className="btn btn-ghost mm-topbar-action"
+          onClick={() => onViewProgress(selected === null ? undefined : { level: selected, withEeg })}
+        >
           <Trophy size={18} aria-hidden="true" /> Progress
         </button>
       </div>
       <div className="mm-panel">
         <div>
-          <h1 className="mm-title font-display">Mental Math</h1>
+          <h1 ref={headingRef} tabIndex={-1} className="mm-title font-display">Mental Math</h1>
           <p className="mm-muted">A 90-second run of arithmetic. Questions get harder as you answer correctly and easier after a miss.</p>
         </div>
 
@@ -339,7 +372,10 @@ const StartLevelPicker: React.FC<{
               : 'Every start level is unlocked.')}
             {data.status === 'unavailable' && 'Your progress couldn’t be loaded, so only level 1 is available right now.'}
           </p>
-          <p className="mm-level-best" data-picker="best">{bestLine(data, selected)}</p>
+          <p className="mm-level-best" data-picker="best">
+            {best.text}
+            {best.provisional && <> <ProvisionalTag /></>}
+          </p>
         </fieldset>
 
         {eegProvider && (

@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { readSessionProgressFields, type ServerResult } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../../repositories/gameSessionRepository';
 import { clientSessionDocument } from '../runSummary';
-import { formatPlayTime, gameOverview, historyRow } from '../progressSummary';
-import { previewDecision } from '../startLevel';
-import { playRun, progressWith } from './fixtures';
+import { formatPlayTime, gameOverview, historyRow, progressCardSummary } from '../progressSummary';
+import { currentProgress, previewDecision } from '../startLevel';
+import { pickerState, playRun, progressWith, sessionRecord } from './fixtures';
 
 const SEED = 4242;
 const ENVIRONMENT = { timezone: 'UTC', appVersion: '0.0.0', platform: 'web' } as const;
@@ -27,7 +27,7 @@ describe('per-game progress', () => {
       unlocked: 1,
       maxLevel: 10,
       unlock: { kind: 'next', unlocked: 1, nextLevel: 2, reachLevel: 3 },
-      levels: [{ startLevel: 1, bests: null }],
+      levels: [{ startLevel: 1, bests: null, provisional: false }],
     });
   });
 
@@ -38,9 +38,35 @@ describe('per-game progress', () => {
     const score = (result: ServerResult) => (result.validity === 'invalid' ? null : result.score);
     expect(overview).toMatchObject({ sessionsCompleted: 2, unlocked: 2, bestPeakLevel: 3 });
     expect(overview.levels).toEqual([
-      { startLevel: 1, bests: { score: score(one.decision.result), correct: 7, peakLevel: 3 } },
-      { startLevel: 2, bests: { score: score(two.decision.result), correct: 2, peakLevel: 2 } },
+      { startLevel: 1, bests: { score: score(one.decision.result), correct: 7, peakLevel: 3 }, provisional: false },
+      { startLevel: 2, bests: { score: score(two.decision.result), correct: 2, peakLevel: 2 }, provisional: false },
     ]);
+  });
+
+  it('marks a start level’s bests provisional while a run the server hasn’t checked holds one of them', () => {
+    // Checked: a level 1 run. Pending on this device: a better level 1 run, and a weaker level 2 run.
+    const checked = decide('sessionAAAAAAAAAAAA1', 1, 3, 1_790_000_000_000, null);
+    const better = playRun({ seed: SEED, startLevel: 1, correct: 7, wallStartMs: 1_790_000_200_000 });
+    const state = pickerState(checked.decision.progress, [sessionRecord('sessionAAAAAAAAAAAA2', better, { seed: SEED })]);
+    const current = currentProgress(state);
+    expect(current.unchecked).toEqual(new Set(['sessionAAAAAAAAAAAA2']));
+    const levels = gameOverview(current.progress, current.unchecked).levels;
+    expect(levels[0]).toMatchObject({ startLevel: 1, bests: { correct: 7 }, provisional: true });
+    // Without the pending run, the server's own bests are not provisional.
+    expect(gameOverview(current.checked, current.unchecked).levels[0]).toMatchObject({ bests: { correct: 3 }, provisional: false });
+  });
+
+  it('marks the Progress card’s numbers provisional only when an unchecked run changes them', () => {
+    const checked = decide('sessionAAAAAAAAAAAA1', 1, 7, 1_790_000_000_000, null);
+    expect(progressCardSummary(currentProgress(pickerState(checked.decision.progress)))).toEqual({ sessionsCompleted: 1, unlocked: 2, maxLevel: 10, provisional: false });
+    // A finished run pending on this device counts: one more run completed, provisionally.
+    const finished = playRun({ seed: SEED, startLevel: 1, correct: 1, wallStartMs: 1_790_000_200_000 });
+    expect(progressCardSummary(currentProgress(pickerState(checked.decision.progress, [sessionRecord('sessionAAAAAAAAAAAA2', finished, { seed: SEED })]))))
+      .toEqual({ sessionsCompleted: 2, unlocked: 2, maxLevel: 10, provisional: true });
+    // An unfinished one changes neither number, so nothing shown is provisional.
+    const quit = { ...finished, status: 'abandoned' as const };
+    expect(progressCardSummary(currentProgress(pickerState(checked.decision.progress, [sessionRecord('sessionAAAAAAAAAAAA3', quit, { seed: SEED })]))))
+      .toMatchObject({ sessionsCompleted: 1, provisional: false });
   });
 
   it('shows records kept from a level that is no longer the highest unlocked', () => {

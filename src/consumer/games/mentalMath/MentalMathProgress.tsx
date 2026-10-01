@@ -5,6 +5,7 @@ import { FactGrid } from '../../../components/ui/FactGrid';
 import type { GameSessionCursor, GameSessionHistoryEntry, GameSessionHistoryPage, GameSessionRepository } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import { formatPlayTime, gameOverview, historyRow, isTimed90, type HistoryRow, type HistoryState } from './progressSummary';
+import { ProvisionalTag } from './ProvisionalTag';
 import { currentProgress } from './startLevel';
 
 // Mental Math's per-game progress (NFCT-22): totals, unlocked start levels,
@@ -37,7 +38,8 @@ interface OlderPages {
 
 function historyTag(row: HistoryRow): { readonly text: string; readonly tone: string } | null {
   const tags: Record<HistoryState, { text: string; tone: string } | null> = {
-    verified: row.personalBest ? { text: 'Personal best', tone: 'status-tag-completed' } : null,
+    // Point in time: the run set a best when the server checked it; a later run may have beaten it since (ADR-001 decision 12).
+    verified: row.personalBest ? { text: 'New best', tone: 'status-tag-completed' } : null,
     flagged: { text: 'Flagged', tone: 'status-tag-paused' },
     invalid: { text: 'Not counted', tone: 'status-tag-alert' },
     'on-device': { text: 'Not uploaded yet', tone: 'status-tag-neutral' },
@@ -149,7 +151,7 @@ export const MentalMathProgress: React.FC<MentalMathProgressProps> = ({ progress
   });
 
   const progressNow = useMemo(() => (progressState.status === 'ready' ? currentProgress(progressState.value) : null), [progressState]);
-  const overview = useMemo(() => gameOverview(progressNow?.progress ?? null), [progressNow]);
+  const overview = useMemo(() => gameOverview(progressNow?.progress ?? null, progressNow?.unchecked), [progressNow]);
   const rows = useMemo(() => {
     const seen = new Set<string>();
     return [...(first?.entries ?? []), ...(olderPages?.entries ?? [])]
@@ -202,12 +204,15 @@ export const MentalMathProgress: React.FC<MentalMathProgressProps> = ({ progress
         {!ready ? <p className="mm-help">{progressState.status === 'unavailable' ? 'Your bests couldn’t be loaded.' : 'Loading your bests…'}</p> : (
           <>
             <ul className="mm-bests">
-              {overview.levels.map(({ startLevel, bests }) => (
+              {overview.levels.map(({ startLevel, bests, provisional }) => (
                 <li key={startLevel} className="mm-best-row" data-best-level={startLevel}>
                   <span className="mm-best-level">Level {startLevel}</span>
                   {bests ? (
                     <span className="mm-best-values">
-                      <span className="mm-best-score" data-best="score">{bests.score === null ? '—' : numberFormat.format(bests.score)}</span>
+                      <span className="mm-best-score-line">
+                        {provisional && <ProvisionalTag />}
+                        <span className="mm-best-score" data-best="score">{bests.score === null ? '—' : numberFormat.format(bests.score)}</span>
+                      </span>
                       <span className="mm-best-detail">
                         {bests.correct === null ? '' : `${bests.correct} correct`}
                         {bests.correct !== null && bests.peakLevel !== null ? ' · ' : ''}

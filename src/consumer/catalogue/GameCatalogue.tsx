@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Calculator, ChartNoAxesColumnIncreasing, Timer, type LucideIcon } from 'lucide-react';
 import type { GameIconKey } from '@nfct/shared';
+import { gameCardId } from './cardIds';
 import { CatalogueCard, type CatalogueCardFact } from './CatalogueCard';
 import { catalogueGames, runLengthLabel, type CatalogueGame } from './gameCatalogue';
 
@@ -29,7 +30,7 @@ export const GameCatalogue: React.FC<{
         {games.map((game) => (
           <CatalogueCard
             key={game.id}
-            id={`game-${game.id}`}
+            id={gameCardId(game.id)}
             name={game.name}
             description={game.summary}
             icon={GAME_ICONS[game.icon]}

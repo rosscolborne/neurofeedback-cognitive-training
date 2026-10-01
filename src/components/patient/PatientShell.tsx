@@ -41,9 +41,10 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
+import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
-import type { GameScreenView } from '../../consumer/games/gameScreens';
-import { MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
+import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
+import { useOpenGame } from '../../consumer/games/useOpenGame';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
 import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
@@ -51,6 +52,9 @@ import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 // consumer shell exists (NFCT-6). Demo Mode's synthetic EEG is offered as an
 // optional, clearly simulated recording; a game never needs it.
 const demoModeEegProvider = createDemoModeEegProvider();
+
+/** Where focus goes when a closed game's opener is gone: the current tab (NFCT-52). */
+const currentTabButton = () => document.querySelector<HTMLElement>('.patient-bottom-nav [aria-current="page"]');
 
 // Same day-month-year style as session history, so dates read alike across Profile and Progress.
 const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
@@ -92,8 +96,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   // The open catalogue game (NFCT-12), and the view it opens on: its start
-  // screen, or its progress (NFCT-22's Progress-tab card).
-  const [openGame, setOpenGame] = useState<{ gameId: string; ownerId: string; initialView?: GameScreenView } | null>(null);
+  // screen, or its progress (NFCT-22's Progress-tab card). Closing it returns
+  // focus to the control that opened it (NFCT-52).
+  const [openGame, setOpenGame, closeGame] = useOpenGame(currentTabButton);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
   const currentClientId = useRef(client.id);
   const currentAllowedExperiences = useRef(client.allowedExperiences);
@@ -383,7 +388,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   };
 
   if (openGame && openGame.ownerId === client.id) {
-    return <GameScreen gameId={openGame.gameId} initialView={openGame.initialView} eegProvider={demoModeEegProvider} onExit={() => setOpenGame(null)} />;
+    return <GameScreen gameId={openGame.gameId} initialView={openGame.initialView} eegProvider={demoModeEegProvider} onExit={closeGame} />;
   }
 
   if (activeSessionExp && sessionOwnerId === client.id) {
@@ -516,7 +521,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'sessions' && (
           <TrainTab
             allowedExperiences={client.allowedExperiences}
-            onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: client.id })}
+            onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: client.id, returnFocusTo: gameCardButtonId(gameId) })}
             onStartExperience={handleStartSession}
           />
         )}
@@ -524,7 +529,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'progress' && (
           <ProgressHistory
             client={client}
-            gamesSection={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress' })} />}
+            gamesSection={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
           />
         )}
 

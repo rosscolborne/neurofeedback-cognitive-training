@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
+import { catalogueCardButtonId } from './cardIds';
 
 // One entry on the Train tab: a game, or the optional headset experience. The
 // name is a real button stretched over the card, so the whole card is one
@@ -42,7 +43,7 @@ export const CatalogueCard: React.FC<CatalogueCardProps> = ({
       <span className="train-card-icon" aria-hidden="true">
         <Icon size={22} />
       </span>
-      <button type="button" className="train-card-name" aria-describedby={describedBy} onClick={onSelect}>
+      <button id={catalogueCardButtonId(id)} type="button" className="train-card-name" aria-describedby={describedBy} onClick={onSelect}>
         {name}
       </button>
       <p id={`${id}-desc`} className="train-card-desc">{description}</p>

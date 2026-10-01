@@ -83,13 +83,29 @@ export function previewProgress(progress: GameProgress | null, pending: readonly
   return preview;
 }
 
+export interface CurrentProgress {
+  /** The cached progress, with this device's pending sessions applied when `previewed`. */
+  readonly progress: GameProgress | null;
+  /** Pending sessions were applied to the cached progress. */
+  readonly previewed: boolean;
+  /** The progress as trusted scoring last wrote it (cached), without any preview. */
+  readonly checked: GameProgress | null;
+  /** The sessions the preview applied: a record one of them holds is not checked yet. */
+  readonly unchecked: ReadonlySet<string>;
+}
+
 /** The cached progress and the pending sessions applied to it, when this build may preview them. */
-export function currentProgress(state: ProgressWithRecentSessions, exceptSessionId: string | null = null): { readonly progress: GameProgress | null; readonly previewed: boolean } {
+export function currentProgress(state: ProgressWithRecentSessions, exceptSessionId: string | null = null): CurrentProgress {
   const cached = state.progress.status === 'readable' ? state.progress.data : null;
   const pending = state.pendingSessions.filter((record) => record.id !== exceptSessionId);
   // Progress kept by another reducer or a newer game version is shown as the server left it.
   const previewed = canApplyToProgress(cached, definition) && pending.length > 0;
-  return { progress: previewed ? previewProgress(cached, pending) : cached, previewed };
+  return {
+    progress: previewed ? previewProgress(cached, pending) : cached,
+    previewed,
+    checked: cached,
+    unchecked: new Set(previewed ? pending.map((record) => record.id) : []),
+  };
 }
 
 /** The last start level if it is still unlocked, otherwise the highest unlocked level. */
