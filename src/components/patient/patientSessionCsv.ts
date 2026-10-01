@@ -37,7 +37,7 @@ export function exportPatientSessionCsv(
   setExportStatus: (status: 'idle' | 'done') => void,
 ): void {
   const blob = new Blob([serializePatientSessionCsv(sessions)], { type: 'text/csv;charset=utf-8;' });
-  const filename = `waveable_progress_${new Date().toISOString().split('T')[0]}.csv`;
+  const filename = `session_progress_${new Date().toISOString().split('T')[0]}.csv`;
 
   if (navigator.share && navigator.canShare) {
     const file = new File([blob], filename, { type: 'text/csv' });

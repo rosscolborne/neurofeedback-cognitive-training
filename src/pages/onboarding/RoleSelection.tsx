@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, UserRole } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
+import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 import { Stethoscope } from 'lucide-react';
 
 export const RoleSelection: React.FC = () => {
@@ -38,7 +39,7 @@ export const RoleSelection: React.FC = () => {
       flexDirection: 'column',
       alignItems: 'center'
     }}>
-      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>How will you use Waveable?</h1>
+      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>How will you use {APP_DISPLAY_NAME}?</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: '40px', textAlign: 'center' }}>
         Select your account type to customize your experience.
       </p>

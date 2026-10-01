@@ -1,4 +1,5 @@
 import React from 'react';
+import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
 export interface BrandLogoProps {
   size?: number | 'sm' | 'md' | 'lg' | 'xl' | 'hero';
@@ -84,7 +85,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       {/* Main Logo Container */}
       <img
         src={imageSrc}
-        alt="Waveable App Logo"
+        alt={`${APP_DISPLAY_NAME} logo`}
         draggable={false}
         style={{
           width: '100%',

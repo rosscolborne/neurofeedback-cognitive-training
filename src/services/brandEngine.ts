@@ -1,4 +1,5 @@
 import { ClinicBrandConfig } from '../types';
+import { APP_DISPLAY_NAME } from '../config/appIdentity';
 
 export interface ContrastResult {
   ratio: number;
@@ -86,7 +87,7 @@ export function adjustColorBrightness(hex: string, percent: number): string {
   return rgbToHex(r * factor, g * factor, b * factor);
 }
 
-export function createBrandPalette(accentHex: string, clinicName = 'Waveable', logoUrl = '/app-logo.png'): ClinicBrandConfig {
+export function createBrandPalette(accentHex: string, clinicName = APP_DISPLAY_NAME, logoUrl = '/app-logo.png'): ClinicBrandConfig {
   if (!isValidHexColor(accentHex)) throw new Error('Enter a six-digit hexadecimal accent color.');
   if (!isBrandAccentUsable(accentHex)) throw new Error('Choose an accent with at least 4.5:1 contrast against all supported light surfaces.');
   if (!clinicName.trim()) throw new Error('Clinic display name is required.');
@@ -123,7 +124,7 @@ export function createBrandPalette(accentHex: string, clinicName = 'Waveable', l
 export const BRAND_PRESETS: ClinicBrandConfig[] = [
   {
     clinicId: 'waveable-core',
-    name: 'Waveable',
+    name: APP_DISPLAY_NAME,
     tagline: 'Neurofeedback & Brain Training Suite',
     logoUrl: '/app-logo.png',
     primaryAccent: '#A8482F',

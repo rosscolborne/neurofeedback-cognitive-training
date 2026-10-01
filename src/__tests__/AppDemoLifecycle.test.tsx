@@ -6,7 +6,7 @@ const authState = vi.hoisted(() => ({
   value: { user: { uid: 'demo-clinician', displayName: 'Sample clinician' }, role: 'clinician', loading: false, isDemoWorkspace: true, logout: vi.fn() } as Record<string, unknown>,
 }));
 const storage = vi.hoisted(() => ({
-  getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
+  getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'NFCT', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
   getClients: vi.fn(), getPatientInvitationsForClinician: vi.fn(), getCurrentClient: vi.fn(),
   subscribeToClientRoster: vi.fn((_onChange: () => void, _onError: (error: Error) => void) => vi.fn()),
   getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(), cancelPatientInvitation: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('../services/storageEngine', () => ({ storageEngine: storage }));
 vi.mock('../services/eegEngine', () => ({ eegEngine: baselineEngine }));
 vi.mock('../services/brandEngine', () => ({
   applyBrandToDOM: vi.fn(),
-  BRAND_PRESETS: [{ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }],
+  BRAND_PRESETS: [{ clinicId: 'app', name: 'NFCT', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }],
 }));
 vi.mock('../services/clinicSettingsRepository', () => ({
   clinicSettingsRepository: settings,
@@ -391,7 +391,7 @@ describe('mounted App account/workspace lifecycle', () => {
     });
 
     expect(shell(renderer).props.patientInvitations).toEqual([]);
-    expect(shell(renderer).props.brand.name).toBe('Waveable');
+    expect(shell(renderer).props.brand.name).toBe('NFCT');
     renderer.unmount();
   });
 
