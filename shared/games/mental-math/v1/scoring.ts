@@ -1,4 +1,5 @@
 import type { ResponseTimeSummary, ScoreContext, ScoredResult } from '../../definition';
+import { isAnswerTimedOut, recordedTiming } from './limits';
 import { MAX_LEVEL, MIN_LEVEL, MODE_ID, timeLimitFor } from './params';
 import { evaluate } from './questions';
 import type { MentalMathMetrics, MentalMathTrial } from './schemas';
@@ -41,7 +42,7 @@ export function speedBonus(level: number, rtMs: number): number {
   const base = basePoints(level);
   const limit = timeLimitFor(level);
   if (!Number.isInteger(rtMs) || rtMs < 0) throw new RangeError(`rtMs must be a non-negative integer, got ${rtMs}`);
-  if (rtMs >= limit) return 0;
+  if (isAnswerTimedOut(rtMs, limit)) return 0;
   return roundHalfUp(base * (limit - rtMs), 2 * limit);
 }
 
@@ -59,13 +60,13 @@ export function pointsFor(level: number, rtMs: number): number {
  */
 export function isCorrectTrial(trial: MentalMathTrial): boolean {
   return trial.response !== null
-    && trial.rtMs < timeLimitFor(trial.level)
+    && !isAnswerTimedOut(trial.rtMs, timeLimitFor(trial.level))
     && trial.response === evaluate(trial);
 }
 
 /** Whether trusted scoring counts the trial as a timeout: no response, or one at or after the deadline. */
 export function isTimeoutTrial(trial: MentalMathTrial): boolean {
-  return trial.response === null || trial.rtMs >= timeLimitFor(trial.level);
+  return recordedTiming(trial.response, trial.rtMs, timeLimitFor(trial.level)).timedOut;
 }
 
 /**

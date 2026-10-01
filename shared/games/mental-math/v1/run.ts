@@ -1,3 +1,4 @@
+import { canPresentAt, recordedTiming, trialEndsWithinRun } from './limits';
 import { MAX_RESPONSE, MAX_TRIALS, RUN_DURATION_MS, levelParams, type QuestionShape } from './params';
 import { QUESTION_VARIANTS, questionAt, sameQuestion, type Question } from './questions';
 import type { MentalMathTrial } from './schemas';
@@ -105,7 +106,7 @@ export function presentQuestion(run: MentalMathRun, shownAtMs: number): MentalMa
   if (!Number.isInteger(shownAtMs) || shownAtMs < 0 || (last !== undefined && shownAtMs < trialEnd(last))) {
     throw new RangeError(`shownAtMs must be an integer at or after the previous trial's end, got ${shownAtMs}`);
   }
-  if (shownAtMs >= RUN_DURATION_MS) {
+  if (!canPresentAt(shownAtMs)) {
     throw new RangeError(`The run ends at ${RUN_DURATION_MS} ms of active time; cannot present at ${shownAtMs}`);
   }
   const position = run.trials.length;
@@ -147,23 +148,21 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
     throw new RangeError(`response must be an integer 0-${MAX_RESPONSE}, got ${response}`);
   }
   // An answer at or after the deadline counts as a timeout.
-  const timedOut = response === null || rtMs >= current.timeLimitMs;
-  const recordedRtMs = timedOut ? current.timeLimitMs : rtMs;
-  // Expiry always wins: a trial may not end after the run.
-  if (current.shownAtMs + recordedRtMs > RUN_DURATION_MS) return { accepted: false, run, reason: 'run-over' };
-  const recorded = timedOut ? null : response;
-  const correct = recorded !== null && recorded === current.expected;
+  const recorded = recordedTiming(response, rtMs, current.timeLimitMs);
+  // Expiry always wins: a trial may not end after the run (judged on the recorded rtMs).
+  if (!trialEndsWithinRun(current.shownAtMs, recorded.rtMs)) return { accepted: false, run, reason: 'run-over' };
+  const correct = recorded.response !== null && recorded.response === current.expected;
   const trial: MentalMathTrial = {
     level: current.level,
     operands: [...current.operands],
     operators: [...current.operators],
     grouped: current.grouped,
     expected: current.expected,
-    response: recorded,
+    response: recorded.response,
     correct,
-    timedOut,
+    timedOut: recorded.timedOut,
     shownAtMs: current.shownAtMs,
-    rtMs: recordedRtMs,
+    rtMs: recorded.rtMs,
     timeLimitMs: current.timeLimitMs,
   };
   return {

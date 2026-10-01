@@ -22,6 +22,7 @@
 // input.
 
 export * from './params';
+export * from './limits';
 export * from './rng';
 export * from './questions';
 export * from './staircase';

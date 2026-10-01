@@ -1,4 +1,5 @@
 import type { ScoreContext, ScoredResult } from '../../definition';
+import { isAnswerTimedOut, trialEndsWithinRun } from './limits';
 import { levelParams, MIN_PLAUSIBLE_RT_MS, MODE_ID, RUN_DURATION_MS } from './params';
 import { evaluate, isLegalQuestion, QUESTION_VARIANTS, questionAt, sameQuestion } from './questions';
 import type { MentalMathMetrics, MentalMathTrial } from './schemas';
@@ -116,7 +117,7 @@ export function checkTrialFlags(trials: readonly MentalMathTrial[]): Plausibilit
 export function checkResponseTimeLimits(trials: readonly MentalMathTrial[]): PlausibilityIssue[] {
   return trials.flatMap((trial, index) => {
     if (trial.response === null) return trial.rtMs === trial.timeLimitMs ? [] : [issue('timeout-rt-mismatch', index)];
-    return trial.rtMs < trial.timeLimitMs ? [] : [issue('rt-exceeds-limit', index)];
+    return isAnswerTimedOut(trial.rtMs, trial.timeLimitMs) ? [issue('rt-exceeds-limit', index)] : [];
   });
 }
 
@@ -166,7 +167,7 @@ export function checkTiming(trials: readonly MentalMathTrial[], { status, active
   });
   if (overlap !== -1) issues.push(issue('trial-overlap', overlap));
 
-  const overrun = trials.findIndex((trial) => trial.shownAtMs + trial.rtMs > RUN_DURATION_MS + TIMING_TOLERANCE_MS);
+  const overrun = trials.findIndex((trial) => !trialEndsWithinRun(trial.shownAtMs, trial.rtMs, RUN_DURATION_MS + TIMING_TOLERANCE_MS));
   if (overrun !== -1) issues.push(issue('run-overrun', overrun));
 
   const lastEnd = trials.reduce((end, trial) => Math.max(end, trial.shownAtMs + trial.rtMs), 0);
