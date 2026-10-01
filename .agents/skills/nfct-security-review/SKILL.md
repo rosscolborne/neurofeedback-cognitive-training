@@ -176,12 +176,14 @@ FOLLOW-UP hardening.
 
 When asked to verify fixes, prove each prior finding resolved with the least
 evidence that shows it: rerun the probe or test that demonstrated it, or the
-regression test that replaced it, and read the fix diff for a new hole. Do not
+regression test that replaced it, and read the fix diff for a new hole,
+including fixes for other gates' findings that touch a boundary. Do not
 repeat the audit at your tier. Report any BLOCKER you happen to see; label
 anything else new FOLLOW-UP. Give each prior finding's status.
 
 ## Verdict
 
 State the tier you reviewed at, then end with an explicit verdict: either
-**no security blockers; ready to merge once CI is green**, or the items that
-must be resolved first.
+**no security blockers; ready to merge once CI is green**, or the BLOCKER and
+SHOULD-FIX items to fix first. After a verification pass, only an open BLOCKER
+keeps the verdict at not ready; list any SHOULD-FIX still open.

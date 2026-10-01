@@ -21,7 +21,7 @@ integration report. Everything else keeps its owner:
 | Responsibility | Owner |
 | --- | --- |
 | Decomposition, stream assignment and tracking | [nfct-orchestration](../nfct-orchestration/SKILL.md) |
-| Agent topology, review routing and the security tier | [nfct-orchestration](../nfct-orchestration/SKILL.md#review-routing), or you when there is no orchestrator |
+| Agent topology, review routing and the security tier | The orchestrator role ([nfct-orchestration](../nfct-orchestration/SKILL.md#review-routing)): whoever started you, or you when the user started you directly |
 | A stream's own change, and defects that reproduce on its branch alone | That stream's implementer |
 | Choosing and writing deterministic tests | [neurasticity-development-testing](../neurasticity-development-testing/SKILL.md) |
 | Browser-driven investigation | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
@@ -180,16 +180,18 @@ one.
 3. **Independent and security review.** With the integration PR open (see
    [Open the integration PR](#open-the-integration-pr)), request
    [nfct-pr-review](../nfct-pr-review/SKILL.md) and a security review at the
-   tier recorded for the integration. Without an orchestrator, choose and
-   record the tier yourself per
+   tier recorded for the integration. If you hold the orchestrator role (see
+   below), choose and record the tier yourself per
    [Security tier](../nfct-orchestration/SKILL.md#security-tier); it is never
    DEEP by default. LIGHT is part of the independent review; STANDARD and DEEP
    are a separate [nfct-security-review](../nfct-security-review/SKILL.md)
    pass. Name the stream PRs already reviewed at the SHAs you merged, so
    review can concentrate on merge resolutions, integration commits and
    cross-stream boundaries while its verdict covers the whole PR. Fix the
-   BLOCKER and SHOULD-FIX findings in one pass; each reviewer verifies its
-   fixes once. Integration fixes do not trigger a fresh review.
+   BLOCKER and SHOULD-FIX findings in one pass. Each reviewer verifies its
+   fixes within the [review budget](../../../AGENTS.md#review-budget), and the
+   security reviewer also checks any fix that touches a security boundary.
+   Integration fixes do not trigger a fresh review.
 4. **Final validation.** If anything was committed after gate 1's run, rerun
    the full deterministic suite once on the final head. This is the one
    combined validation pass the report cites; do not rerun it after each fix.
@@ -202,12 +204,14 @@ one.
    is a finding), fix it on the integration branch, repeat the affected local
    gates, and push again.
 
-Under an orchestrator, it starts QA and the reviewers unless it explicitly
-delegated that to you; ask it, with the brief above
-([agent topology](../../../AGENTS.md#agent-topology)). Without one, start
-them yourself as separate agents where your tooling allows: one independent
-reviewer, one security reviewer only for STANDARD or DEEP, and one QA agent,
-each told to start no agents of its own. Otherwise ask the user to start them.
+Whoever started you holds the orchestrator role
+([agent topology](../../../AGENTS.md#agent-topology)): it chooses the tier
+and starts QA and the reviewers, unless it explicitly delegated that to you.
+Give it the brief above. You hold that role yourself only when the user
+started you directly. Then start them as separate agents where your tooling
+allows (one independent reviewer, one security reviewer only for STANDARD or
+DEEP, and one QA agent, each told to start no agents of its own), or ask the
+user to start them.
 Reviewers must never be the integrator. If you run QA yourself, say so in the
 report.
 
@@ -276,6 +280,7 @@ Give one concise report, in the PR body and in your final message:
 - **Status**, as three lines:
   - Agent work: *complete*, or what remains.
   - Remote CI: *passing*, *pending* or *failing* at `<sha>`, with the run URL.
-  - Merge readiness: *MERGE-READY* (every gate passed and CI is green at
-    `<sha>`; only the listed human checks remain), *NOT YET — awaiting
+  - Merge readiness: *MERGE-READY* (every gate passed with no BLOCKER open
+    and CI is green at `<sha>`; only the listed human checks and carded
+    findings remain), *NOT YET — awaiting
     required CI*, or *NOT READY*, with what blocks it.

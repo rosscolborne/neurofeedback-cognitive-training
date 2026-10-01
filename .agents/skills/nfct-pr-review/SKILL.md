@@ -112,13 +112,16 @@ evidence (a command, probe result or code path). Say which concerns you checked
 and ruled out, and what you could not verify.
 
 End with an explicit verdict: either **ready to merge once CI is green**, or
-the BLOCKER and SHOULD-FIX items that must be resolved first.
+the BLOCKER and SHOULD-FIX items to fix first. After a verification pass, only
+an open BLOCKER keeps the verdict at not ready; list any SHOULD-FIX still open
+so it can get its one repair or be carded.
 
 ## Verification pass
 
 When asked to verify fixes to your findings, check those fixes rather than
 reviewing the PR again. For each finding, read its fix and run its targeted
 check, then read the fix diff for regressions it introduced, which are in
-scope. Do not re-audit the PR unless you are explicitly asked to. Report any
+scope. When the tier is LIGHT, apply the LIGHT checklist to the fix diff
+too. Do not re-audit the PR unless you are explicitly asked to. Report any
 BLOCKER you happen to see outside the fixes; label anything else new
 FOLLOW-UP. End with each prior finding's status and the verdict.

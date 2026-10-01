@@ -142,7 +142,7 @@ changes only where dependencies require it.
 - A fix goes to the owner of the branch where the defect lives: a stream's
   implementer, or the integrator for integration defects (see
   [nfct-integration](../nfct-integration/SKILL.md#fix-what-belongs-here)). The
-  role that raised the finding verifies the fix once, within the
+  role that raised the finding verifies the fix within the
   [review budget](../../../AGENTS.md#review-budget).
 - Work moves back to an earlier phase only as a fix and its verification.
   FOLLOW-UP findings go to cards, never to another fix round.

@@ -122,11 +122,11 @@ Reviewers, security reviewers and exploratory QA label every finding:
 | Severity | Use for | Effect |
 | --- | --- | --- |
 | **BLOCKER** | Wrong behavior, a regression or a broken acceptance criterion in this change, or a realistic security, privacy or data-integrity problem | Blocks completion until it is fixed and verified |
-| **SHOULD-FIX** | A real defect or gap in this change, small enough to fix here | Fixed within the [review budget](#review-budget), otherwise carded and reported as open |
+| **SHOULD-FIX** | A real defect or gap in this change, small enough to fix here | Fixed within the [review budget](#review-budget). If still open after that, carded and reported as open; it then blocks neither completion nor merge readiness, and the owner decides at merge |
 | **FOLLOW-UP** | Hardening, polish, technical debt, and problems that predate the change and that it does not make worse | Carded as [out-of-scope work](#out-of-scope-work); never blocks |
 
 Severity reflects the impact on this change, not effort or interest. Budget
-limits never downgrade a BLOCKER.
+limits never downgrade a BLOCKER. A gate passes once no BLOCKER is open.
 
 ### Review budget
 
@@ -152,9 +152,13 @@ After verification:
 - FOLLOW-UPs are carded.
 - A new minor finding never restarts the review.
 
-A gate stays passed when later commits only fix verified findings. Substantive
-new work after review, such as a feature change, a newly merged stream or a
-rebuilt branch, gets a review scoped to that work, not a full re-review.
+When a fix for any gate touches a security boundary, the security reviewer
+checks that fix diff narrowly: in its verification pass, or as a targeted
+check for a later repair. For a LIGHT tier, the independent reviewer does.
+This is not a new round. With that, a gate stays passed when later commits
+only fix verified findings. Substantive new work after review, such as a
+feature change, a newly merged stream or a rebuilt branch, gets a review
+scoped to that work, not a full re-review.
 Exploratory QA works the same way: one fix pass, then one re-run of the
 affected scenarios.
 
@@ -191,7 +195,8 @@ no new agents or review rounds when any of these happens:
 
 - a gate would need a round beyond its [budget](#review-budget), or the same
   category of finding keeps coming back after fixes;
-- new findings are mostly FOLLOW-UPs rather than BLOCKERs;
+- a verification pass or any later round finds mostly new FOLLOW-UPs rather
+  than BLOCKERs;
 - agents started, review rounds or full-suite runs have grown far beyond the
   plan, for example twice the planned agents or a third full-suite run on one
   PR;
