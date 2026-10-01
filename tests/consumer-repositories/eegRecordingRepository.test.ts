@@ -2,13 +2,15 @@ import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { serverTimestamp, Timestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defineGame } from '@nfct/shared';
-import { EegRecordingAlreadySavedError } from '../../src/consumer/repositories/eegRecordingRepository';
+import type { ConsumerAuth } from '../../src/consumer/firestore/context';
+import { createEegRecordingRepository, EegRecordingAlreadySavedError } from '../../src/consumer/repositories/eegRecordingRepository';
 import {
   closeDevices,
   closeEnvironment,
   eegDraft,
   expectDenied,
   minutesAgo,
+  newDevice,
   queued,
   rawClientWrite,
   resetEmulators,
@@ -46,6 +48,8 @@ describe('saving a recording after its session', () => {
 
     expect(eeg).toMatchObject({ status: 'queued' });
     const { recordingId, serverOutcome } = queued(eeg);
+    // A session's recording has the session's ID.
+    expect(recordingId).toBe(started.sessionId);
     await saved.acknowledged;
     expect(await serverOutcome).toEqual({ status: 'acknowledged' });
 
@@ -185,6 +189,24 @@ describe('saving a recording after its session', () => {
     expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
   });
 
+  it('skips the recording when the signed-in user changes while its checks are in flight', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const started = device.sessions.startGameSession();
+    const saved = await started.save({ definition: testGame, session: sessionDraft() });
+    // The repository sees the signed-in user through its context; the switch is made after the call's synchronous start.
+    let switched = false;
+    const auth: ConsumerAuth = { get currentUser() { return switched ? { uid: 'another-player-uid-000001' } : device.auth.currentUser; } };
+    const eeg = createEegRecordingRepository({ firestore: device.firestore, auth }, { consentServerReadTimeoutMs: 10_000 });
+
+    const pending = eeg.saveRecording(saved, eegDraft());
+    switched = true;
+
+    expect(await pending).toMatchObject({ status: 'skipped', reason: 'owner-changed' });
+    await saved.acknowledged;
+    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
+  });
+
   it('reports a recording the server refuses, and the session is kept', async () => {
     const device = await signedInDevice();
     await withProfile(device, { eegConsent: true });
@@ -249,6 +271,58 @@ describe('one recording per session', () => {
     const first = (results[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof device.eeg.saveRecording>>>).value;
     expect(await queued(first).serverOutcome).toEqual({ status: 'acknowledged' });
     expect((await device.eeg.listForGameSession(started.sessionId)).recordings).toHaveLength(1);
+  });
+
+  it('skips a second recording from another repository on this device, which sees the first in its cache', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const { started, saved, eeg } = await saveSessionThenEeg(device);
+    // Another tab, or a repository created again: it has no memory of the first save.
+    const another = createEegRecordingRepository(device.context, { consentServerReadTimeoutMs: 10_000 });
+
+    expect(await another.saveRecording(saved, eegDraft({ source: 'measured' }))).toMatchObject({ status: 'skipped', reason: 'already-recorded' });
+    // Even before the first recording is acknowledged: it is already queued here.
+    expect(await queued(eeg).serverOutcome).toEqual({ status: 'acknowledged' });
+    expect(await another.saveRecording(saved, eegDraft({ source: 'measured' }))).toMatchObject({ status: 'skipped', reason: 'already-recorded' });
+
+    const { recordings } = await device.eeg.listForGameSession(started.sessionId);
+    expect(recordings.map((record) => [record.id, record.recording.source])).toEqual([[started.sessionId, 'simulated']]);
+  });
+
+  it('lets the rules refuse a second recording that a repository could not see, and keeps the first', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const { started, saved, eeg } = await saveSessionThenEeg(device);
+    await queued(eeg).serverOutcome;
+    // Another install of the same player: it has the session cached, but has never read the recording.
+    const other = newDevice();
+    await signInWithEmailAndPassword(other.auth, device.player.email, device.player.password);
+    expect(await other.sessions.getGameSession(started.sessionId)).toMatchObject({ status: 'readable' });
+
+    const second = await other.eeg.saveRecording(saved, eegDraft({ source: 'measured' }));
+
+    // The second create of the session's recording ID is refused as an update.
+    expect(await queued(second).serverOutcome).toMatchObject({ status: 'refused', reason: 'already-recorded' });
+    const { recordings } = await device.eeg.listForGameSession(started.sessionId);
+    expect(recordings.map((record) => [record.id, record.recording.source])).toEqual([[started.sessionId, 'simulated']]);
+  });
+
+  it('never re-creates a deleted recording from the same repository; the rules accept one new create, still only one', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const { started, saved, eeg } = await saveSessionThenEeg(device);
+    await queued(eeg).serverOutcome;
+    await device.eeg.deleteRecording(started.sessionId).acknowledged;
+
+    await expect(device.eeg.saveRecording(saved, eegDraft())).rejects.toThrow(EegRecordingAlreadySavedError);
+    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
+
+    // A new repository has no memory of the deleted one. With the document
+    // gone, the rules see a create, so the session can hold one recording again.
+    const another = createEegRecordingRepository(device.context, { consentServerReadTimeoutMs: 10_000 });
+    expect(await queued(await another.saveRecording(saved, eegDraft({ source: 'measured' }))).serverOutcome).toEqual({ status: 'acknowledged' });
+    const { recordings } = await device.eeg.listForGameSession(started.sessionId);
+    expect(recordings.map((record) => [record.id, record.recording.source])).toEqual([[started.sessionId, 'measured']]);
   });
 });
 

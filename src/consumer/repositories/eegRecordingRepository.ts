@@ -12,6 +12,7 @@ import {
   serverTimestamp,
   setDoc,
   startAfter,
+  Timestamp,
   where,
   writeBatch,
   type DocumentReference,
@@ -30,7 +31,6 @@ import {
   eegRecordingRef,
   eegRecordingsRef,
   gameSessionRef,
-  newDocumentId,
   profileRef,
   signedInUid,
   type ConsumerFirestoreContext,
@@ -60,6 +60,11 @@ import type { SavedGameSession } from './gameSessionRepository';
 // queued writes in order, so a recording queued after its session reaches the
 // server after it. If the session is refused, the recording is refused too, so
 // no recording can land without its session.
+//
+// A recording's document ID is its session's ID, so a session has at most one
+// recording however many tabs, repositories or retries try to write one: the
+// rules allow create only, so a second create of that ID is refused as an
+// update.
 //
 // Recordings are never updated, and the user can delete one or all of them at
 // any time. Whether a session has EEG is answered only by querying this
@@ -101,6 +106,8 @@ export type EegRecordingSkipReason =
   | 'invalid'
   /** The session is not saved on this device (never saved here, or already refused), so the rules would refuse the recording. */
   | 'session-not-saved'
+  /** This device already holds the session's recording (written here, even if not yet uploaded, or read from the server). */
+  | 'already-recorded'
   /** Nobody, or a different user, is signed in than the one whose session it is. */
   | 'owner-changed';
 
@@ -110,6 +117,8 @@ export type EegRecordingRefusalReason =
   | 'consent-withdrawn'
   /** The linked session did not exist when the recording reached the server (for example, the session was refused). */
   | 'session-not-saved'
+  /** The server already held a different recording for the session (written elsewhere first). Only that one is kept. */
+  | 'already-recorded'
   /** The refusal could not be explained (for example, the server could not be read afterwards). */
   | 'unknown';
 
@@ -128,6 +137,7 @@ export type EegRecordingSave =
    */
   | {
     readonly status: 'queued';
+    /** The session's ID: a session's recording always has its session's ID. */
     readonly recordingId: string;
     readonly serverOutcome: Promise<EegRecordingServerOutcome>;
   }
@@ -154,13 +164,16 @@ export interface EegRecordingRepository {
    *   connection, or with no server answer, the recording is skipped as
    *   `consent-unavailable`; the cached profile is never used. The rules check
    *   consent again when the recording reaches the server.
-   * - At most one recording is queued per session: once one is queued, or
-   *   while one is being saved, a further call throws
-   *   `EegRecordingAlreadySavedError`. After a skip nothing was queued, so the
-   *   call may be repeated.
+   * - A session has at most one recording. The recording's ID is the
+   *   session's ID, so the rules refuse a second create from anywhere, and a
+   *   recording already on this device is skipped as `already-recorded`.
+   *   Within one repository, once a recording is queued, or while one is being
+   *   saved, a further call for the session throws
+   *   `EegRecordingAlreadySavedError`, even after the recording is deleted.
+   *   After a skip nothing was queued, so the call may be repeated.
    */
   saveRecording(session: Pick<SavedGameSession, 'sessionId' | 'userId'>, draft: EegRecordingDraft): Promise<EegRecordingSave>;
-  /** Every recording linked to one session; normally zero or one. */
+  /** Every recording linked to one session: at most one written by this repository (its ID is the session's ID). */
   listForGameSession(gameSessionId: string): Promise<EegRecordingsForSession>;
   /** True when any recording (readable or not) links to the session. Offline it answers from the cache. */
   hasEegRecording(gameSessionId: string): Promise<boolean>;
@@ -213,6 +226,36 @@ function refused(reason: EegRecordingRefusalReason, message: string): EegRecordi
   return { status: 'refused', reason, message };
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Timestamp);
+}
+
+/** Deep equality of written and stored Firestore values: maps, arrays, timestamps and primitives. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a instanceof Timestamp || b instanceof Timestamp) return a instanceof Timestamp && b instanceof Timestamp && a.isEqual(b);
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => sameValue(item, b[index]));
+  }
+  if (isPlainRecord(a) || isPlainRecord(b)) {
+    if (!isPlainRecord(a) || !isPlainRecord(b)) return false;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length
+      && keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameValue(a[key], b[key]));
+  }
+  return a === b;
+}
+
+/**
+ * Whether a stored recording is exactly what this save wrote. `createdAt` is
+ * left out: the server's clock set it. A different recording for the session
+ * (written first by another tab or device) never passes for this save's own.
+ */
+function isThisWrite(stored: Record<string, unknown>, written: Record<string, unknown>): boolean {
+  const { createdAt: _storedCreatedAt, ...storedFields } = stored;
+  const { createdAt: _writtenCreatedAt, ...writtenFields } = written;
+  return sameValue(storedFields, writtenFields);
+}
+
 /** True when the profile document is a readable consumer profile that records EEG consent. */
 function recordsConsent(snapshot: DocumentSnapshot): boolean {
   const read = readDocument('users', snapshot, (raw) => readUserProfile(raw));
@@ -256,10 +299,10 @@ export function createEegRecordingRepository(
     return null;
   }
 
-  /** The session is saved on this device: queued here and not refused, or already stored. */
-  async function sessionSavedHere(uid: string, sessionId: string): Promise<boolean> {
+  /** The document is on this device: written here (even if not yet acknowledged and not refused), or read from the server. */
+  async function onThisDevice(ref: DocumentReference): Promise<boolean> {
     try {
-      return (await getDocFromCache(gameSessionRef(firestore, uid, sessionId))).exists();
+      return (await getDocFromCache(ref)).exists();
     } catch {
       // Not in this device's cache.
       return false;
@@ -268,12 +311,20 @@ export function createEegRecordingRepository(
 
   /**
    * The server's verdict, explained. A refusal carries no reason, so the
-   * repository reads the server afterwards: the recording itself (a resend of
-   * a create the server already applied, whose acknowledgement was lost, is
-   * refused as an update, yet the recording exists), then the session, then
-   * consent.
+   * repository reads the server afterwards:
+   * - the recording itself: a resend of a create the server already applied
+   *   (its acknowledgement was lost) is refused as an update, yet the
+   *   recording exists with exactly what this save wrote. A different
+   *   recording under the session's ID was written elsewhere first;
+   * - then the session, then consent.
    */
-  async function serverOutcome(commit: Promise<void>, uid: string, sessionId: string, ref: DocumentReference): Promise<EegRecordingServerOutcome> {
+  async function serverOutcome(
+    commit: Promise<void>,
+    uid: string,
+    sessionId: string,
+    ref: DocumentReference,
+    written: Record<string, unknown>,
+  ): Promise<EegRecordingServerOutcome> {
     try {
       await commit;
       return { status: 'acknowledged' };
@@ -283,7 +334,11 @@ export function createEegRecordingRepository(
       if ((error as { code?: unknown } | null)?.code !== 'permission-denied') return refused('unknown', message);
       const fromServer = (target: DocumentReference) => withinTimeout(getDocFromServer(target), REFUSAL_DIAGNOSIS_TIMEOUT_MS);
       const recording = await fromServer(ref);
-      if (recording?.exists()) return { status: 'acknowledged' };
+      if (recording?.exists()) {
+        return isThisWrite(recording.data(), written)
+          ? { status: 'acknowledged' }
+          : refused('already-recorded', 'The server already holds a different EEG recording for this game session; a session has at most one.');
+      }
       const session = await fromServer(gameSessionRef(firestore, uid, sessionId));
       if (session && !session.exists()) {
         return refused('session-not-saved', 'The server refused the EEG recording because its game session was not saved.');
@@ -338,15 +393,19 @@ export function createEegRecordingRepository(
 
         // The session must be queued (or stored) ahead of the recording: the
         // rules refuse a recording whose session does not exist.
-        if (!(await sessionSavedHere(uid, sessionId))) {
+        if (!(await onThisDevice(gameSessionRef(firestore, uid, sessionId)))) {
           return skipped('session-not-saved', 'The game session is not saved on this device, so its EEG recording cannot be saved.');
+        }
+        // One recording per session: its ID is the session's ID.
+        const ref = eegRecordingRef(firestore, uid, sessionId);
+        if (await onThisDevice(ref)) {
+          return skipped('already-recorded', 'This game session already has an EEG recording on this device; a session has at most one.');
         }
         const problem = await consentProblem(uid);
         if (problem) return skipped(problem.reason, problem.message);
         // The checks were asynchronous: the session's player must still be the signed-in user.
         if (ownerChanged()) return skipped('owner-changed', ownerChangedMessage);
 
-        const ref = eegRecordingRef(firestore, uid, newDocumentId(eegRecordingsRef(firestore, uid)));
         let commit: Promise<void>;
         try {
           commit = withSdkValidation('EEG recording', () => setDoc(ref, data));
@@ -355,7 +414,7 @@ export function createEegRecordingRepository(
           throw error;
         }
         queued = true;
-        return { status: 'queued', recordingId: ref.id, serverOutcome: serverOutcome(commit, uid, sessionId, ref) };
+        return { status: 'queued', recordingId: ref.id, serverOutcome: serverOutcome(commit, uid, sessionId, ref, data) };
       } finally {
         // Nothing was queued: the session may still be offered a recording.
         if (!queued) claimedSessions.delete(sessionId);

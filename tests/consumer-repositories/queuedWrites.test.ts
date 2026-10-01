@@ -97,12 +97,13 @@ describe('a recording queued behind its session', () => {
     const saved = await started.save({ definition: testGame, session: sessionDraft() });
     await saved.acknowledged;
     const held = holdNextRecording(device);
+    const draft = eegDraft();
 
-    const eeg = await device.eeg.saveRecording(saved, eegDraft());
+    const eeg = await device.eeg.saveRecording(saved, draft);
     const ref = await held;
-    // What the lost send had already written: the same recording, under the same ID.
+    // What the lost send had already written: this same recording, under the same ID.
     await serverWrite({
-      [ref.path]: { ...eegDraft(), schemaVersion: 1, userId: device.player.uid, gameSessionId: started.sessionId, createdAt: Timestamp.now() },
+      [ref.path]: { ...draft, schemaVersion: 1, userId: device.player.uid, gameSessionId: started.sessionId, createdAt: Timestamp.now() },
     });
     await enableNetwork(device.firestore);
 

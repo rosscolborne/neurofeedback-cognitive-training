@@ -62,7 +62,8 @@ Game-specific trials and metrics are validated by each game's own Zod schemas (`
   - The rules evaluate each recording create on its own when it reaches the server: the linked session must exist (`existsAfter`) and the profile must record consent (`getAfter`).
   - The SDK sends one user's queued writes in order, including across tabs and after a restart (the queue is persistent). A recording queued after its session therefore arrives after it.
   - If the session is refused, its recording is refused too, so no recording can exist without its session.
-  - Sessions stay create-only and recordings create-or-delete, both with client-generated IDs. A resend after a lost acknowledgement is refused as an update and never duplicates either document.
+  - Sessions stay create-only and recordings create-or-delete. A resend after a lost acknowledgement is refused as an update and never duplicates either document.
+- **One recording per session.** A recording's document ID is its session's ID, so the create-only rules refuse a second recording for a session from any tab, device or retry. A refused second write is reported as refused (`already-recorded`) unless the stored recording is exactly what it wrote (a lost acknowledgement). Once the user deletes a recording, the rules would accept a new one for that session, but the client never offers one again: the recording exists only in memory, in the run that captured it.
 - **Nothing relied on the atomicity.** Scoring and progression never read EEG, and "has EEG?" is still the `gameSessionId` query. On other devices a recording may briefly lag its session.
 - **Separate outcomes.** The client reports the session (queued, then acknowledged or refused) and the recording separately. A recording is queued, then acknowledged or refused with a reason; or it is skipped with a reason. The UI can therefore say "game saved, EEG not saved" and why.
 
