@@ -103,4 +103,15 @@ describe('defineGame', () => {
     expect(() => defineGame(variant({ modes: [{ ...endlessMode!, unlockPolicy: ({ bestPeakLevel }) => bestPeakLevel / 2 }] })))
       .toThrow(/unlockPolicy/);
   });
+
+  it('accepts an optional run duration: absent or null for untimed modes, else a positive bounded integer', () => {
+    const [endlessMode] = fixtureGame.modes;
+
+    for (const runDurationMs of [undefined, null, 90_000, 3_600_000]) {
+      expect(() => defineGame(variant({ modes: [{ ...endlessMode!, runDurationMs }] }))).not.toThrow();
+    }
+    for (const runDurationMs of [0, -1, 1.5, 3_600_001]) {
+      expect(() => defineGame(variant({ modes: [{ ...endlessMode!, runDurationMs }] }))).toThrow(/runDurationMs/);
+    }
+  });
 });

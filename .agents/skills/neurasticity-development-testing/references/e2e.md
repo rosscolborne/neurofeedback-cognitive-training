@@ -63,6 +63,24 @@ additional browser contexts. Specs that probe a deliberate denial call
   through the signed-in page, using its own ID token and the same Firestore
   rules, that data the UI reports as saved reached Firestore.
 - `e2e/helpers/firestoreProbe.ts`: in-page allowed/denied read probes.
+- `e2e/helpers/cacheIsolation.ts`: in-page probes of the persistent Firestore
+  cache on the app's own instance (cached, listener and offline reads, an
+  IndexedDB scan), used by `cache-isolation.persistence.local.spec.ts` to show
+  that one account cannot read another's cached data after a sign-out,
+  account switch or account deletion.
+
+## Consumer repository tests
+
+`tests/consumer-repositories/` runs the real consumer repositories
+(`src/consumer/repositories/`) against the local Auth and Firestore emulators
+(project `demo-nfct-repositories`), with the real `firestore.rules` loaded, so
+the repositories and the rules are checked together. The harness refuses to
+run without loopback emulator hosts. It needs Java 21:
+
+```bash
+JAVA_HOME=~/.local/share/temurin-jre-21 PATH=$JAVA_HOME/bin:$PATH npm run test:repositories
+npm run test:repositories:typecheck
+```
 
 ## Firestore rules tests
 

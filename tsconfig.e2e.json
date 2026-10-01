@@ -13,7 +13,8 @@
     "ignoreDeprecations": "6.0",
     "paths": {
       "/src/*": ["src/*"],
-      "/e2e/*": ["e2e/*"]
+      "/e2e/*": ["e2e/*"],
+      "@nfct/shared": ["shared/index.ts"]
     }
   },
   "include": ["e2e/**/*.ts", "playwright.config.ts", "playwright.protocol.config.ts", "playwright.webkit.config.ts"]

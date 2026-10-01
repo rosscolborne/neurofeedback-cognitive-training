@@ -15,6 +15,8 @@ Use this skill when changing or reviewing Neurasticity behavior. Its purpose is 
 | Vitest (`npm test`) | TypeScript domain, service, state, and component behavior | Default suite is offline; it excludes the two BrainFlow service backed tests. Start the local service with `npm run brainflow`, then run `npm run test:brainflow:integration` separately for those assertions. |
 | Static contract tests (Vitest) | Fast checks of source wiring and rules text where that contract is deliberate | Text checks do not prove runtime behavior or Firestore authorization. |
 | Local Firestore rules emulator (`npm run test:rules`) | Allowed and denied reads/writes under `firestore.rules` | Does not prove deployed rules or the complete UI workflow. |
+| Consumer repository emulator tests (`npm run test:repositories`) | The consumer repositories in `src/consumer/` against the Auth and Firestore emulators with `firestore.rules` loaded: writes, tolerant reads, paging, offline queueing | Node has no IndexedDB, so the persistent cache's restart behavior is not observable there. |
+| Cloud Functions emulator tests (`npm run test:functions`) | Trusted scoring in `functions/`: the processing core on the Firestore emulator and the `onGameSessionCreated` trigger on the Functions emulator, running the pure `shared/processing` decisions | Needs `npm ci --prefix functions` and Java 21; builds `functions/lib` first. `npm test` excludes `functions/**`, so run it (and `npm run functions:typecheck`) for any change to `shared/` or `functions/`. Emulators only: the Functions emulator never retries a delivery, and nothing proves deployed behavior. |
 | Local emulator Playwright suite (`npm run test:e2e:protocol`) | Authenticated navigation, save/reload, cross-account and rules-backed UI workflows | Emulators only; proves nothing about a deployed project. |
 | Physical hardware | Real Muse, Web Bluetooth, EEG acquisition, and signal quality | Demo Mode and simulated BLE cannot establish hardware behavior. |
 
@@ -54,6 +56,14 @@ For user-facing UI work:
 This skill owns deterministic, repeatable coverage. Driving the running app in a browser to find what no test encodes yet belongs to [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md), which never substitutes for the coverage required here. When exploratory QA hands over a defect that reproduces reliably, the owner of the branch adds its regression test at the lowest layer that observes it; that is Playwright when only the UI shows it.
 
 On an integration branch, the relevant suite is everything the merged checks and CI run, plus deterministic tests for behavior that crosses streams; see [nfct-integration](../nfct-integration/SKILL.md#validate-the-combined-result).
+
+## Revalidation after a fix
+
+Fit the checks to what a fix changed:
+
+- After a fix, rerun the tests that cover the changed code and the finding's own repro (the probe, test or scenario that showed it), plus the fast checks the fix can break: lint, typecheck and build for code, or the changed links for docs. Run an emulator suite (rules, Functions, repositories or Playwright) only when the fix touches what that suite covers.
+- For a security fix, the minimum proof is the probe or test that demonstrated the finding, now showing it is closed, kept as a regression test at the lowest layer that observes it (a rules test for a rules bypass).
+- Do not rerun every expensive suite after each small correction. Run the full required suite once on the final head before reporting the work complete: the relevant [Checks](../../../AGENTS.md#checks) or, for an integration branch, everything the merged checks and CI run.
 
 ## Definition of done
 

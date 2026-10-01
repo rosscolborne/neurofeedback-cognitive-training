@@ -41,7 +41,7 @@ function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.Ref
 }
 
 export function App() {
-  const { user, role, loading, logout, isDemoWorkspace } = useAuth();
+  const { user, role, loading, logout, isDemoWorkspace, cacheStatus, cacheEndingReason, signOutWithoutFirestore } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
@@ -65,6 +65,8 @@ export function App() {
   const [dataIdentity, setDataIdentity] = useState('');
   const loadGeneration = useRef(0);
   const brandGeneration = useRef(0);
+  // The signed-in clinician's clinic, while its settings are still loading.
+  const pendingClinicLoad = useRef<{ identity: string; clinicId: Promise<string | null> } | null>(null);
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
   const accountIdentityRef = useRef(accountIdentity);
   accountIdentityRef.current = accountIdentity;
@@ -178,6 +180,7 @@ export function App() {
     setBrand(BRAND_PRESETS[0]);
     setClinicId(null);
     setClinicIdentity(accountIdentity);
+    pendingClinicLoad.current = null;
 
     if (loading || !user) return;
     if (isDemoWorkspace) {
@@ -186,7 +189,12 @@ export function App() {
     }
 
     if (role === 'clinician') {
-      void clinicSettingsRepository.load()
+      const request = clinicSettingsRepository.load();
+      pendingClinicLoad.current = {
+        identity: accountIdentity,
+        clinicId: request.then((snapshot) => (snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null), () => null),
+      };
+      void request
         .then((snapshot) => {
           if (!isCurrent()) return;
           setClinicId(snapshot.clinic && snapshot.practitioner ? snapshot.clinicId : null);
@@ -207,10 +215,39 @@ export function App() {
     }
   }, [accountIdentity, isDemoWorkspace, loading, role, user, visibleCurrentClient?.clinicId]);
 
-  if (loading) {
+  // While the cache is being cleared for an account change, nothing of any
+  // account is shown, only what is happening. `ending` replaces the account's
+  // screens before the page navigates away, so a page kept by the browser's
+  // back/forward cache holds none of its data either.
+  if (loading || cacheStatus === 'ending') {
+    const waiting = cacheStatus === 'blocked' || cacheStatus === 'failed';
+    const notice = cacheStatus === 'ending' ? { title: cacheEndingReason === 'account-deleted' ? 'Finishing account deletion…' : 'Signing out…' }
+      : cacheStatus === 'blocked' ? {
+        title: 'Finishing sign-out on this device…',
+        detail: 'Close any other tabs or windows with this app open to continue.',
+      }
+        : cacheStatus === 'failed' ? {
+          title: 'Sign-out couldn’t finish on this device.',
+          detail: 'Close any other tabs or windows with this app open, then try again.',
+          retry: true,
+        }
+          : null;
     return (
-      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-patient-base, #F8F7F4)' }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', textAlign: 'center', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
         <BrandLogo size={72} variant="terracotta" glow />
+        {notice && (
+          <div role={notice.retry ? 'alert' : 'status'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', maxWidth: '360px' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{notice.title}</strong>
+            {notice.detail && <span>{notice.detail}</span>}
+          </div>
+        )}
+        {waiting && (
+          // Signing out needs no Firestore, so it works while the cache is held open.
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {cacheStatus === 'failed' && <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>}
+            <button type="button" className="btn btn-secondary" onClick={() => void signOutWithoutFirestore()}>Sign out</button>
+          </div>
+        )}
       </div>
     );
   }
@@ -249,12 +286,18 @@ export function App() {
   const handleAddClient = async (newClient: Partial<ClientProfile>): Promise<PatientInvitation> => {
     const requestIdentity = accountIdentity;
     if (!newClient.email?.trim()) throw new Error('Patient email is required');
-    if (!visibleClinicId) throw new Error('Complete clinic setup before inviting a patient');
+    // The clinic settings load after sign-in. An invitation sent before they
+    // arrive waits for them instead of reporting a missing clinic.
+    const pending = pendingClinicLoad.current;
+    const clinicForInvitation = visibleClinicId
+      ?? (pending?.identity === requestIdentity ? await pending.clinicId : null);
+    if (accountIdentityRef.current !== requestIdentity) throw new Error('The signed-in account changed. Try again.');
+    if (!clinicForInvitation) throw new Error('Complete clinic setup before inviting a patient');
     if (!newClient.condition || !newClient.assignedProtocol || newClient.prescribedSessionsPerWeek == null) {
       throw new Error('Select a clinical indication, protocol, and weekly target before inviting a patient');
     }
     const invitation = await storageEngine.createPatientInvitation({
-      clinicId: visibleClinicId,
+      clinicId: clinicForInvitation,
       clinicianName: user?.displayName || user?.email || 'Clinician',
       patientEmail: newClient.email,
       patientName: newClient.name || '',

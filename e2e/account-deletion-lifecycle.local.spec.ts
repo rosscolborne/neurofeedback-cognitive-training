@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
 import { seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
+import { FIRESTORE_CACHE_STATE_KEY } from '../src/services/firestoreCacheLifecycle';
 
 // Role, label and text locators only: Profile layout and classes differ between UI revisions.
 const PASSWORD_LABEL = 'Enter your password to confirm account deletion';
@@ -132,6 +133,11 @@ test('successful deletion holds a pending status instead of the password form, l
   await expect(page).toHaveURL(/\/welcome/, { timeout: 20_000 });
   expect(teardownRenders).toEqual([]);
   expect(dialogs).toEqual([]);
+
+  // The deleted account's cached documents left this device with it (NFCT-20).
+  expect(JSON.parse(await page.evaluate((key) => localStorage.getItem(key) ?? 'null', FIRESTORE_CACHE_STATE_KEY))).toEqual({ v: 1, owner: null });
+  const scan = await page.evaluate(async (needles) => (await import('/e2e/helpers/cacheIsolation.ts')).scanFirestoreIndexedDb(needles), [fixture.patient.uid, fixture.name]);
+  expect(scan.hits).toEqual({ [fixture.patient.uid]: {}, [fixture.name]: {} });
 
   await expectSignInRejected(page, fixture.patient);
 });

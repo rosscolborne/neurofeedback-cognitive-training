@@ -13,9 +13,15 @@ const state = vi.hoisted(() => ({
   auth: { currentUser: null as null | { uid: string; email: string; delete: () => Promise<void> } },
   reauthenticate: vi.fn(),
   prepareDeletion: vi.fn(),
+  // The cache lifecycle (firestoreCacheLifecycle.test.ts) runs `before` (the
+  // Auth deletion) and, only if it succeeds, clears and navigates.
+  endSession: vi.fn(async ({ before, destination }: { before?: () => Promise<void>; destination: string | null }) => {
+    await before?.();
+    (globalThis as { window?: { location: { href: string } } }).window!.location.href = destination ?? '';
+  }),
 }));
 
-vi.mock('../../../services/firebase', () => ({ auth: state.auth, db: {} }));
+vi.mock('../../../services/firebase', () => ({ auth: state.auth, db: {}, firestoreCache: { endSession: state.endSession } }));
 vi.mock('firebase/auth', () => ({ signOut: vi.fn(), reauthenticateWithCredential: state.reauthenticate,
   EmailAuthProvider: { credential: (email: string, password: string) => ({ email, password }) } }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
@@ -222,6 +228,8 @@ describe('PatientShell persisted profile writes', () => {
       expect(persisted).not.toHaveBeenCalled();
 
       await act(async () => { finishAuthDeletion(); await flush(); });
+      expect(state.endSession).toHaveBeenCalledOnce();
+      expect(state.endSession).toHaveBeenCalledWith(expect.objectContaining({ reason: 'account-deleted', signOut: false, destination: '/welcome' }));
       expect(location.href).toBe('/welcome');
       // Success leaves the status up until the browser navigates away.
       expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
@@ -299,6 +307,8 @@ describe('PatientShell persisted profile writes', () => {
       expect(JSON.stringify(renderer.toJSON())).toContain('Finish deleting your account');
       await submit();
       expect(user.delete).toHaveBeenCalledTimes(2);
+      // The failed attempt cleared nothing; only the successful one ends the session.
+      expect(state.endSession).toHaveBeenCalledTimes(2);
       expect(location.href).toBe('/welcome');
       expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
     } finally {

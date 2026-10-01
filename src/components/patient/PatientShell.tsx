@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { EmailAuthProvider, reauthenticateWithCredential, signOut } from 'firebase/auth';
-import { auth } from '../../services/firebase';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth, firestoreCache } from '../../services/firebase';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSignOut } from '../account/useSignOut';
 import { ClientProfile, ClinicBrandConfig, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
 import { getCalibrationDisplayState } from '../../services/dataMappers';
 import { HomeScreen } from './HomeScreen';
@@ -19,7 +21,7 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink } from 'lucide-react';
+import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
 import { FactGrid, type Fact } from '../ui/FactGrid';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
@@ -39,6 +41,13 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
+import { MentalMathGame } from '../../consumer/games/mentalMath/MentalMathGame';
+import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
+
+// NFCT-21: Mental Math is reached from the Train tab until the consumer shell
+// exists (NFCT-6). Demo Mode's synthetic EEG is offered as an optional,
+// clearly simulated recording; the game never needs it.
+const demoModeEegProvider = createDemoModeEegProvider();
 
 // Same day-month-year style as session history, so dates read alike across Profile and Progress.
 const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
@@ -79,6 +88,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 }) => {
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
+  const [mentalMathOwnerId, setMentalMathOwnerId] = useState<string | null>(null);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
   const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
   const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
@@ -167,11 +177,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
   const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
 
-  const handleLogout = async () => {
-    clearPendingInvitation();
-    await signOut(auth);
-    window.location.href = '/';
-  };
+  // Sign-out clears this device's Firestore cache and reloads the app; it asks
+  // first if some activity has not uploaded yet (AuthContext.logout).
+  const { logout } = useAuth();
+  const signOutFlow = useSignOut(logout);
+  const handleLogout = signOutFlow.requestSignOut;
 
   const handleLinkClinician = async () => {
     if (!invitationCode.trim()) return;
@@ -229,9 +239,19 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
       await storageEngine.preparePatientAccountDeletion(user.uid, (deactivated) => { deactivation.client = deactivated; });
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
-      await user.delete();
-      clearPendingInvitation();
-      window.location.href = '/welcome';
+      // Deleting the Auth account runs inside the cache cleanup, so its
+      // sign-out is not mistaken for an account change. Once it succeeds the
+      // deleted account's cached data and queued writes are removed from this
+      // device, and the app loads afresh at the welcome screen.
+      await firestoreCache.endSession({
+        reason: 'account-deleted',
+        signOut: false,
+        destination: '/welcome',
+        before: async () => {
+          await user.delete();
+          clearPendingInvitation();
+        },
+      });
     } catch (err) {
       if (deactivation.client) onClientPersistedElsewhere(deactivation.client);
       setAccountDeletionError(getAccountDeletionErrorMessage(err));
@@ -407,6 +427,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     exportPatientSessionCsv(allSessions, setExportStatus);
   };
 
+  if (mentalMathOwnerId === client.id) {
+    return <MentalMathGame eegProvider={demoModeEegProvider} onExit={() => setMentalMathOwnerId(null)} />;
+  }
+
   if (activeSessionExp && sessionOwnerId === client.id) {
     return (
       <SessionRunner
@@ -435,7 +459,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <p>Your clinic connection has been removed. Confirm your password to finish deleting your sign-in.</p>
       <button className="btn btn-secondary account-deletion-trigger account-deletion-finish" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
       {deletionPasswordForm}
-      <button className="btn btn-secondary" type="button" onClick={() => void handleLogout()}>Log Out</button>
+      <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={signOutFlow.busy}>{signOutFlow.busy ? 'Signing out…' : 'Log Out'}</button>
+      {signOutFlow.dialog}
     </div>;
   }
 
@@ -593,6 +618,28 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 );
               })}
             </div>
+
+            <section aria-labelledby="train-games-title" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+              <div>
+                <h2 id="train-games-title" style={{ fontSize: '18px', fontWeight: 700 }}>Games</h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cognitive games. No headset needed.</p>
+              </div>
+              <div className="train-grid">
+                <div className="train-game-card" onClick={() => setMentalMathOwnerId(client.id)}>
+                  <div className="train-card-icon" aria-hidden="true">
+                    <Calculator size={22} />
+                  </div>
+                  {/* The whole card opens the game; this button makes it reachable by keyboard and assistive tech. */}
+                  <button type="button" className="train-card-name" aria-describedby="train-desc-mental-math">
+                    Mental Math
+                  </button>
+                  <p id="train-desc-mental-math" className="train-card-desc">A 90-second arithmetic run that adapts as you play.</p>
+                  <div className="train-card-foot">
+                    <span className="status-tag status-tag-neutral train-card-tag">Game</span>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         )}
 
@@ -801,9 +848,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     Disconnect from Clinician
                   </button>
                 )}
-                <button type="button" className="list-row" onClick={handleLogout}>
+                <button type="button" className="list-row" onClick={handleLogout} disabled={signOutFlow.busy}>
                   <LogOut size={18} className="list-row-icon" aria-hidden="true" />
-                  Log Out
+                  {signOutFlow.busy ? 'Signing out…' : 'Log Out'}
                 </button>
               </div>
             </div>
@@ -896,6 +943,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           );
         })}
       </nav>
+      {signOutFlow.dialog}
     </div>
   );
 };

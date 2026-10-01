@@ -123,6 +123,7 @@ export function storedSession(): Record<string, unknown> {
     gameVersion: 1,
     modeId: 'endless',
     startLevel: 2,
+    seed: 2_654_435_761,
     peakLevel: 3,
     status: 'completed',
     startedAt: at(0),

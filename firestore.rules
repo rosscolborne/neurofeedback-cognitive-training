@@ -343,7 +343,7 @@ service cloud.firestore {
 
       function validGameSessionCreate(session) {
         return exactKeys(session, [
-            'schemaVersion', 'userId', 'gameId', 'gameVersion', 'modeId', 'startLevel', 'peakLevel',
+            'schemaVersion', 'userId', 'gameId', 'gameVersion', 'modeId', 'startLevel', 'seed', 'peakLevel',
             'status', 'startedAt', 'endedAt', 'activeDurationMs', 'localDate', 'timezone', 'createdAt',
             'client', 'trials', 'summary'
           ], []) &&
@@ -352,6 +352,10 @@ service cloud.firestore {
           supportedGameVersion(session.gameId, session.gameVersion) &&
           slugId(session.modeId) &&
           intBetween(session.startLevel, 1, 50) &&
+          // The client-chosen session seed the game derives its content from
+          // (an unsigned 32-bit integer, shared/games/seed.ts). Trusted scoring
+          // reproduces the trials' questions from it; it is not anti-cheat.
+          intBetween(session.seed, 0, 4294967295) &&
           // An untrusted observation, bounded only. Trusted scoring derives the
           // real peak from the trials; a mismatch is a diagnostic only.
           intBetween(session.peakLevel, 1, 50) &&
@@ -489,9 +493,13 @@ service cloud.firestore {
           .get('eeg', {}).get('consent', null) != null;
       }
 
+      // A recording's ID is its session's ID, so a session has at most one
+      // recording: a second create under that ID is an update, which is
+      // refused, and no other ID can link to the session.
       match /eegRecordings/{recordingId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) && validDocumentId(recordingId) &&
+          recordingId == request.resource.data.gameSessionId &&
           validEegRecordingCreate(request.resource.data) &&
           linkedSessionExistsAfter(request.resource.data.gameSessionId) &&
           hasEegConsentAfter();

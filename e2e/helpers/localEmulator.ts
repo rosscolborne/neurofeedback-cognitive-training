@@ -48,6 +48,14 @@ export async function seedLinkedPatient(extra: Record<string, unknown> = {}): Pr
   return { clinician, patient, name };
 }
 
+/** A consumer player: an Auth account only. The app creates its profile (users/{uid}) itself. */
+export async function seedConsumerAccount(): Promise<{ uid: string; email: string; password: string }> {
+  const id = randomUUID().slice(0, 12);
+  const account = { uid: `player-${id}`, email: `player-${id}@example.test`, password: 'LocalEmulator!123' };
+  await adminAuth.createUser({ ...account, displayName: 'Local Player' });
+  return account;
+}
+
 export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture): Promise<LocalPatientFixture> {
   const id = randomUUID().slice(0, 12);
   const patient = { uid: `patient-${id}`, email: `patient-${id}@example.test`, password: 'LocalEmulator!123' };
@@ -269,4 +277,16 @@ export async function readPatientRelationship(patientUid: string) {
     acceptedInvitationId: (data.acceptedInvitationId ?? null) as string | null,
     appointmentStatuses: appointments.docs.map((entry) => entry.data().status as string),
   };
+}
+
+/** NFCT-21: the consumer game sessions the app wrote for a user, read back from the emulator. */
+export async function readGameSessions(uid: string): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  const snapshot = await adminDb.collection(`users/${uid}/gameSessions`).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+}
+
+/** NFCT-21: the EEG recordings linked to a user's game sessions. */
+export async function readEegRecordings(uid: string): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  const snapshot = await adminDb.collection(`users/${uid}/eegRecordings`).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
 }
