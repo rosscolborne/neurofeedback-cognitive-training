@@ -54,16 +54,53 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   [Stage 1 test coverage](#stage-1-test-coverage), and leave only intended
   files in the diff ([hand-off hygiene](.agents/skills/nfct-worktrees/SKILL.md#hand-off-hygiene)).
 - When one objective is split into parallel streams, finishing the streams
-  does not finish the objective. It is done only when
-  [nfct-integration](.agents/skills/nfct-integration/SKILL.md) reports the
-  combined result merge-ready, unless the user explicitly asked for
-  independent PRs.
+  does not finish the objective. Its agent work is complete only when
+  [nfct-integration](.agents/skills/nfct-integration/SKILL.md) has combined
+  and validated them in one pushed integration PR, unless the user explicitly
+  asked for independent PRs. It is merge-ready once required CI is green too
+  (see [completion and merge readiness](#completion-and-merge-readiness)).
 - Do not merge your own PR. Merging is the owner's decision; an agent merges
   only when explicitly delegated, and never a PR it implemented or
   integrated.
 - Finish with a report giving, where applicable: branch and worktree, commit
-  SHA, PR URL, files and scope changed, checks and tests run with results, and
-  unresolved risks, blockers or follow-ups.
+  SHA, PR URL, current CI state, files and scope changed, checks and tests run
+  with results, and unresolved risks, blockers or follow-ups.
+
+## Completion and merge readiness
+
+Finishing an agent task and a PR being ready to merge are separate states:
+
+- **Agent task complete**: the implementation or integration work is
+  finished, the required local checks have passed, the PR is pushed, its CI
+  has started, and known findings are reported.
+- **Merge-ready**: every required merge gate is satisfied on the PR's current
+  head, including green remote CI and any required review and QA.
+
+Do not hold your final response waiting for GitHub CI:
+
+1. Run every required local check before pushing.
+2. Push, or open or update the PR.
+3. Confirm CI has started for the pushed commit with
+   `gh run list --branch <branch> --commit <sha>`. A new run can take up to
+   a minute to appear; if none does, start it with
+   `gh workflow run ci.yml --ref <branch>`.
+4. Report the PR URL and the current CI state, including *pending*, and
+   finish. Do not poll or `--watch` the run.
+
+With CI pending, the report says so plainly, for example:
+
+- Agent work: complete
+- Remote CI: pending
+- Merge readiness: NOT YET — awaiting required CI
+
+CI remains a merge gate. Whoever merges, and any later integration or merge
+check, first confirms that required CI is green on the exact head being
+merged (`gh pr checks <n>`). A PR whose CI failed is not merge-ready; the
+branch owner fixes the failure before it merges.
+
+Wait for CI only when the user asks you to, when the task is to diagnose or
+fix CI or to get a PR green, or when an automation genuinely needs the result
+to decide what work happens next.
 
 ## Out-of-scope work
 
@@ -100,8 +137,8 @@ conflict.
 | [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
 | [nfct-frontend-design](.agents/skills/nfct-frontend-design/SKILL.md) | Design and build user-facing UI and game HUDs within the existing visual language |
 | [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Test user-facing changes like a user in a real browser against the local app, including UI checks |
-| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, assign and track multi-stream work through to one merge-ready result |
-| [nfct-integration](.agents/skills/nfct-integration/SKILL.md) | Converge finished parallel streams into one validated, merge-ready PR |
+| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, assign and track multi-stream work through integration into one validated PR |
+| [nfct-integration](.agents/skills/nfct-integration/SKILL.md) | Converge finished parallel streams into one validated integration PR |
 
 ## Checks
 

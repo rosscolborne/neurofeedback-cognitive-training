@@ -1,6 +1,6 @@
 ---
 name: nfct-orchestration
-description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through to one merge-ready result. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, or tracking parallel work to completion.
+description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, or tracking parallel work to completion.
 ---
 
 # NFCT orchestration
@@ -75,7 +75,7 @@ changes only where dependencies require it.
 | 4. Run the combined deterministic suite | Integrator, per the [testing skill](../neurasticity-development-testing/SKILL.md) |
 | 5. Exploratory QA, where the work is user-facing | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
 | 6. Independent review, and security review where triggered | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
-| 7. CI green on the integration PR's final head | Integrator |
+| 7. CI green on the integration PR's final head: a merge gate, started and reported rather than waited for | Integrator starts it; whoever merges confirms it |
 | 8. Targeted human visual and hardware checks | Owner, from the QA report's HUMAN CHECK items |
 | 9. Merge | Owner |
 
@@ -90,18 +90,24 @@ changes only where dependencies require it.
 
 ## Completion
 
-Every stream returning successfully does not complete the objective. Report
-the objective complete only when:
+Every stream returning successfully does not complete the objective. The
+orchestration's agent work is complete only when:
 
-- the integration report says merge-ready or, for independent PRs, the
-  combined check has passed at the heads that will merge and each PR is
-  merge-ready;
-- every applicable phase above has passed on the final head;
+- the integration report says its agent work is complete or, for independent
+  PRs, the combined check has passed at the heads that will merge;
+- every applicable phase through review (1–6) has passed on the final head,
+  and its CI (7) has started;
 - the remaining human checks and follow-up cards are listed.
 
-Until then, report it as in progress, naming the current phase and what
-blocks it. Merging to `main` is the owner's decision. The orchestrator merges
-only when explicitly delegated, and never a PR it implemented or integrated.
+Report merge readiness separately, as
+[completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness) defines it: with CI pending, the
+objective is *not yet* merge-ready, and you do not wait for CI. Until the agent
+work is complete, report the objective as in progress, naming the current
+phase and what blocks it.
+
+Merging to `main` is the owner's decision. The orchestrator merges only when
+explicitly delegated, never a PR it implemented or integrated, and only after
+confirming required CI is green on the head being merged.
 
 ## Reshape when contracts change
 
@@ -116,6 +122,6 @@ new commits instead of rebasing (see
 
 Give the stream plan (cards, owners, worktrees, dependencies, merge order),
 the state of each stream and the current phase, the integration report or a
-link to it, open findings by severity, follow-up cards, the remaining human
+link to it, CI state and merge readiness, open findings by severity, follow-up cards, the remaining human
 checks, and what remains blocked. Once work is merged, have stale worktrees
 cleaned up per [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree).

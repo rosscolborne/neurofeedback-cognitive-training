@@ -1,14 +1,16 @@
 ---
 name: nfct-integration
-description: Converge completed NFCT streams (parallel branches, worktrees or PRs serving one objective) into one validated, merge-ready integration PR. Use when parallel implementation has finished, when related branches or PRs must become one coherent result, when asked to combine or integrate related work, or when parallel work is done but has not been validated together.
+description: Converge completed NFCT streams (parallel branches, worktrees or PRs serving one objective) into one validated integration PR that is merge-ready once its CI is green. Use when parallel implementation has finished, when related branches or PRs must become one coherent result, when asked to combine or integrate related work, or when parallel work is done but has not been validated together.
 ---
 
 # NFCT integration
 
-Finishing every stream does not finish the objective. The objective is done
-only when its streams have been combined, validated together and reported
-merge-ready by this skill, unless the user explicitly asked for independent
-PRs (see [Independent PRs](#independent-prs)).
+Finishing every stream does not finish the objective. The integration's
+agent work is complete only when the streams are combined in one integration
+PR, every applicable gate below has passed on its final head, and that head is
+pushed with its CI started. The objective is merge-ready once that CI is green
+too (see [completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)). If the user explicitly
+asked for independent PRs, see [Independent PRs](#independent-prs).
 
 The integrator owns the combined result: the merge order, the integration
 branch and PR, conflict and semantic resolutions, defects that exist only in
@@ -174,9 +176,14 @@ the fix could affect.
    merged, so review can concentrate on merge resolutions, integration commits
    and cross-stream boundaries while its verdict covers the whole PR. Fix the
    findings; the reviewer re-verifies them.
-4. **CI.** Wait for GitHub CI on the final head (`gh pr checks <n> --watch`).
-   Investigate a failure rather than re-running until green; a flaky test is
-   a finding.
+4. **CI.** Push the final head and confirm its CI has started, then report;
+   do not wait for it to finish
+   ([completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)). CI is a merge gate: the PR is
+   merge-ready only when CI is green on that head. If CI has failed by the
+   time you report, or a later check finds it failed, the PR is not
+   merge-ready. Investigate rather than re-running until green (a flaky test
+   is a finding), fix it on the integration branch, repeat the affected local
+   gates, and push again.
 
 Start QA and the reviewers as separate agents where your tooling allows;
 otherwise ask the orchestrator or user to start them, with the brief above.
@@ -194,7 +201,8 @@ request independent review.
 ## Hand off and clean up
 
 - Do not merge the integration PR: you implemented it. The owner does the
-  remaining human checks and merges. Recommend a merge commit rather than a
+  remaining human checks, confirms required CI is green on the head being
+  merged, and merges. Recommend a merge commit rather than a
   squash; it keeps each stream's commits and SHAs, so the stream branches pass
   the merged check in
   [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree). After
@@ -224,8 +232,9 @@ Only when the user explicitly asks for separate PRs:
 - Each PR merges on its own, in the recorded order. Before merging a stacked
   PR, retarget it to `main` once its base has merged
   (`gh pr edit <n> --base main`); otherwise it merges into its base branch.
-- The objective is complete only when the combined check has passed at the
-  heads that will merge.
+- The integration work is complete when the combined check has passed at
+  the heads that will merge. Each PR is merge-ready once its own review and CI
+  pass.
 
 ## Report
 
@@ -240,6 +249,9 @@ Give one concise report, in the PR body and in your final message:
 - **Exploratory QA**: the QA summary, and its FAIL and BLOCKED rows.
 - **Human verification**: the HUMAN CHECK items left for the owner.
 - **Follow-ups**: cards filed or proposed, and anything unresolved.
-- **Merge readiness**: *merge-ready* (every gate passed at `<sha>` and CI is
-  green; only the listed human checks remain) or *not ready*, with what
-  blocks it.
+- **Status**, as three lines:
+  - Agent work: *complete*, or what remains.
+  - Remote CI: *passing*, *pending* or *failing* at `<sha>`, with the run URL.
+  - Merge readiness: *MERGE-READY* (every gate passed and CI is green at
+    `<sha>`; only the listed human checks remain), *NOT YET — awaiting
+    required CI*, or *NOT READY*, with what blocks it.
