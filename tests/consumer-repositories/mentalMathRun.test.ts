@@ -4,7 +4,7 @@ import { summarizeEegWindows } from '../../src/consumer/eeg/eegCapture';
 import { playRun } from '../../src/consumer/games/mentalMath/__tests__/fixtures';
 import { APP_VERSION, buildSessionDraft } from '../../src/consumer/games/mentalMath/sessionDraft';
 import { GameSessionAlreadySavedError } from '../../src/consumer/repositories/gameSessionRepository';
-import { closeDevices, closeEnvironment, resetEmulators, serverRead, signedInDevice, withProfile } from './harness';
+import { closeDevices, closeEnvironment, queued, resetEmulators, serverRead, signedInDevice, withProfile } from './harness';
 
 // NFCT-21: a run played by the Mental Math runner, turned into a session the
 // way the game screen does, and saved through the real repository with the
@@ -31,9 +31,11 @@ describe('saving a played Mental Math run', () => {
       windows: Array.from({ length: 90 }, (_, index) => ({ mindfulness: 0.5 + (index % 10) / 40, restfulness: 0.6, usable: true })),
     });
 
-    const saved = await started.save({ definition: mentalMath.definition, session, eegRecording });
+    if (!eegRecording) throw new Error('The windows produced no EEG summary.');
+    const saved = await started.save({ definition: mentalMath.definition, session });
+    const eeg = await device.eeg.saveRecording(saved, eegRecording);
     await saved.acknowledged;
-    await expect(started.save({ definition: mentalMath.definition, session, eegRecording })).rejects.toBeInstanceOf(GameSessionAlreadySavedError);
+    await expect(started.save({ definition: mentalMath.definition, session })).rejects.toBeInstanceOf(GameSessionAlreadySavedError);
 
     const stored = await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`);
     expect(stored).toMatchObject({ status: 'completed', seed: started.seed, activeDurationMs: 90_000, startLevel: 1 });
@@ -42,8 +44,8 @@ describe('saving a played Mental Math run', () => {
     const parsed = gameSessionSchemaFor(mentalMath.definition, 'read').parse(stored);
     expect(mentalMath.checkSession(parsed)).toMatchObject({ outcome: 'valid', reasons: [] });
 
-    expect(saved.eegRecording.status).toBe('included');
-    const recordingId = saved.eegRecording.status === 'included' ? saved.eegRecording.recordingId : '';
+    const { recordingId, serverOutcome } = queued(eeg);
+    expect(await serverOutcome).toEqual({ status: 'acknowledged' });
     const recording = await serverRead(`users/${device.player.uid}/eegRecordings/${recordingId}`);
     expect(recording).toMatchObject({ gameSessionId: started.sessionId, source: 'simulated', device: { model: 'unknown' } });
   });

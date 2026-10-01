@@ -244,3 +244,57 @@ test('simulated EEG never changes the trials or the score for the same seed and 
   expect(simulated!.data.peakLevel).toBe(3);
   expect(await readEegRecordings(uid)).toHaveLength(0);
 });
+
+test('offline at the end of a run: the run is saved on the device, simulated EEG is not, and the session uploads once on reconnect', async ({ page, context }) => {
+  const uid = await openMentalMath(page);
+  await page.getByRole('checkbox', { name: /Use Simulated EEG \(Demo Mode\)/ }).check();
+  await startRun(page, 1);
+  for (const correct of [true, false, true]) await answer(page, correct);
+  await context.setOffline(true);
+  await runOut(page);
+  // Page time flows again so the save's bounded consent check can finish.
+  await page.clock.resume();
+  await expect(page.locator('.mm-save')).toHaveText('Saved on this device. Uploading to your account…');
+  // EEG consent is confirmed only with the server, so offline the recording is not saved, and the run still is.
+  await expect(page.locator('.mm-eeg-status')).toHaveText(
+    'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed: you were offline or the connection was too slow.',
+    { timeout: 15_000 },
+  );
+  expect(await readGameSessions(uid)).toHaveLength(0);
+
+  await context.setOffline(false);
+  await expect(page.locator('.mm-save')).toHaveText('Run saved to your account.', { timeout: 30_000 });
+  const sessions = await readGameSessions(uid);
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0]!.data).toMatchObject({ status: 'completed', seed: E2E_FIXED_SESSION_SEED });
+  expect(await readEegRecordings(uid)).toHaveLength(0);
+});
+
+test('a run saved while Firestore is unreachable survives a reload and is uploaded exactly once', async ({ page, context }) => {
+  const uid = await openMentalMath(page);
+  await startRun(page, 1);
+  const typed: number[] = [];
+  for (const correct of [true, true]) typed.push(await answer(page, correct));
+  // Only the Firestore emulator is cut off (setOffline would also stop the app itself from reloading).
+  const firestore = 'http://127.0.0.1:8080/**';
+  await context.route(firestore, (route) => route.abort('internetdisconnected'));
+  await runOut(page);
+  await page.clock.resume();
+  await expect(page.locator('.mm-save')).toHaveText('Saved on this device. Uploading to your account…');
+
+  // The queued write is in the persistent cache, so it survives a full reload.
+  await page.reload();
+  await arriveAtPatientDashboard(page);
+  expect(await readGameSessions(uid)).toHaveLength(0);
+
+  await context.unroute(firestore);
+  await expect.poll(async () => (await readGameSessions(uid)).length, { timeout: 30_000 }).toBe(1);
+  const [session] = await readGameSessions(uid);
+  expect(session!.data).toMatchObject({ status: 'completed', seed: E2E_FIXED_SESSION_SEED });
+  expect((session!.data.trials as Trial[]).filter((trial) => !trial.timedOut).map((trial) => trial.response)).toEqual(typed);
+  // The game's own history read, back online, still finds one session: the write was not repeated.
+  await page.getByRole('button', { name: 'Train', exact: true }).click();
+  await page.getByRole('button', { name: 'Mental Math', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
+  expect(await readGameSessions(uid)).toHaveLength(1);
+});

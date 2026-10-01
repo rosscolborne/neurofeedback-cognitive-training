@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { browserGameClock } from '../../clock/gameClock';
 import type { EegCaptureProvider } from '../../eeg/eegCapture';
-import { gameSessionRepository, progressRepository } from '../../repositories';
+import { eegRecordingRepository, gameSessionRepository, progressRepository } from '../../repositories';
 import { MentalMathScreen } from './MentalMathScreen';
 import { APP_VERSION, deviceTimezone, type SessionEnvironment } from './sessionDraft';
 
@@ -22,6 +22,7 @@ export const MentalMathGame: React.FC<{
   return (
     <MentalMathScreen
       gameSessions={gameSessionRepository}
+      eegRecordings={eegRecordingRepository}
       progress={progressRepository}
       clock={browserGameClock}
       environment={environment}

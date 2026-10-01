@@ -4,8 +4,14 @@ import { mentalMath } from '@nfct/shared';
 import type { GameClock } from '../../clock/gameClock';
 import type { EegCapture, EegCaptureProvider } from '../../eeg/eegCapture';
 import type { EegSource } from '@nfct/shared';
-import type { EegRecordingDraft } from '../../repositories/eegRecordingRepository';
-import type { EegRecordingOutcome, GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
+import type {
+  EegRecordingDraft,
+  EegRecordingRefusalReason,
+  EegRecordingRepository,
+  EegRecordingSave,
+  EegRecordingSkipReason,
+} from '../../repositories/eegRecordingRepository';
+import type { GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import { Keypad } from './Keypad';
 import { MentalMathRunController, type RunOutcome, type RunSnapshot } from './runController';
@@ -21,6 +27,8 @@ import './mentalMath.css';
 
 export interface MentalMathScreenProps {
   readonly gameSessions: Pick<GameSessionRepository, 'startGameSession' | 'getGameSession'>;
+  /** Writes the run's EEG recording, after the session is queued. */
+  readonly eegRecordings: Pick<EegRecordingRepository, 'saveRecording'>;
   readonly progress: Pick<ProgressRepository, 'subscribeToProgressWithRecentSessions'>;
   readonly clock: GameClock;
   readonly environment: SessionEnvironment;
@@ -30,10 +38,18 @@ export interface MentalMathScreenProps {
   readonly onExit: () => void;
 }
 
+/** The run's EEG recording, reported separately from the session: "run saved, EEG not saved" is a normal outcome. */
+type EegState =
+  | { readonly status: 'none' }
+  | { readonly status: 'checking' }
+  | { readonly status: 'queued' }
+  | { readonly status: 'saved' }
+  | { readonly status: 'not-saved'; readonly reason: EegRecordingSkipReason | EegRecordingRefusalReason | 'error' };
+
 type SaveState =
   | { readonly status: 'saving' }
-  | { readonly status: 'queued'; readonly eeg: EegRecordingOutcome }
-  | { readonly status: 'confirmed'; readonly eeg: EegRecordingOutcome }
+  | { readonly status: 'queued'; readonly eeg: EegState }
+  | { readonly status: 'confirmed'; readonly eeg: EegState }
   | { readonly status: 'failed'; readonly message: string };
 
 /** What the player is told about the EEG provider that ran: its label and its provenance. */
@@ -51,6 +67,7 @@ function errorMessage(error: unknown): string {
 
 export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
   gameSessions,
+  eegRecordings,
   progress,
   clock,
   environment,
@@ -98,26 +115,56 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
       eegRecording = null;
     }
     let saved: SavedGameSession;
+    // The session and the EEG recording report separately; each update keeps the other's latest state.
+    let session: 'queued' | 'confirmed' | 'failed' = 'queued';
+    let eegState: EegState = { status: eegRecording ? 'checking' : 'none' };
+    const report = (message = '') => setSave(session === 'failed' ? { status: 'failed', message } : { status: session, eeg: eegState });
     void (async () => {
       try {
-        saved = await game.save({ definition: mentalMath.definition, session: buildSessionDraft(outcome, environment), eegRecording });
+        saved = await game.save({ definition: mentalMath.definition, session: buildSessionDraft(outcome, environment) });
       } catch (error) {
         setSave({ status: 'failed', message: errorMessage(error) });
         return;
       }
-      setSave({ status: 'queued', eeg: saved.eegRecording });
+      report();
+      // Offered straight after the session is queued (not after it is acknowledged), with what save() returned.
+      if (eegRecording) void saveEeg(saved, eegRecording);
       try {
         await saved.acknowledged;
-        setSave({ status: 'confirmed', eeg: saved.eegRecording });
+        session = 'confirmed';
+        report();
       } catch (error) {
         // The refusal can be ambiguous (the write landed, its acknowledgement
         // was lost): check before telling the player the save failed.
         const read = await gameSessions.getGameSession(saved.sessionId).catch(() => null);
-        if (read?.status === 'readable' && !read.data.hasPendingWrites) setSave({ status: 'confirmed', eeg: saved.eegRecording });
-        else setSave({ status: 'failed', message: errorMessage(error) });
+        session = read?.status === 'readable' && !read.data.hasPendingWrites ? 'confirmed' : 'failed';
+        report(errorMessage(error));
       }
     })();
-  }, [environment, gameSessions]);
+
+    async function saveEeg(queuedSession: SavedGameSession, draft: EegRecordingDraft): Promise<void> {
+      const update = (next: EegState) => { eegState = next; if (session !== 'failed') report(); };
+      let result: EegRecordingSave;
+      try {
+        result = await eegRecordings.saveRecording(queuedSession, draft);
+      } catch {
+        // Never affects the session.
+        update({ status: 'not-saved', reason: 'error' });
+        return;
+      }
+      if (result.status === 'skipped') {
+        update({ status: 'not-saved', reason: result.reason });
+        return;
+      }
+      update({ status: 'queued' });
+      try {
+        const server = await result.serverOutcome;
+        update(server.status === 'acknowledged' ? { status: 'saved' } : { status: 'not-saved', reason: server.reason });
+      } catch {
+        update({ status: 'not-saved', reason: 'error' });
+      }
+    }
+  }, [environment, gameSessions, eegRecordings]);
 
   const startRun = useCallback((startLevel: number, withEeg: boolean) => {
     let game: StartedGameSession;
@@ -417,20 +464,37 @@ const PausePanel: React.FC<{
 
 // ---- Post-run handoff (NFCT-22 owns the full summary) ----
 
-function eegMessage(eeg: EegRecordingOutcome, { label, source }: EegInfo): string {
+function eegMessage(eeg: EegState, { label, source }: EegInfo): string {
+  const simulated = source === 'simulated' ? ' It is simulated data, not a measurement.' : '';
   switch (eeg.status) {
-    case 'included':
-      return source === 'simulated'
-        ? `${label} recording saved with this run. It is simulated data, not a measurement.`
-        : `${label} recording saved with this run.`;
-    case 'skipped':
-      return eeg.reason === 'consent-required'
-        ? `${label} was not saved: saving EEG needs your EEG consent.`
-        : eeg.reason === 'consent-unavailable'
-          ? `${label} was not saved: your EEG consent couldn’t be checked.`
-          : `${label} was not saved: the recording was incomplete.`;
     case 'none':
       return `No ${label} was captured during this run.`;
+    case 'checking':
+      return `Checking your EEG consent before saving ${label}…`;
+    case 'queued':
+      return `${label} recording saved on this device. Uploading…${simulated}`;
+    case 'saved':
+      return `${label} recording saved with this run.${simulated}`;
+    case 'not-saved':
+      switch (eeg.reason) {
+        case 'consent-required':
+          return `${label} was not saved: saving EEG needs your EEG consent.`;
+        case 'consent-unavailable':
+          return `${label} wasn’t saved because your EEG consent couldn’t be confirmed: you were offline or the connection was too slow.`;
+        case 'consent-withdrawn':
+          return `${label} was not saved: your EEG consent was withdrawn.`;
+        case 'invalid':
+          return `${label} was not saved: the recording was incomplete.`;
+        case 'session-not-saved':
+          return `${label} was not saved because the run was not saved.`;
+        case 'already-recorded':
+          return `${label} was already saved for this run.`;
+        case 'owner-changed':
+          return `${label} was not saved because you signed out.`;
+        case 'unknown':
+        case 'error':
+          return `${label} couldn’t be saved.`;
+      }
   }
 }
 
@@ -462,7 +526,7 @@ const RunHandoff: React.FC<{
           {outcome.run.trials.length} {outcome.run.trials.length === 1 ? 'question' : 'questions'} attempted, {scored.metrics.correct} correct.
         </p>
         <p className={`mm-save mm-save-${save.status}`} role="status">{saveText}</p>
-        {eeg && save.status !== 'saving' && save.status !== 'failed' && <p className="mm-help">{eegMessage(save.eeg, eeg)}</p>}
+        {eeg && save.status !== 'saving' && save.status !== 'failed' && <p className="mm-help mm-eeg-status" role="status">{eegMessage(save.eeg, eeg)}</p>}
         <p className="mm-help">The server checks every run before it counts toward your records and unlocks. Until then this score is provisional.</p>
         <div className="mm-actions">
           <button type="button" className="btn btn-primary" onClick={onPlayAgain}>Play again</button>
