@@ -33,9 +33,10 @@ export type Verification =
   | { readonly kind: 'provisional'; readonly detail: 'saving' | 'on-device' | 'checking' | 'delayed' }
   | { readonly kind: 'verified' }
   /**
-   * Counts in totals, not in records or unlocks. `upgradable`: only its start
-   * level was locked, so trusted scoring makes it valid once that level is
-   * unlocked (ADR-001 decision 12's upgrade).
+   * Counts in totals, not in records or unlocks. `upgradable`: a finished run
+   * whose only flag is its locked start level, so trusted scoring makes it
+   * valid, with its records and unlocks, once that level is unlocked (ADR-001
+   * decision 12's upgrade).
    */
   | { readonly kind: 'flagged'; readonly reasons: readonly string[]; readonly upgradable: boolean }
   /** Counts nowhere. */
@@ -52,7 +53,7 @@ export type RecordLine =
   | { readonly kind: 'new-best'; readonly startLevel: number; readonly metrics: readonly RecordMetric[] }
   | { readonly kind: 'best-so-far'; readonly startLevel: number; readonly bestScore: number | null }
   | { readonly kind: 'ineligible'; readonly startLevel: number; readonly reason: 'abandoned' | 'invalid' | 'not-saved'; readonly bestScore: number | null }
-  /** `upgradable`: flagged only for its locked start level, so it can still set a record once that level unlocks. */
+  /** `upgradable`: a finished run flagged only for its locked start level, so it can still set a record once that level unlocks. */
   | { readonly kind: 'ineligible'; readonly startLevel: number; readonly reason: 'flagged'; readonly bestScore: number | null; readonly upgradable: boolean };
 
 export type UnlockLine =
@@ -188,7 +189,8 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
     // The client document holds every field the upgrade reads (game, version, mode, start level).
     if (decision) judged = { ...document, result: decision.result } as unknown as SessionProgressFields;
   }
-  const upgradable = shown?.validity === 'flagged' && judged !== null && upgradableLater(judged, after);
+  // Only a finished run gains records or unlocks when upgraded (applyValidEffects skips the rest).
+  const upgradable = shown?.validity === 'flagged' && outcome.status === 'completed' && judged !== null && upgradableLater(judged, after);
 
   const verification: Verification = save === 'failed' ? { kind: 'not-saved' }
     : trusted?.validity === 'valid' ? { kind: 'verified' }
