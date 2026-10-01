@@ -47,6 +47,15 @@ describe('Login password reset', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
+  it('marks the fields for Password AutoFill (NFCT-33)', async () => {
+    const renderer = await mount();
+    expect(emailInput(renderer).props.autoComplete).toBe('email');
+    const password = renderer.root.findByProps({ type: 'password' });
+    expect(password.props.autoComplete).toBe('current-password');
+    expect(password.props.enterKeyHint).toBe('go');
+    renderer.unmount();
+  });
+
   it('keeps the sample clinician workspace entry usable', async () => {
     const renderer = await mount();
     expect(text(renderer.root)).toContain('Fictional sample records for demonstration only');

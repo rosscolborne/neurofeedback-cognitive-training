@@ -1718,8 +1718,10 @@ a, button, input, label, select, textarea {
   cursor: pointer;
 }
 
-.ng-quiet-action:hover {
-  background: var(--surface-patient-recessed);
+@media (hover: hover) {
+  .ng-quiet-action:hover {
+    background: var(--surface-patient-recessed);
+  }
 }
 
 .ng-quiet-action:focus-visible,

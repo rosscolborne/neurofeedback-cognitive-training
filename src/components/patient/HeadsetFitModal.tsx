@@ -86,8 +86,6 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
         style={{
           width: '100%',
           maxWidth: '480px',
-          maxHeight: '100%',
-          overflowY: 'auto',
           backgroundColor: '#FFFFFF',
           borderRadius: 'var(--radius-xl)',
           padding: '28px 24px',
@@ -95,7 +93,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
-          maxHeight: '92vh',
+          maxHeight: '100%',
           overflowY: 'auto',
         }}
       >
