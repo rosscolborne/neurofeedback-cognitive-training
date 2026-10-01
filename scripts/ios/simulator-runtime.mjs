@@ -19,9 +19,13 @@ export function findRuntime(runtimes, version) {
     && (runtime.version === version || runtime.version.startsWith(`${version}.`))) ?? null;
 }
 
-/** The smallest supported iPhone first: the iPhone SE is also the smallest screen the app supports. */
-export function pickDeviceType(runtime) {
-  const iphones = (runtime.supportedDeviceTypes ?? []).filter((type) => type.productFamily === 'iPhone' || type.name.startsWith('iPhone'));
+/**
+ * The smallest supported iPhone first: the iPhone SE is also the smallest
+ * screen the app supports. Without the runtime's own list, any device type
+ * this Xcode knows (creating the device then fails if the runtime refuses it).
+ */
+export function pickDeviceType(runtime, knownTypes = []) {
+  const iphones = (runtime.supportedDeviceTypes ?? knownTypes).filter((type) => type.productFamily === 'iPhone' || type.name.startsWith('iPhone'));
   const preferred = ['iPhone SE (3rd generation)', 'iPhone 14', 'iPhone 15', 'iPhone 16'];
   return preferred.map((name) => iphones.find((type) => type.name === name)).find(Boolean) ?? iphones[0] ?? null;
 }
@@ -49,7 +53,7 @@ function attempt(version) {
     runtime = findRuntime(listRuntimes(), version);
     if (!runtime) throw new Error(`iOS ${version} is not listed as an available runtime after the download.`);
   }
-  const type = pickDeviceType(runtime);
+  const type = pickDeviceType(runtime, JSON.parse(xcrun('simctl', 'list', 'devicetypes', '--json')).devicetypes);
   if (!type) throw new Error(`iOS ${runtime.version} supports no iPhone this Xcode knows.`);
   const udid = xcrun('simctl', 'create', `NFCT minimum iOS ${runtime.version}`, type.identifier, runtime.identifier).trim();
   try {

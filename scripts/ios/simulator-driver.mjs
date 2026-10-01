@@ -228,7 +228,8 @@ export class AppDriver {
     } catch (error) {
       result = { ok: false, reason: error.message };
     }
-    this.record({ action, target: description, ok: result.ok === true, ms: Date.now() - started, detail: result.ok ? undefined : result.reason, scrolled: result.scrolled || undefined });
+    const detail = result.ok ? (result.waited ? `waited: ${result.waited}` : undefined) : result.reason;
+    this.record({ action, target: description, ok: result.ok === true, ms: Date.now() - started, detail, scrolled: result.scrolled || undefined });
     if (result.ok !== true) throw new StepError(`${action} ${description}: ${result.reason ?? 'failed'}`, result);
     return result;
   }

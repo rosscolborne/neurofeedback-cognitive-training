@@ -148,10 +148,11 @@ a higher one.
 | # | Layer | Proves | Runs | Needs |
 | --- | --- | --- | --- | --- |
 | 1 | Desktop Chromium Playwright | Normal browser regressions | `ci.yml`, every PR | Linux |
-| 2 | Playwright WebKit, iPhone SE (3rd gen) and iPhone 17 profiles | WebKit engine differences; small-screen, touch and mobile layout | `ios.yml` `webkit`, every PR; `npm run test:e2e:webkit` | Linux |
-| 3 | Native build and iOS Simulator | The project compiles; Release is safe; in WKWebView at `capacitor://localhost`, the [Simulator scenarios](#simulator-scenarios) pass through the real UI: sign-up and relaunch, a whole Mental Math run saved, backgrounding pauses a run, a kill mid-run saves nothing; weekly on the [oldest supported iOS](#the-minimum-ios-runtime) | `ios.yml` `native`, GitHub-hosted macOS | Nothing local |
-| 4 | Physical iPhone | Interruptions that never hide the page, the software keyboard, IndexedDB durability, real performance | NFCT-32 checklist | The owner's iPhone and signing |
-| 5 | Real Muse headset | Bluetooth, acquisition, signal quality | NFCT-15 | Hardware |
+| 2 | Interactive Chromium at iPhone sizes (iPhone SE (3rd gen) and iPhone 17 profiles) | Layout, overflow, clipping and touch targets at phone sizes, operated by an agent in real Chrome. Chromium mobile emulation: not iOS or Safari evidence | [Exploratory QA](../../.agents/skills/nfct-exploratory-qa/SKILL.md) of every user-facing change | Linux |
+| 3 | Playwright WebKit, iPhone SE (3rd gen) and iPhone 17 profiles | WebKit engine differences; small-screen, touch and mobile layout | `ios.yml` `webkit`, every PR; `npm run test:e2e:webkit` | Linux |
+| 4 | Native build and iOS Simulator | The project compiles; Release is safe; in WKWebView at `capacitor://localhost`, the [Simulator scenarios](#simulator-scenarios) pass through the real UI: sign-up and relaunch, a whole Mental Math run saved, backgrounding pauses a run, a kill mid-run saves nothing; weekly on the [oldest supported iOS](#the-minimum-ios-runtime) | `ios.yml` `native`, GitHub-hosted macOS | Nothing local |
+| 5 | Physical iPhone | Interruptions that never hide the page, the software keyboard, IndexedDB durability, real performance | NFCT-32 checklist | The owner's iPhone and signing |
+| 6 | Physical iPhone with a Muse headset | Bluetooth, acquisition and signal quality on the device | NFCT-15 | The iPhone and a headset |
 
 Alongside these, `ios.yml` `release-bundle` runs on every PR. It builds and
 syncs the production bundle, runs `verify:ios-release`, and shows that the
@@ -163,8 +164,8 @@ selection (NFCT-44). A failure there is a product bug, so it is not retried away
 
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView. It does not
 prove older iOS versions, the `capacitor://` origin, suspension, the software
-keyboard, safe areas or Bluetooth. Layer 3 adds the real WKWebView, the
-origin and iOS's own app lifecycle. Layer 4 adds what only a device shows.
+keyboard, safe areas or Bluetooth. Layer 4 adds the real WKWebView, the
+origin and iOS's own app lifecycle. Layer 5 adds what only a device shows.
 
 ### The macOS job (`ios.yml` `native`)
 
@@ -235,7 +236,7 @@ UI, with no dependency beyond Node and Xcode:
 | --- | --- | --- |
 | `smoke` | Sign-up and the role choice (a Firestore write) through the real UI; a cold relaunch restores the session and role, or names the screen it landed on (role selection, "Your account couldn't be loaded", signed out); light and Dark Mode screenshots | Real touches or typing through the software keyboard |
 | `mental-math` | Train tab, Mental Math, level 1; a whole 90-second run answered on the on-screen keypad by reading and solving each question (one answer deliberately wrong); the end-of-run screen (`#mm-handoff-title`); exactly one session in the Firestore emulator: completed, 90 s active, `client.platform` `ios`, its answered trials exactly the responses typed, each marked correct or wrong as answered | Trusted scoring (the Functions emulator does not run here; `test:functions` covers it), the post-run summary's content (NFCT-22), real performance |
-| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it) pauses the run as a background pause; after 8 s away the clock has not moved, the run stays paused until the player resumes, and Resume shows a new question; a kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
+| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the 8 s away counts, the run stays paused until the player resumes, and Resume shows a new question. It times iOS's events (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`) against the `simctl` command and reports how long the clock ran before the page was hidden. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
 
 The scenarios use what a user sees plus a few stable hooks: the Mental Math
 HUD's `data-hud` attributes, `.mm-question`, `.mm-feedback`, `.mm-paused` and

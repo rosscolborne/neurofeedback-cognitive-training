@@ -8,7 +8,7 @@
 //
 //   smoke        sign up, relaunch: the session and role come back (plus light and Dark Mode screenshots)
 //   mental-math  sign up, play a whole 90-second run on the keypad, the session is written
-//   lifecycle    background mid-run pauses it; a kill mid-run writes nothing; a quit run is saved
+//   lifecycle    background mid-run pauses it, timed against iOS's own events; a kill mid-run writes nothing; a quit run is saved
 
 const button = (name, exact = true) => ({ role: 'button', name, exact });
 const heading = (name, exact = true) => ({ role: 'heading', name, exact });
@@ -122,11 +122,14 @@ async function answer(ctx, { correct = true, thinkMs = 500 } = {}) {
   const { app } = ctx;
   const ready = await app.wait([QUESTION_READY, { target: RUN_END }], { timeout: 15_000 });
   if (ready.index === 1) return null;
-  const question = (await app.read(QUESTION)).text.replace(/\s*=\s*$/, '');
-  const expected = solveQuestion(question);
-  const response = correct ? expected : expected + 1;
-  await sleep(thinkMs);
+  let question = null;
+  let expected = null;
+  let response = null;
   try {
+    question = (await app.read(QUESTION, { timeout: 3_000 })).text.replace(/\s*=\s*$/, '');
+    expected = solveQuestion(question);
+    response = correct ? expected : expected + 1;
+    await sleep(thinkMs);
     for (const digit of String(response)) await app.tap(key(digit), { timeout: 3_000 });
     const submitted = await app.tap(key('Submit'), {
       timeout: 3_000,
@@ -183,8 +186,8 @@ export const SCENARIOS = {
       const answers = [];
       let peakLevel = 1;
       const started = Date.now();
-      // The run is 90 s of active time; feedback flashes are extra. Stop well after it.
-      while (Date.now() - started < 150_000) {
+      // 90 s of active time, plus 0.4 s of feedback per answer off the clock: about 150 s. A safety stop only.
+      while (Date.now() - started < 300_000) {
         const result = await answer(ctx, { correct: answers.length !== 2 });
         if (!result) break;
         if (result.feedback) answers.push(result);
@@ -222,7 +225,7 @@ export const SCENARIOS = {
   },
 
   lifecycle: {
-    summary: 'Background mid-run (simctl launches Settings) pauses the run without losing time and waits for the player; a kill mid-run then relaunch writes no session; a quit run is still saved.',
+    summary: 'Background mid-run (simctl launches Settings): iOS hides the page, the run pauses, the time away never counts and the run waits for the player; a kill mid-run then relaunch writes no session; a quit run is still saved.',
     async run(ctx) {
       const { app, device } = ctx;
       await ctx.launch();
@@ -237,11 +240,14 @@ export const SCENARIOS = {
       await app.wait(QUESTION_READY);
       await sleep(2_000);
       const before = clockSeconds((await app.read(HUD_TIME)).text);
+      const readAt = Date.now();
       const launchBefore = ctx.channel.current;
+      const backgroundAt = Date.now();
       await device.background();
       const backgroundMs = 8_000;
       await sleep(backgroundMs);
       await ctx.checkpoint('in-background');
+      const foregroundAt = Date.now();
       await device.foreground();
       const paused = await app.waitIfAny({ target: heading('Paused') }, { timeout: 15_000 });
       ctx.check('The app resumes the same page (not a relaunch)', ctx.channel.current === launchBefore);
@@ -251,8 +257,26 @@ export const SCENARIOS = {
       const pauseText = await app.read({ css: '.mm-paused .mm-muted' });
       ctx.check('The pause is attributed to the background', /background/i.test(pauseText.text), pauseText.text);
       const after = clockSeconds((await app.read(HUD_TIME)).text);
-      // Reading the clock and backgrounding take a moment of active time; 8 s in the background must not count.
-      ctx.check('The run clock did not run in the background', before - after <= 2, `${before} s left before, ${after} s after ${backgroundMs / 1_000} s in the background`);
+
+      // What iOS told the page, and when, on the clock the host shares with the Simulator.
+      const { lifecycle } = await app.state();
+      const firstAfter = (since, test) => lifecycle.find((event) => event.at >= since && test(event));
+      const hidden = firstAfter(backgroundAt, ({ type, visibility }) => type === 'visibilitychange' && visibility === 'hidden');
+      const visible = firstAfter(foregroundAt, ({ type, visibility }) => type === 'visibilitychange' && visibility === 'visible');
+      const seconds = (ms) => `${(ms / 1_000).toFixed(1)} s`;
+      const timeline = lifecycle.filter(({ at }) => at >= backgroundAt)
+        .map(({ type, visibility, at }) => `${type}${type === 'visibilitychange' ? `:${visibility}` : ''} +${seconds(at - backgroundAt)}`).join(', ');
+      ctx.note(`Lifecycle events after simctl sent the app to the background (t = 0; brought back at +${seconds(foregroundAt - backgroundAt)}): ${timeline || 'none'}.`);
+      ctx.check('iOS hides the page in the background and shows it again on return (visibilitychange)', Boolean(hidden && visible),
+        hidden ? `hidden ${seconds(hidden.at - backgroundAt)} after the background command` : 'no hidden event');
+      // The clock may run from the read until the page is hidden; none of the time hidden may count.
+      const runningMs = (hidden?.at ?? foregroundAt) - readAt;
+      const lost = before - after;
+      ctx.check('The run clock stops when the page is hidden and does not run in the background', lost <= runningMs / 1_000 + 1,
+        `${before} s left before, ${after} s after; the page stayed visible ${seconds(runningMs)} after the clock was read, then was hidden ${hidden && visible ? seconds(visible.at - hidden.at) : '?'}`);
+      if (hidden && hidden.at - backgroundAt > 1_000) {
+        ctx.note(`The run clock kept running for about ${seconds(hidden.at - backgroundAt)} after the app was sent to the background, until iOS hid the page (reported, not failed: NFCT-32 adds a pause on the native inactive state).`);
+      }
       await sleep(3_000);
       const later = clockSeconds((await app.read(HUD_TIME)).text);
       const stillPaused = await app.waitIfAny({ target: heading('Paused') }, { timeout: 1_000 });

@@ -24,6 +24,17 @@
   window.addEventListener('error', (event) => report('uncaught-error', { message: String(event.message), source: event.filename }));
   window.addEventListener('unhandledrejection', (event) => report('unhandled-rejection', { message: String(event.reason?.message ?? event.reason) }));
 
+  // When iOS tells the page about the app's lifecycle, on the shared wall
+  // clock, so the host can time it against its own simctl commands. 'pause'
+  // and 'resume' on document are Capacitor's app-state events.
+  const lifecycle = [];
+  const note = (type) => {
+    lifecycle.push({ type, visibility: document.visibilityState, at: Date.now() });
+    if (lifecycle.length > 100) lifecycle.shift();
+  };
+  for (const type of ['visibilitychange', 'pause', 'resume', 'freeze']) document.addEventListener(type, () => note(type));
+  for (const type of ['pagehide', 'pageshow', 'blur', 'focus']) window.addEventListener(type, () => note(type));
+
   // ---- Finding elements, as a user (or Playwright's getByRole) would ----
 
   const ROLES = {
@@ -250,8 +261,10 @@
   /** Waits for a single visible, enabled element that a user could tap. */
   async function actionable(target, timeout) {
     let last = '';
+    let first = '';
     let scrolled = false;
     const hit = await until(() => {
+      if (last && !first) first = last;
       const { element, reason } = single(target);
       if (!element) {
         last = reason;
@@ -269,7 +282,8 @@
       }
       return { element, ...result };
     }, timeout);
-    return hit ? { ...hit, scrolled } : { reason: `Could not tap ${describeTarget(target)} within ${timeout} ms: ${last}.` };
+    // `waited` says what held a successful tap up, for the step log.
+    return hit ? { ...hit, scrolled, waited: first || last || undefined } : { reason: `Could not tap ${describeTarget(target)} within ${timeout} ms: ${last}.` };
   }
 
   // ---- Commands ----
@@ -279,7 +293,7 @@
       const hit = await actionable(target, timeout);
       if (hit.reason) return { ok: false, reason: hit.reason };
       dispatchTap(hit);
-      const tapped = { ok: true, tapped: describe(hit.target), at: hit.point, scrolled: hit.scrolled };
+      const tapped = { ok: true, tapped: describe(hit.target), at: hit.point, scrolled: hit.scrolled, waited: hit.waited };
       if (!then) return tapped;
       // Waits in the page straight after the tap, so a short-lived state (a feedback flash) is not missed.
       const after = await waitFor(then.conditions, then.timeout ?? 5_000, FAST_POLL_MS);
@@ -294,7 +308,7 @@
       Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, value);
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      return input.value === value ? { ok: true, scrolled: hit.scrolled } : { ok: false, reason: `${describe(input)} did not take the value.` };
+      return input.value === value ? { ok: true, scrolled: hit.scrolled, waited: hit.waited } : { ok: false, reason: `${describe(input)} did not take the value.` };
     },
     wait({ conditions, timeout = 10_000 }) {
       return waitFor(conditions, timeout);
@@ -310,7 +324,7 @@
       return { ok: true, text: elementText(element), name: accessibleName(element), enabled: isEnabled(element), checked: Boolean(element.checked) };
     },
     async state() {
-      return { ok: true, hash: location.hash, visibilityState: document.visibilityState, readyState: document.readyState, hasFocus: document.hasFocus() };
+      return { ok: true, hash: location.hash, visibilityState: document.visibilityState, hasFocus: document.hasFocus(), now: Date.now(), lifecycle: [...lifecycle] };
     },
     /** What is on screen, for failure reports: headings, controls, alerts and layout. */
     async snapshot() {

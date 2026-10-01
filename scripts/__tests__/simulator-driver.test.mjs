@@ -171,5 +171,7 @@ describe('the minimum-iOS runtime choice', () => {
     expect(pickDeviceType(runtimes[1]).name).toBe('iPhone SE (3rd generation)');
     expect(pickDeviceType(runtimes[0]).name).toBe('iPhone 17');
     expect(pickDeviceType({ supportedDeviceTypes: [{ name: 'iPad Air', productFamily: 'iPad' }] })).toBeNull();
+    // A runtime that does not list its device types falls back to the ones Xcode knows.
+    expect(pickDeviceType({}, [iPhone('iPhone 14'), iPhone('iPhone 17')]).name).toBe('iPhone 14');
   });
 });
