@@ -48,6 +48,14 @@ export async function seedLinkedPatient(extra: Record<string, unknown> = {}): Pr
   return { clinician, patient, name };
 }
 
+/** A consumer player: an Auth account only. The app creates its profile (users/{uid}) itself. */
+export async function seedConsumerAccount(): Promise<{ uid: string; email: string; password: string }> {
+  const id = randomUUID().slice(0, 12);
+  const account = { uid: `player-${id}`, email: `player-${id}@example.test`, password: 'LocalEmulator!123' };
+  await adminAuth.createUser({ ...account, displayName: 'Local Player' });
+  return account;
+}
+
 export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture): Promise<LocalPatientFixture> {
   const id = randomUUID().slice(0, 12);
   const patient = { uid: `patient-${id}`, email: `patient-${id}@example.test`, password: 'LocalEmulator!123' };

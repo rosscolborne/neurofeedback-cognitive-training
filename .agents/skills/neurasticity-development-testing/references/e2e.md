@@ -57,6 +57,11 @@ additional browser contexts. Specs that probe a deliberate denial call
   through the signed-in page, using its own ID token and the same Firestore
   rules, that data the UI reports as saved reached Firestore.
 - `e2e/helpers/firestoreProbe.ts`: in-page allowed/denied read probes.
+- `e2e/helpers/cacheIsolation.ts`: in-page probes of the persistent Firestore
+  cache on the app's own instance (cached, listener and offline reads, an
+  IndexedDB scan), used by `cache-isolation.persistence.local.spec.ts` to show
+  that one account cannot read another's cached data after a sign-out,
+  account switch or account deletion.
 
 ## Consumer repository tests
 
