@@ -14,7 +14,6 @@ import {
 import {
   closeDevices,
   closeEnvironment,
-  eegDraft,
   eventually,
   expectDenied,
   minutesAgo,
@@ -30,7 +29,6 @@ import {
   timestampAt,
   type TestTrial,
   trustedResult,
-  withProfile,
 } from './harness';
 
 const SESSION_KEYS = [
@@ -112,7 +110,8 @@ describe('saving a finished session', () => {
     const saved = await started.save({ definition: testGame, session: draft });
     await saved.acknowledged;
 
-    expect(saved).toMatchObject({ sessionId: started.sessionId, eegRecording: { status: 'none' } });
+    expect(saved).toMatchObject({ sessionId: started.sessionId, userId: device.player.uid });
+    expect(Object.keys(saved).sort()).toEqual(['acknowledged', 'sessionId', 'userId']);
     const stored = await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`);
     expect(Object.keys(stored ?? {}).sort()).toEqual(SESSION_KEYS);
     expect(stored).toMatchObject({
@@ -141,19 +140,19 @@ describe('saving a finished session', () => {
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toMatchObject({ peakLevel: 2 });
   });
 
-  it('refuses concurrent saves of one game, so only one batch is ever queued', async () => {
+  it('refuses concurrent saves of one game, so only one write is ever queued', async () => {
     const device = await signedInDevice();
-    await withProfile(device, { eegConsent: true });
     const started = device.sessions.startGameSession();
 
     const results = await Promise.allSettled([
-      started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() }),
       started.save({ definition: testGame, session: sessionDraft() }),
+      started.save({ definition: testGame, session: sessionDraft({ peakLevel: 3 }) }),
     ]);
 
     expect(results.map((result) => result.status)).toEqual(['fulfilled', 'rejected']);
     expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(GameSessionAlreadySavedError);
     await (results[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof started.save>>>).value.acknowledged;
+    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toMatchObject({ peakLevel: 2 });
   });
 
   it('the rules refuse the update a retried save would be, which is why the repository never retries', async () => {
@@ -269,121 +268,6 @@ describe('saving a finished session', () => {
     const stored = await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`);
     expect(stored?.endedAt).toBeInstanceOf(Timestamp);
     expect(timestampAt(stored, 'endedAt').isEqual(endedAt)).toBe(true);
-  });
-});
-
-describe('saving with an optional EEG recording', () => {
-  it('writes the session and its recording in one batch, linked only by the recording', async () => {
-    const device = await signedInDevice();
-    await withProfile(device, { eegConsent: true });
-    const started = device.sessions.startGameSession();
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft({ source: 'simulated' }) });
-    await saved.acknowledged;
-
-    expect(saved.eegRecording.status).toBe('included');
-    const recordingId = saved.eegRecording.status === 'included' ? saved.eegRecording.recordingId : '';
-    const recording = await serverRead(`users/${device.player.uid}/eegRecordings/${recordingId}`);
-    expect(recording).toMatchObject({ schemaVersion: 1, userId: device.player.uid, gameSessionId: started.sessionId, source: 'simulated' });
-    expect(recording?.createdAt).toBeInstanceOf(Timestamp);
-    // The session carries no EEG flag.
-    const stored = await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`);
-    expect(Object.keys(stored ?? {}).sort()).toEqual(SESSION_KEYS);
-    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(true);
-  });
-
-  it('writes measured recordings as measured', async () => {
-    const device = await signedInDevice();
-    await withProfile(device, { eegConsent: true });
-    const started = device.sessions.startGameSession();
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft({ source: 'measured' }) });
-    await saved.acknowledged;
-
-    const { recordings } = await device.eeg.listForGameSession(started.sessionId);
-    expect(recordings.map((record) => record.recording.source)).toEqual(['measured']);
-  });
-
-  it('still saves the session when EEG consent is missing, and says the recording was skipped', async () => {
-    const device = await signedInDevice();
-    await withProfile(device);
-    const started = device.sessions.startGameSession();
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-    await saved.acknowledged;
-
-    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-required' });
-    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
-    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
-  });
-
-  it('checks consent on the server, so consent withdrawn on another device skips the recording instead of costing the session', async () => {
-    const device = await signedInDevice();
-    await withProfile(device, { eegConsent: true });
-    // This device has read (and cached) the profile with consent...
-    const cached = await device.profiles.getProfile();
-    expect(cached.status === 'readable' && cached.data.eeg.consent).not.toBeNull();
-    // ...then consent is withdrawn on another device; nothing here is listening to the profile.
-    const profile = await serverRead(`users/${device.player.uid}`);
-    await serverWrite({ [`users/${device.player.uid}`]: { ...profile, eeg: { ...profile?.eeg, consent: null } } });
-    const started = device.sessions.startGameSession();
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-    await saved.acknowledged;
-
-    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-required' });
-    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
-    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
-  });
-
-  it('treats a missing profile as no consent', async () => {
-    const device = await signedInDevice();
-    const started = device.sessions.startGameSession();
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-    await saved.acknowledged;
-
-    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-required' });
-    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
-  });
-
-  it('skips a recording with no valid source, or any other schema problem, and still saves the session', async () => {
-    const device = await signedInDevice();
-    await withProfile(device, { eegConsent: true });
-    const invalid = [
-      { ...eegDraft(), source: undefined },
-      { ...eegDraft(), source: 'demo' },
-      { ...eegDraft(), device: { ...eegDraft().device, model: 'simulated' } },
-      { ...eegDraft(), valence: 0.4 },
-      { ...eegDraft(), gameSessionId: 'another-session-000001' },
-    ] as unknown as ReturnType<typeof eegDraft>[];
-
-    for (const eegRecording of invalid) {
-      const started = device.sessions.startGameSession();
-      const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording });
-      await saved.acknowledged;
-
-      expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'invalid' });
-      expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
-      expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
-    }
-  });
-});
-
-describe('an EEG value set to undefined', () => {
-  it('leaves only the recording out, and still saves the session', async () => {
-    const device = await signedInDevice();
-    await withProfile(device, { eegConsent: true });
-    const started = device.sessions.startGameSession();
-    const summary = { ...eegDraft().summary, relativeBandPower: { delta: 0.3, theta: undefined } };
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft({ summary }) });
-    await saved.acknowledged;
-
-    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'invalid' });
-    expect(saved.eegRecording.status === 'skipped' && saved.eegRecording.message).toMatch(/summary\.relativeBandPower\.theta/);
-    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
-    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
   });
 });
 

@@ -11,7 +11,6 @@ import {
   closeEnvironment,
   eegDraft,
   eventually,
-  newDevice,
   profileDraft,
   resetEmulators,
   serverRead,
@@ -22,7 +21,6 @@ import {
   stalledEndpoint,
   testGame,
   withProfile,
-  type Device,
 } from './harness';
 
 // Offline play (NFCT-20). The app uses Firestore's persistent IndexedDB cache;
@@ -110,41 +108,27 @@ describe('playing offline', () => {
     stopState();
   });
 
-  it('queues a session and its EEG recording as one batch, using the cached consent, and both land', async () => {
+  it('skips EEG offline even with consent cached on this device, at once, and still queues the session', async () => {
     const device = await signedInDevice();
     await withProfile(device, { eegConsent: true });
-    await device.profiles.getProfile();
+    // This device has read (and cached) the profile with consent.
+    const cached = await device.profiles.getProfile();
+    expect(cached.status === 'readable' && cached.data.eeg.consent).not.toBeNull();
     await disableNetwork(device.firestore);
     const started = device.sessions.startGameSession();
 
+    const saved = await started.save({ definition: testGame, session: sessionDraft() });
     const before = Date.now();
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
+    const eeg = await device.eeg.saveRecording(saved, eegDraft());
     // Offline the server read fails at once: no waiting for the consent read's time bound.
     expect(Date.now() - before).toBeLessThan(CONSENT_SERVER_READ_TIMEOUT_MS / 2);
-    expect(saved.eegRecording.status).toBe('included');
+    // Consent is established only by the server; the cached grant is never used.
+    expect(eeg).toMatchObject({ status: 'skipped', reason: 'consent-unavailable' });
+    expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
+
     await enableNetwork(device.firestore);
     await saved.acknowledged;
-
-    const recordingId = saved.eegRecording.status === 'included' ? saved.eegRecording.recordingId : '';
     expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
-    expect(await serverRead(`users/${device.player.uid}/eegRecordings/${recordingId}`)).toMatchObject({ gameSessionId: started.sessionId });
-  });
-
-  it('skips EEG it cannot check consent for offline, and still queues the session', async () => {
-    const first = await signedInDevice();
-    await withProfile(first, { eegConsent: true });
-    // A second install that has never read the profile.
-    const device: Device = newDevice();
-    await signInWithEmailAndPassword(device.auth, first.player.email, first.player.password);
-    await disableNetwork(device.firestore);
-    const started = device.sessions.startGameSession();
-
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-    expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-unavailable' });
-    await enableNetwork(device.firestore);
-    await saved.acknowledged;
-
-    expect(await serverRead(`users/${first.player.uid}/gameSessions/${started.sessionId}`)).toBeDefined();
     expect(await device.eeg.hasEegRecording(started.sessionId)).toBe(false);
   });
 
@@ -179,31 +163,29 @@ describe('playing offline', () => {
     await write.acknowledged;
   });
 
-  it('refuses a queued batch as a whole when consent was withdrawn meanwhile (the session goes with it)', async () => {
+  it('sends a session queued offline even if EEG consent is withdrawn before it reconnects', async () => {
     const device = await signedInDevice();
     await withProfile(device, { eegConsent: true });
-    await device.profiles.getProfile();
     await disableNetwork(device.firestore);
     const started = device.sessions.startGameSession();
-    const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-    // Consent withdrawn on another device before this one reconnects.
+    const saved = await started.save({ definition: testGame, session: sessionDraft() });
+    // Consent withdrawn on another device before this one reconnects: it has nothing to do with the session.
     const profile = await serverRead(`users/${device.player.uid}`);
     await serverWrite({ [`users/${device.player.uid}`]: { ...profile, eeg: { ...profile?.eeg, consent: null } } });
 
     await enableNetwork(device.firestore);
-    const error = await saved.acknowledged.catch((reason: unknown) => reason);
+    await saved.acknowledged;
 
-    expect((error as { code?: string }).code).toBe('permission-denied');
-    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toBeUndefined();
+    expect(await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`)).toMatchObject({ userId: device.player.uid });
   });
 });
 
 describe('saving never waits on the network for EEG consent', () => {
-  // disableNetwork() puts the SDK firmly offline, where reads answer from the
-  // cache at once. A stalled connection instead leaves it in an unknown state,
-  // where a plain getDoc() waits for the server for many seconds.
+  // disableNetwork() puts the SDK firmly offline, where server reads fail at
+  // once. A stalled connection instead leaves it in an unknown state, where a
+  // plain getDoc() waits for the server for many seconds.
 
-  it('waits only the bounded server read on a stalled connection, then uses the cached consent and queues the batch', async () => {
+  it('queues the session at once on a stalled connection, then skips the recording after the bounded consent read', async () => {
     const stalled = await stalledEndpoint();
     try {
       const device = await signedInDevice('stalled', { firestoreHost: stalled.host, eegOptions: { consentServerReadTimeoutMs: 300 } });
@@ -212,36 +194,22 @@ describe('saving never waits on the network for EEG consent', () => {
       void device.profiles.grantEegConsent(acceptedConsentVersion).acknowledged;
       const started = device.sessions.startGameSession();
 
-      const before = Date.now();
-      const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-      const elapsed = Date.now() - before;
+      const beforeSave = Date.now();
+      const saved = await started.save({ definition: testGame, session: sessionDraft() });
+      const saveElapsed = Date.now() - beforeSave;
+      const beforeEeg = Date.now();
+      const eeg = await device.eeg.saveRecording(saved, eegDraft());
+      const eegElapsed = Date.now() - beforeEeg;
 
-      expect(saved.eegRecording.status).toBe('included');
-      expect(elapsed).toBeGreaterThanOrEqual(250);
-      expect(elapsed).toBeLessThan(2_000);
-      const queued = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'gameSessions'));
-      expect(queued.docs.map((item) => [item.id, item.metadata.hasPendingWrites])).toEqual([[started.sessionId, true]]);
-    } finally {
-      await closeDevices();
-      await stalled.close();
-    }
-  });
-
-  it('skips the recording when the bounded server read fails and the profile is not cached, and queues the session', async () => {
-    const stalled = await stalledEndpoint();
-    try {
-      const device = await signedInDevice('stalled', { firestoreHost: stalled.host, eegOptions: { consentServerReadTimeoutMs: 300 } });
-      const started = device.sessions.startGameSession();
-
-      const before = Date.now();
-      const saved = await started.save({ definition: testGame, session: sessionDraft(), eegRecording: eegDraft() });
-      const elapsed = Date.now() - before;
-
-      expect(saved.eegRecording).toMatchObject({ status: 'skipped', reason: 'consent-unavailable' });
-      expect(elapsed).toBeGreaterThanOrEqual(250);
-      expect(elapsed).toBeLessThan(2_000);
-      const queued = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'gameSessions'));
-      expect(queued.docs.map((item) => item.id)).toEqual([started.sessionId]);
+      // The session never waits for EEG: it is queued before consent is even read.
+      expect(saveElapsed).toBeLessThan(250);
+      expect(eeg).toMatchObject({ status: 'skipped', reason: 'consent-unavailable' });
+      expect(eegElapsed).toBeGreaterThanOrEqual(250);
+      expect(eegElapsed).toBeLessThan(2_000);
+      const queuedSessions = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'gameSessions'));
+      expect(queuedSessions.docs.map((item) => [item.id, item.metadata.hasPendingWrites])).toEqual([[started.sessionId, true]]);
+      const queuedRecordings = await getDocsFromCache(collection(device.firestore, 'users', device.player.uid, 'eegRecordings'));
+      expect(queuedRecordings.docs).toEqual([]);
     } finally {
       await closeDevices();
       await stalled.close();

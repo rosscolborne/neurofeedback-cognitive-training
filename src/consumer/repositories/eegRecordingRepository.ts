@@ -10,6 +10,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   startAfter,
   where,
   writeBatch,
@@ -28,6 +29,7 @@ import {
   assertDocumentId,
   eegRecordingRef,
   eegRecordingsRef,
+  gameSessionRef,
   newDocumentId,
   profileRef,
   signedInUid,
@@ -41,17 +43,28 @@ import {
   assertValidWithServerClock,
   ConsumerWriteValidationError,
   pendingWrite,
+  withSdkValidation,
   type PendingWrite,
 } from '../firestore/writes';
+import type { SavedGameSession } from './gameSessionRepository';
 
 // users/{uid}/eegRecordings/{recordingId}: optional EEG summaries, each linked
-// to one game session. A recording is written only in the same batch as its
-// session (gameSessionRepository), because the rules require the linked
-// session to exist after the write. Recordings are never updated, and the
-// user can delete one or all of them at any time.
+// to one game session. This repository is the only writer of recordings.
 //
-// Whether a session has EEG is answered only by querying this collection on
-// `gameSessionId`: the session itself has no EEG flag (ADR-001 decision 3).
+// A recording is its own write, made after its session is saved and never in
+// the session's write: an EEG problem (no consent, consent that cannot be
+// confirmed, invalid data, a server refusal) costs only the recording, never
+// the session. The caller saves the session first (gameSessionRepository) and
+// then offers the recording with `saveRecording`. The rules require the linked
+// session to exist when the recording is written; the SDK sends one user's
+// queued writes in order, so a recording queued after its session reaches the
+// server after it. If the session is refused, the recording is refused too, so
+// no recording can land without its session.
+//
+// Recordings are never updated, and the user can delete one or all of them at
+// any time. Whether a session has EEG is answered only by querying this
+// collection on `gameSessionId`: the session itself has no EEG flag (ADR-001
+// decision 3).
 
 /** Fields the repository sets: the path owner, the schema version, the linked session and the server clock. */
 const REPOSITORY_OWNED_KEYS = ['schemaVersion', 'userId', 'gameSessionId', 'createdAt'] as const;
@@ -74,29 +87,79 @@ export interface EegRecordingsForSession {
   readonly fromCache: boolean;
 }
 
-/** Why a recording offered with a session was left out of the session's write. */
+/** Why a recording was not written. Nothing was queued, and the session is unaffected. */
 export type EegRecordingSkipReason =
-  /** The profile has no EEG consent (or no consumer profile exists). */
+  /** The server's profile records no EEG consent, or there is no consumer profile. */
   | 'consent-required'
-  /** Consent could not be checked: the server did not answer in time, and the profile is not cached. */
+  /**
+   * Consent could not be confirmed with the server: the device is offline,
+   * the server did not answer within the bound, or a consent change made on
+   * this device is not yet acknowledged. The cached profile is never used.
+   */
   | 'consent-unavailable'
   /** The draft breaks the shared EEG schema. */
-  | 'invalid';
+  | 'invalid'
+  /** The session is not saved on this device (never saved here, or already refused), so the rules would refuse the recording. */
+  | 'session-not-saved'
+  /** Nobody, or a different user, is signed in than the one whose session it is. */
+  | 'owner-changed';
 
-/** A recording ready to join its session's batch. */
-export interface PreparedEegRecording {
-  readonly status: 'ready';
-  readonly ref: DocumentReference;
-  readonly data: Record<string, unknown>;
-}
+/** Why the server refused a queued recording, as far as the repository could tell afterwards. */
+export type EegRecordingRefusalReason =
+  /** The profile had no EEG consent when the recording reached the server (for example, withdrawn on another device). */
+  | 'consent-withdrawn'
+  /** The linked session did not exist when the recording reached the server (for example, the session was refused). */
+  | 'session-not-saved'
+  /** The refusal could not be explained (for example, the server could not be read afterwards). */
+  | 'unknown';
 
-export interface SkippedEegRecording {
-  readonly status: 'skipped';
-  readonly reason: EegRecordingSkipReason;
-  readonly message: string;
+/** The server's verdict on a queued recording. It never rejects. */
+export type EegRecordingServerOutcome =
+  | { readonly status: 'acknowledged' }
+  | { readonly status: 'refused'; readonly reason: EegRecordingRefusalReason; readonly message: string };
+
+/** What happened to a recording offered for a saved session. */
+export type EegRecordingSave =
+  /**
+   * Written to the local cache and queued for the server, after the server
+   * confirmed consent. `serverOutcome` settles when the server accepts or
+   * refuses it (offline, it stays pending; with the persistent cache the
+   * queued write survives a restart).
+   */
+  | {
+    readonly status: 'queued';
+    readonly recordingId: string;
+    readonly serverOutcome: Promise<EegRecordingServerOutcome>;
+  }
+  /** Not written. The session is saved regardless (EEG is never required). */
+  | { readonly status: 'skipped'; readonly reason: EegRecordingSkipReason; readonly message: string };
+
+export class EegRecordingAlreadySavedError extends Error {
+  constructor(gameSessionId: string) {
+    super(`An EEG recording for game session ${gameSessionId} is already being saved or has been queued; a session gets at most one.`);
+    this.name = 'EegRecordingAlreadySavedError';
+  }
 }
 
 export interface EegRecordingRepository {
+  /**
+   * Writes the EEG recording of a session that `StartedGameSession.save` has
+   * already queued, as a separate create. Call it after `save` resolves, with
+   * what `save` returned.
+   *
+   * - It never throws for an EEG problem: a recording it cannot write is
+   *   `skipped` with a reason, and the session is unaffected.
+   * - Consent must be confirmed by the server's copy of the profile, read
+   *   within `CONSENT_SERVER_READ_TIMEOUT_MS`. Offline, on a stalled
+   *   connection, or with no server answer, the recording is skipped as
+   *   `consent-unavailable`; the cached profile is never used. The rules check
+   *   consent again when the recording reaches the server.
+   * - At most one recording is queued per session: once one is queued, or
+   *   while one is being saved, a further call throws
+   *   `EegRecordingAlreadySavedError`. After a skip nothing was queued, so the
+   *   call may be repeated.
+   */
+  saveRecording(session: Pick<SavedGameSession, 'sessionId' | 'userId'>, draft: EegRecordingDraft): Promise<EegRecordingSave>;
   /** Every recording linked to one session; normally zero or one. */
   listForGameSession(gameSessionId: string): Promise<EegRecordingsForSession>;
   /** True when any recording (readable or not) links to the session. Offline it answers from the cache. */
@@ -108,22 +171,20 @@ export interface EegRecordingRepository {
    * once the server has applied every delete.
    */
   deleteAllRecordings(): Promise<{ deleted: number }>;
-  /**
-   * Validates a recording for a session and checks consent, for
-   * gameSessionRepository to add to the session's batch. It never writes.
-   */
-  prepareRecording(gameSessionId: string, draft: EegRecordingDraft): Promise<PreparedEegRecording | SkippedEegRecording>;
 }
 
 const DELETE_PAGE_SIZE = 400;
 
 /**
- * The longest a save waits for the server's copy of the profile when checking
- * EEG consent. After it the cached profile is used, if there is one, and
- * otherwise the recording is skipped as 'consent-unavailable'. Offline, the
- * server read fails at once, so the cache is used without waiting.
+ * The longest `saveRecording` waits for the server's copy of the profile when
+ * confirming EEG consent. After it the recording is skipped as
+ * 'consent-unavailable'. Offline, the server read fails at once, so the skip
+ * is immediate. The session was saved before, so this never delays it.
  */
 export const CONSENT_SERVER_READ_TIMEOUT_MS = 1_500;
+
+/** The longest each server read takes when explaining a refusal; after it the reason is 'unknown'. */
+const REFUSAL_DIAGNOSIS_TIMEOUT_MS = 5_000;
 
 export interface EegRecordingRepositoryOptions {
   readonly consentServerReadTimeoutMs?: number;
@@ -144,43 +205,95 @@ function recordingRecord(raw: Record<string, unknown>, snapshot: QueryDocumentSn
   return { id: snapshot.id, recording: readEegRecording(raw), hasPendingWrites: snapshot.metadata.hasPendingWrites };
 }
 
+function skipped(reason: EegRecordingSkipReason, message: string): EegRecordingSave {
+  return { status: 'skipped', reason, message };
+}
+
+function refused(reason: EegRecordingRefusalReason, message: string): EegRecordingServerOutcome {
+  return { status: 'refused', reason, message };
+}
+
+/** True when the profile document is a readable consumer profile that records EEG consent. */
+function recordsConsent(snapshot: DocumentSnapshot): boolean {
+  const read = readDocument('users', snapshot, (raw) => readUserProfile(raw));
+  return read.status === 'readable' && read.data.eeg.consent !== null;
+}
+
 export function createEegRecordingRepository(
   context: ConsumerFirestoreContext,
   options: EegRecordingRepositoryOptions = {},
 ): EegRecordingRepository {
   const { firestore } = context;
   const consentServerReadTimeoutMs = options.consentServerReadTimeoutMs ?? CONSENT_SERVER_READ_TIMEOUT_MS;
+  /** Sessions with a recording being saved or already queued by this repository: one recording per session. */
+  const claimedSessions = new Set<string>();
 
   /**
-   * The profile for a consent check. The server's copy comes first, because
-   * the rules check consent as the server holds it when the batch arrives: a
-   * cached copy can still show consent that was withdrawn on another device,
-   * and a recording included on that basis would get the whole batch, session
-   * included, refused. The server read is bounded, so a save never waits long
-   * on the network: a plain getDoc() waits for the server while the connection
-   * state is unknown (at startup, or on a stalled connection), which can take
-   * many seconds. Offline, the server read fails at once and the cached copy
-   * is used; with neither, the recording is skipped.
+   * Null when the server's copy of the profile records consent; otherwise why
+   * the recording must be skipped. Consent is positively established only by
+   * the server: the cached profile is never used, because it can still show
+   * consent that was withdrawn on another device. A copy with a consent change
+   * made on this device and not yet acknowledged is not the server's word
+   * either. The read is bounded, so a save never waits long on the network: a
+   * plain getDoc() waits while the connection state is unknown (at startup, or
+   * on a stalled connection), which can take many seconds.
    */
-  async function profileForConsent(uid: string): Promise<DocumentSnapshot | null> {
-    const ref = profileRef(firestore, uid);
-    const fromServer = await withinTimeout(getDocFromServer(ref), consentServerReadTimeoutMs);
-    if (fromServer) return fromServer;
+  async function consentProblem(uid: string): Promise<{ reason: EegRecordingSkipReason; message: string } | null> {
+    const snapshot = await withinTimeout(getDocFromServer(profileRef(firestore, uid)), consentServerReadTimeoutMs);
+    if (!snapshot) {
+      return {
+        reason: 'consent-unavailable',
+        message: 'EEG consent could not be confirmed: the server could not be reached in time (offline or a slow connection).',
+      };
+    }
+    if (!recordsConsent(snapshot)) return { reason: 'consent-required', message: 'EEG consent is not recorded on the profile.' };
+    if (snapshot.metadata.hasPendingWrites) {
+      return {
+        reason: 'consent-unavailable',
+        message: 'EEG consent could not be confirmed: a profile change made on this device has not reached the server yet.',
+      };
+    }
+    return null;
+  }
+
+  /** The session is saved on this device: queued here and not refused, or already stored. */
+  async function sessionSavedHere(uid: string, sessionId: string): Promise<boolean> {
     try {
-      return await getDocFromCache(ref);
+      return (await getDocFromCache(gameSessionRef(firestore, uid, sessionId))).exists();
     } catch {
-      // Not cached on this device either.
-      return null;
+      // Not in this device's cache.
+      return false;
     }
   }
 
-  /** Null when the profile records consent; otherwise why the recording must be left out. */
-  async function consentProblem(uid: string): Promise<EegRecordingSkipReason | null> {
-    const snapshot = await profileForConsent(uid);
-    // No timely server answer and no cached profile. EEG is optional, so the session is saved without it.
-    if (!snapshot) return 'consent-unavailable';
-    const read = readDocument('users', snapshot, (raw) => readUserProfile(raw));
-    return read.status === 'readable' && read.data.eeg.consent !== null ? null : 'consent-required';
+  /**
+   * The server's verdict, explained. A refusal carries no reason, so the
+   * repository reads the server afterwards: the recording itself (a resend of
+   * a create the server already applied, whose acknowledgement was lost, is
+   * refused as an update, yet the recording exists), then the session, then
+   * consent.
+   */
+  async function serverOutcome(commit: Promise<void>, uid: string, sessionId: string, ref: DocumentReference): Promise<EegRecordingServerOutcome> {
+    try {
+      await commit;
+      return { status: 'acknowledged' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // A server refusal arrives as a FirebaseError, not always a FirestoreError instance: compare the code.
+      if ((error as { code?: unknown } | null)?.code !== 'permission-denied') return refused('unknown', message);
+      const fromServer = (target: DocumentReference) => withinTimeout(getDocFromServer(target), REFUSAL_DIAGNOSIS_TIMEOUT_MS);
+      const recording = await fromServer(ref);
+      if (recording?.exists()) return { status: 'acknowledged' };
+      const session = await fromServer(gameSessionRef(firestore, uid, sessionId));
+      if (session && !session.exists()) {
+        return refused('session-not-saved', 'The server refused the EEG recording because its game session was not saved.');
+      }
+      const profile = await fromServer(profileRef(firestore, uid));
+      if (profile && !recordsConsent(profile)) {
+        return refused('consent-withdrawn', 'The server refused the EEG recording because EEG consent was no longer recorded on the profile.');
+      }
+      return refused('unknown', message);
+    }
   }
 
   async function listIds(fromServer: boolean, uid: string): Promise<string[]> {
@@ -196,6 +309,59 @@ export function createEegRecordingRepository(
   }
 
   return {
+    async saveRecording(session, draft) {
+      const sessionId = assertDocumentId('game session ID', session.sessionId);
+      if (claimedSessions.has(sessionId)) throw new EegRecordingAlreadySavedError(sessionId);
+      claimedSessions.add(sessionId);
+      let queued = false;
+      try {
+        const ownerChanged = () => context.auth.currentUser?.uid !== session.userId;
+        const ownerChangedMessage = 'The signed-in user changed after the session was saved, so its EEG recording was not saved.';
+        if (ownerChanged()) return skipped('owner-changed', ownerChangedMessage);
+        const uid = signedInUid(context);
+
+        const data = toSdkTimestamps({
+          ...draft,
+          schemaVersion: EEG_RECORDING_SCHEMA_VERSION,
+          userId: uid,
+          gameSessionId: sessionId,
+          createdAt: serverTimestamp(),
+        });
+        try {
+          assertNoReservedKeys('EEG recording', draft, REPOSITORY_OWNED_KEYS);
+          assertNoUndefined('EEG recording', data);
+          assertValidWithServerClock('EEG recording', eegRecordingWriteSchema, data);
+        } catch (error) {
+          if (error instanceof ConsumerWriteValidationError) return skipped('invalid', error.message);
+          throw error;
+        }
+
+        // The session must be queued (or stored) ahead of the recording: the
+        // rules refuse a recording whose session does not exist.
+        if (!(await sessionSavedHere(uid, sessionId))) {
+          return skipped('session-not-saved', 'The game session is not saved on this device, so its EEG recording cannot be saved.');
+        }
+        const problem = await consentProblem(uid);
+        if (problem) return skipped(problem.reason, problem.message);
+        // The checks were asynchronous: the session's player must still be the signed-in user.
+        if (ownerChanged()) return skipped('owner-changed', ownerChangedMessage);
+
+        const ref = eegRecordingRef(firestore, uid, newDocumentId(eegRecordingsRef(firestore, uid)));
+        let commit: Promise<void>;
+        try {
+          commit = withSdkValidation('EEG recording', () => setDoc(ref, data));
+        } catch (error) {
+          if (error instanceof ConsumerWriteValidationError) return skipped('invalid', error.message);
+          throw error;
+        }
+        queued = true;
+        return { status: 'queued', recordingId: ref.id, serverOutcome: serverOutcome(commit, uid, sessionId, ref) };
+      } finally {
+        // Nothing was queued: the session may still be offered a recording.
+        if (!queued) claimedSessions.delete(sessionId);
+      }
+    },
+
     async listForGameSession(gameSessionId) {
       const uid = signedInUid(context);
       const snapshot = await getDocs(query(eegRecordingsRef(firestore, uid), where('gameSessionId', '==', assertDocumentId('game session ID', gameSessionId))));
@@ -223,38 +389,6 @@ export function createEegRecordingRepository(
         await batch.commit();
       }
       return { deleted: all.length };
-    },
-
-    async prepareRecording(gameSessionId, draft) {
-      const uid = signedInUid(context);
-      assertDocumentId('game session ID', gameSessionId);
-      const data = toSdkTimestamps({
-        ...draft,
-        schemaVersion: EEG_RECORDING_SCHEMA_VERSION,
-        userId: uid,
-        gameSessionId,
-        createdAt: serverTimestamp(),
-      });
-      try {
-        assertNoReservedKeys('EEG recording', draft, REPOSITORY_OWNED_KEYS);
-        assertNoUndefined('EEG recording', data);
-        assertValidWithServerClock('EEG recording', eegRecordingWriteSchema, data);
-      } catch (error) {
-        if (error instanceof ConsumerWriteValidationError) return { status: 'skipped', reason: 'invalid', message: error.message };
-        throw error;
-      }
-      const problem = await consentProblem(uid);
-      if (problem) {
-        return {
-          status: 'skipped',
-          reason: problem,
-          message: problem === 'consent-required'
-            ? 'EEG consent is not recorded on the profile.'
-            : 'EEG consent could not be checked: the server did not answer in time and the profile is not cached.',
-        };
-      }
-      const collectionRef = eegRecordingsRef(firestore, uid);
-      return { status: 'ready', ref: eegRecordingRef(firestore, uid, newDocumentId(collectionRef)), data };
     },
   };
 }

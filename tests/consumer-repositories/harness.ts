@@ -28,7 +28,12 @@ import {
 } from '../../src/consumer/repositories/gameSessionRepository';
 import { createProfileRepository, type UserProfileDraft } from '../../src/consumer/repositories/profileRepository';
 import { createProgressRepository } from '../../src/consumer/repositories/progressRepository';
-import type { EegRecordingDraft, EegRecordingRepositoryOptions } from '../../src/consumer/repositories/eegRecordingRepository';
+import type {
+  EegRecordingDraft,
+  EegRecordingRepositoryOptions,
+  EegRecordingSave,
+  EegRecordingServerOutcome,
+} from '../../src/consumer/repositories/eegRecordingRepository';
 
 /**
  * Repository tests run the real consumer repositories against the local Auth
@@ -96,11 +101,15 @@ export function newDevice(options: DeviceOptions = {}): Device {
   const [host, port] = (options.firestoreHost ?? firestoreHost!).split(':');
   connectFirestoreEmulator(firestore, host!, Number(port));
   const context: ConsumerFirestoreContext = { firestore, auth };
-  const eeg = createEegRecordingRepository(context, options.eegOptions);
+  // EEG consent is confirmed only by a server read, bounded in production by
+  // CONSENT_SERVER_READ_TIMEOUT_MS. A loaded CI emulator can be slower than
+  // that, which would skip recordings the tests expect, so devices wait longer
+  // unless a test sets the bound itself (as the stalled-connection tests do).
+  const eeg = createEegRecordingRepository(context, { consentServerReadTimeoutMs: 10_000, ...options.eegOptions });
   return {
     app, auth, firestore, context, eeg,
     profiles: createProfileRepository(context),
-    sessions: createGameSessionRepository(context, eeg, options.sessionOptions),
+    sessions: createGameSessionRepository(context, options.sessionOptions),
     progress: createProgressRepository(context),
   };
 }
@@ -301,6 +310,27 @@ export function profileDraft(overrides: Partial<UserProfileDraft> = {}): UserPro
     eeg: { enabled: false, preferredDevice: null },
     ...overrides,
   };
+}
+
+/**
+ * Saves a finished session, then offers its EEG recording, as the game runner
+ * does: the recording is a separate write, made after the session is queued.
+ */
+export async function saveSessionThenEeg(
+  device: Device,
+  recording: EegRecordingDraft = eegDraft(),
+  session: GameSessionDraft<TestTrial, TestMetrics> = sessionDraft(),
+) {
+  const started = device.sessions.startGameSession();
+  const saved = await started.save({ definition: testGame, session });
+  const eeg = await device.eeg.saveRecording(saved, recording);
+  return { started, saved, eeg };
+}
+
+/** A queued recording's ID and server outcome, failing clearly if it was skipped. */
+export function queued(save: EegRecordingSave): { recordingId: string; serverOutcome: Promise<EegRecordingServerOutcome> } {
+  if (save.status !== 'queued') throw new Error(`Expected the EEG recording to be queued, but it was skipped (${save.reason}): ${save.message}`);
+  return save;
 }
 
 /** The accepted placeholder consent version in firestore.rules until NFCT-25/NFCT-27 approve the copy. */

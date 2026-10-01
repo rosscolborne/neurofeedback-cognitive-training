@@ -17,25 +17,28 @@ const context: ConsumerFirestoreContext = { firestore: db, auth };
 
 export const profileRepository = createProfileRepository(context);
 export const eegRecordingRepository = createEegRecordingRepository(context);
-export const gameSessionRepository = createGameSessionRepository(context, eegRecordingRepository);
+export const gameSessionRepository = createGameSessionRepository(context);
 export const progressRepository = createProgressRepository(context);
 
 export { SignInRequiredError, InvalidDocumentIdError } from '../firestore/context';
 export type { DocumentRead, SnapshotState, UnreadableDocument } from '../firestore/reads';
 export { ConsumerWriteValidationError, type PendingWrite } from '../firestore/writes';
 export type { ProfileRepository, UserProfileDraft, UserProfilePatch } from './profileRepository';
-export type {
-  EegRecordingDraft,
-  EegRecordingRecord,
-  EegRecordingRepository,
-  EegRecordingsForSession,
-  EegRecordingSkipReason,
+export {
+  EegRecordingAlreadySavedError,
+  type EegRecordingDraft,
+  type EegRecordingRecord,
+  type EegRecordingRefusalReason,
+  type EegRecordingRepository,
+  type EegRecordingSave,
+  type EegRecordingServerOutcome,
+  type EegRecordingsForSession,
+  type EegRecordingSkipReason,
 } from './eegRecordingRepository';
 export {
   GameSessionAlreadySavedError,
   GameSessionOwnerChangedError,
   InvalidSessionSeedError,
-  type EegRecordingOutcome,
   type GameSessionCursor,
   type GameSessionDraft,
   type GameSessionPage,
