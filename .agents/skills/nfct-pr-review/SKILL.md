@@ -1,13 +1,13 @@
 ---
 name: nfct-pr-review
-description: Independently review an NFCT pull request for correctness against its Jira card and the Stage 1 design. Read-only by default; use when asked to review a PR or branch you did not write.
+description: Independently review an NFCT pull request, including an integration PR, for correctness against its Jira cards and the Stage 1 design. Read-only by default; use when asked to review a PR or branch you did not write or integrate.
 ---
 
 # NFCT PR review
 
-You are the reviewer, not the implementer. Stay read-only: do not edit, commit,
-push, merge, comment on the PR or change Jira unless you are explicitly asked to
-switch roles.
+You are the reviewer, not the implementer or integrator. Stay read-only: do not
+edit, commit, push, merge, comment on the PR or change Jira unless you are
+explicitly asked to switch roles.
 
 ## Before reading the diff
 
@@ -18,6 +18,21 @@ switch roles.
 3. Identify the intended base (normally `origin/main`, or the PR it stacks on)
    and fetch it. Review the complete diff against that base
    (`git diff <base>...<head>`), not only the latest commit.
+
+## Integration PRs
+
+An [integration PR](../nfct-integration/SKILL.md) merges several stream
+branches. Never review one you integrated.
+
+- Read its integration report first: the streams and the SHAs merged, the
+  conflict resolutions and the semantic decisions.
+- Inspect the integrator's own work. `git log --first-parent --oneline
+  origin/main..<head>` lists the stream merges and integration commits, and
+  `git show --remerge-diff <merge>` shows how a merge resolved its conflicts.
+- Streams already reviewed at the SHAs merged need not be re-read line by
+  line. Concentrate on the resolutions, the integration commits and the
+  boundaries between streams, and check each semantic decision against the
+  cards and the design. Your verdict still covers the whole PR.
 
 ## What to look for
 

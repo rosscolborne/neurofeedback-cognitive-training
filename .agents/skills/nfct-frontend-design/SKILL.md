@@ -86,5 +86,6 @@ look complete. If a slot has no real content yet, design its empty state.
 Judge the UI in the running app, not from JSX or CSS. After meaningful UI
 changes, run [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) on the
 changed flow, including its UI checks, before handing off. Fix defects within
-the card; report out-of-scope ones in its Jira-ready form. Deterministic
+the card; report out-of-scope ones as
+[follow-up cards](../../../AGENTS.md#out-of-scope-work). Deterministic
 coverage still follows [Stage 1 test coverage](../../../AGENTS.md#stage-1-test-coverage).

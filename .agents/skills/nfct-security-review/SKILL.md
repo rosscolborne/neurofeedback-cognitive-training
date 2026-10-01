@@ -21,7 +21,10 @@ This skill goes deeper on trust boundaries and can run alongside it.
    write paths together; a rule is only as strict as every path that reaches
    it.
 3. Review the complete diff against its intended base, plus any unchanged code
-   the new behavior now relies on.
+   the new behavior now relies on. For an
+   [integration PR](../nfct-integration/SKILL.md), review the combined
+   result: a boundary can open where streams meet even when each stream
+   passed on its own.
 
 ## Review areas
 

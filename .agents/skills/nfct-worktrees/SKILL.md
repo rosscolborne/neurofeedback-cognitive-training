@@ -1,6 +1,6 @@
 ---
 name: nfct-worktrees
-description: Create, hand off and clean up isolated NFCT task, review and integration worktrees and branches safely. Use when starting writable work on a card, setting up a reviewer's probe worktree or an integration test worktree, finishing or handing off a PR, or diagnosing and removing stale worktrees.
+description: Create, hand off and clean up isolated NFCT task, review, QA and integration worktrees and branches safely. Use when starting writable work on a card, setting up a reviewer's or exploratory QA's worktree, an integration branch or an integration check, finishing or handing off a PR, or diagnosing and removing stale worktrees.
 ---
 
 # NFCT worktrees
@@ -23,9 +23,9 @@ PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
   branch and worktree whenever other work may run in parallel, which is the
   normal case here.
 - Read-only planning, review, Jira work and analysis do not need one. A
-  reviewer who wants temporary probe files uses a
-  [review worktree](#review-worktrees); an integrator uses an
-  [integration worktree](#integration-worktrees).
+  reviewer who wants temporary probe files, or an independent QA pass that
+  runs the app, uses a [review or QA worktree](#review-worktrees); an
+  integrator uses an [integration worktree](#integration-worktrees).
 - The primary checkout is shared. Do not switch its branch or do task work in
   it while other streams are running.
 - Never modify another agent's active worktree, branch or uncommitted work.
@@ -35,7 +35,8 @@ PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 Use predictable names from the Jira card: branch `<type>/<CARD>-<slug>`
 (`feature/`, `fix/`, `chore/`, `docs/`) and a sibling worktree
 `$PRIMARY-<CARD>`. For work with no card, use a short task slug instead of
-`<CARD>`.
+`<CARD>`. Integration branches have their own names; see
+[Integration worktrees](#integration-worktrees).
 
 ```bash
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
@@ -58,8 +59,11 @@ git log --oneline origin/main..HEAD   # only this task's commits
 git merge-base --is-ancestor origin/main HEAD && echo "based on origin/main"
 ```
 
-Only the branch's owner rebases it. If a rebase rewrites published history,
-push with `git push --force-with-lease`, never plain `--force`.
+Only the branch's owner rebases it, and not once integration of it has
+started: then fixes go on as new commits (see
+[nfct-integration](../nfct-integration/SKILL.md#inventory-the-streams)). If a
+rebase rewrites published history, push with `git push --force-with-lease`,
+never plain `--force`.
 
 ## Review worktrees
 
@@ -74,31 +78,56 @@ git -C "$PRIMARY" fetch origin pull/<n>/head
 git -C "$PRIMARY" worktree add --detach "$PRIMARY-review-pr<n>" FETCH_HEAD
 ```
 
+An independent [exploratory QA](../nfct-exploratory-qa/SKILL.md) pass runs
+the app from the same kind of worktree, named `$PRIMARY-qa-pr<n>` so it does
+not collide with a reviewer's. For an integration check, which has no PR, use
+the check's local SHA instead of `FETCH_HEAD` and name it
+`$PRIMARY-qa-<slug>`.
+
 It has no `node_modules`; run `npm ci --legacy-peer-deps` in it before running
 tests. It has no branch and no PR lifecycle. Never commit or push from it
 unless you are explicitly switched into an implementation role. When the
-review ends, delete your own probe files (note any worth keeping as permanent
-tests in the findings), then [remove it](#clean-up-review-and-integration-worktrees).
+review or QA pass ends, delete your own probe files (note any worth keeping as
+permanent tests in the findings), then
+[remove it](#clean-up-review-qa-and-integration-check-worktrees).
 
 ## Integration worktrees
 
-An integrator tests completed branches together in a detached worktree from
-`origin/main`, never in anyone's feature branch:
+An integrator ([nfct-integration](../nfct-integration/SKILL.md)) works in its
+own worktree from `origin/main`, never in a stream's worktree or the primary
+checkout. Either kind has no `node_modules`; install dependencies before
+running the suite.
+
+**Integration branch** (the default). The integrator's task branch,
+`integration/<slug>`, where the slug names the objective or epic, in
+`$PRIMARY-integration-<slug>`. Merge each stream into it in dependency order:
 
 ```bash
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch origin
-git -C "$PRIMARY" worktree add --detach "$PRIMARY-integration-<slug>" origin/main
-git -C "$PRIMARY-integration-<slug>" merge --no-ff --no-edit origin/feature/NFCT-18-firestore-rules
+git -C "$PRIMARY" worktree add --no-track -b integration/NFCT-1-mental-math \
+  "$PRIMARY-integration-NFCT-1-mental-math" origin/main
+git -C "$PRIMARY-integration-NFCT-1-mental-math" merge --no-ff --no-edit \
+  origin/feature/NFCT-17-mental-math-definition
 ```
 
-Merge or cherry-pick branches into it in dependency order, then install
-dependencies and run the suite there. The merge and cherry-pick commits it
-gains are disposable test state: never push them and never create a branch
-from them. Conflicts and regressions go back to each branch's owner as
-findings. Do not create a named integration branch unless the owner asks; one
-that is pushed or opened as a PR is a task branch and follows the task
-lifecycle.
+The integrator commits integration fixes on it, pushes it and opens one PR.
+It follows the task [lifecycle](#lifecycle) and
+[cleanup](#clean-up-a-task-worktree).
+
+**Integration check** (only when the user wants independent PRs). A detached
+worktree that merges the streams only to test that they work together:
+
+```bash
+PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+git -C "$PRIMARY" fetch origin
+git -C "$PRIMARY" worktree add --detach "$PRIMARY-integration-check-<slug>" origin/main
+git -C "$PRIMARY-integration-check-<slug>" merge --no-ff --no-edit origin/feature/NFCT-18-firestore-rules
+```
+
+Its merge and cherry-pick commits are disposable test state: never push them
+and never create a branch from them. Conflicts and regressions go back to each
+stream's owner as findings.
 
 ## Hand-off hygiene
 
@@ -117,10 +146,11 @@ Before opening, updating or handing off a PR:
   PR is open, so review fixes are made in place. It becomes eligible for
   cleanup only when the PR is merged or the work is explicitly abandoned by the
   owner, **and** the worktree is clean and fully pushed.
-- **Review and integration worktrees are disposable.** A review worktree never
-  has commits; an integration worktree's local test merges are never pushed.
-  Either is eligible for cleanup as soon as the review or integration pass
-  ends and its findings are handed back, once `git status` is clean.
+- **Review, QA and integration-check worktrees are disposable.** A review or
+  QA worktree never has commits; an integration check's local test merges are
+  never pushed. Each is eligible for cleanup as soon as its pass ends and its
+  findings are handed back, once `git status` is clean. An integration branch
+  is a task branch and follows the rule above.
 
 ## Diagnose
 
@@ -146,12 +176,13 @@ done
 - The first line is the primary checkout. Never remove it.
 - `dirty` counts modified and untracked files; ignored files such as
   `node_modules/` are not counted and do not block removal.
-- `unpushed` counts commits on no remote branch. For a detached integration
-  worktree these are its disposable test merges.
-- A detached worktree is a review or integration worktree (`-review-pr<n>`,
-  `-integration-<slug>`). `pr=none` with a dirty tree usually means work in
-  progress. Leave both to their owner unless the lifecycle rules say
-  otherwise.
+- `unpushed` counts commits on no remote branch. For an integration check
+  these are its disposable test merges.
+- A detached worktree is a review, QA or integration-check worktree
+  (`-review-pr<n>`, `-qa-pr<n>` or `-qa-<slug>`, `-integration-check-<slug>`).
+  A worktree on an `integration/<slug>` branch is a task worktree. `pr=none`
+  with a dirty tree usually means work in progress. Leave both to their owner
+  unless the lifecycle rules say otherwise.
 - Active-agent check, **Linux only**: look for processes running in the
   worktree, then for recent edits:
 
@@ -215,11 +246,11 @@ wt="$PRIMARY-NFCT-18"
   `--force`.
 - Report what you removed and what you left, with the reason.
 
-## Clean up review and integration worktrees
+## Clean up review, QA and integration-check worktrees
 
 ```bash
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
-wt="$PRIMARY-review-pr<n>"   # or "$PRIMARY-integration-<slug>"
+wt="$PRIMARY-review-pr<n>"   # or -qa-pr<n>, -qa-<slug>, -integration-check-<slug>
 (
   set -eu
   stop() { echo "STOP: $*" >&2; exit 1; }
