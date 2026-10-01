@@ -236,7 +236,7 @@ Then one transaction:
 8. `unsupported`: record `processing.state = 'unsupported'` and stop. `invalid`: write the result alone; it counts nowhere, so progress is not even read.
 9. Classify progress (below): apply it, rebuild an older aggregate inside the transaction, or refuse progress from newer code.
 10. **Decide the start-level unlock:** `startLevel` above `unlockedStartLevel(mode, progress | null)` adds the flag `start-level-locked`.
-11. If the decision raised the unlocked start level (or progress was rebuilt), **upgrade**, in this same transaction, the start-level-locked sessions the new progress unlocks (below).
+11. If the decision raised the unlocked start level (or progress was rebuilt), **upgrade**, in this same transaction, the start-level-locked sessions the new progress unlocks (below). A session flagged `start-level-locked` against progress its own transaction rebuilt joins that cascade as well. So if the cascade unlocks its level, it is upgraded in the same commit, exactly as if it had been processed after the cascade; its totals are still counted once.
 12. **Write** the `result` (with `performanceIndex: null`), progress and every upgraded result in one commit, removing any stale `processing` in the same write.
 
 **Validity.** The worst outcome among all reasons: a game version's own table (`REASON_OUTCOMES`) for its codes, and trusted scoring's `SERVER_REASON_OUTCOMES` for its own:

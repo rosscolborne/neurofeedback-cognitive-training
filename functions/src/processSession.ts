@@ -4,6 +4,7 @@ import {
   decideSession,
   evaluateSession,
   processingRecord,
+  readSessionProgressFields,
   sessionProcessingWriteSchema,
   type ProcessingReason,
   type ServerResult,
@@ -54,7 +55,7 @@ export type ProcessOutcome =
   | {
     readonly status: 'processed';
     readonly validity: ServerResult['validity'];
-    /** Sessions upgraded from flagged to valid in the same commit. */
+    /** Other sessions upgraded from flagged to valid in the same commit (this session's own upgrade shows in `validity`). */
     readonly upgraded: readonly string[];
     /** Set when the commit's own upgrade budget ran out: the post-commit reconcile must finish it. */
     readonly reconcile: ReconcileTarget | null;
@@ -106,21 +107,30 @@ export async function processSession(context: ProcessingContext, uid: string, se
     // A valid or flagged session counts in totals, so progress exists after it.
     if (decision.progress === null) throw new Error('A counted session must leave progress');
 
-    // A raised unlock can make stored start-level-locked sessions upgradable; so can a rebuild.
+    // A raised unlock can make stored start-level-locked sessions upgradable; so can a rebuild. When this
+    // session was itself flagged start-level-locked (only possible against rebuilt progress), it joins the
+    // cascade as a pending candidate, so an unlock the cascade reaches upgrades it in this same commit,
+    // just as it would have been had it been processed after that cascade.
+    const pending = decision.result.validity === 'flagged'
+      ? [{ id: sessionId, fields: readSessionProgressFields({ ...judged.session, result: decision.result }) }]
+      : [];
     const planned = decision.unlockRaised || rebuilt
-      ? await upgradeInTransaction(context, transaction, uid, target, decision.progress, processedAt)
+      ? await upgradeInTransaction(context, transaction, uid, target, decision.progress, processedAt, pending)
       : { progress: decision.progress, upgrades: [], complete: true };
+    const own = planned.upgrades.find(({ sessionId: upgradedId }) => upgradedId === sessionId);
+    const others = planned.upgrades.filter(({ sessionId: upgradedId }) => upgradedId !== sessionId);
+    const result = own?.result ?? decision.result;
 
     // Every read is done; write the session, progress and the upgrades together.
-    transaction.update(ref, { result: decision.result, processing: FieldValue.delete() });
+    transaction.update(ref, { result, processing: FieldValue.delete() });
     transaction.set(progressRef(context.db, uid, gameId), planned.progress);
-    for (const { sessionId: upgradedId, result } of planned.upgrades) {
-      transaction.update(sessionRef(context.db, uid, upgradedId), { result });
+    for (const { sessionId: upgradedId, result: upgradedResult } of others) {
+      transaction.update(sessionRef(context.db, uid, upgradedId), { result: upgradedResult });
     }
     return {
       status: 'processed',
-      validity: decision.result.validity,
-      upgraded: planned.upgrades.map(({ sessionId: upgradedId }) => upgradedId),
+      validity: result.validity,
+      upgraded: others.map(({ sessionId: upgradedId }) => upgradedId),
       reconcile: planned.complete ? null : target,
     };
   });

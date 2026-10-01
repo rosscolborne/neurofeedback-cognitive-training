@@ -43,7 +43,13 @@ export type ReconcileReport = {
   readonly stopped: 'fixpoint' | 'no-progress' | 'progress-not-current' | 'budget' | 'account-deleted';
 };
 
-type Candidate = { readonly id: string; readonly fields: SessionProgressFields };
+/** A flagged session that may be upgradable: its ID and the fields progress depends on (its stored result included). */
+export type Candidate = { readonly id: string; readonly fields: SessionProgressFields };
+
+/** Scan order: start level, then session ID. Never a device clock. */
+function byScanOrder(a: Candidate, b: Candidate): number {
+  return a.fields.startLevel - b.fields.startLevel || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
 type QueryRunner = (query: Query) => Promise<QuerySnapshot>;
 
 /**
@@ -125,6 +131,15 @@ export type TransactionUpgrade = {
  * Every level from the lowest lockable one up to the unlocked bound is read,
  * not only the newly unlocked ones, so a session an earlier, interrupted
  * reconcile left flagged is found too.
+ *
+ * `pending` holds sessions this same transaction has just decided but not yet
+ * written (the session being processed, when it was flagged
+ * start-level-locked against progress this transaction rebuilt). A query
+ * cannot see them, so they join the candidates of the round whose newly
+ * unlocked levels reach them, exactly as if they were already stored: the
+ * cascade that their own transaction unlocks upgrades them too. Their totals
+ * were applied once by their decision; an upgrade adds only valid-only
+ * effects.
  */
 export async function upgradeInTransaction(
   context: ProcessingContext,
@@ -134,6 +149,7 @@ export async function upgradeInTransaction(
   progress: GameProgress,
   /** The commit's own time (its result's processedAt): the upgrades land in the same commit. */
   upgradedAt: FirestoreTimestamp,
+  pending: readonly Candidate[] = [],
 ): Promise<TransactionUpgrade> {
   const { limits, registry } = context;
   const upgrades: { sessionId: string; result: ServerResult }[] = [];
@@ -148,8 +164,10 @@ export async function upgradeInTransaction(
       { from: scannedUpTo + 1, to }, limits.transactionUpgradeScanBudget - read,
     );
     read += scan.read;
+    const reached = pending.filter(({ fields }) => fields.startLevel > scannedUpTo && fields.startLevel <= to
+      && upgradeBlocker(fields, current, registry) === null);
     scannedUpTo = to;
-    for (const candidate of scan.candidates) {
+    for (const candidate of [...scan.candidates, ...reached].sort(byScanOrder)) {
       if (upgrades.length >= limits.transactionUpgradeLimit) return { progress: current, upgrades, complete: false };
       const decision = upgradeSession(candidate.fields, current, { sessionId: candidate.id, upgradedAt, registry });
       if (decision === null) continue;
