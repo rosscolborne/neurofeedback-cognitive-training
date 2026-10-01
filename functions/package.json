@@ -1,0 +1,19 @@
+{
+  "name": "nfct-functions",
+  "private": true,
+  "description": "NFCT Cloud Functions (2nd gen, Node 22): trusted session scoring. build.mjs bundles src/ and ../shared into lib/index.js.",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

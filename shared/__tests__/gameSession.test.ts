@@ -5,8 +5,12 @@ import {
   outcomeFromResult,
   readGameSession,
   readGameSessionFor,
+  readSessionProgressFields,
   serverResultWriteSchema,
+  SESSION_PROGRESS_FIELDS,
   SESSION_SEED_MAX,
+  sessionProcessingWriteSchema,
+  trustedGameSessionSchemaFor,
 } from '@nfct/shared';
 import { at, fixtureGame, storedSession, unprocessedSession } from './fixtures';
 
@@ -91,11 +95,17 @@ describe('game session schema', () => {
     expect(() => readGameSession({ ...session, result: { ...result, performanceIndex: undefined } })).toThrow(DomainReadError);
   });
 
-  it('requires startLevel and peakLevel, with the peak at or above the start', () => {
+  it('requires startLevel and peakLevel, bounding the client peak only as the rules do', () => {
     const { startLevel: _startLevel, ...withoutStart } = storedSession();
 
     expect(() => readGameSession(withoutStart)).toThrow(DomainReadError);
-    expect(() => readGameSession({ ...storedSession(), startLevel: 4, peakLevel: 3 })).toThrow(/peakLevel/);
+    // The client peak is an untrusted observation: one below the start level
+    // is the game's peak-level-mismatch diagnostic, never a schema failure.
+    expect(readGameSession({ ...storedSession(), startLevel: 4, peakLevel: 3 }).peakLevel).toBe(3);
+    expect(gameSessionWriteSchema.safeParse({ ...unprocessedSession(), startLevel: 4, peakLevel: 3 }).success).toBe(true);
+    for (const peakLevel of [0, 51, 2.5]) {
+      expect(() => readGameSession({ ...storedSession(), peakLevel })).toThrow(/peakLevel/);
+    }
   });
 
   it('requires an unsigned 32-bit integer seed, on write and on read', () => {
@@ -181,12 +191,92 @@ describe('game session schema', () => {
       expect(readGameSession(session).gameVersion).toBe(1);
     });
 
-    it('rejects another game, an unknown mode, and levels beyond the mode', () => {
+    it('rejects another game, an unknown mode, and a start level beyond the mode', () => {
       const session = storedSession();
 
       expect(() => readGameSessionFor(fixtureGame, { ...session, gameId: 'other-game' })).toThrow(/gameId/);
       expect(() => readGameSessionFor(fixtureGame, { ...session, modeId: 'blitz' })).toThrow(/modeId/);
-      expect(() => readGameSessionFor(fixtureGame, { ...session, modeId: 'sprint', peakLevel: 4 })).toThrow(/peakLevel/);
+      expect(() => readGameSessionFor(fixtureGame, { ...session, modeId: 'sprint', startLevel: 4, peakLevel: 4 }))
+        .toThrow(/startLevel/);
+    });
+
+    it('reads a client peak beyond the mode: it is only a diagnostic', () => {
+      const session = { ...storedSession(), modeId: 'sprint', startLevel: 3, peakLevel: 4 };
+
+      expect(readGameSessionFor(fixtureGame, session).peakLevel).toBe(4);
+    });
+  });
+
+  describe('trusted scoring schema', () => {
+    const schema = trustedGameSessionSchemaFor(fixtureGame);
+
+    it('checks trials and the envelope with the game version\'s own schemas', () => {
+      const session = unprocessedSession();
+      const trials = session.trials as object[];
+
+      expect(schema.parse(session)).toEqual(session);
+      expect(schema.safeParse({ ...session, trials: [{ ...trials[0], hint: 'x' }] }).success).toBe(false);
+      expect(schema.safeParse({ ...session, gameVersion: 2 }).success).toBe(false);
+      expect(schema.safeParse({ ...session, modeId: 'sprint', startLevel: 4 }).success).toBe(false);
+      expect(schema.safeParse({ ...session, surprise: true }).success).toBe(false);
+    });
+
+    it('checks the display summary only for the structure the rules enforce', () => {
+      const session = unprocessedSession();
+      const summary = session.summary as Record<string, unknown>;
+      const withSummary = (change: Record<string, unknown>) => ({ ...session, summary: { ...summary, ...change } });
+
+      // Values the game's own summary schema rejects are never a schema failure here.
+      for (const change of [
+        { accuracy: 1.5 }, { trialsTotal: -1 }, { trialsCorrect: 0.5 }, { metrics: {} }, { metrics: { lives: 3 } },
+        // Firestore doubles the rules accept as numbers, though z.number() refuses them.
+        { score: Number.NaN }, { accuracy: Number.POSITIVE_INFINITY }, { trialsTotal: Number.NEGATIVE_INFINITY },
+        { responseTime: { medianMs: Number.NaN, meanMs: 1, p90Ms: Number.POSITIVE_INFINITY } },
+      ]) {
+        expect(schema.safeParse(withSummary(change)).success).toBe(true);
+      }
+      // The rules' structure still holds: exact keys, value types, at most 32 metrics.
+      const tooManyMetrics = Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`m${index}`, 1]));
+      for (const change of [{ score: '10' }, { accuracy: 'high' }, { extra: 1 }, { responseTime: { medianMs: 1 } }, { metrics: tooManyMetrics }]) {
+        expect(schema.safeParse(withSummary(change)).success).toBe(false);
+      }
+    });
+  });
+
+  describe('server processing state', () => {
+    const processing = { state: 'failed', reason: 'internal-error', attempts: 1, updatedAt: at(3) };
+
+    it('records why trusted scoring has not written a result yet', () => {
+      expect(sessionProcessingWriteSchema.parse(processing)).toEqual(processing);
+      expect(gameSessionWriteSchema.parse({ ...unprocessedSession(), processing }).processing).toEqual(processing);
+      expect(sessionProcessingWriteSchema.parse({ ...processing, state: 'unsupported' }).state).toBe('unsupported');
+      for (const change of [{ state: 'pending' }, { reason: 'Not A Code' }, { attempts: 0 }, { updatedAt: '2026-09-30' }, { extra: 1 }]) {
+        expect(sessionProcessingWriteSchema.safeParse({ ...processing, ...change }).success).toBe(false);
+      }
+    });
+
+    it('is never written together with a result', () => {
+      expect(gameSessionWriteSchema.safeParse({ ...storedSession(), processing }).success).toBe(false);
+    });
+
+    it('reads a processing state from a newer server that this build does not know', () => {
+      const newer = { ...unprocessedSession(), processing: { ...processing, state: 'deferred', note: 'x' } };
+
+      expect(readGameSession(newer).processing?.state).toBe('deferred');
+    });
+  });
+
+  describe('progress fields', () => {
+    it('reads only what progress depends on, from a projection without trials or summary', () => {
+      const session = storedSession();
+      const projection = Object.fromEntries(SESSION_PROGRESS_FIELDS.map((field) => [field, session[field]]));
+
+      expect(SESSION_PROGRESS_FIELDS).not.toContain('trials');
+      expect(SESSION_PROGRESS_FIELDS).not.toContain('summary');
+      expect(SESSION_PROGRESS_FIELDS).not.toContain('peakLevel');
+      expect(readSessionProgressFields(projection)).toMatchObject({ gameId: 'fixture-game', startLevel: 2, result: session.result });
+      expect(readSessionProgressFields(unprocessedSession()).result).toBeUndefined();
+      expect(() => readSessionProgressFields({ ...projection, schemaVersion: 2 })).toThrow(DomainReadError);
     });
   });
 });

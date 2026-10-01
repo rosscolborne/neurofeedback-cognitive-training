@@ -15,6 +15,8 @@ concurrency:
 
 # No secrets and no Firebase configuration: unit tests use an inert demo
 # project, and every Firebase-backed test runs against local emulators.
+# Nothing here deploys: the Cloud Functions codebase (functions/) is only
+# type-checked, built and tested on the emulators.
 # The embedded brainflow_service/ is owned by the shared brainflow-service
 # repository, which runs its pytest suite; it is not tested here.
 
@@ -28,15 +30,21 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
       # @elata-biosciences/eeg-web-ble@0.12.0 declares a peer on a
       # non-existent @elata-biosciences/eeg-web@^0.2.1.
       - run: npm ci --legacy-peer-deps
+      - run: npm ci --prefix functions
       - run: npm run check:isolation
       - run: npm run lint
       - run: npm run build
       - run: npm test
       - run: npm run test:e2e:typecheck
       - run: npm run test:rules:typecheck
+      - run: npm run functions:typecheck
+      - run: npm run functions:build
 
   emulators:
     runs-on: ubuntu-latest
@@ -48,6 +56,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -57,7 +68,11 @@ jobs:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npm ci --legacy-peer-deps
+      - run: npm ci --prefix functions
       - run: npm run test:rules
+      # Builds functions/lib, then runs the processing core on the Firestore
+      # emulator and the trigger on the Functions emulator (NFCT-19).
+      - run: npm run test:functions
       - run: npx playwright test --project=permission-guard
       # Local-emulator browser suite; Playwright uses /usr/bin/google-chrome.
       - run: npm run test:e2e:protocol
