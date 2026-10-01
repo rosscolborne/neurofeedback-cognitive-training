@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { browserGameClock } from '../../clock/gameClock';
 import type { EegCaptureProvider } from '../../eeg/eegCapture';
 import { eegRecordingRepository, gameSessionRepository, progressRepository } from '../../repositories';
-import { MentalMathScreen } from './MentalMathScreen';
+import { MentalMathScreen, type MentalMathView } from './MentalMathScreen';
 import { APP_VERSION, deviceTimezone, type SessionEnvironment } from './sessionDraft';
 
 // Mental Math bound to the app: the consumer repositories (persistent offline
@@ -16,8 +16,10 @@ function platform(): SessionEnvironment['platform'] {
 
 export const MentalMathGame: React.FC<{
   readonly eegProvider?: EegCaptureProvider | null;
+  /** Open on the start-level picker (default) or on the game's progress and history. */
+  readonly initialView?: MentalMathView;
   readonly onExit: () => void;
-}> = ({ eegProvider = null, onExit }) => {
+}> = ({ eegProvider = null, initialView = 'picker', onExit }) => {
   const environment = useMemo<SessionEnvironment>(() => ({ timezone: deviceTimezone(), appVersion: APP_VERSION, platform: platform() }), []);
   return (
     <MentalMathScreen
@@ -27,6 +29,7 @@ export const MentalMathGame: React.FC<{
       clock={browserGameClock}
       environment={environment}
       eegProvider={eegProvider}
+      initialView={initialView}
       onExit={onExit}
     />
   );

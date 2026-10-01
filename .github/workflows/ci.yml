@@ -78,6 +78,9 @@ jobs:
       - run: npm run test:functions
       - run: npx playwright test --project=permission-guard
       # Local-emulator browser suite; Playwright uses /usr/bin/google-chrome.
+      # It runs the Functions emulator too, so saved game sessions get their
+      # trusted result and progress (NFCT-22); the script builds functions/lib
+      # first, from the functions dependencies installed above.
       - run: npm run test:e2e:protocol
       - uses: actions/upload-artifact@v4
         if: failure()
