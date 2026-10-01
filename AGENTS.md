@@ -412,13 +412,17 @@ scripts/qa-lane.sh list
 scripts/qa-lane.sh down nfct22                              # stops everything in the lane
 ```
 
-- A lane has no internet: run installs, `npx playwright install`, downloads,
-  `git` and `gh` outside it. Web fonts from Google Fonts do not load in it.
+- A lane has no internet: requests off the machine fail fast. Run installs,
+  `npx playwright install`, downloads, `git` and `gh` outside it. Google Fonts
+  cannot load in it, so text uses fallback fonts. Browsers in it still report
+  online (a dummy interface with no route), so offline and reconnect behavior
+  can be tested there.
 - Its servers are reachable only from inside it, so run the browser there too
   ([interactive browser QA](.agents/skills/nfct-exploratory-qa/SKILL.md#drive-the-browser)).
 - Processes appear as root inside (your files stay yours), so Chrome there
-  needs its sandbox off; `.playwright/cli.config.json` does that for
-  `scripts/qa-browser.sh`, and Playwright's test runner already does.
+  needs its sandbox off: `scripts/qa-browser.sh` passes
+  `scripts/qa/playwright-cli.json` for that, and Playwright's test runner
+  already does.
 - `down` your lane when you finish. It stops only processes in that lane.
 
 Without lanes (not Linux, or unprivileged user namespaces disabled; the script

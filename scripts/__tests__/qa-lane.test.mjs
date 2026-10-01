@@ -29,18 +29,21 @@ afterAll(() => {
 });
 
 describe('qa-lane.sh', () => {
+  // Command-line errors come first, so they read the same on every OS.
+  const darwin = { fakes: { uname: 'echo Darwin' } };
+
   it('prints usage for an unknown command', () => {
-    expect(run(['bogus'])).toMatchObject({ status: 2, output: expect.stringContaining('usage:') });
+    expect(run(['bogus'], darwin)).toMatchObject({ status: 2, output: expect.stringContaining('usage:') });
   });
 
   it('fails clearly off Linux', () => {
-    const { status, output } = run(['up', lane], { fakes: { uname: 'echo Darwin' } });
+    const { status, output } = run(['up', lane], darwin);
     expect(status).toBe(1);
     expect(output).toContain('lanes need Linux network namespaces');
   });
 
-  it.runIf(isLinux)('rejects lane names that are not plain words', () => {
-    expect(run(['up', '../x'])).toMatchObject({ status: 1, output: expect.stringContaining('invalid lane name') });
+  it('rejects lane names that are not plain words', () => {
+    expect(run(['up', '../x'], darwin)).toMatchObject({ status: 1, output: expect.stringContaining('invalid lane name') });
   });
 
   it.runIf(isLinux)('fails clearly when unprivileged user namespaces are disabled', () => {
@@ -52,13 +55,17 @@ describe('qa-lane.sh', () => {
     expect(output).toContain('apparmor_restrict_unprivileged_userns');
   });
 
-  it.runIf(lanesWork)('gives a lane its own loopback and stops everything in it on down', () => {
-    expect(run(['up', lane]).status).toBe(0);
-    const inLane = run(['exec', lane, '--', 'sh', '-c', 'echo "$NFCT_QA_LANE"; readlink /proc/self/ns/net']);
+  it.runIf(lanesWork)('gives a lane its own network and stops everything in it on down', () => {
+    const up = run(['up', lane]);
+    expect(up.status).toBe(0);
+    const inLane = run(['exec', lane, '--', 'sh', '-c', 'echo "$NFCT_QA_LANE"; readlink /proc/self/ns/net; ip -o addr; ip route']);
     expect(inLane.status).toBe(0);
-    const [name, laneNet] = inLane.output.trim().split('\n');
+    const [name, laneNet, ...net] = inLane.output.trim().split('\n');
     expect(name).toBe(lane);
     expect(laneNet).not.toBe(spawnSync('readlink', ['/proc/self/ns/net'], { encoding: 'utf8' }).stdout.trim());
+    // Browsers report online through the dummy interface, but nothing is routed off the machine.
+    if (!up.output.includes('warning')) expect(net.join('\n')).toContain('nfct0');
+    expect(net.join('\n')).not.toMatch(/^default /m);
 
     // A detached process in the lane outlives `exec` but not `down`.
     run(['exec', lane, '--', 'setsid', 'sh', '-c', 'sleep 300 </dev/null >/dev/null 2>&1 &']);

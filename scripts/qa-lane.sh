@@ -10,7 +10,8 @@
 #   scripts/qa-lane.sh list                   show lanes, process counts and ports
 #
 # A lane is a user and network namespace kept open by a `sleep` process. It has
-# loopback only: no internet, so install and download outside it. Inside, your
+# loopback and a dummy interface with no route, so browsers report online but
+# nothing reaches the internet: install and download outside it. Inside, your
 # processes appear as root (files stay yours), so Chrome needs its sandbox off
 # there. `down` stops only processes in the lane's namespaces. Lock and log
 # files go in $NFCT_QA_LANE_STATE (default ${XDG_RUNTIME_DIR:-/tmp}/nfct-qa-lanes-<uid>).
@@ -34,6 +35,20 @@ die() {
   exit 1
 }
 
+check_name() {
+  [[ ${1:-} =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$ ]] ||
+    die "invalid lane name '${1:-}': use up to 40 letters, digits, '-' or '_'."
+}
+
+case "${1:-}" in
+up | exec | down)
+  [ $# -ge 2 ] || usage
+  check_name "$2"
+  ;;
+list) ;;
+*) usage ;;
+esac
+
 [ "$(uname -s)" = Linux ] ||
   die "lanes need Linux network namespaces; on $(uname -s), run emulator-backed work one at a time."
 for tool in unshare nsenter setsid pgrep flock ip; do
@@ -42,11 +57,6 @@ done
 
 uid=$(id -u)
 state=${NFCT_QA_LANE_STATE:-${XDG_RUNTIME_DIR:-/tmp}/nfct-qa-lanes-$uid}
-
-check_name() {
-  [[ ${1:-} =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$ ]] ||
-    die "invalid lane name '${1:-}': use up to 40 letters, digits, '-' or '_'."
-}
 
 # Prints the pid of the lane's holder process; fails when the lane is not up.
 holder() {
@@ -89,9 +99,16 @@ cmd_up() {
   kernel.apparmor_restrict_unprivileged_userns = 0 (or an AppArmor profile
   allowing unshare). Without lanes, run emulator-backed work one at a time."
   fi
-  # 9>&- keeps the lock fd out of the long-lived holder.
-  setsid unshare --user --map-root-user --net -- \
-    bash -c 'ip link set lo up && exec -a "$0" sleep infinity' "nfct-qa-lane:$name" \
+  # The dummy interface has an address but no route: Chrome then reports
+  # navigator.onLine (and its offline/online toggle works) while traffic off
+  # the machine still fails fast. Best effort. 9>&- keeps the lock fd out of
+  # the long-lived holder.
+  setsid unshare --user --map-root-user --net -- bash -c '
+    ip link set lo up || exit 1
+    { ip link add nfct0 type dummy && ip addr add 192.0.2.1/32 dev nfct0 &&
+      ip link set nfct0 up; } 2>/dev/null ||
+      echo "warning: no dummy interface, so browsers in this lane report offline" >&2
+    exec -a "$0" sleep infinity' "nfct-qa-lane:$name" \
     </dev/null >"$state/$name.log" 2>&1 9>&- &
   for _ in $(seq 1 50); do
     hpid=$(holder "$name") && break
@@ -99,6 +116,7 @@ cmd_up() {
   done
   [ -n "$hpid" ] || die "lane $name did not start: $(cat "$state/$name.log")"
   [ "$(ns_of "$hpid" net)" != "$(ns_of $$ net)" ] || die "lane $name has no private network."
+  [ ! -s "$state/$name.log" ] || sed "s|^|$prog: |" "$state/$name.log" >&2
   rm -f "$state/$name.log"
   echo "lane $name is up (holder pid $hpid)"
 }
@@ -162,15 +180,11 @@ cmd_list() {
   [ -n "$any" ] || echo "no lanes"
 }
 
-case "${1:-}" in
-up | exec | down)
-  [ $# -ge 2 ] || usage
-  check_name "$2"
+if [ "$1" = list ]; then
+  cmd_list
+else
   cmd="cmd_$1"
   name=$2
   shift 2
   "$cmd" "$name" "$@"
-  ;;
-list) cmd_list ;;
-*) usage ;;
-esac
+fi

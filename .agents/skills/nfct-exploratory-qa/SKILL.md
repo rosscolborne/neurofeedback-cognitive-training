@@ -121,9 +121,9 @@ scenario PASS from code alone. Choose the tool:
    hidden tab pauses games and ignores resizing. A browser outside your lane
    cannot reach servers inside it.
 2. **Otherwise, `scripts/qa-browser.sh`**: the pinned Playwright CLI driving
-   real Google Chrome inside your lane, with device profiles. Download it once,
-   outside the lane, with `scripts/qa-browser.sh --fetch`. Then, for lane
-   `qa-pr42`:
+   the installed Google Chrome (it needs Chrome, as the Playwright suites do)
+   inside your lane, with device profiles. Download it once, outside the lane,
+   with `scripts/qa-browser.sh --fetch`. Then, for lane `qa-pr42`:
 
    ```bash
    scripts/qa-browser.sh qa-pr42 -s=se open http://127.0.0.1:5193/ --device "iPhone SE (3rd gen)"
@@ -139,15 +139,19 @@ scenario PASS from code alone. Choose the tool:
    Open a second session for the larger phone (`-s=i17 open ... --device
    "iPhone 17"`). `--help` lists every command. Output not saved with
    `--filename` goes to the ignored `.playwright-cli/`; keep evidence outside
-   the repository. Timed games keep running between your tool calls, so pause
-   before a long look, or read and answer in one call with `run-code` and
-   role locators (`page.getByRole(...)`), which is still user input.
+   the repository. `click` sends mouse events even under a phone profile; for
+   touch-only handlers use `run-code` with `locator.tap()`. Timed games keep
+   running between your tool calls, so pause before a long look, or read and
+   answer in one call with `run-code` and role locators
+   (`page.getByRole(...)`), which is still user input.
 3. **Otherwise**, a scratch Playwright script outside the repository.
 
 `eval` and `run-code` are for observing and for user-like input, never for
-calling app internals. In a lane, Google Fonts cannot load: text falls back to
-system fonts and the console shows that one request failing. Both come from
-the lane, not the app; leave exact typography to a HUMAN CHECK.
+calling app internals. In a lane, the page reports online and
+`network-state-set offline` and `online` toggle it, but nothing off the
+machine is reachable: Google Fonts cannot load, so text falls back to system
+fonts and the console shows that one request failing. Both come from the
+lane, not the app; leave exact typography to a HUMAN CHECK.
 
 At each step, observe:
 
