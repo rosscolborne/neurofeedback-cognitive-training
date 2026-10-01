@@ -26,24 +26,41 @@ export function inputOriginOf(event: MouseEvent): InputOrigin {
   return event.detail === 0 ? { kind: 'keyboard' } : { kind: 'pointer', x: event.clientX, y: event.clientY };
 }
 
-const POINTER_EVENTS = ['pointerdown', 'mousedown', 'click'] as const;
 /** Before any handler on the page; an options object, which every EventTarget implementation honours on removal. */
 const CAPTURE = { capture: true } as const;
+
+/** How long a dropped press may wait for its click (a press held this long is not a tap). */
+export const DROPPED_PRESS_CAP_MS = 1_000;
+
+/** How long the keyboard guard waits for a key event at all (a click from assistive technology involves none). */
+export const KEYBOARD_GUARD_CAP_MS = 10_000;
 
 function drop(event: Event): void {
   event.preventDefault();
   event.stopImmediatePropagation();
 }
 
+type Listeners = ReadonlyArray<readonly [string, (event: Event) => void]>;
+
+/** Adds `listeners` in the capture phase; returns a function that removes them and cancels `timers`. */
+function listen(target: EventTarget, listeners: Listeners, timers: Array<ReturnType<typeof setTimeout>>): () => void {
+  for (const [type, listener] of listeners) target.addEventListener(type, listener, CAPTURE);
+  return () => {
+    for (const timer of timers) clearTimeout(timer);
+    for (const [type, listener] of listeners) target.removeEventListener(type, listener, CAPTURE);
+  };
+}
+
 /**
  * Ignores a repeat of the input that just closed a screen, and nothing else:
  *
- * - after a tap or click: the next tap, if it comes within `durationMs` and
- *   lands near the same spot (the second tap of a double tap). Only that one
- *   tap is dropped: input anywhere else ends the guard and passes through,
- *   and keyboard clicks are never touched.
- * - after the keyboard: auto-repeated key presses of the key still held down,
- *   until it is released. A fresh key press passes through.
+ * - after a tap or click: the next press, if it starts within `durationMs`
+ *   near the same spot (the second tap of a double tap), and that press's
+ *   click whenever it comes, even after the window. Only that one tap is
+ *   dropped: a press anywhere else, or after the window, ends the guard and
+ *   passes through, and keyboard clicks are never touched.
+ * - after the keyboard: auto-repeats of the key still held down. The first
+ *   fresh key press or release ends the guard.
  *
  * It works on the input itself, in the capture phase, before any handler sees
  * it, and also drops the press that would move focus to the control under the
@@ -52,42 +69,54 @@ function drop(event: Event): void {
  * function that ends the guard early.
  */
 export function ignoreRepeatInput(origin: InputOrigin, target: EventTarget = window, durationMs = REPEAT_INPUT_GUARD_MS): () => void {
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  let stop = () => {};
+
   if (origin.kind === 'keyboard') {
-    const onKeyDown = (event: Event) => { if ((event as KeyboardEvent).repeat) drop(event); };
-    const stop = () => {
-      target.removeEventListener('keydown', onKeyDown, CAPTURE);
-      target.removeEventListener('keyup', stop, CAPTURE);
+    // Enter activates on keydown, so its auto-repeat follows the closing click; Space activates on keyup, so the
+    // next key event is already a fresh one.
+    const onKeyDown = (event: Event) => {
+      if ((event as KeyboardEvent).repeat) drop(event);
+      else stop();
     };
-    target.addEventListener('keydown', onKeyDown, CAPTURE);
-    target.addEventListener('keyup', stop, CAPTURE);
-    return stop;
+    stop = listen(target, [['keydown', onKeyDown], ['keyup', () => stop()]], timers);
+    timers.push(setTimeout(() => stop(), KEYBOARD_GUARD_CAP_MS));
+    return () => stop();
   }
 
   const { x, y } = origin;
   const until = performance.now() + durationMs;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const stop = () => {
-    if (timer !== undefined) clearTimeout(timer);
-    for (const type of POINTER_EVENTS) target.removeEventListener(type, onPointer, CAPTURE);
-  };
-  function onPointer(event: Event): void {
-    if (performance.now() >= until) {
-      stop();
-      return;
-    }
+  /** A dropped press is waiting for its click, which is dropped too, whenever it comes. */
+  let holding = false;
+  const near = (event: Event) => {
     const pointer = event as MouseEvent;
-    // A keyboard-activated click has no position (detail 0).
-    if (pointer.type === 'click' && pointer.detail === 0) return;
-    if (Math.hypot(pointer.clientX - x, pointer.clientY - y) > DOUBLE_TAP_SLOP_PX) {
-      // The player has moved on: everything from here is deliberate.
-      stop();
+    return Math.hypot(pointer.clientX - x, pointer.clientY - y) <= DOUBLE_TAP_SLOP_PX;
+  };
+  const onPress = (event: Event) => {
+    // The compatibility mousedown of a press already dropped.
+    if (event.type === 'mousedown' && holding) {
+      drop(event);
       return;
     }
-    drop(event);
-    // The second tap ends with its click; a later one is deliberate.
-    if (event.type === 'click') stop();
-  }
-  for (const type of POINTER_EVENTS) target.addEventListener(type, onPointer, CAPTURE);
-  timer = setTimeout(stop, durationMs);
-  return stop;
+    if (performance.now() < until && near(event)) {
+      drop(event);
+      holding = true;
+      timers.push(setTimeout(() => stop(), DROPPED_PRESS_CAP_MS));
+      return;
+    }
+    // Elsewhere, or after the window: the player has moved on.
+    stop();
+  };
+  const onClick = (event: Event) => {
+    // A keyboard-activated click has no position (detail 0).
+    if ((event as MouseEvent).detail === 0) return;
+    if (holding || (performance.now() < until && near(event))) drop(event);
+    // The second tap ends with its click; any later one is deliberate.
+    stop();
+  };
+  const onCancel = () => { if (holding) stop(); };
+  stop = listen(target, [['pointerdown', onPress], ['mousedown', onPress], ['click', onClick], ['pointercancel', onCancel]], timers);
+  // The window closes unless a dropped press is still waiting for its click.
+  timers.push(setTimeout(() => { if (!holding) stop(); }, durationMs));
+  return () => stop();
 }

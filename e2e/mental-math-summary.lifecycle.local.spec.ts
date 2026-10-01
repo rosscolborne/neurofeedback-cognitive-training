@@ -317,27 +317,37 @@ test.describe('leaving Mental Math on a phone', () => {
   const trainHeading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Train', exact: true });
   const mentalMathCard = (page: Page) => page.getByRole('main').getByRole('button', { name: 'Mental Math', exact: true });
 
-  test('a double tap on Done closes the game once: the second tap never opens the tab under it, and focus returns to the game’s card', async ({ page, browserName }) => {
-    await page.clock.install();
-    await signUpAndOpenTrain(page);
-    await mentalMathCard(page).tap();
+  /**
+   * A quit run's summary, opened from `opener` (Train's Mental Math card by default), with page time stopped (it
+   * moves only with runFor). Returns the centre of Done, and a count of the input events that reach the page,
+   * taken before the app (or its guard) sees them.
+   */
+  async function quitToSummary(page: Page, opener = mentalMathCard(page)): Promise<{ x: number; y: number; seen: (type: string) => Promise<number> }> {
+    await opener.tap();
     await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
-    // Page time stops here and moves only with runFor, so the taps below are exactly 150 ms apart.
     await startRun(page, 1);
     await page.clock.runFor(1_000);
     await page.getByRole('button', { name: 'Pause', exact: true }).tap();
     await page.getByRole('button', { name: 'Quit run', exact: true }).tap();
     await expect(page.locator('#mm-handoff-title')).toHaveText('Run ended early');
-
-    // The presses and clicks that reach the page, counted before the app (or its guard) sees them.
     await page.evaluate(() => {
       const seen: Record<string, number> = {};
       (window as unknown as { nfctInput: Record<string, number> }).nfctInput = seen;
-      for (const type of ['pointerdown', 'click']) window.addEventListener(type, () => { seen[type] = (seen[type] ?? 0) + 1; }, { capture: true });
+      for (const type of ['pointerdown', 'pointerup', 'click']) window.addEventListener(type, () => { seen[type] = (seen[type] ?? 0) + 1; }, { capture: true });
     });
-    const seen = (type: string) => page.evaluate((name) => (window as unknown as { nfctInput: Record<string, number> }).nfctInput[name] ?? 0, type);
     const done = await page.getByRole('button', { name: 'Done', exact: true }).boundingBox();
-    const [x, y] = [done!.x + done!.width / 2, done!.y + done!.height / 2];
+    return {
+      x: done!.x + done!.width / 2,
+      y: done!.y + done!.height / 2,
+      seen: (type) => page.evaluate((name) => (window as unknown as { nfctInput: Record<string, number> }).nfctInput[name] ?? 0, type),
+    };
+  }
+
+  test('a double tap on Done closes the game once: the second tap never opens the tab under it, and focus returns to the game’s card', async ({ page, browserName }) => {
+    await page.clock.install();
+    await signUpAndOpenTrain(page);
+    // Page time stops in the run and moves only with runFor, so the taps below are exactly 150 ms apart.
+    const { x, y, seen } = await quitToSummary(page);
 
     await page.touchscreen.tap(x, y);
     await expect(trainHeading(page)).toBeVisible();
@@ -359,6 +369,60 @@ test.describe('leaving Mental Math on a phone', () => {
     await page.clock.runFor(500);
     await page.touchscreen.tap(x, y);
     await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
+  });
+
+  test('a second press made inside the double-tap window but released after it still never opens the tab under Done', async ({ page }) => {
+    await page.clock.install();
+    await signUpAndOpenTrain(page);
+    const { x, y, seen } = await quitToSummary(page);
+    await page.touchscreen.tap(x, y);
+    await expect(trainHeading(page)).toBeVisible();
+
+    // Pressed 350 ms after Done, released at 450 ms: past the 400 ms window, the click still belongs to that press.
+    await page.clock.runFor(350);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.clock.runFor(100);
+    const released = await seen('pointerup');
+    await page.mouse.up();
+    // A click follows its pointerup in the same task, so once the release has been seen, its click has been handled.
+    await expect.poll(() => seen('pointerup')).toBe(released + 1);
+    await expect(trainHeading(page)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toHaveCount(0);
+
+    await page.clock.runFor(1_100);
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
+  });
+
+  test('Done on a scrolled summary returns to the top of the screen that opened the game, with its opener in view and focused', async ({ page }) => {
+    await page.clock.install();
+    await signUpAndOpenTrain(page);
+    const scrollY = () => page.evaluate(() => window.scrollY);
+    const doneAtTheBottom = async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      expect(await scrollY()).toBeGreaterThan(0);
+      await page.getByRole('button', { name: 'Done', exact: true }).tap();
+    };
+
+    // From Train.
+    await quitToSummary(page);
+    await doneAtTheBottom();
+    await expect(trainHeading(page)).toBeVisible();
+    expect(await scrollY()).toBe(0);
+    await expect(mentalMathCard(page)).toBeInViewport();
+    await expect(mentalMathCard(page)).toBeFocused();
+
+    // From Home's Play (NFCT-13): the Play card and the streak are on screen, not above it.
+    // Page time flows again so the picker can load the player's levels; the next run stops it again.
+    await page.clock.resume();
+    await page.getByRole('button', { name: 'Home', exact: true }).tap();
+    const homePlay = page.getByRole('main').getByRole('button', { name: 'Play Mental Math', exact: true });
+    await quitToSummary(page, homePlay);
+    await doneAtTheBottom();
+    await expect(homePlay).toBeInViewport();
+    expect(await scrollY()).toBe(0);
+    await expect(homePlay).toBeFocused();
   });
 
   test('Back returns focus to the control that opened each screen', async ({ page }) => {
