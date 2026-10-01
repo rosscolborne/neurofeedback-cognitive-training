@@ -41,12 +41,13 @@ export const DisconnectClinicianDialog: React.FC<DisconnectClinicianDialogProps>
   return (
     <div
       role="presentation"
+      className="overlay-safe-area"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isDisconnecting) onClose();
       }}
       style={{
         position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '16px', background: 'rgba(58, 49, 43, 0.58)', backdropFilter: 'blur(7px)',
+        background: 'rgba(58, 49, 43, 0.58)', backdropFilter: 'blur(7px)',
       }}
     >
       <section
@@ -55,7 +56,7 @@ export const DisconnectClinicianDialog: React.FC<DisconnectClinicianDialogProps>
         aria-labelledby="disconnect-clinician-title"
         aria-describedby="disconnect-clinician-consequences"
         style={{
-          width: 'min(440px, 100%)', maxHeight: 'min(840px, calc(100dvh - 32px))', overflowY: 'auto',
+          width: 'min(440px, 100%)', maxHeight: 'min(840px, 100%)', overflowY: 'auto',
           borderRadius: '24px', background: 'var(--surface-patient-card)', border: '1px solid var(--border-subtle)',
           boxShadow: '0 24px 70px rgba(58, 49, 43, 0.2)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px',
         }}

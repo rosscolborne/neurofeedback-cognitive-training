@@ -350,7 +350,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         autoComplete="off"
         autoFocus={!!initialInvitationCode}
         className="font-mono"
-        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '14px', letterSpacing: '0.06em' }}
+        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '16px', letterSpacing: '0.06em' }}
       />
       <div style={{ color: 'var(--text-secondary)', fontSize: '11px', lineHeight: 1.4 }}>
         Use the code from your clinician. You must be signed in with the email address they invited.

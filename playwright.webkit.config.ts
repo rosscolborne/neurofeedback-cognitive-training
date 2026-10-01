@@ -27,6 +27,10 @@ const IOS_WEBKIT_SPECS = [
   'mental-math-summary.lifecycle.local.spec.ts',
   // NFCT-12: the Train game catalogue, the way into every game, at phone widths.
   'train-catalogue.self-directed.local.spec.ts',
+  // NFCT-33: iPhone polish. The account forms and dialogs and the bundled
+  // fonts; the run screen's touch handling, HUD widths and keypad.
+  'iphone-forms.auth-handoffs.local.spec.ts',
+  'mental-math-touch.lifecycle.local.spec.ts',
 ];
 
 export default defineConfig({

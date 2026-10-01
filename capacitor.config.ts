@@ -18,6 +18,11 @@ const config: CapacitorConfig = {
     hostname: 'localhost',
     androidScheme: 'https',
   },
+  ios: {
+    // Pinch-zoom (NFCT-33). Capacitor turns zooming off in its web view by
+    // default, which would override the zoomable viewport in index.html.
+    zoomEnabled: true,
+  },
   plugins: {
     // Dark status-bar text over the light UI. Capacitor's built-in SystemBars
     // plugin applies its style at launch, after Info.plist's UIStatusBarStyle
