@@ -136,6 +136,21 @@ describe('Progress', () => {
     expect(visibleText(r)).toContain('Your progress will show when you’re back online.');
   });
 
+  it('scrolls to and focuses the achievements once loaded when Home asks for them', async () => {
+    const heading = { scrollIntoView: vi.fn(), focus: vi.fn() };
+    const { sources } = fakeSources({ summary: readable(summaryWith([TODAY])) });
+    const onSectionFocused = vi.fn();
+    await act(async () => {
+      renderer = create(
+        <ProgressOverview playerId="player-1" sources={sources} clock={utcClock} onPlay={vi.fn()} games={null} focusSection="achievements" onSectionFocused={onSectionFocused} />,
+        { createNodeMock: (element) => (element.props.id === 'ov-achievements-title' ? heading : null) },
+      );
+    });
+    expect(heading.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    expect(heading.focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(onSectionFocused).toHaveBeenCalledTimes(1);
+  });
+
   it('reports what it cannot load', async () => {
     const { r } = await renderProgress({ summary: 'error' });
     expect(visibleText(r)).toContain('Your progress couldn’t be loaded right now.');
