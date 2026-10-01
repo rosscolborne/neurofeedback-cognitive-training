@@ -415,8 +415,8 @@ scripts/qa-lane.sh down nfct22                              # stops everything i
 ```
 
 - A lane has no internet: requests off the machine fail fast. Run installs,
-  `npx playwright install`, downloads, `git` and `gh` outside it. Google Fonts
-  cannot load in it, so text uses fallback fonts. Browsers in it still report
+  `npx playwright install`, downloads, `git` and `gh` outside it. The app's
+  fonts are bundled, so pages render as they do online. Browsers in it still report
   online (a dummy interface with no route), so offline and reconnect behavior
   can be tested there.
 - Its servers are reachable only from inside it, so run the browser there too

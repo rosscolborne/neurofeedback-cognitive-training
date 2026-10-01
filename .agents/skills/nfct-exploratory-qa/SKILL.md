@@ -149,9 +149,9 @@ scenario PASS from code alone. Choose the tool:
 `eval` and `run-code` are for observing and for user-like input, never for
 calling app internals. In a lane, the page reports online and
 `network-state-set offline` and `online` toggle it, but nothing off the
-machine is reachable: Google Fonts cannot load, so text falls back to system
-fonts and the console shows that one request failing. Both come from the
-lane, not the app; leave exact typography to a HUMAN CHECK.
+machine is reachable. The app needs nothing off the machine (its fonts are
+bundled), so a failed off-machine request in the console is a finding, not a
+lane artifact.
 
 At each step, observe:
 

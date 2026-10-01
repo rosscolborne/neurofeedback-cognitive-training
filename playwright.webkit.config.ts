@@ -11,14 +11,14 @@ import protocol from './playwright.protocol.config';
 // WebKit engine differences and small-screen, touch and mobile layout
 // problems. It does not prove older iOS versions, the capacitor:// origin,
 // suspension, the software keyboard, safe areas or Bluetooth; the iOS
-// Simulator smoke test and real iPhones cover those (docs/nfct/ios.md).
+// Simulator scenarios and real iPhones cover those (docs/nfct/ios.md).
 const IOS_WEBKIT_SPECS = [
   // Sign-in, credentials and account deletion.
   'auth-handoffs.local.spec.ts',
   'password-reset.auth-handoffs.local.spec.ts',
   'account-deletion-lifecycle.local.spec.ts',
   // Stage 1 (NFCT-20, NFCT-21): Mental Math run lifecycle, cache isolation and
-  // offline cache. They join this run as soon as they land on main.
+  // offline cache.
   'mental-math.lifecycle.local.spec.ts',
   'cache-isolation.persistence.local.spec.ts',
   'offline-cache.persistence.local.spec.ts',
