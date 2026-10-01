@@ -169,9 +169,11 @@ Choose from these by risk; not every item applies to every change.
    there, and label the defect a *regression*, *pre-existing* or *unknown*.
 3. Decide scope. In scope means within the card or, on an integration branch,
    within the combined objective. A pre-existing defect is out of scope unless
-   it breaks an acceptance criterion.
+   it breaks an acceptance criterion. Label an in-scope FAIL BLOCKER or
+   SHOULD-FIX and an out-of-scope one FOLLOW-UP
+   ([finding severity](../../../AGENTS.md#finding-severity)).
 4. **In scope**: the branch owner fixes it. Afterwards, re-run the failing
-   scenario, its neighbors and the smoke path.
+   scenario, its neighbors and the smoke path once, not the whole matrix.
 5. **Out of scope**: write it up as a
    [follow-up card](../../../AGENTS.md#out-of-scope-work). Do not widen the
    change.
@@ -214,7 +216,8 @@ the accounts used. Then give one row per scenario:
 
 Result is **PASS**, **FAIL**, **BLOCKED** (could not be run; say why) or
 **HUMAN CHECK**. For each FAIL, add the steps to reproduce, expected and
-actual behavior, evidence, whether it is a regression, and its scope.
+actual behavior, evidence, whether it is a regression, its scope and its
+severity.
 
 Then summarize:
 

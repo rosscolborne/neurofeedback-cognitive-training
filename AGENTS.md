@@ -50,9 +50,11 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   deliberate test doubles are fine, and Demo Mode's synthetic EEG is an
   existing, deliberate feature. Never weaken production behavior just to make a
   test pass.
-- Before opening or updating a PR, run the relevant [checks](#checks), follow
+- Before opening a PR, run the relevant [checks](#checks), follow
   [Stage 1 test coverage](#stage-1-test-coverage), and leave only intended
   files in the diff ([hand-off hygiene](.agents/skills/nfct-worktrees/SKILL.md#hand-off-hygiene)).
+  Before pushing a fix, rerun the checks that cover what it changed
+  ([revalidation](#revalidation)).
 - When one objective is split into parallel streams, finishing the streams
   does not finish the objective. Its agent work is complete only when
   [nfct-integration](.agents/skills/nfct-integration/SKILL.md) has combined
@@ -102,12 +104,142 @@ Wait for CI only when the user asks you to, when the task is to diagnose or
 fix CI or to get a PR green, or when an automation genuinely needs the result
 to decide what work happens next.
 
+## Bounded review
+
+Work is complete when its objective is met and no BLOCKER remains, not when
+nothing more could be improved. Reviews converge within a fixed budget unless
+the user explicitly asks for a [deep audit](#deep-audit-mode).
+
+The orchestrator owns agent topology and review routing: which agents run,
+which review gates apply, and at which security tier
+([nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md#review-routing)).
+Without an orchestrator, the agent the user is talking to has that role.
+
+### Finding severity
+
+Reviewers, security reviewers and exploratory QA label every finding:
+
+| Severity | Use for | Effect |
+| --- | --- | --- |
+| **BLOCKER** | Wrong behavior, a regression or a broken acceptance criterion in this change, or a realistic security, privacy or data-integrity problem | Blocks completion until it is fixed and verified |
+| **SHOULD-FIX** | A real defect or gap in this change, small enough to fix here | Fixed within the [review budget](#review-budget). If still open after that, carded and reported as open; it then blocks neither completion nor merge readiness, and the owner decides at merge |
+| **FOLLOW-UP** | Hardening, polish, technical debt, and problems that predate the change and that it does not make worse | Carded as [out-of-scope work](#out-of-scope-work); never blocks |
+
+Severity reflects the impact on this change, not effort or interest. Budget
+limits never downgrade a BLOCKER. A gate passes once no BLOCKER is open.
+
+### Review budget
+
+By default, each PR that gets review gates has:
+
+1. One independent review
+   ([nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md)) and one
+   security review at its routed tier
+   ([nfct-security-review](.agents/skills/nfct-security-review/SKILL.md#review-tiers)).
+   A LIGHT security review is part of the independent review.
+2. At most one fix pass per review, by the branch owner, for its BLOCKER and
+   SHOULD-FIX findings.
+3. One verification pass per review, by the role that raised the findings. It
+   checks those fixes and the code they touched; it is not a fresh audit.
+
+After verification:
+
+- An open BLOCKER, including one a fix introduced, still blocks. It gets one
+  more targeted fix, which the role that raised it checks narrowly; if it is
+  still open, [checkpoint](#checkpoints).
+- An open SHOULD-FIX gets at most one targeted repair, proven by its targeted
+  check. If that does not close it, card it and report it as open.
+- FOLLOW-UPs are carded.
+- A new minor finding never restarts the review.
+
+When a fix for any gate touches a security boundary, the security reviewer
+checks that fix diff narrowly: in its verification pass, or as a targeted
+check for a later repair. For a LIGHT tier, the independent reviewer does.
+This is not a new round. With that, a gate stays passed when later commits
+only fix verified findings. Substantive new work after review, such as a
+feature change, a newly merged stream or a rebuilt branch, gets a review
+scoped to that work, not a full re-review.
+Exploratory QA works the same way: one fix pass, then one re-run of the
+affected scenarios.
+
+### Agent topology
+
+Only the orchestrator starts agents, or an agent it has explicitly delegated
+that to. Implementers, integrators, reviewers, security reviewers and QA
+return results and recommendations to the agent that started them instead of
+starting agents themselves:
+
+- Reviewers do not start more reviewers, and security reviewers do not start
+  deeper security reviews. A reviewer that thinks a gate or a higher tier is
+  missing says so in its findings.
+- Implementers check their own work (targeted tests, UI self-QA) but do not
+  start reviews that duplicate the orchestrator's gates.
+- More reviewers is not more safety. Add an agent only for a distinct risk
+  that no planned gate covers.
+
+A short-lived, read-only lookup inside your own task, such as a code search,
+is not a new role and is fine. A review, a QA pass, implementation work, or an
+agent that would start others is.
+
+### Revalidation
+
+After a fix, rerun the checks that cover what it changed, not every suite.
+Run the full required suite once on the final head before reporting the work
+complete. [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md#revalidation-after-a-fix)
+has the detail.
+
+### Checkpoints
+
+Stopping at a checkpoint is intended, bounded autonomy, not a failure. Start
+no new agents or review rounds when any of these happens:
+
+- a gate would need a round beyond its [budget](#review-budget), or the same
+  category of finding keeps coming back after fixes;
+- a verification pass or any later round finds mostly new FOLLOW-UPs rather
+  than BLOCKERs;
+- agents started, review rounds or full-suite runs have grown far beyond the
+  plan, for example twice the planned agents or a third full-suite run on one
+  PR;
+- the work has grown beyond the objective: another card's worth of work, or
+  files and boundaries the plan did not include;
+- the effort is clearly out of proportion to the risk, such as a LIGHT change
+  that has needed several review rounds.
+
+Do not estimate cost in money; count what you can observe (review rounds,
+agents started, full-suite runs, steps or elapsed time, scope growth). If the
+work already meets its [completion](#completion-and-merge-readiness) criteria
+with no BLOCKER open, finish normally. Otherwise stop and report a
+checkpoint: the work completed, the remaining blockers, the
+FOLLOW-UPs deferred and carded, why execution stopped, and the recommended
+next action. The user decides whether to continue.
+
+### Deep audit mode
+
+Enter deep audit mode only when the user explicitly asks for it: an
+exhaustive review, finding every issue, security hardening, an adversarial
+audit or a release-readiness deep dive. Routing a risky change to the DEEP
+security tier does not enter it.
+
+- Say that you are entering deep audit mode, and name its scope.
+- The review budget and the round, agent and suite-run checkpoints are
+  relaxed: rounds may continue while they find BLOCKER or SHOULD-FIX issues
+  within the scope.
+- For a hardening request, FOLLOW-UP hardening within the scope may be fixed
+  instead of carded.
+- The scope stays tied to the requested objective, and the scope checkpoint
+  still applies.
+- Agent topology still applies: the orchestrator may run more review passes,
+  but other agents still start none.
+
+Deep audit mode ends when a full pass over the scope finds no new BLOCKER or
+SHOULD-FIX, or when the user stops it.
+
 ## Out-of-scope work
 
 A bug, gap or improvement found outside the current card (or, during
-integration, outside the combined objective) becomes a follow-up card, not
-part of the PR. Something that breaks the card's acceptance criteria is in
-scope: fix it, or report it as a blocker.
+integration, outside the combined objective), and every FOLLOW-UP finding,
+becomes a follow-up card, not part of the PR. Something that breaks the card's
+acceptance criteria is in scope: fix it, or report it as a blocker.
 
 - Write it up Jira-ready: a summary; bug or task; steps to reproduce or
   context; expected and actual behavior; branch, SHA and environment;
@@ -119,6 +251,12 @@ scope: fix it, or report it as a blocker.
   Search the NFCT project for an existing card first, then create the card in
   the NFCT project and link it to the card where the work was found. Without
   Jira access, list it in the report for the owner to file.
+- Group related findings into one card per coherent piece of work, such as
+  "game-session rules hardening", rather than one card per finding, and file
+  them when the gate ends. A nit not worth a card stays in the report.
+- A follow-up does not block the current objective. If the objective
+  genuinely depends on it, or leaving it is a real risk, it is a BLOCKER or
+  SHOULD-FIX instead.
 
 ## Skills
 
@@ -134,10 +272,10 @@ conflict.
 | [nfct-worktrees](.agents/skills/nfct-worktrees/SKILL.md) | Create, hand off and clean up task, review, QA and integration worktrees and branches |
 | [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md) | Choose and run the right test layers |
 | [nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md) | Independently review a PR (read-only) |
-| [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review changes to auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
+| [nfct-security-review](.agents/skills/nfct-security-review/SKILL.md) | Review security at a routed LIGHT, STANDARD or DEEP tier, for auth, rules, Functions, deletion, trusted scoring, EEG data, secrets or ownership (read-only) |
 | [nfct-frontend-design](.agents/skills/nfct-frontend-design/SKILL.md) | Design and build user-facing UI and game HUDs within the existing visual language |
 | [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Test user-facing changes like a user in a real browser against the local app, including UI checks |
-| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, assign and track multi-stream work through integration into one validated PR |
+| [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, assign and track multi-stream work through integration into one validated PR; own agent topology and review routing |
 | [nfct-integration](.agents/skills/nfct-integration/SKILL.md) | Converge finished parallel streams into one validated integration PR |
 
 ## Checks

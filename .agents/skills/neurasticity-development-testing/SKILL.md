@@ -36,6 +36,14 @@ This skill owns deterministic, repeatable coverage. Driving the running app in a
 
 On an integration branch, the relevant suite is everything the merged checks and CI run, plus deterministic tests for behavior that crosses streams; see [nfct-integration](../nfct-integration/SKILL.md#validate-the-combined-result).
 
+## Revalidation after a fix
+
+Fit the checks to what a fix changed:
+
+- After a fix, rerun the tests that cover the changed code and the finding's own repro (the probe, test or scenario that showed it), plus the fast checks the fix can break: lint, typecheck and build for code, or the changed links for docs. Run an emulator suite (rules, Functions, repositories or Playwright) only when the fix touches what that suite covers.
+- For a security fix, the minimum proof is the probe or test that demonstrated the finding, now showing it is closed, kept as a regression test at the lowest layer that observes it (a rules test for a rules bypass).
+- Do not rerun every expensive suite after each small correction. Run the full required suite once on the final head before reporting the work complete: the relevant [Checks](../../../AGENTS.md#checks) or, for an integration branch, everything the merged checks and CI run.
+
 ## Definition of done
 
 Before reporting an implementation or review complete:

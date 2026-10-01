@@ -7,10 +7,11 @@ description: Converge completed NFCT streams (parallel branches, worktrees or PR
 
 Finishing every stream does not finish the objective. The integration's
 agent work is complete only when the streams are combined in one integration
-PR, every applicable gate below has passed on its final head, and that head is
-pushed with its CI started. The objective is merge-ready once that CI is green
-too (see [completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)). If the user explicitly
-asked for independent PRs, see [Independent PRs](#independent-prs).
+PR, every applicable gate below has passed with no BLOCKER open, and the
+final head is pushed with its CI started. The objective is merge-ready once
+that CI is green too (see [completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)).
+If the user explicitly asked for independent PRs, see
+[Independent PRs](#independent-prs).
 
 The integrator owns the combined result: the merge order, the integration
 branch and PR, conflict and semantic resolutions, defects that exist only in
@@ -20,10 +21,11 @@ integration report. Everything else keeps its owner:
 | Responsibility | Owner |
 | --- | --- |
 | Decomposition, stream assignment and tracking | [nfct-orchestration](../nfct-orchestration/SKILL.md) |
+| Agent topology, review routing and the security tier | The orchestrator role ([nfct-orchestration](../nfct-orchestration/SKILL.md#review-routing)): whoever started you, or you when the user started you directly |
 | A stream's own change, and defects that reproduce on its branch alone | That stream's implementer |
 | Choosing and writing deterministic tests | [neurasticity-development-testing](../neurasticity-development-testing/SKILL.md) |
 | Browser-driven investigation | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
-| Review of the integration PR | [nfct-pr-review](../nfct-pr-review/SKILL.md) and, where triggered, [nfct-security-review](../nfct-security-review/SKILL.md), by agents that did not integrate it |
+| Review of the integration PR | [nfct-pr-review](../nfct-pr-review/SKILL.md) and [nfct-security-review](../nfct-security-review/SKILL.md) at the routed tier, by agents that did not integrate it |
 | Out-of-scope discoveries | [Out-of-scope work](../../../AGENTS.md#out-of-scope-work) |
 | Human checks and the merge | The owner |
 
@@ -151,8 +153,15 @@ Record each decision and its reason; the reviewer checks them.
 
 ## Validate the combined result
 
-Run every gate that applies, in this order. After any fix, repeat the gates
-the fix could affect.
+Run every gate that applies, in this order. QA and each review run once, with
+at most one fix pass and one verification pass
+([review budget](../../../AGENTS.md#review-budget)). After a fix, rerun only
+the checks that cover what it changed
+([revalidation](../neurasticity-development-testing/SKILL.md#revalidation-after-a-fix));
+gate 4 runs everything once more at the end. Card FOLLOW-UP findings instead
+of extending the integration, and if a
+[checkpoint](../../../AGENTS.md#checkpoints) condition is met, stop and report
+one.
 
 1. **Deterministic suite.** Following the
    [testing skill](../neurasticity-development-testing/SKILL.md), run in the
@@ -167,16 +176,26 @@ the fix could affect.
    integration head to [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md)
    with the streams, cards, SHAs, your semantic decisions and the risk areas
    you found. It returns in-scope defects to you as the branch owner; fix them
-   and have QA re-run the affected scenarios.
-3. **Independent review.** With the integration PR open (see
+   and have QA re-run the affected scenarios once.
+3. **Independent and security review.** With the integration PR open (see
    [Open the integration PR](#open-the-integration-pr)), request
-   [nfct-pr-review](../nfct-pr-review/SKILL.md), plus
-   [nfct-security-review](../nfct-security-review/SKILL.md) when any stream
-   touches its triggers. Name the stream PRs already reviewed at the SHAs you
-   merged, so review can concentrate on merge resolutions, integration commits
-   and cross-stream boundaries while its verdict covers the whole PR. Fix the
-   findings; the reviewer re-verifies them.
-4. **CI.** Push the final head and confirm its CI has started, then report;
+   [nfct-pr-review](../nfct-pr-review/SKILL.md) and a security review at the
+   tier recorded for the integration. If you hold the orchestrator role (see
+   below), choose and record the tier yourself per
+   [Security tier](../nfct-orchestration/SKILL.md#security-tier); it is never
+   DEEP by default. LIGHT is part of the independent review; STANDARD and DEEP
+   are a separate [nfct-security-review](../nfct-security-review/SKILL.md)
+   pass. Name the stream PRs already reviewed at the SHAs you merged, so
+   review can concentrate on merge resolutions, integration commits and
+   cross-stream boundaries while its verdict covers the whole PR. Fix the
+   BLOCKER and SHOULD-FIX findings in one pass. Each reviewer verifies its
+   fixes within the [review budget](../../../AGENTS.md#review-budget), and the
+   security reviewer also checks any fix that touches a security boundary.
+   Integration fixes do not trigger a fresh review.
+4. **Final validation.** If anything was committed after gate 1's run, rerun
+   the full deterministic suite once on the final head. This is the one
+   combined validation pass the report cites; do not rerun it after each fix.
+5. **CI.** Push the final head and confirm its CI has started, then report;
    do not wait for it to finish
    ([completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)). CI is a merge gate: the PR is
    merge-ready only when CI is green on that head. If CI has failed by the
@@ -185,8 +204,14 @@ the fix could affect.
    is a finding), fix it on the integration branch, repeat the affected local
    gates, and push again.
 
-Start QA and the reviewers as separate agents where your tooling allows;
-otherwise ask the orchestrator or user to start them, with the brief above.
+Whoever started you holds the orchestrator role
+([agent topology](../../../AGENTS.md#agent-topology)): it chooses the tier
+and starts QA and the reviewers, unless it explicitly delegated that to you.
+Give it the brief above. You hold that role yourself only when the user
+started you directly. Then start them as separate agents where your tooling
+allows (one independent reviewer, one security reviewer only for STANDARD or
+DEEP, and one QA agent, each told to start no agents of its own), or ask the
+user to start them.
 Reviewers must never be the integrator. If you run QA yourself, say so in the
 report.
 
@@ -244,14 +269,18 @@ Give one concise report, in the PR body and in your final message:
 - **Result**: the integration branch, PR URL and final head SHA.
 - **Conflicts**: the file, what each side intended, and the resolution.
 - **Semantic decisions**: what you found, what you decided and why.
-- **Tests**: commands run and results, and coverage added.
-- **Reviewer findings**: by severity, with resolutions and the verdict.
+- **Tests**: commands run and results, and coverage added, with the final
+  validation run's head SHA.
+- **Security review**: the tier and its reason, as recorded.
+- **Reviewer findings**: by severity (BLOCKER, SHOULD-FIX, FOLLOW-UP), with
+  resolutions and each verdict.
 - **Exploratory QA**: the QA summary, and its FAIL and BLOCKED rows.
 - **Human verification**: the HUMAN CHECK items left for the owner.
 - **Follow-ups**: cards filed or proposed, and anything unresolved.
 - **Status**, as three lines:
   - Agent work: *complete*, or what remains.
   - Remote CI: *passing*, *pending* or *failing* at `<sha>`, with the run URL.
-  - Merge readiness: *MERGE-READY* (every gate passed and CI is green at
-    `<sha>`; only the listed human checks remain), *NOT YET — awaiting
+  - Merge readiness: *MERGE-READY* (every gate passed with no BLOCKER open
+    and CI is green at `<sha>`; only the listed human checks and carded
+    findings remain), *NOT YET — awaiting
     required CI*, or *NOT READY*, with what blocks it.
