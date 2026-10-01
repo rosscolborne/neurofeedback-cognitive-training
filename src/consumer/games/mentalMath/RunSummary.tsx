@@ -144,7 +144,10 @@ function recordLine(record: RecordLine, provisional: boolean, unavailable: boole
         case 'abandoned':
           return { title: 'Unfinished runs don’t set records', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted' };
         case 'flagged':
-          return { title: 'Flagged runs don’t set records', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted', pending: provisional };
+          // Flagged only for its locked start level: the upgrade (ADR-001 decision 12) can still make it count.
+          return record.upgradable
+            ? { title: 'Not a record yet', detail: `This run can still set a record once level ${record.startLevel} is unlocked.`, tone: 'muted', pending: provisional }
+            : { title: 'Flagged runs don’t set records', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted', pending: provisional };
         case 'invalid':
           return { title: 'Not counted', detail: bestSentence(record.startLevel, record.bestScore), tone: 'muted', pending: provisional };
         case 'not-saved':

@@ -123,9 +123,14 @@ describe('post-session summary', () => {
     expect(decision.result).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked'] });
     const lockedOnly = summary(outcome, 'confirmed', pickerState(null, [stored(outcome, decision.result)]));
     expect(lockedOnly.verification).toEqual({ kind: 'flagged', reasons: ['start-level-locked'], upgradable: true });
+    expect(lockedOnly.record).toEqual({ kind: 'ineligible', startLevel: 2, reason: 'flagged', bestScore: null, upgradable: true });
+    // The preview predicts the same before the server has checked it.
+    expect(summary(outcome, 'confirmed', pickerState(null, [stored(outcome)])).record).toMatchObject({ reason: 'flagged', upgradable: true });
     // Another flag as well: the upgrade never applies (ADR-001 decision 12).
     const alsoFast = { ...decision.result, reasons: ['start-level-locked', 'rt-below-floor'] } as ServerResult;
-    expect(summary(outcome, 'confirmed', pickerState(null, [stored(outcome, alsoFast)])).verification).toMatchObject({ upgradable: false });
+    const both = summary(outcome, 'confirmed', pickerState(null, [stored(outcome, alsoFast)]));
+    expect(both.verification).toMatchObject({ upgradable: false });
+    expect(both.record).toMatchObject({ reason: 'flagged', upgradable: false });
   });
 
   it('says the totals include an unchecked run only when the preview counts this run, or another pending one', () => {
