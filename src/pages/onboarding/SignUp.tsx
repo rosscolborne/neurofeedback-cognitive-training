@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft } from 'lucide-react';
+import { useKeepActionAboveKeyboard } from '../../components/ui/useKeepActionAboveKeyboard';
 
 export const SignUp: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +13,9 @@ export const SignUp: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  useKeepActionAboveKeyboard(formRef, submitRef);
 
   const getErrorMessage = (err: any): string => {
     const code = err?.code || '';
@@ -90,7 +94,7 @@ export const SignUp: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form ref={formRef} onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Your Name</label>
             <input 
@@ -116,6 +120,7 @@ export const SignUp: React.FC = () => {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
+              autoComplete="email"
               style={{
                 width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
                 background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
@@ -132,6 +137,8 @@ export const SignUp: React.FC = () => {
               onChange={e => setPassword(e.target.value)}
               placeholder="At least 6 characters"
               required
+              autoComplete="new-password"
+              enterKeyHint="go"
               style={{
                 width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
                 background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
@@ -141,6 +148,7 @@ export const SignUp: React.FC = () => {
           </div>
 
           <button 
+            ref={submitRef}
             type="submit" 
             disabled={loading}
             style={{

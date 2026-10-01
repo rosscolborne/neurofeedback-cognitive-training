@@ -130,8 +130,14 @@
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-.mm-level:hover {
-  border-color: var(--brand-primary);
+@media (hover: hover) {
+  .mm-level:hover {
+    border-color: var(--brand-primary);
+  }
+
+  .mm-level-locked:hover {
+    border-color: var(--border-default);
+  }
 }
 
 .mm-level-selected {
@@ -145,10 +151,6 @@
   background-color: var(--surface-patient-recessed);
   color: var(--text-tertiary);
   cursor: not-allowed;
-}
-
-.mm-level-locked:hover {
-  border-color: var(--border-default);
 }
 
 .mm-level:has(input:focus-visible) {
@@ -211,8 +213,16 @@
 
 /* ---- The run ---- */
 
+/* The run is played by touch (NFCT-33): pressing the question, the HUD or a
+   key never selects text or opens the iOS callout, quick taps never zoom, and
+   a tap shows the control's own pressed state instead of the grey flash. */
 .mm-run {
   gap: var(--space-3);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mm-hud {
@@ -276,6 +286,10 @@
 .mm-key:focus-visible {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
+}
+
+.mm-pause:active:not(:disabled) {
+  background-color: var(--surface-patient-recessed);
 }
 
 .mm-pause:disabled {
@@ -371,6 +385,7 @@
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -441,8 +456,10 @@
   font-size: 14px;
 }
 
-.btn.mm-link:hover {
-  color: var(--brand-primary-hover);
+@media (hover: hover) {
+  .btn.mm-link:hover {
+    color: var(--brand-primary-hover);
+  }
 }
 
 /* A link on its own row, aligned with the text above it. */
@@ -817,6 +834,19 @@
 .mm-progress-card .mm-link {
   margin-right: calc(-1 * var(--space-2));
   flex-shrink: 0;
+}
+
+/* iPhone SE to iPhone 16 widths: tighter HUD spacing keeps all four stats and
+   the Pause label on one line with a four-digit score (NFCT-33). */
+@media (max-width: 400px) {
+  .mm-hud {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+
+  .mm-hud-stats {
+    gap: var(--space-2);
+  }
 }
 
 @media (max-width: 360px) {

@@ -17,7 +17,8 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--border-default)',
   background: '#FFFFFF',
   color: 'var(--text-primary)',
-  fontSize: '13px',
+  // 16px: iOS zooms into a smaller field on focus.
+  fontSize: '16px',
 };
 
 export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({

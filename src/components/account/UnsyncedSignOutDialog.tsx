@@ -58,12 +58,13 @@ export const UnsyncedSignOutDialog: React.FC<UnsyncedSignOutDialogProps> = ({ si
   return (
     <div
       role="presentation"
+      className="overlay-safe-area"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !signingOut) onStaySignedIn();
       }}
       style={{
         position: 'fixed', inset: 0, zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '16px', background: 'rgba(58, 49, 43, 0.58)', backdropFilter: 'blur(7px)',
+        background: 'rgba(58, 49, 43, 0.58)', backdropFilter: 'blur(7px)',
       }}
     >
       <section
@@ -73,7 +74,7 @@ export const UnsyncedSignOutDialog: React.FC<UnsyncedSignOutDialogProps> = ({ si
         aria-labelledby="unsynced-sign-out-title"
         aria-describedby="unsynced-sign-out-description"
         style={{
-          width: 'min(440px, 100%)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto',
+          width: 'min(440px, 100%)', maxHeight: '100%', overflowY: 'auto',
           borderRadius: '24px', background: 'var(--surface-patient-card)', border: '1px solid var(--border-subtle)',
           boxShadow: '0 24px 70px rgba(58, 49, 43, 0.2)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px',
         }}

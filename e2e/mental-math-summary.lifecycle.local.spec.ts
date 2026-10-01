@@ -376,6 +376,14 @@ test.describe('leaving Mental Math on a phone', () => {
     await expect(trainHeading(page)).toBeVisible();
     await expect(mentalMathCard(page)).toBeFocused();
 
+    // Home's Play button (NFCT-13) → the picker → Back.
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    const homePlay = page.getByRole('main').getByRole('button', { name: 'Play Mental Math', exact: true });
+    await homePlay.click();
+    await expect(page.getByRole('heading', { name: 'Mental Math', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(homePlay).toBeFocused();
+
     // The Progress tab's Records button → the game's progress → Back.
     await page.getByRole('button', { name: 'Progress', exact: true }).click();
     const records = page.getByRole('button', { name: 'Mental Math records and history', exact: true });

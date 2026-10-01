@@ -151,10 +151,13 @@ describe('bounded patient session history', () => {
     expect(text(r)).not.toContain('Showing');
     await act(async () => { r.unmount(); });
 
+    // No neurofeedback session at all: the optional section stays one line, with no empty charts or controls.
     storage.getSessions.mockResolvedValueOnce([]);
     r = await render();
-    expect(text(r)).toContain('No sessions in this period');
+    expect(text(r)).toContain('No neurofeedback sessions yet.');
+    expect(text(r)).not.toContain('No sessions in this period');
     expect(text(r)).not.toContain('Showing');
+    expect(text(r)).not.toContain('Milestones');
     await act(async () => { r.unmount(); });
   });
 });

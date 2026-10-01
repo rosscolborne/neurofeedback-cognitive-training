@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft, Stethoscope } from 'lucide-react';
 import { shouldOfferClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
+import { useKeepActionAboveKeyboard } from '../../components/ui/useKeepActionAboveKeyboard';
 
 // Client-side pause between reset emails to the same address so repeated clicks
 // cannot flood an inbox. Firebase still applies its own server-side limits.
@@ -28,6 +29,9 @@ export const Login: React.FC = () => {
   // handleReset the same synchronous guard as resetPendingRef.
   const [resetAvailableAt, setResetAvailableAt] = useState<Record<string, number>>({});
   const resetAvailableAtRef = useRef<Record<string, number>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  useKeepActionAboveKeyboard(formRef, submitRef);
   const [resetClock, setResetClock] = useState(() => Date.now());
 
   const resetConfirmation = 'If an account uses that email address, we’ll send password reset instructions.';
@@ -238,7 +242,7 @@ export const Login: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={resetView ? handleReset : handleLogin} noValidate={resetView} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <form ref={formRef} onSubmit={resetView ? handleReset : handleLogin} noValidate={resetView} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
           <label htmlFor="login-email" style={{ display: 'block', fontSize: '14px', marginBottom: '8px', color: 'var(--text-secondary)' }}>Email</label>
           <input 
@@ -256,6 +260,7 @@ export const Login: React.FC = () => {
             }}
             placeholder="name@example.com"
             required={!resetView}
+            autoComplete="email"
             style={{
               width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
               background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
@@ -273,6 +278,8 @@ export const Login: React.FC = () => {
             onChange={e => setPassword(e.target.value)}
             placeholder="Your password"
             required
+            autoComplete="current-password"
+            enterKeyHint="go"
             style={{
               width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
               background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
@@ -292,6 +299,7 @@ export const Login: React.FC = () => {
         )}
 
         <button 
+          ref={submitRef}
           type="submit" 
           disabled={submitDisabled}
           style={{

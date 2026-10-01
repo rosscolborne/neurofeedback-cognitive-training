@@ -290,3 +290,15 @@ export async function readEegRecordings(uid: string): Promise<Array<{ id: string
   const snapshot = await adminDb.collection(`users/${uid}/eegRecordings`).get();
   return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
 }
+
+/** NFCT-13: the server-maintained stats summary and achievements of a user (observation only). */
+export async function readPlayerStats(uid: string): Promise<{
+  summary: Record<string, unknown> | undefined;
+  achievements: Array<{ id: string; data: Record<string, unknown> }>;
+}> {
+  const [summary, achievements] = await Promise.all([
+    adminDb.doc(`users/${uid}/stats/summary`).get(),
+    adminDb.collection(`users/${uid}/achievements`).get(),
+  ]);
+  return { summary: summary.data(), achievements: achievements.docs.map((doc) => ({ id: doc.id, data: doc.data() })) };
+}

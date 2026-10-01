@@ -45,6 +45,8 @@ import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
 import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
 import { useOpenGame } from '../../consumer/games/useOpenGame';
+import { HOME_ALL_RUNS_BUTTON_ID, HOME_PLAY_BUTTON_ID, HomeOverview } from '../../consumer/overview/HomeOverview';
+import { PROGRESS_PLAY_BUTTON_ID, ProgressOverview } from '../../consumer/overview/ProgressOverview';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
 import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
@@ -94,6 +96,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationDismissed,
 }) => {
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  // Home's "See all achievements" opens Progress at its achievements (NFCT-13). The request lasts
+  // only for the Progress visit it opened: leaving Progress drops it (see below, after activeTab).
+  const [progressFocus, setProgressFocus] = useState<'achievements' | null>(null);
+  const [progressFocusTab, setProgressFocusTab] = useState<string>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   // The open catalogue game (NFCT-12), and the view it opens on: its start
   // screen, or its progress (NFCT-22's Progress-tab card). Closing it returns
@@ -160,6 +166,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const isClinicianLinked = trainingAuthority === 'clinician';
   // Clinician-dependent destinations follow the live relationship; a hidden tab falls back to Home.
   const activeTab = isPatientTabAvailable(requestedTab, trainingAuthority) ? requestedTab : 'home';
+  // Any change to a tab other than Progress drops a pending "See all achievements" request, so a later,
+  // ordinary visit to Progress opens at the top (state adjusted while rendering, not in an effect).
+  if (progressFocusTab !== activeTab) {
+    setProgressFocusTab(activeTab);
+    if (activeTab !== 'progress' && progressFocus !== null) setProgressFocus(null);
+  }
   // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
   const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
     && client.acceptedInvitationId.toUpperCase() === initialInvitationCode.toUpperCase();
@@ -355,7 +367,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         autoComplete="off"
         autoFocus={!!initialInvitationCode}
         className="font-mono"
-        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '14px', letterSpacing: '0.06em' }}
+        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '16px', letterSpacing: '0.06em' }}
       />
       <div style={{ color: 'var(--text-secondary)', fontSize: '11px', lineHeight: 1.4 }}>
         Use the code from your clinician. You must be signed in with the email address they invited.
@@ -515,6 +527,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             onStartSession={handleStartSession}
             onOpenProtocolDetails={() => setShowProtocolDetails(true)}
             onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
+            gamesSection={(
+              <HomeOverview
+                playerId={client.id}
+                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, returnFocusTo: HOME_PLAY_BUTTON_ID })}
+                onOpenAchievements={() => { setProgressFocus('achievements'); setActiveTab('progress'); }}
+                onOpenGameProgress={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: HOME_ALL_RUNS_BUTTON_ID })}
+              />
+            )}
           />
         )}
 
@@ -529,7 +549,15 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'progress' && (
           <ProgressHistory
             client={client}
-            gamesSection={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
+            gamesSection={(
+              <ProgressOverview
+                playerId={client.id}
+                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, returnFocusTo: PROGRESS_PLAY_BUTTON_ID })}
+                focusSection={progressFocus}
+                onSectionFocused={() => setProgressFocus(null)}
+                games={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
+              />
+            )}
           />
         )}
 

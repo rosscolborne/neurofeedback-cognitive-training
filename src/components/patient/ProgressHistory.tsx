@@ -137,6 +137,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesS
   // blocked while a journal is open, so the reset can never hide an unsaved journal.
   const history = useBoundedHistory(historySessions, `${client.id}:${period}`);
   const exportAvailability = getSessionExportState(progressDisplay.presentation);
+  // Neurofeedback is optional: with no sessions at all, the section stays one line instead of empty charts.
+  const noNeurofeedbackSessions = sessionStatus === 'ready' && allSessions.length === 0;
 
   const periodLabel = period === 'week' ? 'Past 7 days' : period === 'month' ? 'Past 30 days' : 'All time';
   const periodDemoCount = progressDisplay.periodSessions.filter((session) => session.isDemo === true).length;
@@ -170,24 +172,40 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesS
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
-      {/* Title & Period Selector */}
+      {/* Title */}
+      <h1 className="font-display" style={{ fontSize: '28px', color: 'var(--text-primary)', fontWeight: 400 }}>
+        Your Progress
+      </h1>
+
+      {/* Game performance comes first (NFCT-13). */}
+      {gamesSection}
+
+      {/* Optional neurofeedback (EEG) history: secondary, and separate from game progress. */}
+      <section
+        aria-labelledby="neurofeedback-history-title"
+        style={{ display: 'flex', flexDirection: 'column', gap: '20px', ...(gamesSection ? { marginTop: '12px', paddingTop: '24px', borderTop: '1px solid var(--border-default)' } : {}) }}
+      >
       <div>
-        <h1 className="font-display" style={{ fontSize: '28px', color: 'var(--text-primary)', fontWeight: 400 }}>
-          Your Progress
-        </h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+        <h2 id="neurofeedback-history-title" className="font-display" style={{ fontSize: '20px', color: 'var(--text-primary)', fontWeight: 400 }}>
+          Neurofeedback sessions
+        </h2>
+        <p style={{ marginTop: '2px', fontSize: '13px', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+          Optional training with a Muse headset. It never counts toward your streak, games or achievements.
+        </p>
+        <p style={{ marginTop: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>
           {sessionStatus === 'loading'
             ? 'Loading your saved sessions…'
             : sessionStatus === 'error'
               ? 'Your saved sessions could not be loaded.'
               : progressDisplay.validSessions.length > 0
-            ? `Tracking ${progressDisplay.validSessions.length} session${progressDisplay.validSessions.length !== 1 ? 's' : ''} over time.`
-            : 'Complete your first session to start tracking progress.'}
+                ? `Tracking ${progressDisplay.validSessions.length} session${progressDisplay.validSessions.length !== 1 ? 's' : ''} over time.`
+                : noNeurofeedbackSessions
+                  ? 'No neurofeedback sessions yet.'
+                  : 'No sessions with a usable date yet.'}
         </p>
       </div>
 
-      {gamesSection}
-
+      {!noNeurofeedbackSessions && <>
       {/* Period Selector Pills */}
       <div
         style={{
@@ -340,9 +358,9 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesS
 
       {/* Session History List with Mini-Gauges */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <h2 className="font-display" style={{ fontSize: '20px', color: 'var(--text-primary)' }}>
+        <h3 className="font-display" style={{ fontSize: '18px', color: 'var(--text-primary)' }}>
           Session History
-        </h2>
+        </h3>
         {journalSwitchMessage && journal?.clientId === client.id && <p role="status">Save or cancel the current journal before opening another session or range.</p>}
 
         {historySessions.length === 0 ? (
@@ -549,6 +567,8 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesS
                   : 'Export Data (CSV)'}
         </button>
       </div>
+      </>}
+      </section>
     </div>
   );
 };

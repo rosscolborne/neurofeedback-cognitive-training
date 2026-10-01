@@ -58,7 +58,8 @@ function formatWhen(ms: number): string {
   return `${day} · ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
 }
 
-const HistoryItem: React.FC<{ readonly row: HistoryRow }> = ({ row }) => {
+/** One run in a history list; Home (NFCT-13) shows the newest few. */
+export const HistoryItem: React.FC<{ readonly row: HistoryRow }> = ({ row }) => {
   const tag = historyTag(row);
   return (
     // Focusable from script only: after "Show more runs", focus moves to the first run it added.

@@ -3,6 +3,8 @@
    White-Label Neurofeedback Platform CSS Architecture
    ========================================================================== */
 
+@import './fonts.css';
+
 :root {
   /* White-Label Brand Tokens (Dynamically overridden via brandEngine) */
   --brand-primary: #E8967A;
@@ -95,9 +97,31 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* iOS keeps text at the size the CSS sets; pinch-zoom enlarges it (NFCT-33:
+   index.html's viewport and capacitor.config.ts's ios.zoomEnabled). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 /* Form controls otherwise fall back to the browser's system and monospace fonts. */
 input, select, textarea, button {
   font-family: inherit;
+}
+
+/* Taps on controls act at once, and quick repeated taps never zoom the page. */
+a, button, input, label, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Modal overlays keep dialogs 16px from each edge and clear of the notch,
+   Dynamic Island and home indicator (the iOS web view draws under them). */
+.overlay-safe-area {
+  padding:
+    max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
 }
 
 /* Typography Utility Classes */
@@ -165,9 +189,25 @@ input, select, textarea, button {
   font-size: 16px;
 }
 
-.btn-primary:hover {
-  background-color: var(--brand-primary-hover);
-  transform: translateY(-1px);
+/* Hover styles apply only where a pointer can hover, so they never stick after a tap. */
+@media (hover: hover) {
+  .btn-primary:hover {
+    background-color: var(--brand-primary-hover);
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--brand-primary-subtle);
+  }
+
+  .btn-ghost:hover {
+    background-color: var(--surface-patient-recessed);
+    color: var(--text-primary);
+  }
+
+  .btn-dense:hover {
+    background-color: #2D3A44;
+  }
 }
 
 .btn-primary:active {
@@ -183,21 +223,12 @@ input, select, textarea, button {
   font-size: 15px;
 }
 
-.btn-secondary:hover {
-  background-color: var(--brand-primary-subtle);
-}
-
 .btn-ghost {
   background-color: transparent;
   color: var(--text-secondary);
   border-radius: var(--radius-md);
   padding: 8px 16px;
   font-size: 14px;
-}
-
-.btn-ghost:hover {
-  background-color: var(--surface-patient-recessed);
-  color: var(--text-primary);
 }
 
 .btn-dense {
@@ -207,10 +238,6 @@ input, select, textarea, button {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
-}
-
-.btn-dense:hover {
-  background-color: #2D3A44;
 }
 
 .messaging-search {
@@ -573,8 +600,10 @@ input, select, textarea, button {
   border-top: 0;
 }
 
-.list-row:hover:not(:disabled) {
-  background: var(--surface-patient-base);
+@media (hover: hover) {
+  .list-row:hover:not(:disabled) {
+    background: var(--surface-patient-base);
+  }
 }
 
 .list-row:focus-visible {
@@ -1690,8 +1719,10 @@ input, select, textarea, button {
   cursor: pointer;
 }
 
-.ng-quiet-action:hover {
-  background: var(--surface-patient-recessed);
+@media (hover: hover) {
+  .ng-quiet-action:hover {
+    background: var(--surface-patient-recessed);
+  }
 }
 
 .ng-quiet-action:focus-visible,
@@ -1773,8 +1804,10 @@ input, select, textarea, button {
   cursor: pointer;
 }
 
-.protocol-chip:hover {
-  border-color: var(--text-tertiary);
+@media (hover: hover) {
+  .protocol-chip:hover {
+    border-color: var(--text-tertiary);
+  }
 }
 
 .protocol-chip:focus-visible {
@@ -2027,8 +2060,10 @@ input, select, textarea, button {
   border-color: var(--account-deletion-red);
 }
 
-.account-deletion-trigger:hover {
-  background-color: var(--status-alert-bg);
+@media (hover: hover) {
+  .account-deletion-trigger:hover {
+    background-color: var(--status-alert-bg);
+  }
 }
 
 .account-deletion-finish {
@@ -2080,7 +2115,8 @@ input, select, textarea, button {
   border-radius: var(--radius-sm);
   background: #FFFFFF;
   color: var(--text-primary);
-  font-size: 13px;
+  /* 16px: iOS zooms into a smaller field on focus. */
+  font-size: 16px;
 }
 
 .account-deletion-password:focus-visible {
@@ -2114,8 +2150,10 @@ input, select, textarea, button {
   font-size: 13px;
 }
 
-.account-deletion-submit:hover:not(:disabled) {
-  filter: brightness(0.94);
+@media (hover: hover) {
+  .account-deletion-submit:hover:not(:disabled) {
+    filter: brightness(0.94);
+  }
 }
 
 .account-deletion-trigger:disabled,
