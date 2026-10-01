@@ -103,3 +103,5 @@ Browser integration tests have their own service and environment requirements.
 The FastAPI service source is in `brainflow_service/`; its endpoints and
 signal-processing behavior are documented in
 [brainflow_service/README.md](brainflow_service/README.md).
+
+TestFlight auto-deploy trigger verified.
