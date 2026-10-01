@@ -1254,10 +1254,10 @@ describe('patient invitation linking', () => {
         delete: vi.fn(),
       })
     );
-    const fallback = createBlankProfile('patient-1', 'patient@example.test') as Partial<ClientProfile>;
-    delete fallback.allowedExperiences;
+    // An explicit empty list, so the invited template list visibly replaces it.
+    const fallback: ClientProfile = { ...createBlankProfile('patient-1', 'patient@example.test'), allowedExperiences: [] };
 
-    const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', fallback as ClientProfile);
+    const linked = await storageEngine.acceptPatientInvitation('ABCD-EFGH-JKLM', fallback);
     const expected = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
     expect(linked.assignedProtocol).toBe('alpha-enhancement');
     expect(linked.allowedExperiences).toEqual(expected);
@@ -1269,7 +1269,8 @@ describe('patient invitation linking', () => {
     const previous = {
       ...createBlankProfile('patient-1', 'patient@example.test'),
       assignedProtocol: 'theta-beta-ratio' as const,
-      allowedExperiences: ['neuro-gambit'] as ClientProfile['allowedExperiences'],
+      // An explicit empty list, so the invited template list visibly replaces it.
+      allowedExperiences: [] as ClientProfile['allowedExperiences'],
       customProtocolConfig: getClinicalProtocolTemplate('theta-beta-ratio'),
       clinicianId: undefined,
       clinicId: undefined,
