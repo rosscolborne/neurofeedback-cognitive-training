@@ -41,7 +41,7 @@ function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.Ref
 }
 
 export function App() {
-  const { user, role, loading, logout, isDemoWorkspace } = useAuth();
+  const { user, role, loading, logout, isDemoWorkspace, cacheStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
@@ -216,9 +216,29 @@ export function App() {
   }, [accountIdentity, isDemoWorkspace, loading, role, user, visibleCurrentClient?.clinicId]);
 
   if (loading) {
+    // The persistent cache is being cleared for an account change. Nothing of
+    // the previous account is shown meanwhile, only what is happening.
+    const notice = cacheStatus === 'ending' ? { title: 'Signing out…' }
+      : cacheStatus === 'blocked' ? {
+        title: 'Finishing sign-out on this device…',
+        detail: 'Close any other tabs or windows with this app open to continue.',
+      }
+        : cacheStatus === 'failed' ? {
+          title: 'This device’s saved data couldn’t be cleared.',
+          detail: 'Close any other tabs or windows with this app open, then try again.',
+          retry: true,
+        }
+          : null;
     return (
-      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-patient-base, #F8F7F4)' }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', textAlign: 'center', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
         <BrandLogo size={72} variant="terracotta" glow />
+        {notice && (
+          <div role={notice.retry ? 'alert' : 'status'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', maxWidth: '360px' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{notice.title}</strong>
+            {notice.detail && <span>{notice.detail}</span>}
+            {notice.retry && <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>}
+          </div>
+        )}
       </div>
     );
   }

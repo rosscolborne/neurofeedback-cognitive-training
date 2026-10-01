@@ -9,8 +9,18 @@ const firebaseAuth = vi.hoisted(() => ({
   sendPasswordResetEmail: vi.fn(),
 }));
 const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), setDoc: vi.fn() }));
+// The cache lifecycle has its own tests (firestoreCacheLifecycle.test.ts and
+// AuthContextCache.test.tsx); here it always reports the cache ready.
+const cache = vi.hoisted(() => ({
+  prepareForUser: vi.fn(),
+  isEnding: vi.fn(() => false),
+  hasUnsyncedWrites: vi.fn(),
+  endSession: vi.fn(),
+  subscribe: () => () => {},
+  getStatus: () => 'idle',
+}));
 
-vi.mock('../../services/firebase', () => ({ auth: { currentUser: { uid: 'real-user' } }, db: {} }));
+vi.mock('../../services/firebase', () => ({ auth: { currentUser: { uid: 'real-user' } }, db: {}, firestoreCache: cache }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
   signOut: firebaseAuth.signOut,
@@ -61,6 +71,9 @@ describe('mounted AuthProvider clinician demo lifecycle', () => {
     vi.clearAllMocks();
     firebaseAuth.signOut.mockResolvedValue(undefined);
     firebaseAuth.signIn.mockResolvedValue({ user: { uid: 'signed-in-user' } });
+    cache.prepareForUser.mockResolvedValue({ status: 'ready' });
+    cache.hasUnsyncedWrites.mockResolvedValue(false);
+    cache.endSession.mockResolvedValue(undefined);
     deactivateClinicianDemoWorkspace();
     vi.stubGlobal('localStorage', memoryStorage());
     firestore.getDoc.mockResolvedValue({ exists: () => true, data: () => ({ role: 'clinician' }) });

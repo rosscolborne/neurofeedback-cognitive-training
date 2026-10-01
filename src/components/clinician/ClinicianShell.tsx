@@ -10,7 +10,8 @@ import { ClinicalReportsView } from './ClinicalReportsView';
 import { ClinicSettingsView } from './ClinicSettingsView';
 import type { ClinicSettingsSnapshot } from '../../services/clinicSettingsRepository';
 import { BrandLogo } from '../brand/BrandLogo';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, type LogoutOutcome } from '../../contexts/AuthContext';
+import { useSignOut } from '../account/useSignOut';
 import {
   Users,
   Calendar,
@@ -35,7 +36,8 @@ interface ClinicianShellProps {
   onCancelPatientInvitation: (invitationId: string) => Promise<void>;
   onOpenRebrand: () => void;
   onClinicSettingsSaved?: (snapshot: ClinicSettingsSnapshot) => void | Promise<void>;
-  onLogout: () => Promise<void>;
+  /** AuthContext.logout: clears this device's cache; reports unsynced writes first. */
+  onLogout: (options?: { discardUnsyncedWrites?: boolean }) => Promise<LogoutOutcome>;
 }
 
 interface ClinicianNavItem {
@@ -62,6 +64,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
   onLogout,
 }) => {
   const { user } = useAuth();
+  const signOutFlow = useSignOut(onLogout);
   const [activeNav, setActiveNav] = useState<'clients' | 'calendar' | 'messages' | 'reports' | 'settings'>('clients');
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
   const linkedSelectedClient = clients.find((client) => client.id === selectedClient?.id) ?? null;
@@ -135,14 +138,15 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             <span>Brand</span>
           </button>
           <button
-            onClick={() => void onLogout()}
+            onClick={signOutFlow.requestSignOut}
+            disabled={signOutFlow.busy}
             className="btn btn-ghost"
             style={{ padding: '6px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
             title="Sign out"
             aria-label="Sign out"
           >
             <LogOut size={14} />
-            <span>Sign out</span>
+            <span>{signOutFlow.busy ? 'Signing out…' : 'Sign out'}</span>
           </button>
         </div>
       </header>
@@ -235,7 +239,8 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
             </div>
           </div>
           <button
-            onClick={() => void onLogout()}
+            onClick={signOutFlow.requestSignOut}
+            disabled={signOutFlow.busy}
             className="btn btn-ghost"
             style={{
               width: '100%',
@@ -246,7 +251,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
               color: 'var(--text-secondary)',
             }}
           >
-            <LogOut size={16} /> Sign out
+            <LogOut size={16} /> {signOutFlow.busy ? 'Signing out…' : 'Sign out'}
           </button>
           <button
             onClick={onOpenRebrand}
@@ -396,6 +401,7 @@ export const ClinicianShell: React.FC<ClinicianShellProps> = ({
           );
         })}
       </nav>
+      {signOutFlow.dialog}
     </div>
   );
 };

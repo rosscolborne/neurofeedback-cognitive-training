@@ -18,6 +18,10 @@ const sdk = vi.hoisted(() => ({
   persistentMultipleTabManager: vi.fn(() => ({ kind: 'PersistentMultipleTab' })),
   persistentSingleTabManager: vi.fn(() => ({ kind: 'persistentSingleTab' })),
   memoryLocalCache: vi.fn(() => ({ kind: 'memory' })),
+  clearIndexedDbPersistence: vi.fn(async (_db: unknown) => {}),
+  terminate: vi.fn(async (_db: unknown) => {}),
+  waitForPendingWrites: vi.fn(async (_db: unknown) => {}),
+  signOut: vi.fn(async (_auth: unknown) => {}),
 }));
 
 vi.mock('firebase/app', () => ({ initializeApp: sdk.initializeApp, getApps: sdk.getApps, getApp: sdk.getApp }));
@@ -25,6 +29,7 @@ vi.mock('firebase/auth', () => ({
   initializeAuth: sdk.initializeAuth,
   getAuth: sdk.getAuth,
   connectAuthEmulator: sdk.connectAuthEmulator,
+  signOut: sdk.signOut,
   indexedDBLocalPersistence: {},
   browserLocalPersistence: {},
 }));
@@ -36,6 +41,9 @@ vi.mock('firebase/firestore', () => ({
   persistentMultipleTabManager: sdk.persistentMultipleTabManager,
   persistentSingleTabManager: sdk.persistentSingleTabManager,
   memoryLocalCache: sdk.memoryLocalCache,
+  clearIndexedDbPersistence: sdk.clearIndexedDbPersistence,
+  terminate: sdk.terminate,
+  waitForPendingWrites: sdk.waitForPendingWrites,
 }));
 vi.mock('../firebaseConfig', () => ({ resolveFirebaseConfig: () => ({ projectId: 'demo-nfct-unit' }) }));
 
@@ -82,6 +90,23 @@ describe('app Firestore initialization', () => {
     expect(sdk.connectAuthEmulator).toHaveBeenCalledWith({ kind: 'auth' }, 'http://127.0.0.1:9099', { disableWarnings: true });
     expect(sdk.initializeFirestore.mock.invocationCallOrder[0])
       .toBeLessThan(sdk.connectFirestoreEmulator.mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it('starts the cache lifecycle once Firestore is created and connected, before anything else can use it', async () => {
+    vi.stubEnv('VITE_E2E_EMULATORS', 'true');
+    // No browser storage here, so the cache owner is unknown: the lifecycle
+    // deletes the cache at module load, ahead of every other Firestore call.
+    const { db, firestoreCache } = await import('../firebase');
+
+    expect(sdk.clearIndexedDbPersistence).toHaveBeenCalledOnce();
+    expect(sdk.clearIndexedDbPersistence).toHaveBeenCalledWith(db);
+    expect(sdk.connectFirestoreEmulator.mock.invocationCallOrder[0])
+      .toBeLessThan(sdk.clearIndexedDbPersistence.mock.invocationCallOrder[0] ?? 0);
+    expect(sdk.terminate).not.toHaveBeenCalled();
+
+    await firestoreCache.endSession({ reason: 'sign-out', signOut: true, destination: '/' }).catch(() => {});
+    expect(sdk.signOut).toHaveBeenCalledWith({ kind: 'auth' });
+    expect(sdk.terminate).toHaveBeenCalledWith(db);
   });
 
   it('reuses the running instance when a hot reload initializes it again', async () => {

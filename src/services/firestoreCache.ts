@@ -14,6 +14,11 @@ import { persistentLocalCache, persistentMultipleTabManager, type FirestoreSetti
  * Where IndexedDB is unavailable (for example some private-browsing modes) the
  * SDK logs a warning and falls back to a memory cache: the app still works,
  * but writes queued offline do not survive a restart.
+ *
+ * The cache holds the signed-in account's documents and queued writes, and
+ * belongs to one account at a time: `firestoreCacheLifecycle.ts` deletes it on
+ * sign-out, account switch and account deletion, and before first use when
+ * its owner is not the signed-in account.
  */
 export function appFirestoreSettings(): FirestoreSettings {
   return { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) };
