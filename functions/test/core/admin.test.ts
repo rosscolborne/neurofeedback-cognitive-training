@@ -49,7 +49,7 @@ describe('rebuild-progress', () => {
 
     const reports = await runRebuildProgress(['--project', CORE_PROJECT, '--uid', uid], env, out);
 
-    expect(reports).toMatchObject([{ gameId: 'mental-math', written: 'set' }]);
+    expect(reports.progress).toMatchObject([{ gameId: 'mental-math', written: 'set' }]);
     const rebuilt = await readDoc(db, progressPath(uid));
     expect(content(rebuilt)).toEqual(content(live));
     expect(rebuilt?.updatedAt).not.toEqual(live?.updatedAt);

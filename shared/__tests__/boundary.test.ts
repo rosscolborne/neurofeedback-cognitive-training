@@ -34,13 +34,13 @@ describe('shared package boundary', () => {
     expect(outside).toEqual([]);
   });
 
-  it('keeps EEG out of progression', () => {
-    const progressionFiles = files.filter((file) => relative(SHARED_DIR, file).startsWith('progress/'));
+  it('keeps EEG out of progression, streaks, daily stats and achievements', () => {
+    const progressionFiles = files.filter((file) => /^(progress|stats)\//.test(relative(SHARED_DIR, file)));
     const eegImports = progressionFiles.flatMap((file) => importsOf(file)
       .filter((specifier) => /eeg/i.test(specifier))
       .map((specifier) => `${relative(SHARED_DIR, file)} -> ${specifier}`));
 
-    expect(progressionFiles.length).toBeGreaterThan(0);
+    expect(progressionFiles.some((file) => relative(SHARED_DIR, file).startsWith('stats/'))).toBe(true);
     expect(eegImports).toEqual([]);
   });
 

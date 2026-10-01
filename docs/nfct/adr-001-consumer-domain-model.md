@@ -5,7 +5,7 @@
 - **Design baseline:** [NFCT Consumer Firestore & Domain Model — Stage 1 Design](https://claude.ai/code/artifact/bd8c450e-199f-42ea-ba59-60ddcf7758cb).
   This ADR is the durable summary; the design holds the full reasoning, rules sketch, index plan and card sequence.
 - **Code:** [`shared/`](../../shared/index.ts), imported as `@nfct/shared`; trusted scoring in [`functions/`](../../functions/src/index.ts)
-- **Amended:** NFCT-17 (session seed, validity classification); NFCT-19 (decision 12, trusted session processing, and the notes it adds to decisions 2, 5, 6, 7 and 8). Items marked **owner confirmation** are provisional until the owner confirms them.
+- **Amended:** NFCT-17 (session seed, validity classification); NFCT-19 (decision 12, trusted session processing, and the notes it adds to decisions 2, 5, 6, 7 and 8); NFCT-13 part 1 (decision 13, streaks, daily stats and achievements). Items marked **owner confirmation** are provisional until the owner confirms them.
 
 ## Context
 
@@ -23,7 +23,7 @@ The consumer model is built new alongside it. The clinical model stays in place,
 | `users/{uid}/gameSessions/{sessionId}` | One finished game session with its raw trials | Client, create only |
 | `users/{uid}/eegRecordings/{recordingId}` | One optional EEG summary, linked to a session | Client, create or delete |
 | `users/{uid}/progress/{gameId}` | Per-game bests, unlocks and totals | Server only |
-| `users/{uid}/{stats,dailyStats,achievements}` | Stage 2 aggregates (reserved) | Server only |
+| `users/{uid}/stats/summary`, `dailyStats/{localDate}`, `achievements/{id}` | Cross-game totals, the streak, daily activity and earned achievements (decision 13) | Server only |
 | `accountDeletions/{uid}` | Deletion ledger; top level so it outlives the user | Server only |
 
 Ownership is then one rule, and account deletion is one recursive delete. `userId` is still stored on sessions and recordings, so collection-group queries stay possible later. The game catalogue is code in `shared/`, not a Firestore collection.
@@ -109,7 +109,7 @@ It processes each session independently, in whatever order sessions arrive, and 
 - **Totals.** Abandoned sessions add active time and last-played time, but do not count as completed or set records.
 - **`performanceIndex`.** `result.performanceIndex` and `performanceIndexVersion` are `number | null` and always null in Stage 1. `GameDefinition.performanceIndex` stays absent until a formula is validated on real gameplay data (NFCT-26).
 - **Where the logic lives.** The per-game reducer `applySession` and `unlockedStartLevel` are pure functions in `shared/`. Trusted scoring, the client's optimistic preview and the rebuild script all call the same code.
-- **Stage 1 progress is limited.** It holds only personal bests, best peak level, unlocked start levels, completed-session count, active time and last-played time. Streaks, daily stats, weekly goals, achievements, domain indexes and leaderboards are later stages.
+- **Stage 1 progress is limited.** It holds only personal bests, best peak level, unlocked start levels, completed-session count, active time and last-played time. Streaks, daily stats and achievements are separate cross-game aggregates (decision 13); weekly goals are computed on read; domain indexes and leaderboards are later stages.
 
 `applySession(progress | null, { definition, sessionId, session, outcome, appliedAt })` works as follows:
 
@@ -389,6 +389,45 @@ Sessions at the attempt cap are left for the admin re-drive (which has no cap) a
 
 So one trigger invocation reads at most about 1,230 documents, almost all projected without trials, and writes at most about 130. The in-transaction upgrade runs only when the unlocked level rises, at most once per level per mode, or after a rebuild, and the reconcile only past the transaction's budget. A user who writes many sessions therefore pays about one small transaction per session. A sweep run reads at most 2,000 projected documents per state and processes at most 100 sessions.
 
+### 13. Streaks, daily stats and achievements (NFCT-13)
+
+Three more server-only aggregates, maintained by `onGameSessionCreated` in the **same transaction** as a session's `result` and `progress/{gameId}` (and by every transaction that upgrades a session), with the same exactly-once, order-independence, compatibility and deletion guarantees as progress (decision 12). The pure reducers are in `shared/stats/`; `functions/src/stats.ts` only reads and writes documents. EEG is never an input.
+
+| Document | Holds |
+| --- | --- |
+| `stats/summary` | Activity: counted sessions, completed sessions, active time, last played. Progression: valid runs, best trusted peak level per game, the streak (training days as maximal runs of consecutive local dates, with `current`, `longest`, `lastActiveDate`) and the IDs of the achievements created |
+| `dailyStats/{localDate}` | One per local date with a counted session: sessions, completed sessions, active time, and the same per game. Bucketed by the session's own `localDate` |
+| `achievements/{id}` | One per achievement earned: `earnedAt` (server clock), the valid session that earned it, its game and local date. Created only if absent |
+
+**Eligibility** (owner confirmation):
+
+| Session | Activity (summary totals, `dailyStats`, weekly goal) | Valid runs, peak level, streak, achievements |
+| --- | --- | --- |
+| valid, completed | Counted | Counted; a training day only with a verified date |
+| valid, abandoned | Counted | Never |
+| flagged | Counted | Never, until the start-level upgrade makes it valid |
+| invalid | Never | Never |
+
+- **Training day.** A local date with at least one **valid, completed** session whose date the server verified: its result carries neither `local-date-mismatch` (the anti-backfill check against the server clock, decision 12) nor `unknown-timezone`, nor `reasons-truncated`. An honest session uploaded more than a day after it was played counts toward time played on its day, but does not make that day a training day.
+- **Why valid only.** Flagged sessions count toward time played but never earn achievements; streak and run achievements read the streak and the valid-run count, so those count valid sessions only. Everything a session contributes is therefore fixed when it is processed, except its valid-only part, which the start-level upgrade adds at most once.
+- **Streak liveness is read-time.** The summary stores the latest run whether or not it is still alive. `streakStatus(streak, today)` decides, with `today = localDateIn(profile timezone, now)`: alive while the latest training day is today or yesterday, otherwise `current` is 0.
+- **Weekly goal, week and month views** are computed on read from at most 31 `dailyStats` documents and the profile's `weeklyGoal` (`shared/stats/views.ts`); nothing is stored for them. `sessions` counts completed sessions, `minutes` all active play, `activeDays` days with a completed session.
+- **Achievement catalogue v1** (`ACHIEVEMENT_CATALOGUE`, provisional, owner to change freely): first run; 10, 50 and 100 runs; 3-, 7- and 30-day streaks; Mental Math level 5 and level 10. Gameplay-only criteria and plain copy, no cognitive, clinical or EEG claim. Titles and descriptions live in code, not in Firestore. A change to a criterion or to the set bumps `STATS_AGGREGATE_VERSION`, so trusted scoring rebuilds each player's stats and awards the new set from stored results; IDs are never reused.
+
+**Exactly once and order independence.** Activity is sums applied when a session is first processed (the transaction skips a session that has a result). The valid-only part is applied once per session: when it is processed valid, or when it is upgraded (a session is upgraded at most once), in the processing transaction's cascade or in a post-commit upgrade batch. It is a count, a maximum and a set union of training days, so the final summary is the same for every processing order and equals a rebuild from the stored results. Achievement criteria are monotone in it and checked after every change, so the set earned does not depend on order; which session is credited, and `earnedAt`, are point-in-time facts like a result's `personalBest`.
+
+**Compatibility.** One `aggregateVersion` covers the summary, every day and the achievement set:
+
+- current: apply;
+- older (or no summary although earlier sessions already count, because they were processed before NFCT-13): rebuild every stats document inside the processing transaction from the stored results, in `endedAt` order, then apply. "Older" is decided from the `schemaVersion` and `aggregateVersion` alone, before the shape is read, so a bump that also changes the shape rebuilds rather than failing sessions;
+- newer, from newer code: never written; the session is retried and then marked `failed` with `stats-newer-than-code`;
+- unreadable: the session is marked `failed` with `stats-unreadable` until the admin rebuild repairs it;
+- a post-commit upgrade batch that meets newer or unreadable stats upgrades nothing and stops with `stats-not-current`; one that meets missing or older stats upgrades the session and progress and leaves the stats to the next rebuild, which then includes the upgrade.
+
+**Rebuild.** `rebuildUserStats` (run by `npm run functions:rebuild-progress` after the progress rebuild and before the no-budget reconcile) replays every stored result in `endedAt` order in one transaction, overwrites the summary and every day, deletes days and catalogue achievements no session justifies, and creates missing achievements. An existing achievement keeps its original attribution. Like the progress rebuild, its read grows with the user's history (NFCT-35 tracks a paged rebuild).
+
+**Cost.** A counted session's transaction adds two reads and two writes (summary and day), plus one read and one write per achievement earned, and one read the first time a player's summary is created.
+
 ## The shared package
 
 `shared/` is the one home for consumer-domain contracts and pure logic. The app imports it through the `@nfct/shared` alias (Vite and `tsconfig.app.json`); Cloud Functions import the same code through the same alias, and `functions/build.mjs` bundles it (with zod) into the deployable `functions/lib/index.js`, because a deploy uploads `functions/` alone. It depends only on `zod`, and is type-checked strictly with no DOM or Node types (`tsconfig.shared.json`). A boundary test keeps it free of Firebase SDKs, `src/` and clinical code, and keeps EEG out of `shared/progress/`.
@@ -402,6 +441,7 @@ So one trigger invocation reads at most about 1,230 documents, almost all projec
 | `schemas/*.ts` | Zod schemas and `read*` mappers for the profile, game session, EEG recording and progress |
 | `progress/unlocks.ts` | `unlockedStartLevel` |
 | `progress/applySession.ts` | The `applySession` reducer (totals, then `applyValidEffects`), `validOutcome` / `outcomeFromResult`, `canApplyToProgress` and `rebuildProgress` |
+| `schemas/stats.ts`, `stats/` | The stats, daily stats and achievement schemas and readers; the stats reducers, `rebuildStats` and compatibility classification; streak runs and `streakStatus`; the achievement catalogue; local-date arithmetic and the read-time week, month and weekly-goal views (decision 13) |
 | `processing/` | Trusted scoring's pure decisions (NFCT-19): the game-version module registry, `evaluateSession`, `decideSession`, `upgradeSession`, `upgradeScanLevels`, `classifyProgress` (aggregate compatibility), reason merging and clock diagnostics |
 
 `GameDefinition` fields:
