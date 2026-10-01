@@ -16,8 +16,10 @@ const cache = vi.hoisted(() => ({
   isEnding: vi.fn(() => false),
   hasUnsyncedWrites: vi.fn(),
   endSession: vi.fn(),
+  signOutWithoutFirestore: vi.fn(),
   subscribe: () => () => {},
   getStatus: () => 'idle',
+  getEndingReason: () => null,
 }));
 
 vi.mock('../../services/firebase', () => ({ auth: { currentUser: { uid: 'real-user' } }, db: {}, firestoreCache: cache }));

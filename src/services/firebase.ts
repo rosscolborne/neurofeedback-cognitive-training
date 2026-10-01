@@ -74,6 +74,12 @@ export const firestoreCache = createFirestoreCacheLifecycle({
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   },
+  subscribeToPageShow: (listener) => {
+    if (typeof window === 'undefined') return () => {};
+    const onPageShow = (event: PageTransitionEvent) => listener(event.persisted);
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  },
 });
 
 firestoreCache.start();

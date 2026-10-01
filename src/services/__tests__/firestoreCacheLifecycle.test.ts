@@ -34,6 +34,7 @@ function harness(options: HarnessOptions = {}) {
   }
   const events: string[] = [];
   const storageListeners: ((key: string | null) => void)[] = [];
+  const pageShowListeners: ((persisted: boolean) => void)[] = [];
   /** Firestore's instance in this tab: running once the app has used it, until terminated. */
   const instance = { running: false, terminated: false };
   let ids = 0;
@@ -71,6 +72,10 @@ function harness(options: HarnessOptions = {}) {
       storageListeners.push(listener);
       return () => {};
     },
+    subscribeToPageShow: (listener: (persisted: boolean) => void) => {
+      pageShowListeners.push(listener);
+      return () => {};
+    },
     newId: () => `id-${++ids}`,
     now: () => 1_000,
     warn: () => {},
@@ -91,6 +96,8 @@ function harness(options: HarnessOptions = {}) {
       else store.set(FIRESTORE_CACHE_STATE_KEY, JSON.stringify(state));
       for (const listener of storageListeners) listener(FIRESTORE_CACHE_STATE_KEY);
     },
+    /** The browser shows the page again, from the back/forward cache when `persisted`. */
+    pageShow: (persisted: boolean) => { for (const listener of pageShowListeners) listener(persisted); },
     setClear: (impl: () => Promise<void>) => { clearImpl = impl; },
     setTerminate: (impl: () => Promise<void>) => { terminateImpl = impl; },
     setSignOut: (impl: () => Promise<void>) => { signOutImpl = impl; },
@@ -168,6 +175,38 @@ describe('start-up', () => {
     expect(await h.lifecycle.prepareForUser('bob')).toEqual({ status: 'ready' });
     expect(h.deps.signOut).not.toHaveBeenCalled();
     expect(h.state()).toEqual({ v: 1, owner: 'bob' });
+  });
+
+  it('keeps the marker until a retried sign-out succeeds: no moment where the account looks accepted', async () => {
+    const h = harness({ state: { v: 1, owner: 'alice', cleanup: cleanupOf() } });
+    const signingOut = deferred();
+    h.setSignOut(() => signingOut.promise);
+    h.lifecycle.start();
+
+    const preparing = h.lifecycle.prepareForUser('alice');
+    await vi.waitFor(() => expect(h.deps.signOut).toHaveBeenCalledOnce());
+    // The cache is deleted, but the account is still signed in: the marker stays.
+    expect(h.state()?.cleanup).toMatchObject({ id: 'earlier', signOut: true, previousOwner: 'alice' });
+    signingOut.resolve();
+    expect(await preparing).toEqual({ status: 'signing-out' });
+    expect(h.state()).toEqual({ v: 1, owner: null });
+  });
+
+  it('when the retried sign-out fails again, keeps the marker and reports failed; the next start retries', async () => {
+    const h = harness({ state: { v: 1, owner: 'alice', cleanup: cleanupOf() } });
+    h.setSignOut(async () => { throw new Error('auth/network-request-failed'); });
+    h.lifecycle.start();
+
+    expect(await h.lifecycle.prepareForUser('alice')).toEqual({ status: 'signing-out' });
+    expect(h.lifecycle.getStatus()).toBe('failed');
+    expect(h.state()?.cleanup).toMatchObject({ signOut: true, previousOwner: 'alice' });
+
+    h.setSignOut(async () => {});
+    const next = createFirestoreCacheLifecycle(h.deps);
+    next.start();
+    expect(await next.prepareForUser('alice')).toEqual({ status: 'signing-out' });
+    expect(h.deps.signOut).toHaveBeenCalledTimes(2);
+    expect(h.state()).toEqual({ v: 1, owner: null });
   });
 
   it('without localStorage clears at every start and still lets the user in', async () => {
@@ -423,6 +462,21 @@ describe('endSession', () => {
     expect(h.events).toEqual(['delete-account', 'state:alice+cleanup(account-deleted,id-1)', 'terminate', 'clear', 'state:none', 'navigate:/welcome']);
   });
 
+  it('account deletion: reports ending only once the account is deleted, so a failed deletion keeps its screen', async () => {
+    const h = await signedIn();
+    const deleting = deferred();
+    const statuses: string[] = [];
+    h.lifecycle.subscribe(() => statuses.push(`${h.lifecycle.getStatus()}:${h.lifecycle.getEndingReason()}`));
+
+    const run = h.lifecycle.endSession({ reason: 'account-deleted', signOut: false, destination: '/welcome', before: () => deleting.promise });
+    expect(h.lifecycle.isEnding()).toBe(true);
+    expect(h.lifecycle.getStatus()).toBe('idle');
+    deleting.resolve();
+    await run;
+    expect(statuses[0]).toBe('ending:account-deleted');
+    expect(h.events.indexOf('navigate:/welcome')).toBeGreaterThan(0);
+  });
+
   it('account deletion: a failure clears nothing and leaves the session usable', async () => {
     const h = await signedIn();
     const failure = new Error('auth/network-request-failed');
@@ -469,6 +523,70 @@ describe('endSession', () => {
 
     await h.lifecycle.endSession({ reason: 'sign-out', signOut: true, destination: '/' });
     expect(h.state()?.cleanup?.id).toBe('other-tab');
+  });
+});
+
+describe('signOutWithoutFirestore', () => {
+  it('signs out while the deletion is held up, touching no Firestore, and keeps the marker for the next start', async () => {
+    const h = harness({ state: { v: 1, owner: 'alice', cleanup: cleanupOf({ signOut: false }) } });
+    h.setClear(() => new Promise(() => {}));
+    h.lifecycle.start();
+    void h.lifecycle.prepareForUser('bob');
+    const clearCalls = h.deps.clearPersistence.mock.calls.length;
+
+    await h.lifecycle.signOutWithoutFirestore();
+    expect(h.deps.signOut).toHaveBeenCalledOnce();
+    expect(h.deps.navigate).toHaveBeenCalledWith('/');
+    expect(h.deps.terminate).not.toHaveBeenCalled();
+    expect(h.deps.waitForPendingWrites).not.toHaveBeenCalled();
+    expect(h.deps.clearPersistence).toHaveBeenCalledTimes(clearCalls);
+    expect(h.state()?.cleanup?.id).toBe('earlier');
+    expect(h.lifecycle.getStatus()).toBe('ending');
+  });
+
+  it('still navigates when sign-out hangs', async () => {
+    vi.useFakeTimers();
+    const h = harness({ state: { v: 1, owner: 'alice' } });
+    h.setSignOut(() => new Promise(() => {}));
+    let done = false;
+    void h.lifecycle.signOutWithoutFirestore().then(() => { done = true; });
+    await vi.advanceTimersByTimeAsync(DEFAULT_CACHE_TIMEOUTS.signOutMs);
+    expect(done).toBe(true);
+    expect(h.deps.navigate).toHaveBeenCalledWith('/');
+  });
+});
+
+describe('back/forward cache', () => {
+  it('loads the app afresh when a page that ended its session is shown again from the cache', async () => {
+    const h = harness({ state: { v: 1, owner: 'alice' } });
+    h.lifecycle.start();
+    await h.lifecycle.prepareForUser('alice');
+    await h.lifecycle.endSession({ reason: 'account-deleted', signOut: false, destination: '/welcome' });
+    expect(h.deps.navigate).toHaveBeenCalledTimes(1);
+
+    h.pageShow(true);
+    expect(h.deps.navigate).toHaveBeenLastCalledWith('/');
+    expect(h.deps.navigate).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads the app afresh when the account changed while the page was cached', async () => {
+    const h = harness({ state: { v: 1, owner: 'alice' } });
+    h.lifecycle.start();
+    await h.lifecycle.prepareForUser('alice');
+    h.store.set(FIRESTORE_CACHE_STATE_KEY, JSON.stringify({ v: 1, owner: 'bob' }));
+
+    h.pageShow(true);
+    expect(h.deps.navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('leaves a page alone when its account is still the cache\'s owner, or on an ordinary load', async () => {
+    const h = harness({ state: { v: 1, owner: 'alice' } });
+    h.lifecycle.start();
+    await h.lifecycle.prepareForUser('alice');
+
+    h.pageShow(true);
+    h.pageShow(false);
+    expect(h.deps.navigate).not.toHaveBeenCalled();
   });
 });
 
