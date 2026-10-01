@@ -3,7 +3,7 @@ import { Calculator, ChevronRight, Flame, Play } from 'lucide-react';
 import { mentalMath, type LocalDate, type StatsSummary } from '@nfct/shared';
 import { gameSessionRepository, profileRepository, statsRepository } from '../repositories';
 import { HistoryItem } from '../games/mentalMath/MentalMathProgress';
-import { formatPlayTime, historyRow, isTimed90, type HistoryRow } from '../games/mentalMath/progressSummary';
+import { formatPlayTime } from '../games/mentalMath/progressSummary';
 import {
   achievementLists,
   daysText,
@@ -17,7 +17,18 @@ import {
   type StreakView,
 } from './overviewModel';
 import { AchievementRow, GoalMeter, StreakStrip } from './OverviewParts';
-import { browserOverviewClock, useRecentRuns, usePlayerOverview, type OverviewClock, type OverviewSources, type PlayerOverview } from './usePlayerOverview';
+import {
+  browserOverviewClock,
+  hasUncheckedRun,
+  runRows,
+  statsPhase,
+  useRecentRuns,
+  usePlayerOverview,
+  type OverviewClock,
+  type OverviewSources,
+  type PlayerOverview,
+  type StatsPhase,
+} from './usePlayerOverview';
 import '../games/mentalMath/mentalMath.css';
 import './overview.css';
 
@@ -41,27 +52,6 @@ export interface HomeOverviewProps {
   readonly onOpenGameProgress: () => void;
   readonly sources?: OverviewSources;
   readonly clock?: OverviewClock;
-}
-
-/**
- * What Home can say about the player's stats:
- * - 'stats': a readable summary;
- * - 'new': no summary and no runs: nothing to show yet;
- * - 'catching-up': runs, but no summary yet (runs scored before streaks existed: the next run rebuilds it);
- * - 'offline': runs, and no summary in this device's cache;
- * - 'unavailable': the summary could not be read or shown.
- */
-type StatsPhase = 'loading' | 'stats' | 'new' | 'catching-up' | 'offline' | 'unavailable';
-
-function statsPhase(overview: PlayerOverview, runs: readonly HistoryRow[] | null): StatsPhase {
-  const { summary } = overview;
-  if (summary.status === 'loading' || runs === null || overview.todayState === 'loading') return 'loading';
-  if (summary.status === 'unavailable') return 'unavailable';
-  const read = summary.value;
-  if (read.status === 'readable') return 'stats';
-  if (read.status === 'unreadable') return 'unavailable';
-  if (runs.length === 0) return 'new';
-  return read.fromCache ? 'offline' : 'catching-up';
 }
 
 const INTRO = 'A 90-second arithmetic run that adapts as you play.';
@@ -104,9 +94,8 @@ const StreakCard: React.FC<{
   if (phase === 'loading') caption = 'Loading your streak…';
   else if (phase === 'unavailable') caption = 'Your streak couldn’t be loaded right now.';
   else if (phase === 'offline') caption = 'Your streak will show when you’re back online.';
-  else if (phase === 'catching-up') caption = checking
-    ? 'Your latest run is still being checked. Your streak and achievements update once it’s confirmed.'
-    : 'Your streak and achievements catch up after your next finished run.';
+  else if (phase === 'checking') caption = 'Your latest run is still being checked. Your streak and achievements update once it’s confirmed.';
+  else if (phase === 'catching-up') caption = 'Your streak and achievements catch up after your next finished run.';
   else if (view?.kind === 'today-unknown') caption = `Longest: ${daysText(view.longest)}. Your current streak can’t be shown because ${zoneText(overview.zone)} isn’t recognised.`;
   else if (view?.kind === 'status' && !view.status.alive) caption = `Last trained ${formatLocalDate(view.status.lastActiveDate!, today)}. Longest: ${daysText(longest)}.`;
   else if (view?.kind === 'status') {
@@ -155,16 +144,13 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
 }) => {
   const overview = usePlayerOverview(playerId, sources, 'week', clock);
   const recent = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, HOME_RECENT_RUNS);
-  const rows = useMemo(
-    () => (recent.status === 'ready' ? recent.value.entries.filter(isTimed90).map(historyRow) : recent.status === 'unavailable' ? [] : null),
-    [recent],
-  );
-  const phase = statsPhase(overview, rows);
+  const rows = useMemo(() => runRows(recent), [recent]);
+  const phase = statsPhase(overview, recent, clock.isOnline());
   const summary = overview.summary.status === 'ready' && overview.summary.value.status === 'readable' ? overview.summary.value.data : null;
   const view = summary ? streakView(summary.streak, overview.today) : null;
   const nudge = view ? streakNudge(view) : null;
   // A run this device saved that trusted scoring has not confirmed yet: the streak may be about to change.
-  const checking = rows?.some((row) => row.state === 'on-device' || row.state === 'checking' || row.state === 'delayed') ?? false;
+  const checking = rows !== null && hasUncheckedRun(rows);
   const lists = useMemo(
     () => (overview.achievements.status === 'ready' ? achievementLists(overview.achievements.value.achievements) : null),
     [overview.achievements],
@@ -188,7 +174,8 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
         </button>
       </section>
 
-      {phase !== 'new' && (
+      {/* Nothing while loading, so a new player never sees a streak card come and go. */}
+      {phase !== 'new' && phase !== 'loading' && (
         <StreakCard phase={phase} overview={overview} summary={summary} view={view} checking={checking} />
       )}
 

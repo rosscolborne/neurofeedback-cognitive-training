@@ -139,7 +139,9 @@ describe('activity and the weekly goal', () => {
     expect(minutes).toMatchObject({ value: 5, met: true, fraction: 1 });
     expect(goalText(minutes)).toBe('5 of 5 minutes played');
     const days = goalProgress({ kind: 'activeDays', target: 1 }, documents, TODAY)!;
-    expect(goalText(days)).toBe('2 of 1 active day');
+    // Past the target, the count reads on its own with the goal beside it.
+    expect(goalText(days)).toBe('2 active days (goal 1)');
+    expect(goalText(goalProgress({ kind: 'activeDays', target: 2 }, documents, TODAY)!)).toBe('2 of 2 active days');
   });
 });
 

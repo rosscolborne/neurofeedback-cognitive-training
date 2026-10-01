@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ACHIEVEMENT_CATALOGUE } from '@nfct/shared';
 import { ProgressOverview } from '../ProgressOverview';
 import { formatLocalDate } from '../overviewModel';
+import type { OverviewClock } from '../usePlayerOverview';
 import {
   achievement,
   buttonNamed,
@@ -12,6 +13,7 @@ import {
   day,
   fakeSources,
   missing,
+  offlineClock,
   readable,
   runEntry,
   summaryWith,
@@ -30,11 +32,12 @@ afterEach(() => {
   renderer = null;
 });
 
-async function renderProgress(state: FakeState) {
+async function renderProgress(state: FakeState, clock: OverviewClock = utcClock) {
+  act(() => renderer?.unmount());
   const fakes = fakeSources(state);
   const onPlay = vi.fn();
   await act(async () => {
-    renderer = create(<ProgressOverview playerId="player-1" sources={fakes.sources} clock={utcClock} onPlay={onPlay} games={<p>Mental Math card</p>} />);
+    renderer = create(<ProgressOverview playerId="player-1" sources={fakes.sources} clock={clock} onPlay={onPlay} games={<p>Mental Math card</p>} />);
   });
   return { r: renderer!, onPlay, ...fakes };
 }
@@ -131,16 +134,36 @@ describe('Progress', () => {
     expect(one(r, 'longest-streak')).toBe('1 day');
   });
 
-  it('tells a player whose runs predate the aggregates that the next run brings them up to date', async () => {
+  it('tells a player whose runs predate the aggregates that the next run brings them up to date, without zeros', async () => {
     const { r } = await renderProgress({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA1')] });
     expect(byData(r, 'progress-empty')).toHaveLength(0);
-    expect(visibleText(r)).toContain('Your streak and all-time figures catch up after your next finished run.');
+    expect(one(r, 'all-time-note')).toBe('Your streak and all-time figures catch up after your next finished run.');
+    expect(one(r, 'activity-note')).toBe('Your activity catches up after your next finished run.');
+    expect(one(r, 'achievements-note')).toBe('Your achievements catch up after your next finished run.');
+    // No "0 of 9 earned", "First run: not earned yet" or "No runs yet this week" for a player who has played.
+    expect(byData(r, 'achievement-count')).toHaveLength(0);
+    expect(achievementRows(r)).toHaveLength(0);
+    expect(byData(r, 'activity-totals')).toHaveLength(0);
+    expect(calendarDays(r)).toHaveLength(0);
+  });
+
+  it('says a run still being checked will update the figures, the activity and the achievements', async () => {
+    const { r } = await renderProgress({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
+    expect(one(r, 'all-time-note')).toBe('Your latest run is still being checked. Your streak and all-time figures update once it’s confirmed.');
+    expect(one(r, 'activity-note')).toBe('Your latest run is still being checked. Your activity updates once it’s confirmed.');
+    expect(one(r, 'achievements-note')).toBe('Your latest run is still being checked. Your achievements update once it’s confirmed.');
+    expect(achievementRows(r)).toHaveLength(0);
   });
 
   it('waits for the connection rather than calling an offline player new', async () => {
-    const { r } = await renderProgress({ summary: missing(true) });
+    const { r } = await renderProgress({ summary: missing(true) }, offlineClock);
     expect(byData(r, 'progress-empty')).toHaveLength(0);
-    expect(visibleText(r)).toContain('Your progress will show when you’re back online.');
+    expect(one(r, 'all-time-note')).toBe('Your streak and all-time figures will show when you’re back online.');
+    expect(one(r, 'achievements-note')).toBe('Your achievements will show when you’re back online.');
+    // Online, a summary missing from the cache is still loading, never "offline" or "new" in between.
+    const waiting = await renderProgress({ summary: missing(true) });
+    expect(byData(waiting.r, 'progress-empty')).toHaveLength(0);
+    expect(one(waiting.r, 'all-time-note')).toBe('Loading your progress…');
   });
 
   it('scrolls to and focuses the achievements once loaded when Home asks for them', async () => {
@@ -160,6 +183,9 @@ describe('Progress', () => {
 
   it('reports what it cannot load', async () => {
     const { r } = await renderProgress({ summary: 'error' });
-    expect(visibleText(r)).toContain('Your progress couldn’t be loaded right now.');
+    expect(one(r, 'all-time-note')).toBe('Your streak and all-time figures couldn’t be loaded right now.');
+    const runsFailed = await renderProgress({ summary: missing(), runs: 'error' });
+    expect(byData(runsFailed.r, 'progress-empty')).toHaveLength(0);
+    expect(one(runsFailed.r, 'achievements-note')).toBe('Your achievements couldn’t be loaded right now.');
   });
 });

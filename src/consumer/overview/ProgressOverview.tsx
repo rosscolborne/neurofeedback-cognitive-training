@@ -15,7 +15,15 @@ import {
   type ActivityPeriod,
 } from './overviewModel';
 import { AchievementRow, GoalMeter } from './OverviewParts';
-import { browserOverviewClock, usePlayerOverview, useRecentRuns, type OverviewClock, type OverviewSources } from './usePlayerOverview';
+import {
+  browserOverviewClock,
+  statsPhase,
+  usePlayerOverview,
+  useRecentRuns,
+  type OverviewClock,
+  type OverviewSources,
+  type StatsPhase,
+} from './usePlayerOverview';
 import '../games/mentalMath/mentalMath.css';
 import './overview.css';
 
@@ -42,6 +50,26 @@ export interface ProgressOverviewProps {
   readonly onSectionFocused?: () => void;
   readonly sources?: OverviewSources;
   readonly clock?: OverviewClock;
+}
+
+/** Runs read to tell a new player from one whose stats are not ready yet (the same check as Home's). */
+const NEWEST_RUNS = 3;
+
+/**
+ * What a section says instead of figures that would mislead: zeros and "not
+ * earned yet" for a player whose runs the aggregates do not include yet.
+ * Null when the section can show its own data.
+ */
+function pendingNote(phase: StatsPhase, section: 'figures' | 'activity' | 'achievements'): string | null {
+  const subject = section === 'figures' ? 'Your streak and all-time figures' : section === 'activity' ? 'Your activity' : 'Your achievements';
+  switch (phase) {
+    case 'loading': return null;
+    case 'offline': return `${subject} will show when you’re back online.`;
+    case 'checking': return `Your latest run is still being checked. ${subject} ${section === 'activity' ? 'updates' : 'update'} once it’s confirmed.`;
+    case 'catching-up': return `${subject} ${section === 'activity' ? 'catches' : 'catch'} up after your next finished run.`;
+    case 'unavailable': return `${subject} couldn’t be loaded right now.`;
+    default: return null;
+  }
 }
 
 function dayLabel(day: ActivityDay, today: LocalDate): string {
@@ -80,13 +108,16 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
   );
   // Whether the player has played at all: a missing summary alone does not say (runs scored before the
   // aggregates existed have none until the next run rebuilds it, and offline it may just not be cached).
-  const newest = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, 1);
-  const hasRuns = newest.status === 'ready' ? newest.value.entries.length > 0 : newest.status === 'loading' ? null : false;
-  const noRunsYet = summaryRead?.status === 'missing' && !summaryRead.fromCache && hasRuns === false;
+  const newest = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, NEWEST_RUNS);
+  const phase = statsPhase(overview, newest, clock.isOnline());
+  const noRunsYet = phase === 'new';
+  // The activity and achievements show their own data only once the stats are known to include every
+  // run; until then each says why it has nothing to show.
+  const showsData = phase === 'stats' || phase === 'new';
   // Focused only once everything above it has loaded, so the section does not move after the scroll.
   const achievementsHeading = useRef<HTMLHeadingElement>(null);
-  const settled = summaryState.status !== 'loading' && achievements.status !== 'loading'
-    && todayState !== 'loading' && (todayState === 'unknown-zone' || days.status !== 'loading');
+  const settled = phase !== 'loading' && (!showsData
+    || (achievements.status !== 'loading' && (todayState === 'unknown-zone' || days.status !== 'loading')));
   useEffect(() => {
     if (focusSection !== 'achievements' || !settled) return;
     achievementsHeading.current?.scrollIntoView({ block: 'start' });
@@ -132,12 +163,7 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
               </div>
             </dl>
           ) : (
-            <p className="ov-help">
-              {summaryState.status === 'loading' || todayState === 'loading' || (summaryRead?.status === 'missing' && hasRuns === null) ? 'Loading your progress…'
-                : summaryRead?.status === 'missing' && summaryRead.fromCache ? 'Your progress will show when you’re back online.'
-                  : summaryRead?.status === 'missing' ? 'Your streak and all-time figures catch up after your next finished run.'
-                    : 'Your progress couldn’t be loaded right now.'}
-            </p>
+            <p className="ov-help" data-overview="all-time-note">{pendingNote(phase, 'figures') ?? 'Loading your progress…'}</p>
           )}
           {view?.kind === 'today-unknown' && (
             <p className="ov-help">{`Your current streak can’t be shown because your time zone (${overview.zone.zone}) isn’t recognised.`}</p>
@@ -157,7 +183,9 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
             </button>
           ))}
         </div>
-        {todayState === 'unknown-zone' ? (
+        {!showsData ? (
+          <p className="ov-help" data-overview="activity-note">{pendingNote(phase, 'activity') ?? 'Loading your activity…'}</p>
+        ) : todayState === 'unknown-zone' ? (
           <p className="ov-help">{`Your activity can’t be shown because your time zone (${overview.zone.zone}) isn’t recognised.`}</p>
         ) : activity === null || today === null ? (
           <p className="ov-help">{days.status === 'unavailable' ? 'Your activity couldn’t be loaded right now.' : 'Loading your activity…'}</p>
@@ -205,9 +233,10 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
 
       <section className="ov-card" aria-labelledby="ov-achievements-title" data-overview="achievements">
         <h2 id="ov-achievements-title" ref={achievementsHeading} tabIndex={-1} className="ov-card-title ov-scroll-target">Achievements</h2>
-        {achievements.status === 'loading' && <p className="ov-help">Loading your achievements…</p>}
-        {achievements.status === 'unavailable' && <p className="ov-help">Your achievements couldn’t be loaded right now.</p>}
-        {lists && (
+        {!showsData && <p className="ov-help" data-overview="achievements-note">{pendingNote(phase, 'achievements') ?? 'Loading your achievements…'}</p>}
+        {showsData && achievements.status === 'loading' && <p className="ov-help">Loading your achievements…</p>}
+        {showsData && achievements.status === 'unavailable' && <p className="ov-help">Your achievements couldn’t be loaded right now.</p>}
+        {showsData && lists && (
           <>
             <p className="ov-help" data-overview="achievement-count">{lists.earned.length} of {lists.total} earned</p>
             {lists.earned.length > 0 && (

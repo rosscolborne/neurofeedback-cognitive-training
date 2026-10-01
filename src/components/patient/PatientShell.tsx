@@ -92,8 +92,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationDismissed,
 }) => {
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
-  // Home's "See all achievements" opens Progress at its achievements (NFCT-13).
+  // Home's "See all achievements" opens Progress at its achievements (NFCT-13). The request lasts
+  // only for the Progress visit it opened: leaving Progress drops it (see below, after activeTab).
   const [progressFocus, setProgressFocus] = useState<'achievements' | null>(null);
+  const [progressFocusTab, setProgressFocusTab] = useState<string>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   // The open catalogue game (NFCT-12), and the view it opens on: its start
   // screen, or its progress (NFCT-22's Progress-tab card).
@@ -159,6 +161,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const isClinicianLinked = trainingAuthority === 'clinician';
   // Clinician-dependent destinations follow the live relationship; a hidden tab falls back to Home.
   const activeTab = isPatientTabAvailable(requestedTab, trainingAuthority) ? requestedTab : 'home';
+  // Any change to a tab other than Progress drops a pending "See all achievements" request, so a later,
+  // ordinary visit to Progress opens at the top (state adjusted while rendering, not in an effect).
+  if (progressFocusTab !== activeTab) {
+    setProgressFocusTab(activeTab);
+    if (activeTab !== 'progress' && progressFocus !== null) setProgressFocus(null);
+  }
   // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
   const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
     && client.acceptedInvitationId.toUpperCase() === initialInvitationCode.toUpperCase();

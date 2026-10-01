@@ -5,6 +5,7 @@ import type { GameSessionHistoryPage, GameSessionRepository } from '../repositor
 import type { ProfileRepository } from '../repositories/profileRepository';
 import type { AchievementsRead, DailyStatsRead, StatsRepository } from '../repositories/statsRepository';
 import { deviceTimezone } from '../games/mentalMath/sessionDraft';
+import { historyRow, isTimed90, type HistoryRow } from '../games/mentalMath/progressSummary';
 import { periodRange, playerToday, playerWeeklyGoal, playerZone, type ActivityPeriod, type PlayerZone } from './overviewModel';
 
 // The reads behind Home and Progress (NFCT-13 part 2): live subscriptions to
@@ -33,6 +34,8 @@ export interface OverviewClock {
   readonly deviceZone: () => string;
   /** Calls `listener` whenever the app comes back to the foreground; returns the unsubscribe. */
   readonly onForeground: (listener: () => void) => () => void;
+  /** Whether the device reports a network connection (a hint: it can be online and still unable to reach the server). */
+  readonly isOnline: () => boolean;
 }
 
 export const browserOverviewClock: OverviewClock = {
@@ -45,6 +48,7 @@ export const browserOverviewClock: OverviewClock = {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   },
+  isOnline: () => typeof navigator === 'undefined' || navigator.onLine !== false,
 };
 
 type Keyed<T> = { readonly key: string; readonly value: Loaded<T> };
@@ -184,4 +188,47 @@ export function useRecentRuns(
 ): Loaded<GameSessionHistoryPage> {
   return useKeyedSubscription<GameSessionHistoryPage>(`${playerId}:runs:${gameId}:${pageSize}`, (onNext, onError) =>
     gameSessions.subscribeToGameSessionHistory({ gameId, pageSize }, onNext, onError));
+}
+
+/**
+ * What the screens can say about the player's stats, before any figure is shown:
+ * - 'stats': a readable summary;
+ * - 'new': the server has no summary and the player has no runs;
+ * - 'checking': no summary yet, and a run trusted scoring has not confirmed (on this device, uploading or delayed);
+ * - 'catching-up': no summary, but runs (scored before the aggregates existed: the next run rebuilds them);
+ * - 'offline': no summary in this device's cache and no connection, so nothing can be said yet;
+ * - 'unavailable': the summary or the runs could not be read.
+ * A summary missing from the cache while the device reports a connection is still loading: the
+ * server's answer usually follows at once, and a player is never told they are offline, or new, in between.
+ */
+export type StatsPhase = 'loading' | 'stats' | 'new' | 'checking' | 'catching-up' | 'offline' | 'unavailable';
+
+/** A run trusted scoring has not confirmed yet: the stats may be about to change. */
+export function hasUncheckedRun(rows: readonly HistoryRow[]): boolean {
+  return rows.some((row) => row.state === 'on-device' || row.state === 'checking' || row.state === 'delayed');
+}
+
+/** The Mental Math rows of a page of runs, or null while it loads; a page that failed is null too (see statsPhase). */
+export function runRows(runs: Loaded<GameSessionHistoryPage>): HistoryRow[] | null {
+  return runs.status === 'ready' ? runs.value.entries.filter(isTimed90).map(historyRow) : null;
+}
+
+export function statsPhase(
+  overview: Pick<PlayerOverview, 'summary' | 'todayState'>,
+  runs: Loaded<GameSessionHistoryPage>,
+  online: boolean,
+): StatsPhase {
+  const { summary, todayState } = overview;
+  if (summary.status === 'loading' || todayState === 'loading') return 'loading';
+  if (summary.status === 'unavailable') return 'unavailable';
+  const read = summary.value;
+  if (read.status === 'readable') return 'stats';
+  if (read.status === 'unreadable') return 'unavailable';
+  // No summary. Offline or unreadable runs first: neither says whether the player is new.
+  if (read.fromCache) return online ? 'loading' : 'offline';
+  if (runs.status === 'loading') return 'loading';
+  if (runs.status === 'unavailable') return 'unavailable';
+  const rows = runRows(runs)!;
+  if (rows.length === 0) return 'new';
+  return hasUncheckedRun(rows) ? 'checking' : 'catching-up';
 }

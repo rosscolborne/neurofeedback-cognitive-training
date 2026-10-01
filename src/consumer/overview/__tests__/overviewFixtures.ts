@@ -27,7 +27,9 @@ export const at = (ms: number) => Timestamp.fromMillis(ms);
 /** Thursday 1 October 2026, noon UTC. Its ISO week runs Mon 28 Sep to Sun 4 Oct. */
 export const NOW_MS = Date.UTC(2026, 9, 1, 12);
 export const TODAY = '2026-10-01';
-export const utcClock: OverviewClock = { now: () => NOW_MS, deviceZone: () => 'UTC', onForeground: () => () => {} };
+export const utcClock: OverviewClock = { now: () => NOW_MS, deviceZone: () => 'UTC', onForeground: () => () => {}, isOnline: () => true };
+/** The same clock on a device with no connection. */
+export const offlineClock: OverviewClock = { ...utcClock, isOnline: () => false };
 
 export function summaryWith(trainingDays: readonly string[], overrides: Partial<StatsSummary> = {}): StatsSummary {
   return {
@@ -100,7 +102,7 @@ export interface FakeState {
   days?: readonly DailyStats[];
   achievements?: readonly Achievement[];
   profile?: DocumentRead<UserProfile> | 'error';
-  runs?: readonly GameSessionHistoryEntry[];
+  runs?: readonly GameSessionHistoryEntry[] | 'error';
 }
 
 /** Repositories that answer at once with `state`; each subscription's calls are recorded. */
@@ -129,8 +131,9 @@ export function fakeSources(state: FakeState) {
       return state.profile ?? legacyProfile;
     }) },
     gameSessions: {
-      subscribeToGameSessionHistory: vi.fn((_options: unknown, onNext: (page: GameSessionHistoryPage) => void) => {
-        onNext({ entries: [...(state.runs ?? [])], unreadable: [], nextCursor: null, fromCache: false });
+      subscribeToGameSessionHistory: vi.fn((_options: unknown, onNext: (page: GameSessionHistoryPage) => void, onError: (error: Error) => void) => {
+        if (state.runs === 'error') onError(new Error('unavailable'));
+        else onNext({ entries: [...(state.runs ?? [])], unreadable: [], nextCursor: null, fromCache: false });
         return () => {};
       }),
     },

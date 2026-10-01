@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeOverview } from '../HomeOverview';
 import { formatLocalDate } from '../overviewModel';
+import type { OverviewClock } from '../usePlayerOverview';
 import {
   achievement,
   buttonNamed,
@@ -11,6 +12,7 @@ import {
   day,
   fakeSources,
   missing,
+  offlineClock,
   readable,
   runEntry,
   summaryWith,
@@ -29,11 +31,12 @@ afterEach(() => {
   renderer = null;
 });
 
-async function renderHome(state: FakeState, playerId = 'player-1') {
+async function renderHome(state: FakeState, clock: OverviewClock = utcClock) {
+  act(() => renderer?.unmount());
   const { sources } = fakeSources(state);
   const handlers = { onPlay: vi.fn(), onOpenAchievements: vi.fn(), onOpenGameProgress: vi.fn() };
   await act(async () => {
-    renderer = create(<HomeOverview playerId={playerId} sources={sources} clock={utcClock} {...handlers} />);
+    renderer = create(<HomeOverview playerId="player-1" sources={sources} clock={clock} {...handlers} />);
   });
   return { r: renderer!, sources, handlers };
 }
@@ -145,8 +148,26 @@ describe('Home', () => {
   });
 
   it('waits for the connection instead of claiming no stats when the summary is not cached offline', async () => {
-    const { r } = await renderHome({ summary: missing(true), runs: [runEntry('sessionAAAAAAAAAAAA1')] });
+    const { r } = await renderHome({ summary: missing(true), runs: [runEntry('sessionAAAAAAAAAAAA1')] }, offlineClock);
     expect(one(r, 'streak-caption')).toBe('Your streak will show when you’re back online.');
+  });
+
+  it('never calls a player new while offline with nothing cached, or when the runs cannot be read', async () => {
+    // No connection and nothing cached: no runs in the cache says nothing about the account.
+    const offline = await renderHome({ summary: missing(true), runs: [] }, offlineClock);
+    expect(one(offline.r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play.');
+    expect(visibleText(offline.r)).not.toContain('Start here');
+    expect(one(offline.r, 'streak-caption')).toBe('Your streak will show when you’re back online.');
+
+    // The server has no summary, but the runs could not be read: not "new" either.
+    const failed = await renderHome({ summary: missing(), runs: 'error' });
+    expect(visibleText(failed.r)).not.toContain('Start here');
+    expect(one(failed.r, 'streak-caption')).toBe('Your streak couldn’t be loaded right now.');
+
+    // Online, a summary missing from the cache is still loading: no streak card and no "new" message in between.
+    const waiting = await renderHome({ summary: missing(true), runs: [] });
+    expect(byData(waiting.r, 'streak-card')).toHaveLength(0);
+    expect(visibleText(waiting.r)).not.toContain('Start here');
   });
 
   it('reports a summary it cannot load without breaking Home', async () => {

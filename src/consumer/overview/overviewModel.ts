@@ -211,10 +211,13 @@ const GOAL_UNITS: Record<WeeklyGoal['kind'], { one: string; many: string }> = {
   activeDays: { one: 'active day', many: 'active days' },
 };
 
-/** "3 of 5 finished runs". Active days here are days with a finished run, not streak days. */
+/** "3 of 5 finished runs", or "6 finished runs (goal 5)" once past it. Active days are days with a finished run, not streak days. */
 export function goalText(progress: WeeklyGoalProgress): string {
   const unit = GOAL_UNITS[progress.kind];
-  return `${progress.value} of ${progress.target} ${progress.target === 1 ? unit.one : unit.many}`;
+  const units = (count: number) => (count === 1 ? unit.one : unit.many);
+  return progress.value > progress.target
+    ? `${progress.value} ${units(progress.value)} (goal ${progress.target})`
+    : `${progress.value} of ${progress.target} ${units(progress.target)}`;
 }
 
 export interface AchievementItem {
