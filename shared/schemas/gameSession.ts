@@ -373,6 +373,23 @@ export function readSessionProgressFields(raw: unknown): SessionProgressFields {
   return readVersioned('gameSessions', raw, { 1: sessionProgressFieldsReadSchema });
 }
 
+/**
+ * The fields every server-maintained aggregate depends on: progress's, plus
+ * the `localDate` the stats bucket a session under (NFCT-13). Still no
+ * trials, summary, client `peakLevel` or anything about EEG. Upgrade scans
+ * and stats rebuilds read sessions through a projection of these fields
+ * (`SESSION_AGGREGATE_FIELDS`).
+ */
+const sessionAggregateFieldsReadSchema = sessionProgressFieldsReadSchema.extend({ localDate: localDateSchema });
+export type SessionAggregateFields = z.infer<typeof sessionAggregateFieldsReadSchema>;
+/** The document fields `readSessionAggregateFields` needs, for a Firestore projection. */
+export const SESSION_AGGREGATE_FIELDS = Object.freeze(Object.keys(sessionAggregateFieldsReadSchema.shape));
+
+/** Reads only the fields the aggregates depend on (tolerant, like every reader). */
+export function readSessionAggregateFields(raw: unknown): SessionAggregateFields {
+  return readVersioned('gameSessions', raw, { 1: sessionAggregateFieldsReadSchema });
+}
+
 export function readGameSession(raw: unknown): GameSession {
   return readVersioned('gameSessions', raw, { 1: gameSessionReadSchema });
 }
