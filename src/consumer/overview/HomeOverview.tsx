@@ -40,8 +40,8 @@ export interface HomeOverviewProps {
   readonly playerId: string;
   /** Opens Mental Math's start-level picker. */
   readonly onPlay: () => void;
-  /** Opens the Progress tab. */
-  readonly onOpenProgress: () => void;
+  /** Opens the Progress tab at its achievements. */
+  readonly onOpenAchievements: () => void;
   /** Opens Mental Math's records and run history. */
   readonly onOpenGameProgress: () => void;
   readonly sources?: HomeOverviewSources;
@@ -153,7 +153,7 @@ const StreakCard: React.FC<{
 export const HomeOverview: React.FC<HomeOverviewProps> = ({
   playerId,
   onPlay,
-  onOpenProgress,
+  onOpenAchievements,
   onOpenGameProgress,
   sources = defaultSources,
   clock = browserOverviewClock,
@@ -201,7 +201,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
         <section className="ov-card" aria-labelledby="ov-home-achievements-title" data-overview="home-achievements">
           <div className="ov-card-head">
             <h2 id="ov-home-achievements-title" className="ov-card-title">Achievements</h2>
-            <button type="button" className="btn btn-ghost mm-link" onClick={onOpenProgress} aria-label="See all achievements">
+            <button type="button" className="btn btn-ghost mm-link" onClick={onOpenAchievements} aria-label="See all achievements">
               See all <ChevronRight size={16} aria-hidden="true" />
             </button>
           </div>

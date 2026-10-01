@@ -32,12 +32,13 @@
   line-height: 1.3;
 }
 
-.ov-section-title {
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 1.25;
+/* A heading focused from another screen: clear of the sticky top bar, focused without a ring (it is not a control). */
+.ov-scroll-target {
+  scroll-margin-top: calc(88px + env(safe-area-inset-top, 0px));
+}
+
+.ov-scroll-target:focus {
+  outline: none;
 }
 
 .ov-help {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
 import { addDays, type LocalDate } from '@nfct/shared';
 import { profileRepository, statsRepository } from '../repositories';
@@ -36,6 +36,10 @@ export interface ProgressOverviewProps {
   readonly onPlay: () => void;
   /** The per-game entries (Mental Math's progress card). */
   readonly games: React.ReactNode;
+  /** A section to scroll to and focus once the screen has loaded (Home's "See all achievements"). */
+  readonly focusSection?: 'achievements' | null;
+  /** Called once `focusSection` has been focused. */
+  readonly onSectionFocused?: () => void;
   readonly sources?: OverviewSources;
   readonly clock?: OverviewClock;
 }
@@ -52,6 +56,8 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
   playerId,
   onPlay,
   games,
+  focusSection = null,
+  onSectionFocused,
   sources = defaultSources,
   clock = browserOverviewClock,
 }) => {
@@ -74,6 +80,17 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
   );
   // No summary from the server: no run has counted yet (a missing summary served from this device's cache may only mean offline).
   const noRunsYet = summaryRead?.status === 'missing' && !summaryRead.fromCache;
+  // Focused only once everything above it has loaded, so the section does not move after the scroll.
+  const achievementsHeading = useRef<HTMLHeadingElement>(null);
+  const settled = summaryState.status !== 'loading' && achievements.status !== 'loading'
+    && todayState !== 'loading' && (todayState === 'unknown-zone' || days.status !== 'loading');
+  useEffect(() => {
+    if (focusSection !== 'achievements' || !settled) return;
+    achievementsHeading.current?.scrollIntoView({ block: 'start' });
+    achievementsHeading.current?.focus({ preventScroll: true });
+    onSectionFocused?.();
+  }, [focusSection, settled, onSectionFocused]);
+
   const weekdayHeader = useMemo(() => (range ? Array.from({ length: 7 }, (_, index) => {
     const first = activity ? addDays(range.from, -activity.leadingBlanks) : range.from;
     return weekdayLabel(addDays(first, index));
@@ -183,7 +200,7 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
       </section>
 
       <section className="ov-card" aria-labelledby="ov-achievements-title" data-overview="achievements">
-        <h2 id="ov-achievements-title" className="ov-card-title">Achievements</h2>
+        <h2 id="ov-achievements-title" ref={achievementsHeading} tabIndex={-1} className="ov-card-title ov-scroll-target">Achievements</h2>
         {achievements.status === 'loading' && <p className="ov-help">Loading your achievements…</p>}
         {achievements.status === 'unavailable' && <p className="ov-help">Your achievements couldn’t be loaded right now.</p>}
         {lists && (

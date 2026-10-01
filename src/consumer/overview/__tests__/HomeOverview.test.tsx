@@ -31,7 +31,7 @@ afterEach(() => {
 
 async function renderHome(state: FakeState, playerId = 'player-1') {
   const { sources } = fakeSources(state);
-  const handlers = { onPlay: vi.fn(), onOpenProgress: vi.fn(), onOpenGameProgress: vi.fn() };
+  const handlers = { onPlay: vi.fn(), onOpenAchievements: vi.fn(), onOpenGameProgress: vi.fn() };
   await act(async () => {
     renderer = create(<HomeOverview playerId={playerId} sources={sources} clock={utcClock} {...handlers} />);
   });
@@ -162,7 +162,7 @@ describe('Home', () => {
     expect(rows.map((node) => node.props['data-achievement'])).toEqual(['first-run']);
     expect(textOf(rows[0]!)).toContain('Not earned yet');
     act(() => buttonNamed(r, 'See all achievements').props.onClick());
-    expect(handlers.onOpenProgress).toHaveBeenCalledTimes(1);
+    expect(handlers.onOpenAchievements).toHaveBeenCalledTimes(1);
     act(() => buttonNamed(r, 'All Mental Math runs and records').props.onClick());
     expect(handlers.onOpenGameProgress).toHaveBeenCalledTimes(1);
   });
@@ -183,11 +183,11 @@ describe('Home', () => {
   it('never shows one player’s reads to another: a new player id starts loading again', async () => {
     const { sources } = fakeSources({ summary: readable(summaryWith([TODAY])), runs: [runEntry('sessionAAAAAAAAAAAA1')] });
     await act(async () => {
-      renderer = create(<HomeOverview playerId="player-1" sources={sources} clock={utcClock} onPlay={vi.fn()} onOpenProgress={vi.fn()} onOpenGameProgress={vi.fn()} />);
+      renderer = create(<HomeOverview playerId="player-1" sources={sources} clock={utcClock} onPlay={vi.fn()} onOpenAchievements={vi.fn()} onOpenGameProgress={vi.fn()} />);
     });
     expect(sources.stats.subscribeToSummary).toHaveBeenCalledTimes(1);
     await act(async () => {
-      renderer!.update(<HomeOverview playerId="player-2" sources={sources} clock={utcClock} onPlay={vi.fn()} onOpenProgress={vi.fn()} onOpenGameProgress={vi.fn()} />);
+      renderer!.update(<HomeOverview playerId="player-2" sources={sources} clock={utcClock} onPlay={vi.fn()} onOpenAchievements={vi.fn()} onOpenGameProgress={vi.fn()} />);
     });
     expect(sources.stats.subscribeToSummary).toHaveBeenCalledTimes(2);
     expect(sources.profile.getProfile).toHaveBeenCalledTimes(2);

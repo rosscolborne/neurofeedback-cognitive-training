@@ -92,6 +92,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationDismissed,
 }) => {
   const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  // Home's "See all achievements" opens Progress at its achievements (NFCT-13).
+  const [progressFocus, setProgressFocus] = useState<'achievements' | null>(null);
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   // The open catalogue game (NFCT-12), and the view it opens on: its start
   // screen, or its progress (NFCT-22's Progress-tab card).
@@ -516,7 +518,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <HomeOverview
                 playerId={client.id}
                 onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id })}
-                onOpenProgress={() => setActiveTab('progress')}
+                onOpenAchievements={() => { setProgressFocus('achievements'); setActiveTab('progress'); }}
                 onOpenGameProgress={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress' })}
               />
             )}
@@ -538,6 +540,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <ProgressOverview
                 playerId={client.id}
                 onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id })}
+                focusSection={progressFocus}
+                onSectionFocused={() => setProgressFocus(null)}
                 games={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress' })} />}
               />
             )}

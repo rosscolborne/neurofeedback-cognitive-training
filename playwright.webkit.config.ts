@@ -27,6 +27,9 @@ const IOS_WEBKIT_SPECS = [
   'mental-math-summary.lifecycle.local.spec.ts',
   // NFCT-12: the Train game catalogue, the way into every game, at phone widths.
   'train-catalogue.self-directed.local.spec.ts',
+  // NFCT-13: Home's Play, streak and achievements, and Progress, after a run
+  // scored by trusted scoring.
+  'home-progress.lifecycle.local.spec.ts',
 ];
 
 export default defineConfig({
