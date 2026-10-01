@@ -1,10 +1,11 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  // Working identity, not the public one: NFCT-34 sets the final bundle ID,
-  // name and Apple team (docs/nfct/ios.md#identity). appId must equal
-  // PRODUCT_BUNDLE_IDENTIFIER in ios/App/App.xcodeproj.
-  appId: 'io.github.rosscolborne.nfct',
+  // The bundle ID is the owner's choice, provisional until its App ID is
+  // registered; it is permanent once an App Store Connect record uses it. The
+  // display name is a working name until NFCT-34 (docs/nfct/ios.md#identity).
+  // appId must equal PRODUCT_BUNDLE_IDENTIFIER in ios/App/App.xcodeproj.
+  appId: 'com.neurofeedbackcognitivetraining.app',
   appName: 'NFCT',
   webDir: 'dist',
   server: {

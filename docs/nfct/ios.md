@@ -16,14 +16,15 @@ still needed for the checks listed under
 
 | | Value | Status |
 | --- | --- | --- |
-| Bundle ID | `io.github.rosscolborne.nfct` | Working placeholder under the repository owner's GitHub namespace |
+| Bundle ID | `com.neurofeedbackcognitivetraining.app` | Chosen by the owner on 1 October 2026; provisional until its App ID is registered |
 | Display name | `NFCT` | Working name |
 | Apple team | none committed | The existing Apple Developer account's team, set outside the repo: [locally](#signing-on-your-mac) or in [Xcode Cloud](#xcode-cloud) |
 | Version / build | `1.0` / `1` | `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` |
 
-NFCT-34 replaces the working identity with the public one (bundle ID, name,
-icon, App Store Connect record) before the first TestFlight build. Until any
-user installs a build, changing the bundle ID costs nothing:
+The bundle ID becomes permanent once an App Store Connect app record uses
+it, and a different bundle ID is a different app with empty storage. Until
+then, for example if the App ID turns out to be unavailable, changing it costs
+nothing:
 
 1. change `appId` in `capacitor.config.ts`;
 2. change both `PRODUCT_BUNDLE_IDENTIFIER` lines in
@@ -31,8 +32,8 @@ user installs a build, changing the bundle ID costs nothing:
 3. run `npm test`; `scripts/__tests__/ios-project.test.mjs` fails if the two
    disagree.
 
-After users have installed it, a new bundle ID is a new app with empty
-storage.
+The display name and icon can change at any time; NFCT-34 sets the public
+ones.
 
 NFCT is a new app in the same Apple Developer account that holds Waveable's
 app, so only the app's own identity had to change. NFCT-30 replaced
@@ -276,10 +277,11 @@ The release model has no long-lived release or beta branch:
 These need the live Apple account and are done by the owner, never by an
 agent. Nothing else in NFCT-30 or NFCT-31 waits for them.
 
-1. Confirm the bundle ID: keep `io.github.rosscolborne.nfct`, or choose
-   another and change it as described in [Identity](#identity).
-2. Register it as an App ID (Certificates, Identifiers & Profiles). It needs
-   no extra capabilities: Bluetooth needs no entitlement.
+1. Register `com.neurofeedbackcognitivetraining.app` as an App ID in
+   Certificates, Identifiers & Profiles. It needs no extra capabilities:
+   Bluetooth needs no entitlement.
+2. If that ID is unavailable, choose another and change it as described in
+   [Identity](#identity) before creating any app record.
 3. Create the NFCT app record in App Store Connect with that bundle ID.
 4. In Xcode, Integrate > Create Workflow for this repository's
    `ios/App/App.xcodeproj` and the `App` scheme, connected to

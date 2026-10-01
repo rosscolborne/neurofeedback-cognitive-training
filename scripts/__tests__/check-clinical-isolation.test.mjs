@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe('check:isolation', () => {
   it('passes a tree with only NFCT identity', () => {
-    expect(runCheck({ 'capacitor.config.ts': "appId: 'io.github.rosscolborne.nfct'" }).status).toBe(0);
+    expect(runCheck({ 'capacitor.config.ts': "appId: 'com.neurofeedbackcognitivetraining.app'" }).status).toBe(0);
   });
 
   it.each([
