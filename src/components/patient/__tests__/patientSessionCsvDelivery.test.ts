@@ -3,7 +3,7 @@ import type { SessionRecord } from '../../../types';
 import { exportPatientSessionCsv } from '../patientSessionCsv';
 
 const rows = [{
-  date: 'Sep 27, 2026', protocol: 'theta-beta-ratio', experience: 'skyline-drift',
+  date: 'Sep 27, 2026', protocol: 'theta-beta-ratio', experience: 'neuro-gambit',
   durationSeconds: 0, timeInZonePercent: 0, averageCoherence: null,
   peakFocusScore: 0, isDemo: true,
 }] as SessionRecord[];

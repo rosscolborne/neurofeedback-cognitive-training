@@ -303,6 +303,6 @@ export function getEarnedBadgeIds(sessions: SessionRecord[], timeZone?: string, 
     earned.add('deep-focus');
   }
   if (typeof gardenStage === 'number' && Number.isFinite(gardenStage) && gardenStage >= 3) earned.add('garden-keeper');
-  // Alpha-dominance duration and visited skyline biomes are not persisted.
+  // Alpha-dominance duration is not persisted, so Still Waters is never recomputed here.
   return earned;
 }

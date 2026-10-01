@@ -10,13 +10,7 @@ import {
   removePatientFields, seedFutureLifecycleAppointment, seedLinkedPatient, seedPendingInvitation, seedSelfDirectedHistory,
 } from './helpers/localEmulator';
 
-const EXPERIENCE_NAMES: Record<string, string> = {
-  'neuro-gambit': 'NeuroGambit', 'immersive-3d': 'Generative XR', 'generative-music': 'Generative Music',
-  'narrative-story': 'Contemplative Reading', 'skyline-drift': 'Skyline Drift', 'tidal-garden': 'Tidal Garden',
-  'breath-weave': 'Breath Weave', 'signal-sort': 'Signal Sort', 'rhythm-lock': 'Rhythm Lock',
-  'media-mode': 'Media Mode', 'soundscape-mode': 'Soundscape Mode', mandala: 'Mandala Breathing',
-  'eeg-mandala': 'Generative Mandala',
-};
+const EXPERIENCE_NAMES: Record<string, string> = { 'neuro-gambit': 'NeuroGambit' };
 const defaults = (protocol: Parameters<typeof getClinicalProtocolTemplate>[0]) => [...getClinicalProtocolTemplate(protocol)!.recommendedExperiences];
 const PATIENT_TABS = ['Home', 'Train', 'Progress', 'Profile'];
 
@@ -67,7 +61,7 @@ async function expectHistory(page: Page, uid: string, sessionId: string) {
   }, uid);
   expect(sessionIds).toContain(sessionId);
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
-  await expect(page.locator('.card-patient').filter({ hasText: 'breath weave' }).first()).toBeVisible();
+  await expect(page.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).first()).toBeVisible();
 }
 
 /** Without an invitation link a self-directed patient has nothing to connect with, on Home or Profile. */
@@ -135,7 +129,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     const setup = patient.getByRole('dialog', { name: 'Training setup' });
     await expect(setup).toContainText('not a diagnosis or a treatment plan');
     await setup.getByRole('radio', { name: /Hardt Alpha Synchrony Protocol/ }).check();
-    await expect(setup).toContainText(`Using the ${alpha.length} defaults for this protocol`);
+    await expect(setup).toContainText('Using the 1 default for this protocol');
     await setup.getByRole('button', { name: 'Save setup' }).click();
     await expect(setup).toHaveCount(0);
     await expectAuthority(patient, 'Self-directed', 'Hardt Alpha Synchrony Protocol');
@@ -146,27 +140,24 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expectTrainCatalogue(patient, alpha);
     expect(await readPatientTrainingRecord(uid)).toMatchObject({ clinicianId: null, assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
 
-    // 3. Customize experiences: the exact list persists and drives Home, Train and session start.
+    // 3. Customizing needs at least one experience; the saved list drives Home, Train and session start.
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
     await patient.getByRole('button', { name: 'Change Training Setup', exact: true }).click();
     await setup.getByRole('button', { name: 'Customize experiences' }).click();
-    await setup.getByRole('checkbox', { name: 'Tidal Garden' }).uncheck();
-    await setup.getByRole('checkbox', { name: 'Signal Sort' }).check();
-    const custom = [...alpha.filter((id) => id !== 'tidal-garden'), 'signal-sort'];
-    await expect(setup).toContainText(`Customized: ${custom.length} of 13 experiences`);
-    await setup.getByRole('button', { name: 'Save setup' }).click();
+    await setup.getByRole('checkbox', { name: 'NeuroGambit' }).uncheck();
+    await expect(setup).toContainText('Customized: 0 of 1 experience');
+    await expect(setup.getByRole('alert')).toContainText('Choose at least one training experience.');
+    await expect(setup.getByRole('button', { name: 'Save setup' })).toBeDisabled();
+    await setup.getByRole('button', { name: 'Use protocol defaults' }).click();
+    await expect(setup).toContainText('Using the 1 default for this protocol');
+    await setup.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(setup).toHaveCount(0);
-    await reloadPatient(patient);
-    await expectTrainCatalogue(patient, custom);
+    expect(await readPatientTrainingRecord(uid)).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
     await patient.getByRole('button', { name: 'Home', exact: true }).click();
-    await expect(patient.getByRole('button', { name: 'Signal Sort', exact: true })).toHaveCount(1);
-    await expect(patient.getByRole('button', { name: 'Tidal Garden', exact: true })).toHaveCount(0);
-    const saved = await readPatientTrainingRecord(uid);
-    expect(new Set(saved.allowedExperiences)).toEqual(new Set(custom));
-    expect(saved.allowedExperiences).toHaveLength(custom.length);
-    await startPatientTrainingInDemoMode(patient, 'Signal Sort');
-    // Session start honors the customized list: the Signal Sort game itself is running.
-    await expect(patient.getByRole('meter', { name: 'Stillness' })).toBeVisible();
+    await expect(patient.getByRole('button', { name: 'NeuroGambit', exact: true })).toHaveCount(1);
+    await startPatientTrainingInDemoMode(patient, 'NeuroGambit');
+    // Session start honors the saved list: NeuroGambit itself is running.
+    await expect(patient.getByRole('group', { name: 'Training track' })).toBeVisible();
     await expect(patient.getByRole('button', { name: 'End Session & Save' })).toBeVisible();
     await reloadPatient(patient);
 
@@ -419,7 +410,8 @@ test('a clinician can end the relationship from the phone roster without deletin
 });
 
 test('an unlinked legacy profile without assignment fields stays usable and can be configured', async ({ browser }) => {
-  // Legacy field-missing records keep the established full-catalogue fallback until the patient chooses.
+  // Legacy field-missing records keep the full-catalogue fallback until the patient chooses; that catalogue is
+  // now NeuroGambit alone, which matches the default protocol's defaults.
   const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
   await removePatientFields(fixture.patient.uid, ['allowedExperiences', 'assignedProtocol']);
   const context = await browser.newContext();
@@ -432,7 +424,7 @@ test('an unlinked legacy profile without assignment fields stays usable and can 
     await page.getByRole('button', { name: 'Home', exact: true }).click();
     await page.getByRole('button', { name: 'Change training setup', exact: true }).click();
     const setup = page.getByRole('dialog', { name: 'Training setup' });
-    await expect(setup).toContainText('Customized: 13 of 13 experiences');
+    await expect(setup).toContainText('Using the 1 default for this protocol');
     await setup.getByRole('radio', { name: /Peniston Alpha-Theta Protocol/ }).check();
     await setup.getByRole('button', { name: 'Save setup' }).click();
     await expect(setup).toHaveCount(0);

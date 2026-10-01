@@ -4,7 +4,7 @@ import { assessQeegRecord, deriveLearningScorePoints, deriveSessionBandRows, for
 
 const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 's1', patientId: 'p1', patientName: 'Patient', clinicId: 'c1', date: 'Sep 19, 2026', timestamp: 1,
-  protocol: 'theta-beta-ratio', experience: 'skyline-drift', durationSeconds: 60, timeInZonePercent: 0,
+  protocol: 'theta-beta-ratio', experience: 'neuro-gambit', durationSeconds: 60, timeInZonePercent: 0,
   averageCoherence: null, peakFocusScore: 0,
   averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
   metricProvenance: { averageBands: { algorithm: 'welch-psd', version: '1', source: 'brainflow' } },

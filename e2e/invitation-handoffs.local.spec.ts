@@ -196,13 +196,10 @@ test('first-time patient signup retains the signed-out invitation deep link', as
     expect(assigned.protocol).toBe('alpha-enhancement');
     expect(assigned.allowed).toEqual(getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences);
     await patient.getByRole('button', { name: 'Home', exact: true }).click();
-    for (const name of ['Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing']) {
-      await expect(patient.getByRole('button', { name, exact: true })).toHaveCount(1);
-    }
-    await expect(patient.getByRole('button', { name: 'NeuroGambit', exact: true })).toHaveCount(0);
+    await expect(patient.getByRole('button', { name: 'NeuroGambit', exact: true })).toHaveCount(1);
     await patient.getByRole('button', { name: 'Train', exact: true }).click();
     await expect(patient.locator('main .card-patient')).toHaveCount(assigned.allowed!.length);
-    await expect(patient.locator('main .card-patient').getByText('NeuroGambit', { exact: true })).toHaveCount(0);
+    await expect(patient.locator('main .card-patient').getByText('NeuroGambit', { exact: true })).toHaveCount(1);
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await expect(patient.getByRole('alert').filter({ hasText: 'already connected to a clinician' })).toHaveCount(0);

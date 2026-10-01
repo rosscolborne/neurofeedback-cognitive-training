@@ -162,7 +162,7 @@ const sessionDocument = (id: string, patientId: string) => ({
   exists: () => true,
   data: (): SessionRecord => ({
     id, patientId, patientName: patientId, clinicId: 'clinic-1', clinicianId: 'clinician-1',
-    date: '', timestamp: 100, protocol: 'theta-beta-ratio', experience: 'skyline-drift',
+    date: '', timestamp: 100, protocol: 'theta-beta-ratio', experience: 'neuro-gambit',
     durationSeconds: 10, timeInZonePercent: 10, averageCoherence: null, peakFocusScore: 10,
     averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
     timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0,
@@ -660,7 +660,7 @@ describe('idempotent compatibility session saves', () => {
     const startingCount = patient.completedSessionsCount;
     const session = {
       id: 'idempotency-test', patientId: patient.id, patientName: patient.name, clinicId: 'demo-clinic',
-      date: '', timestamp: 100, protocol: 'theta-beta-ratio' as const, experience: 'skyline-drift' as const,
+      date: '', timestamp: 100, protocol: 'theta-beta-ratio' as const, experience: 'neuro-gambit' as const,
       durationSeconds: 10, timeInZonePercent: 50, averageCoherence: null, peakFocusScore: 50,
       averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 }, timeSeries: [],
       adaptiveAdjustmentsCount: 0, finalThreshold: 0, isDemo: true,
@@ -770,7 +770,7 @@ describe('production and sample workspace separation', () => {
     expect((firestore.setDoc.mock.calls[1][1] as ClientProfile).allowedExperiences).toEqual([]);
   });
 
-  it('saves and reloads a template assignment that excludes NeuroGambit', async () => {
+  it('saves and reloads a template assignment exactly', async () => {
     const template = getClinicalProtocolTemplate('alpha-enhancement')!;
     const patient = { ...createBlankProfile('patient-1', 'patient@example.test'),
       allowedExperiences: [...template.recommendedExperiences] };
@@ -778,11 +778,9 @@ describe('production and sample workspace separation', () => {
     firestore.setDoc.mockImplementationOnce(async (_ref: unknown, payload: ClientProfile) => { persisted = payload; });
     await storageEngine.saveClient(patient);
     expect(persisted.allowedExperiences).toEqual(template.recommendedExperiences);
-    expect(persisted.allowedExperiences).not.toContain('neuro-gambit');
     firestore.getDoc.mockResolvedValueOnce({ id: patient.id, exists: () => true, data: () => persisted });
     const reloaded = await storageEngine.getClient(patient.id);
     expect(reloaded?.allowedExperiences).toEqual(template.recommendedExperiences);
-    expect(reloaded?.allowedExperiences).not.toContain('neuro-gambit');
   });
 
   it('deletes a stale custom template when switching protocol and reloads the selected assignment', async () => {
@@ -952,7 +950,8 @@ describe('authenticated simulator session persistence', () => {
     );
     const session = {
       ...sessionDocument('simulated-session', 'patient-1').data(),
-      experience: 'tidal-garden' as const,
+      experience: 'neuro-gambit' as const,
+      protocol: 'alpha-enhancement' as const,
       timeInZonePercent: 80,
       isDemo: true,
       clinicianId: undefined,
@@ -1004,55 +1003,6 @@ describe('authenticated simulator session persistence', () => {
 
     await expect(storageEngine.createSession(session)).resolves.toMatchObject({ created: false });
     expect(transactionSet).not.toHaveBeenCalled();
-  });
-});
-
-describe('Tidal Garden initialization', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    deactivateClinicianDemoWorkspace();
-    state.auth.currentUser = { uid: 'patient-1' };
-  });
-
-  it('starts a blank real profile at stage one', () => {
-    expect(createBlankProfile('patient-1', 'patient@example.com').tidalGardenState).toEqual({
-      stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '',
-    });
-  });
-
-  it('initializes only the missing field in one transaction and leaves existing growth alone', async () => {
-    const stored = { ...createBlankProfile('patient-1', 'patient@example.com'), tidalGardenState: undefined as ClientProfile['tidalGardenState'], notes: 'concurrent note' };
-    const transactionSet = vi.fn((_ref, payload) => Object.assign(stored, payload));
-    firestore.runTransaction.mockImplementation(async (_db, callback) => callback({
-      get: vi.fn(async () => ({ id: 'patient-1', exists: () => true, data: () => ({ ...stored }) })),
-      update: transactionSet,
-    }));
-    const first = await storageEngine.ensureTidalGardenState('patient-1');
-    expect(first.tidalGardenState?.stage).toBe(1);
-    expect(transactionSet).toHaveBeenCalledWith(expect.anything(), { tidalGardenState: first.tidalGardenState });
-    stored.tidalGardenState = { stage: 3, growthPoints: 501, plantsUnlocked: ['existing'], lastWatered: 'date' };
-    const second = await storageEngine.ensureTidalGardenState('patient-1');
-    expect(second.tidalGardenState).toEqual(stored.tidalGardenState);
-    expect(transactionSet).toHaveBeenCalledOnce();
-    expect(stored.notes).toBe('concurrent note');
-  });
-
-  it('fails explicitly for a missing profile or transaction denial', async () => {
-    firestore.runTransaction.mockImplementationOnce(async (_db, callback) => callback({
-      get: vi.fn().mockResolvedValue({ id: 'patient-1', exists: () => false }), update: vi.fn(),
-    }));
-    await expect(storageEngine.ensureTidalGardenState('patient-1')).rejects.toThrow('profile is unavailable');
-    firestore.runTransaction.mockRejectedValueOnce(new Error('permission-denied'));
-    await expect(storageEngine.ensureTidalGardenState('patient-1')).rejects.toThrow('permission-denied');
-  });
-
-  it('keeps sample initialization entirely in memory', async () => {
-    activateClinicianDemoWorkspace();
-    const sample = INITIAL_DEMO_CLIENTS[0];
-    const first = await storageEngine.ensureTidalGardenState(sample.id);
-    expect(first.tidalGardenState).toEqual(sample.tidalGardenState);
-    expect(firestore.runTransaction).not.toHaveBeenCalled();
-    expect(firestore.getDoc).not.toHaveBeenCalled();
   });
 });
 
@@ -1311,7 +1261,6 @@ describe('patient invitation linking', () => {
     const expected = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
     expect(linked.assignedProtocol).toBe('alpha-enhancement');
     expect(linked.allowedExperiences).toEqual(expected);
-    expect(linked.allowedExperiences).not.toContain('neuro-gambit');
     expect(writes[0].allowedExperiences).toEqual(linked.allowedExperiences);
   });
 
@@ -1349,7 +1298,6 @@ describe('patient invitation linking', () => {
       assignedProtocol: 'alpha-enhancement', allowedExperiences: expected,
       completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: previous.tidalGardenState,
     });
-    expect(linked.allowedExperiences).not.toContain('neuro-gambit');
     expect(linked.customProtocolConfig).toBeUndefined();
     expect(writes[0]).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: expected,
       customProtocolConfig: { __deleteField: true }, tidalGardenState: previous.tidalGardenState });
@@ -1797,22 +1745,22 @@ describe('self-directed training setup', () => {
     expect(saved.customProtocolConfig).toBeUndefined();
   });
 
-  it('persists an exact customized list in catalogue order', async () => {
+  it('persists a deduplicated list in catalogue order', async () => {
     const update = transaction(unlinked());
-    await storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'smr-enhancement', allowedExperiences: ['tidal-garden', 'neuro-gambit', 'tidal-garden'] });
-    expect(update.mock.calls[0][1]).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit', 'tidal-garden'] });
+    await storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit', 'neuro-gambit'] });
+    expect(update.mock.calls[0][1]).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit'] });
   });
 
   it.each([
     ['canonical link', { clinicianId: 'clinician-1', clinicId: 'clinic-1' }],
     ['legacy link', { linkedClinicianCode: 'clinician-1' }],
   ])('refuses to overwrite a clinician-managed assignment (%s) and returns the current profile', async (_label, link) => {
-    const clinicianAssigned = { ...unlinked(), ...link, assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'], customProtocolConfig: undefined };
+    const clinicianAssigned = { ...unlinked(), ...link, assignedProtocol: 'smr-enhancement', allowedExperiences: [], customProtocolConfig: undefined };
     const update = transaction(clinicianAssigned);
-    const attempt = storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['tidal-garden'] });
+    const attempt = storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] });
     await expect(attempt).rejects.toBeInstanceOf(ClinicianManagedTrainingError);
     await attempt.catch((error: ClinicianManagedTrainingError) => {
-      expect(error.current).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'] });
+      expect(error.current).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: [] });
     });
     expect(update).not.toHaveBeenCalled();
   });
@@ -1820,18 +1768,18 @@ describe('self-directed training setup', () => {
   it('validates before any read and refuses another account, deletion, and missing profiles', async () => {
     await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: [] }))
       .rejects.toThrow('Choose at least one training experience.');
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'individualized-upper-alpha', allowedExperiences: ['mandala'] }))
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'individualized-upper-alpha', allowedExperiences: ['neuro-gambit'] }))
       .rejects.toThrow('not available for self-directed training');
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('other-patient', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }))
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('other-patient', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }))
       .rejects.toThrow('Sign in as this patient');
     expect(firestore.runTransaction).not.toHaveBeenCalled();
 
     const deletingUpdate = transaction({ ...unlinked(), accountDeletionStartedAt: new Date() });
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }))
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }))
       .rejects.toThrow('account deletion');
     expect(deletingUpdate).not.toHaveBeenCalled();
     transaction(null);
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }))
+    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }))
       .rejects.toThrow('profile is unavailable');
   });
 });
@@ -1839,7 +1787,7 @@ describe('self-directed training setup', () => {
 describe('patient-initiated clinician disconnect', () => {
   const linked = (): ClientProfile => ({
     ...createBlankProfile('patient-1', 'patient@example.test'), clinicianId: 'clinician-1', clinicId: 'clinic-1',
-    acceptedInvitationId: 'CODE-AAAA-AAAA', assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'],
+    acceptedInvitationId: 'CODE-AAAA-AAAA', assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit'],
     completedSessionsCount: 4, badges: ['garden-keeper'],
   });
   const appointment = (id: string, clinicianId: string, startsAt: number, status = 'scheduled') => ({
@@ -1889,7 +1837,7 @@ describe('patient-initiated clinician disconnect', () => {
       clinicianId: null, linkedClinicianCode: null, clinicId: null, acceptedInvitationId: null, updatedAt: { __serverTimestamp: true },
     });
     // The last clinician assignment stays as the self-directed starting point; history is untouched.
-    expect(result).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['signal-sort'], completedSessionsCount: 4, badges: ['garden-keeper'] });
+    expect(result).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit'], completedSessionsCount: 4, badges: ['garden-keeper'] });
     expect(result.clinicianId).toBeUndefined();
     expect(result.clinicId).toBeUndefined();
     expect(result.acceptedInvitationId).toBeUndefined();

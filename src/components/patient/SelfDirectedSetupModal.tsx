@@ -141,7 +141,7 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
                     <span style={{ fontSize: '14px', fontWeight: 650, color: 'var(--text-primary)' }}>{option.name}</span>
                     <span style={{ fontSize: '12px', lineHeight: 1.45, color: 'var(--text-secondary)' }}>{option.description}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                      {option.focus} · {option.defaultExperiences.length} default experiences
+                      {option.focus} · {option.defaultExperiences.length} default {option.defaultExperiences.length === 1 ? 'experience' : 'experiences'}
                     </span>
                   </span>
                 </label>
@@ -156,8 +156,8 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
                   <div style={{ fontSize: '14px', fontWeight: 650 }}>Experiences</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                     {usesDefaults
-                      ? `Using the ${experiences.length} defaults for this protocol`
-                      : `Customized: ${experiences.length} of ${EXPERIENCE_IDS.length} experiences`}
+                      ? `Using the ${experiences.length} ${experiences.length === 1 ? 'default' : 'defaults'} for this protocol`
+                      : `Customized: ${experiences.length} of ${EXPERIENCE_IDS.length} ${EXPERIENCE_IDS.length === 1 ? 'experience' : 'experiences'}`}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>

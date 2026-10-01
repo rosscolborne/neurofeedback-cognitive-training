@@ -17,7 +17,7 @@ import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemp
 const base: ClientProfile = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com',
   condition: 'ADHD (Inattentive)', status: 'active',
-  allowedExperiences: ['skyline-drift'], brainMaps: [], badges: [],
+  allowedExperiences: ['neuro-gambit'], brainMaps: [], badges: [],
   completedSessionsCount: 0, currentStreak: 0,
 };
 

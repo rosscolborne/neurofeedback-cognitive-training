@@ -235,14 +235,6 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
     iconName: 'Compass',
     unlockedAt: undefined,
   },
-  {
-    id: 'skyline-explorer',
-    title: 'Skyline Pilot',
-    description: 'Soared through 5 distinct procedurally generated flight biomes.',
-    category: 'exploration',
-    iconName: 'Send',
-    unlockedAt: undefined,
-  },
 ];
 
 export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
@@ -278,7 +270,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'ADHD (Inattentive)',
     status: 'active',
     assignedProtocol: 'theta-beta-ratio',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift', 'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit'],
+    allowedExperiences: ['neuro-gambit'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 14,
     currentStreak: 5,
@@ -287,7 +279,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     lastSessionDate: 'Today, 9:45 AM',
     nextSessionDate: 'Tomorrow, 10:00 AM',
     isDemo: true,
-    notes: 'Responds well to Skyline Drift visual neuro-luminosity. Frontal theta suppression target at AF7/AF8 (virtual Fz).',
+    notes: 'Frontal theta suppression target at AF7/AF8 (virtual Fz).',
     brainMaps: [
       {
         id: 'qeeg-sarah-baseline',
@@ -323,7 +315,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Generalized Anxiety',
     status: 'active',
     assignedProtocol: 'alpha-enhancement',
-    allowedExperiences: ['neuro-gambit', 'immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
+    allowedExperiences: ['neuro-gambit'],
     prescribedSessionsPerWeek: 3,
     completedSessionsCount: 9,
     currentStreak: 3,
@@ -351,7 +343,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Stress / Insomnia',
     status: 'paused',
     assignedProtocol: 'beta-downtraining',
-    allowedExperiences: ['neuro-gambit', 'immersive-3d', 'generative-music', 'narrative-story', 'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala'],
+    allowedExperiences: ['neuro-gambit'],
     prescribedSessionsPerWeek: 3,
     completedSessionsCount: 6,
     currentStreak: 0,
@@ -379,7 +371,7 @@ export const INITIAL_DEMO_CLIENTS: ClientProfile[] = [
     condition: 'Peak Performance',
     status: 'active',
     assignedProtocol: 'smr-enhancement',
-    allowedExperiences: ['immersive-3d', 'generative-music', 'narrative-story', 'signal-sort', 'rhythm-lock', 'skyline-drift', 'eeg-mandala', 'neuro-gambit'],
+    allowedExperiences: ['neuro-gambit'],
     prescribedSessionsPerWeek: 4,
     completedSessionsCount: 18,
     currentStreak: 8,
@@ -413,7 +405,7 @@ export const INITIAL_DEMO_MESSAGES: MessageThread[] = [
       {
         id: 'm1',
         sender: 'clinician',
-        text: 'Hi Sarah, I reviewed your Skyline Drift sessions from this week. Your Theta/Beta ratio showed steady suppression during the 15-minute mark.',
+        text: 'Hi Sarah, I reviewed your sessions from this week. Your Theta/Beta ratio showed steady suppression during the 15-minute mark.',
         timestamp: 'Aug 21, 4:30 PM',
         isRead: true,
       },
@@ -451,7 +443,7 @@ export const INITIAL_DEMO_MESSAGES: MessageThread[] = [
       {
         id: 'm201',
         sender: 'clinician',
-        text: 'Hi David, how is the Tidal Garden alpha training experience feeling for your evening wind-down?',
+        text: 'Hi David, how is the alpha training feeling for your evening wind-down?',
         timestamp: 'Aug 20, 1:00 PM',
         isRead: true,
       },
@@ -482,7 +474,7 @@ export const INITIAL_DEMO_MESSAGES: MessageThread[] = [
       {
         id: 'm302',
         sender: 'patient',
-        text: 'The Signal Sort task has really helped me dial in stillness before high-stakes presentations.',
+        text: 'Training has really helped me dial in stillness before high-stakes presentations.',
         timestamp: 'Aug 24, 8:00 AM',
         isRead: true,
       },
@@ -499,7 +491,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     date: 'Aug 25, 2026',
     timestamp: Date.now() - 1000 * 60 * 60 * 2,
     protocol: 'theta-beta-ratio',
-    experience: 'skyline-drift',
+    experience: 'neuro-gambit',
     durationSeconds: 1500, // 25 min
     timeInZonePercent: 84,
     averageCoherence: 80,
@@ -528,7 +520,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     date: 'Aug 23, 2026',
     timestamp: Date.now() - 1000 * 60 * 60 * 48,
     protocol: 'theta-beta-ratio',
-    experience: 'signal-sort',
+    experience: 'neuro-gambit',
     durationSeconds: 1500,
     timeInZonePercent: 79,
     averageCoherence: 76,
@@ -556,7 +548,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     date: 'Aug 24, 2026',
     timestamp: Date.now() - 1000 * 60 * 60 * 20,
     protocol: 'alpha-enhancement',
-    experience: 'tidal-garden',
+    experience: 'neuro-gambit',
     durationSeconds: 1500,
     timeInZonePercent: 78,
     averageCoherence: 82,
@@ -584,7 +576,7 @@ export const INITIAL_DEMO_SESSIONS: SessionRecord[] = [
     date: 'Aug 24, 2026',
     timestamp: Date.now() - 1000 * 60 * 60 * 26,
     protocol: 'smr-enhancement',
-    experience: 'signal-sort',
+    experience: 'neuro-gambit',
     durationSeconds: 1800,
     timeInZonePercent: 91,
     averageCoherence: 88,
@@ -618,7 +610,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     durationMinutes: 45,
     type: 'remote-training',
     protocol: 'theta-beta-ratio',
-    experience: 'skyline-drift',
+    experience: 'neuro-gambit',
     status: 'scheduled',
     notes: 'Supervised remote session. Target Fz virtual midline theta suppression with Muse S Athena.',
     isDemo: true,
@@ -635,7 +627,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     durationMinutes: 30,
     type: 'protocol-review',
     protocol: 'alpha-enhancement',
-    experience: 'tidal-garden',
+    experience: 'neuro-gambit',
     status: 'scheduled',
     notes: 'Review posterior alpha synchrony and adjust adaptive step sensitivity.',
     isDemo: true,
@@ -652,7 +644,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     durationMinutes: 30,
     type: 'remote-training',
     protocol: 'smr-enhancement',
-    experience: 'signal-sort',
+    experience: 'neuro-gambit',
     status: 'scheduled',
     notes: 'Morning executive flow training.',
     isDemo: true,
@@ -669,7 +661,7 @@ export const INITIAL_DEMO_APPOINTMENTS: CalendarAppointment[] = [
     durationMinutes: 60,
     type: 'in-clinic-evaluation',
     protocol: 'beta-downtraining',
-    experience: 'breath-weave',
+    experience: 'neuro-gambit',
     status: 'completed',
     notes: 'In-clinic 19-channel EEG baseline and impedance check conducted.',
     isDemo: true,
@@ -1544,30 +1536,6 @@ class StorageEngine {
 
     const snapshot = await getDoc(doc(db, 'clients', user.uid));
     return snapshot.exists() ? readClientProfile(snapshot.data(), snapshot.id) : null;
-  }
-
-  /** Initialize only a missing garden field; the transaction preserves concurrent growth and care fields. */
-  public async ensureTidalGardenState(patientId: string): Promise<ClientProfile> {
-    if (this.isDemoWorkspace()) {
-      const index = this.demoClients.findIndex((client) => client.id === patientId);
-      if (index < 0) throw new Error('Patient profile is unavailable. Try again.');
-      const current = this.demoClients[index];
-      if (current.tidalGardenState) return current;
-      const updated = { ...current, tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' } };
-      this.demoClients[index] = updated;
-      return updated;
-    }
-    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to open Tidal Garden.');
-    const clientRef = doc(db, 'clients', patientId);
-    return runTransaction(db, async (transaction) => {
-      const snapshot = await transaction.get(clientRef);
-      if (!snapshot.exists()) throw new Error('Patient profile is unavailable. Try again.');
-      const current = readClientProfile(snapshot.data(), snapshot.id);
-      if (current.tidalGardenState) return current;
-      const tidalGardenState = { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' };
-      transaction.update(clientRef, { tidalGardenState });
-      return { ...current, tidalGardenState };
-    });
   }
 
   public setCurrentClientId(id: string) {

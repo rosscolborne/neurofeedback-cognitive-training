@@ -11,7 +11,7 @@ import { PostSessionSummary } from '../PostSessionSummary';
 const session: SessionRecord = {
   id: 'sess-durable', patientId: 'patient-1', patientName: 'Patient One', clinicId: 'clinic-1',
   clinicianId: 'clinician-1', date: 'Sep 19, 2026', timestamp: 1,
-  protocol: 'alpha-enhancement', experience: 'tidal-garden', durationSeconds: 60,
+  protocol: 'alpha-enhancement', experience: 'neuro-gambit', durationSeconds: 60,
   timeInZonePercent: 50, averageCoherence: null, timeSeries: [],
   adaptiveAdjustmentsCount: 0, finalThreshold: 11, isDemo: true,
 };
