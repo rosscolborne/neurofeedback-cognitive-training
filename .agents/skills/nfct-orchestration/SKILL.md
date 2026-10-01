@@ -108,8 +108,8 @@ only when explicitly delegated, and never a PR it implemented or integrated.
 If an upstream contract changes (a type, path, rule or interface), pause the
 downstream streams that depend on it. Reassess their plans, have their owners
 rebase them, or stop them, rather than letting them finish against a stale
-contract. Once integration has merged a stream, its owner adds fixes as new
-commits instead of rebasing (see
+contract. Once integration of a stream has started, its owner adds fixes as
+new commits instead of rebasing (see
 [nfct-integration](../nfct-integration/SKILL.md#inventory-the-streams)).
 
 ## Report

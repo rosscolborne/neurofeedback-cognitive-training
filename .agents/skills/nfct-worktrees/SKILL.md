@@ -59,8 +59,8 @@ git log --oneline origin/main..HEAD   # only this task's commits
 git merge-base --is-ancestor origin/main HEAD && echo "based on origin/main"
 ```
 
-Only the branch's owner rebases it, and not once an integration has merged
-it: then fixes go on as new commits (see
+Only the branch's owner rebases it, and not once integration of it has
+started: then fixes go on as new commits (see
 [nfct-integration](../nfct-integration/SKILL.md#inventory-the-streams)). If a
 rebase rewrites published history, push with `git push --force-with-lease`,
 never plain `--force`.
@@ -250,7 +250,7 @@ wt="$PRIMARY-NFCT-18"
 
 ```bash
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
-wt="$PRIMARY-review-pr<n>"   # or "$PRIMARY-qa-pr<n>", "$PRIMARY-integration-check-<slug>"
+wt="$PRIMARY-review-pr<n>"   # or -qa-pr<n>, -qa-<slug>, -integration-check-<slug>
 (
   set -eu
   stop() { echo "STOP: $*" >&2; exit 1; }
