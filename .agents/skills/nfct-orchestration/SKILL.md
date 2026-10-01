@@ -37,9 +37,13 @@ its procedure rather than restating it.
   same surface; sequence them, or land the shared contract first.
 - Give each writable stream its own worktree, created from the right base per
   [nfct-worktrees](../nfct-worktrees/SKILL.md#create).
-- The emulator and Vite ports are fixed per machine. Schedule emulator-backed
-  runs (the rules, Functions and Playwright suites, and browser QA) one at a
-  time across streams.
+- The emulator and Vite ports are fixed, so each environment needs its own
+  network. On Linux, give each stream and each QA agent its own
+  [QA lane](../../../AGENTS.md#parallel-agents-qa-lanes), named after it, and
+  tell it to `down` the lane when it finishes. Emulator-backed runs (the
+  rules, repository, Functions and Playwright suites, and browser QA) then run
+  in parallel across lanes, one at a time within a lane. Without lanes,
+  schedule them one at a time across streams.
 - Keep each implementation stream scoped to its card. A stream that finds
   unrelated work hands it back as
   [out-of-scope work](../../../AGENTS.md#out-of-scope-work) instead of

@@ -73,14 +73,17 @@ back in. Watch the console throughout.
    an unpushed integration check, at the check's local SHA).
    Install what the branch's [Checks](../../../AGENTS.md#checks) install.
 2. Start the emulators and app per
-   [Running locally](../../../AGENTS.md#running-locally). Also start every
+   [Running locally](../../../AGENTS.md#running-locally), in your own
+   [QA lane](../../../AGENTS.md#parallel-agents-qa-lanes) named after the run
+   (for example `qa-pr42`): one QA environment per lane, browser included.
+   Also start every
    emulator the branch's `firebase.json` configures that the flow depends on,
    building what it loads first (for example `functions`, where trusted
    processing runs). Without it, server-side results never appear; that is a
    gap in your environment, not a product bug.
-3. The emulator and Vite ports are fixed, so only one QA environment can run
-   per machine. If a port is taken, find out whose process holds it; never
-   stop another agent's processes.
+3. Without lanes, only one QA environment can run per machine. If a port is
+   taken, find out whose process holds it. Never stop another agent's
+   processes or lanes.
 4. Create accounts through the UI where you can, since that also exercises
    sign-up. Seed only preconditions that are slow or impossible to reach
    through the UI, and only in the emulators: for example with the seeders in
@@ -107,11 +110,48 @@ testing; it proves nothing about hardware.
 
 ## Drive the browser
 
-When a browser-control tool is available (such as Claude in Chrome, a
-Playwright MCP server, or your agent's built-in browser), use it; reading the
-source is not a substitute. Without one, drive a real browser from a scratch
-Playwright script kept outside the repository. If you cannot drive a browser
-at all, report the run BLOCKED. Never mark a scenario PASS from code alone.
+Operate the running app step by step in a real browser, as a user would, and
+look at the result of each step; reading the source is not a substitute. If
+you cannot drive a browser at all, report the run BLOCKED. Never mark a
+scenario PASS from code alone. Choose the tool:
+
+1. **Your agent's own browser tool** (such as Claude in Chrome), only when it
+   can reach the app and really shows a visible page at the size under test:
+   check `innerWidth`, `innerHeight` and that `document.hidden` is `false`. A
+   hidden tab pauses games and ignores resizing. A browser outside your lane
+   cannot reach servers inside it.
+2. **Otherwise, `scripts/qa-browser.sh`**: the pinned Playwright CLI driving
+   the installed Google Chrome (it needs Chrome, as the Playwright suites do)
+   inside your lane, with device profiles. Download it once, outside the lane,
+   with `scripts/qa-browser.sh --fetch`. Then, for lane `qa-pr42`:
+
+   ```bash
+   scripts/qa-browser.sh qa-pr42 -s=se open http://127.0.0.1:5193/ --device "iPhone SE (3rd gen)"
+   scripts/qa-browser.sh qa-pr42 -s=se snapshot     # accessibility tree with refs (e15, ...)
+   scripts/qa-browser.sh qa-pr42 -s=se click e15    # also: fill <ref> <text>, press <key>, mousewheel 0 600, go-back, reload
+   scripts/qa-browser.sh qa-pr42 -s=se eval "() => [innerWidth, document.documentElement.scrollWidth, document.hidden]"
+   scripts/qa-browser.sh qa-pr42 -s=se console      # errors and warnings
+   scripts/qa-browser.sh qa-pr42 -s=se screenshot --filename=<evidence dir>/se-home.png
+   scripts/qa-browser.sh qa-pr42 -s=se network-state-set offline   # and online
+   scripts/qa-browser.sh qa-pr42 -s=se close
+   ```
+
+   Open a second session for the larger phone (`-s=i17 open ... --device
+   "iPhone 17"`). `--help` lists every command. Output not saved with
+   `--filename` goes to the ignored `.playwright-cli/`; keep evidence outside
+   the repository. `click` sends mouse events even under a phone profile; for
+   touch-only handlers use `run-code` with `locator.tap()`. Timed games keep
+   running between your tool calls, so pause before a long look, or read and
+   answer in one call with `run-code` and role locators
+   (`page.getByRole(...)`), which is still user input.
+3. **Otherwise**, a scratch Playwright script outside the repository.
+
+`eval` and `run-code` are for observing and for user-like input, never for
+calling app internals. In a lane, the page reports online and
+`network-state-set offline` and `online` toggle it, but nothing off the
+machine is reachable: Google Fonts cannot load, so text falls back to system
+fonts and the console shows that one request failing. Both come from the
+lane, not the app; leave exact typography to a HUMAN CHECK.
 
 At each step, observe:
 
@@ -159,15 +199,22 @@ Choose from these by risk; not every item applies to every change.
   scores, feedback, timers or messages change; keyboard navigation, visible
   focus and where focus lands after each step; stale UI after state changes;
   whether the journey is coherent from start to finish.
-- **Phone sizes** (required for every user-facing change): repeat the changed
-  flow in portrait at 375 × 667 (iPhone SE) and at about 400 pt wide
-  (iPhone 17), with touch emulation where the tool allows, as well as at
-  desktop size. Look for horizontal scrolling, clipped or overlapping text,
-  primary actions below the fold, and touch targets under 44 pt. Where you
-  can drive WebKit (for example a scratch Playwright script with `webkit` and
-  `devices['iPhone SE (3rd gen)']`), run the smoke path there too. A desktop
-  browser at a phone width is not WebKit, and WebKit is not iOS: name what you
-  actually used. See the [device layers](../neurasticity-development-testing/SKILL.md#phones-webkit-and-ios).
+- **Phone sizes** (required for every user-facing UI change): operate the
+  changed UI [interactively](#drive-the-browser), in portrait, at 375 × 667
+  (iPhone SE (3rd gen)) and at about 400 pt wide (iPhone 17), with touch, as
+  well as at desktop size. Actually navigate and use it: scroll; open and
+  close modals and dialogs; fill and submit forms, including validation; and
+  check sticky and fixed controls while scrolling, clipped or overlapping
+  text, horizontal overflow (`scrollWidth` wider than `innerWidth`),
+  responsive states, primary actions below the fold, touch targets under
+  44 pt, and console errors. Screenshots or automated viewport tests alone do
+  not satisfy this. Label this evidence "Chromium mobile emulation — not
+  iOS/Safari evidence". Where you can also drive Playwright WebKit (for
+  example a scratch script with `webkit` and
+  `devices['iPhone SE (3rd gen)']`), run the smoke path there and label it
+  "WebKit on Linux — not iOS". This complements the deterministic WebKit
+  suite and the iOS Simulator and replaces neither; see the
+  [device layers](../neurasticity-development-testing/SKILL.md#phones-webkit-and-ios).
 
 ## When something fails
 
@@ -212,15 +259,17 @@ the app.
 
 ## Finish
 
-Stop the emulators and dev server you started, so the next run or test suite
-can use the ports, then remove your QA worktree per
+`down` your lane, which stops the emulators, dev server and browser in it
+(without a lane, stop the ones you started so the next run can use the
+ports), then remove your QA worktree per
 [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-review-qa-and-integration-check-worktrees).
 Keep the evidence until the findings are handed over.
 
 ## Report
 
 Start with the branch and SHA tested, the emulators, the browser tooling and
-the accounts used. Then give one row per scenario:
+devices with their evidence labels, and the accounts used. Then give one row
+per scenario:
 
 | Scenario | Role | Result | Evidence / Notes | Follow-up |
 | --- | --- | --- | --- | --- |
