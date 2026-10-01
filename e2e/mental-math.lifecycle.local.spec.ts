@@ -79,10 +79,20 @@ async function answer(page: Page, correct: boolean, thinkMs = 1_200): Promise<nu
   return response;
 }
 
-/** Lets the remaining active time run out: unanswered questions time out, the last is discarded at 90 s. */
+/**
+ * Lets the remaining active time run out: unanswered questions time out, the
+ * last is discarded at 90 s. Page time stops as soon as the run has ended, so
+ * the save's own real-time bounds (the EEG consent check gives the server
+ * 1.5 s) are not fast-forwarded past before the network can answer.
+ */
 async function runOut(page: Page): Promise<void> {
-  await page.clock.runFor(200_000);
-  await expect(page.getByRole('heading', { name: 'Run complete', exact: true })).toBeVisible();
+  const ended = page.getByRole('heading', { name: 'Run complete', exact: true });
+  for (let step = 0; step < 1_000 && !(await ended.isVisible()); step += 1) {
+    const [minutes, seconds] = ((await hud(page, 'time').textContent().catch(() => null)) ?? '0:00').split(':').map(Number);
+    // Whole seconds while the run is far from its end, then 100 ms at a time.
+    await page.clock.runFor((minutes ?? 0) * 60 + (seconds ?? 0) > 3 ? 1_000 : 100);
+  }
+  await expect(ended).toBeVisible();
 }
 
 /** Page time flows again so the queued write reaches the emulator; the handoff reports it. */

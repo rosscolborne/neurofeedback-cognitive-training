@@ -141,7 +141,7 @@ describe('MentalMathScreen', () => {
     expect(h.hud('level')).toBe('3');
   });
 
-  it('plays a full run with the keypad, answers each question once, and saves once as completed', () => {
+  it('plays a full run with the keypad, answers each question once, and saves once as completed', async () => {
     const h = harness();
     h.press('Start at level 1');
     expect(h.hud('time')).toBe('1:30');
@@ -173,6 +173,7 @@ describe('MentalMathScreen', () => {
     expect(h.root().findByProps({ id: 'mm-handoff-title' }).children.join('')).toBe('Run complete');
     // No partial-run state is ever written to browser storage.
     expect(storageWrites).not.toHaveBeenCalled();
+    await h.flush();
   });
 
   it('writes nothing before the run ends, and nothing at all if the screen closes mid-run', () => {
@@ -193,7 +194,7 @@ describe('MentalMathScreen', () => {
     expect(storageWrites).not.toHaveBeenCalled();
   });
 
-  it('pauses with a frozen clock and a discarded question, and resumes with a fresh one', () => {
+  it('pauses with a frozen clock and a discarded question, and resumes with a fresh one', async () => {
     const h = harness();
     h.press('Start at level 1');
     h.advance(10_000); // the first question timed out at 8 s
@@ -214,6 +215,7 @@ describe('MentalMathScreen', () => {
     expect(session.trials).toHaveLength(1);
     expect(session.activeDurationMs).toBe(10_000);
     expect(h.root().findByProps({ id: 'mm-handoff-title' }).children.join('')).toBe('Run ended early');
+    await h.flush();
   });
 
   it('pauses when the app goes to the background, and never abandons the run', () => {
@@ -442,7 +444,7 @@ describe('MentalMathScreen', () => {
     expect(h.saveStatus()).toBe('This run couldn’t be saved. Missing or insufficient permissions.');
   });
 
-  it('keeps a pressed key focusable through the feedback flash, and ignores held keys', () => {
+  it('keeps a pressed key focusable through the feedback flash, and ignores held keys', async () => {
     const listeners: Record<string, (event: KeyboardEvent) => void> = {};
     vi.stubGlobal('window', { addEventListener: (type: string, listener: (event: KeyboardEvent) => void) => { listeners[type] = listener; }, removeEventListener: vi.fn() });
     const h = harness();
@@ -478,6 +480,7 @@ describe('MentalMathScreen', () => {
     h.press('Quit run');
     expect(h.saves[0]!.session.trials).toHaveLength(1);
     expect(h.saves[0]!.session.trials[0]).toMatchObject({ response: 4, rtMs: 1_000 });
+    await h.flush();
   });
 
   it('gives identical trials and score with and without simulated EEG for the same seed and inputs', async () => {
