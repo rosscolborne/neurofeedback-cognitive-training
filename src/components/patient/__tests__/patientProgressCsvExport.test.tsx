@@ -39,17 +39,17 @@ describe('Progress CSV caller', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('shows only supported milestones and updates Garden Keeper from reloaded stage evidence', async () => {
+  it('shows only supported milestones, never the retired Tidal Garden badge', async () => {
     state.getSessions.mockResolvedValueOnce([]);
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<ProgressHistory client={client} />); });
+    // A legacy profile can still hold a grown garden; there is no garden to show for it.
+    await act(async () => { renderer = create(<ProgressHistory client={{ ...client, tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: [], lastWatered: '' } }} />); });
     const text = () => renderer.root.findAllByType('div').flatMap((node) => node.children.filter((child): child is string => typeof child === 'string')).join(' ');
-    expect(text()).toContain('Garden Keeper');
+    expect(text()).toContain('First Light');
+    expect(text()).toContain('Steady State');
+    expect(text()).toContain('Deep Focus Master');
+    expect(text()).not.toContain('Garden Keeper');
     expect(text()).not.toContain('Still Waters');
-    const gardenCard = () => renderer.root.findAllByType('div').find((node) => node.children.includes('Garden Keeper'))!.parent!;
-    expect(gardenCard().props['aria-label']).toContain('Garden Keeper: locked');
-    await act(async () => { renderer.update(<ProgressHistory client={{ ...client, tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: [], lastWatered: '' } }} />); });
-    expect(gardenCard().props['aria-label']).toContain('Garden Keeper: earned');
     renderer.unmount();
   });
 

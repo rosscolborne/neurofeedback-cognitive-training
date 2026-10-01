@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi, startPatientTrainingInDemoMode } from './helpers/auth';
-import { seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
+import { readPatientTrainingRecord, seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
 
 const seedPatient = seedLinkedPatient;
 type Fixture = LocalPatientFixture;
@@ -101,8 +101,6 @@ test('clinician protocol change updates patient Home and Train without losing Ga
     const patient = await patientContext.newPage();
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
-    await patient.getByRole('button', { name: 'Progress', exact: true }).click();
-    await expect(patient.getByText('Garden Keeper', { exact: true })).toBeVisible();
 
     await clinicianDetail(clinician, fixture);
     await openBuilder(clinician);
@@ -117,8 +115,9 @@ test('clinician protocol change updates patient Home and Train without losing Ga
     const cards = patient.locator('main .card-patient');
     await expect(cards).toHaveCount(alpha.recommendedExperiences.length);
     await expect(cards.getByText('NeuroGambit', { exact: true })).toHaveCount(1);
-    await patient.getByRole('button', { name: 'Progress', exact: true }).click();
-    await expect(patient.getByText('Garden Keeper', { exact: true })).toBeVisible();
+    expect(await readPatientTrainingRecord(fixture.patient.uid)).toMatchObject({
+      assignedProtocol: 'alpha-enhancement', tidalGardenState: { stage: 3, growthPoints: 601, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
+    });
   } finally {
     await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
   }

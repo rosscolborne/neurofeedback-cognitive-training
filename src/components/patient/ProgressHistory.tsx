@@ -22,7 +22,7 @@ interface ProgressHistoryProps {
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
-const VISIBLE_BADGE_IDS = new Set(['first-light', 'steady-state', 'deep-focus', 'garden-keeper']);
+const VISIBLE_BADGE_IDS = new Set(['first-light', 'steady-state', 'deep-focus']);
 
 const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
   Award,
@@ -126,8 +126,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client }) => {
     nowMs,
     chartWidth: 360,
     chartHeight: 120,
-    gardenStage: client.tidalGardenState?.stage,
-  }), [sessionStatus, allSessions, period, nowMs, client.tidalGardenState?.stage]);
+  }), [sessionStatus, allSessions, period, nowMs]);
   const historySessions = useMemo(
     () => [...progressDisplay.periodSessions].reverse(),
     [progressDisplay.periodSessions],

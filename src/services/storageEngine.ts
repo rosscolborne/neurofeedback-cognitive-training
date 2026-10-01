@@ -227,14 +227,6 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
     iconName: 'Wind',
     unlockedAt: undefined,
   },
-  {
-    id: 'garden-keeper',
-    title: 'Garden Keeper',
-    description: 'Evolved Tidal Garden to Stage 3 with thriving bioluminescence.',
-    category: 'exploration',
-    iconName: 'Compass',
-    unlockedAt: undefined,
-  },
 ];
 
 export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
