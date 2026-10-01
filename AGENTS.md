@@ -107,6 +107,12 @@ Do not hold your final response waiting for GitHub CI:
 4. Report the PR URL and the current CI state, including *pending*, and
    finish. Do not poll or `--watch` the run.
 
+Every push to a PR reruns its CI, so avoid incremental pushes: work and test
+locally, batch related changes, and push when the work is ready for CI or
+review or when a remote checkpoint is genuinely useful, not after each small
+edit. After a CI failure, diagnose and fix it locally and batch the next push
+where practical.
+
 With CI pending, the report says so plainly, for example:
 
 - Agent work: complete
