@@ -1,0 +1,200 @@
+name: iOS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  # Superseded PR pushes are cancelled. A running main check is never
+  # cancelled, though GitHub still drops a queued one if several merges land
+  # at once.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# iOS build checks (NFCT-31); docs/nfct/ios.md explains each layer.
+#
+# No secrets, no signing and no Firebase configuration: the app is built
+# unsigned for the Simulator, and every Firebase-backed step runs against
+# local emulators. Nothing here archives, signs or uploads: TestFlight builds
+# come from NFCT's Xcode Cloud workflow, whose post-clone hook the macOS job
+# runs, or from the owner-run `npm run ios:archive` (docs/nfct/ios.md#releases).
+
+jobs:
+  release-bundle:
+    name: Release-bundle safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      # A production build, synced into the iOS project, then checked.
+      - run: npm run sync:ios
+      - name: The release check refuses the emulator development bundle
+        run: |
+          npm run sync:ios:emulators
+          if npm run verify:ios-release; then
+            echo "::error::verify:ios-release accepted the emulator development bundle"
+            exit 1
+          fi
+
+  webkit:
+    name: WebKit iPhone (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci --legacy-peer-deps
+      # Only WebKit: the other suites use the runner's Google Chrome.
+      - run: npx playwright install --with-deps webkit
+      - run: npm run test:e2e:webkit
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: webkit-playwright-results
+          path: test-results/
+          retention-days: 7
+
+  changes:
+    name: Native changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      # macOS minutes are expensive, so pull requests run the native job only
+      # when they change something the Xcode build or the Simulator smoke
+      # test depends on. Web-only changes cannot break the native compile and
+      # are covered by the jobs above and ci.yml. Pushes to main and manual
+      # runs always run it, so drift is caught on main.
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The checkout is the PR merged into its base: HEAD^1 is the base.
+          git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
+          if grep -qE "$native_paths" "$RUNNER_TEMP/changed.txt"; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+            grep -E "$native_paths" "$RUNNER_TEMP/changed.txt"
+          else
+            echo "native=false" >> "$GITHUB_OUTPUT"
+            echo "No native-relevant changes; the macOS job is skipped."
+          fi
+
+  native:
+    name: Xcode build and Simulator smoke
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    # Pinned image and Xcode. Capacitor 8.5 needs Xcode 26; 26.5 matches an
+    # installed iOS 26.5 Simulator runtime on this image.
+    runs-on: macos-26
+    timeout-minutes: 50
+    env:
+      XCODE_APP: /Applications/Xcode_26.5.app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          sudo xcode-select --switch "$XCODE_APP"
+          xcodebuild -version
+          xcrun simctl list runtimes
+          {
+            echo "IOS_DERIVED_DATA=$RUNNER_TEMP/DerivedData"
+            echo "IOS_SOURCE_PACKAGES=$RUNNER_TEMP/SourcePackages"
+            echo "SMOKE_OUT=$RUNNER_TEMP/ios-simulator-smoke"
+          } >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: spm-${{ runner.os }}-xcode26.5-${{ hashFiles('ios/App/CapApp-SPM/Package.swift', 'ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'package-lock.json') }}
+          restore-keys: spm-${{ runner.os }}-xcode26.5-
+
+      # 1. What an archive would build: the production bundle in Release.
+      # The Xcode Cloud post-clone hook itself installs the locked
+      # dependencies, builds and syncs the production bundle, and runs
+      # verify:ios-release, so every run here also proves that hook.
+      - name: Run the Xcode Cloud post-clone hook
+        env:
+          CI_PRIMARY_REPOSITORY_PATH: ${{ github.workspace }}
+        run: ios/App/ci_scripts/ci_post_clone.sh
+      - name: Resolve Swift packages
+        run: npm run ios:build -- resolve
+      - name: Build Release for the Simulator, unsigned
+        run: npm run ios:build -- Release
+      - name: Check the built Release app
+        run: node scripts/ios/check-built-app.mjs "$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/App.app" Release
+
+      # 2. Negative test: a Release build refuses the development bundle.
+      - name: Release refuses the emulator development bundle
+        run: |
+          npm run sync:ios:emulators
+          if npm run ios:build -- Release > "$RUNNER_TEMP/release-guard.log" 2>&1; then
+            echo "::error::A Release build accepted the emulator development bundle"
+            exit 1
+          fi
+          grep -F "error: The web bundle" "$RUNNER_TEMP/release-guard.log"
+
+      # 3. Simulator smoke: the emulator Debug build on an iPhone Simulator.
+      - name: Pick an iPhone Simulator
+        id: simulator
+        run: echo "udid=$(node scripts/ios/simulator-smoke.mjs pick)" >> "$GITHUB_OUTPUT"
+      - name: Build the emulator Debug app for the Simulator
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          node scripts/ios/simulator-smoke.mjs inject
+          npm run ios:build -- Debug "platform=iOS Simulator,id=$UDID"
+          node scripts/ios/check-built-app.mjs "$IOS_DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app" Debug
+      - name: Simulator smoke against the emulators
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: >-
+          npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e
+          "node scripts/ios/simulator-smoke.mjs run '$IOS_DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app' '$UDID' '$SMOKE_OUT'"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-smoke
+          path: ${{ runner.temp }}/ios-simulator-smoke
+          if-no-files-found: ignore
+          retention-days: 14

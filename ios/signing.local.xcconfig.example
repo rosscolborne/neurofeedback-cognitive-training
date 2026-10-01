@@ -1,0 +1,8 @@
+// Copy to ios/signing.local.xcconfig (gitignored) to sign on your own Mac,
+// for example to install a Debug build on your iPhone. Simulator builds and
+// CI need no signing.
+//
+// Your Apple team ID is in Xcode > Settings > Accounts, or at
+// developer.apple.com > Membership. Never commit it: the committed project
+// keeps DEVELOPMENT_TEAM empty, and a test fails if it is set there.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

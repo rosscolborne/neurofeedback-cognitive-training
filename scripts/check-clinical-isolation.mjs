@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Fails if any tracked file references the Waveable clinical product's Firebase
-// project, credentials or auto-deploy workflow. Run in CI on every PR.
+// project, credentials, auto-deploy workflow or app bundle IDs, or if Apple
+// signing material is tracked. Run in CI on every PR. The Apple team is not
+// listed: it is the Apple account, which also holds the NFCT app.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, lstatSync, readlinkSync } from 'node:fs';
 
@@ -9,14 +11,21 @@ const FORBIDDEN = [
   /AIzaSyC1dgTl/,                     // clinical Firebase web API key (prefix)
   /814671644395/,                     // clinical Firebase sender id
   /waveable-e2e@/,                    // clinical E2E service account
+  /com\.waveable/,                    // Waveable's iOS bundle IDs
+  /com\.brainswell/,                  // Waveable's earlier bundle IDs
 ];
 // The fail-closed deny-list must name the clinical identifiers it refuses.
 const ALLOWED = new Map([
   ['src/services/firebaseConfig.ts', [/brainwell-327dc/, /814671644395/]],
   ['src/services/__tests__/firebaseConfig.test.ts', [/brainwell-327dc/, /814671644395/]],
   ['scripts/check-clinical-isolation.mjs', FORBIDDEN],
+  ['scripts/__tests__/check-clinical-isolation.test.mjs', FORBIDDEN],
 ]);
-const FORBIDDEN_FILES = [/^\.env$/, /GoogleService-Info\.plist$/, /^\.github\/workflows\/sync-ios\.yml$/, /^ios\/App\/App\/public\//, /\.xcarchive\//];
+const FORBIDDEN_FILES = [
+  /^\.env$/, /GoogleService-Info\.plist$/, /^\.github\/workflows\/sync-ios\.yml$/, /^ios\/App\/App\/public\//, /\.xcarchive\//,
+  // Apple signing material and local signing settings (docs/nfct/ios.md)
+  /\.p12$/i, /\.cer$/i, /\.mobileprovision$/i, /\.provisionprofile$/i, /(^|\/)AuthKey_[^/]*\.p8$/, /(^|\/)signing\.local\.xcconfig$/,
+];
 
 const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
 const problems = [];

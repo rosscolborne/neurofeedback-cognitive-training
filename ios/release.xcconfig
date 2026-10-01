@@ -1,0 +1,10 @@
+// Base configuration for Release builds, including every archive.
+//
+// Release never sets CAPACITOR_DEBUG, so the web view is not inspectable and
+// Capacitor logs nothing. npm run verify:ios-release checks this, and the
+// target's "Refuse a development web bundle in Release" build phase refuses a
+// development web bundle.
+
+// Signing stays out of the repository: put DEVELOPMENT_TEAM in this
+// gitignored file (see signing.local.xcconfig.example and docs/nfct/ios.md).
+#include? "signing.local.xcconfig"

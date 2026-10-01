@@ -17,5 +17,5 @@
       "@nfct/shared": ["shared/index.ts"]
     }
   },
-  "include": ["e2e/**/*.ts", "playwright.config.ts", "playwright.protocol.config.ts"]
+  "include": ["e2e/**/*.ts", "playwright.config.ts", "playwright.protocol.config.ts", "playwright.webkit.config.ts"]
 }
