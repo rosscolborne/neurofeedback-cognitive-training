@@ -32,6 +32,7 @@ vi.mock('../EducationHub', () => ({ EducationHub: 'education-hub' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
+vi.mock('../../../consumer/games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));
 
 import { HomeScreen } from '../HomeScreen';
 import { PatientShell } from '../PatientShell';
@@ -72,6 +73,21 @@ describe('self-directed patient shell', () => {
     onClientPersistedElsewhere = vi.fn();
     vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  it('opens Mental Math from the Train tab with Demo Mode EEG offered as simulated, and returns to Train', async () => {
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(shell(unlinked())); });
+    tab(renderer, 'Train');
+    const gameCard = renderer.root.findAll((node) => node.props.className === 'train-game-card')[0]!;
+    expect(hasText(gameCard, 'Mental Math')).toBe(true);
+    act(() => { gameCard.props.onClick(); });
+    const game = renderer.root.findAll((node) => (node.type as unknown) === 'mental-math-game');
+    expect(game).toHaveLength(1);
+    expect(game[0]!.props.eegProvider.source).toBe('simulated');
+    act(() => { game[0]!.props.onExit(); });
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'mental-math-game')).toHaveLength(0);
+    expect(trainCards(renderer)).toHaveLength(tbr.length);
   });
 
   it('gives an unlinked patient a clean five-tab shell with the default protocol and no care-team gaps', async () => {
