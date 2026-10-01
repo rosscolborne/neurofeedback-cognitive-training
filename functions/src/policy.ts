@@ -72,11 +72,14 @@ export const EXHAUSTIVE_RECONCILE: Partial<ProcessingLimits> = Object.freeze({
  */
 export interface SweepPolicy {
   /**
-   * A session still pending this long after it was created missed its
-   * trigger: a delivery stops retrying after `retryWindowMs` and records
-   * 'failed', so only a delivery that never ran leaves a session pending.
-   * Failed and unsupported sessions are re-driven only once their state is at
-   * least this old as well, so a sweep never races a live delivery.
+   * Only sessions created at least this long ago are re-driven (the cutoff is
+   * on `createdAt`, for every state). A session still pending this long after
+   * it was created missed its trigger: a delivery stops retrying after
+   * `retryWindowMs` and records 'failed', so only a delivery that never ran
+   * leaves a session pending. A failed or unsupported state was recorded by a
+   * delivery that has already ended; should a redelivery still be running,
+   * the processing transaction serialises the two and the second finds the
+   * session processed, so the sweep needs no cutoff on the state's own time.
    */
   readonly settleAfterMs: number;
   /** Only sessions created this recently (bounds the pending scan). */
