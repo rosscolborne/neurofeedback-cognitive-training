@@ -49,6 +49,8 @@ export {
   InvalidSessionSeedError,
   type GameSessionCursor,
   type GameSessionDraft,
+  type GameSessionHistoryEntry,
+  type GameSessionHistoryPage,
   type GameSessionPage,
   type GameSessionRecord,
   type GameSessionRepository,
