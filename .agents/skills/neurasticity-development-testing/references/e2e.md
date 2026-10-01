@@ -35,7 +35,8 @@ only for failures.
 
 ## Local emulator suite
 
-`npm run test:e2e:protocol` starts the Auth and Firestore emulators (project
+`npm run test:e2e:protocol` builds `functions/lib` and starts the Auth,
+Firestore and Functions emulators (project
 `demo-neurasticity-protocol-e2e`), Vite on port 5193 with
 `VITE_E2E_EMULATORS=true`, and every `*.local.spec.ts` matched by
 `playwright.protocol.config.ts`. It needs Java 21 on `PATH`. The browser
@@ -45,7 +46,7 @@ fresh in the emulators and disappear when they stop. See
 
 Extra arguments to `npm run test:e2e:protocol` go to `firebase emulators:exec`,
 not Playwright. For a single file or reporter flags, run
-`npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e "npx playwright test --config playwright.protocol.config.ts <file>"`.
+`npm run functions:build && npx firebase emulators:exec --only auth,firestore,functions --project demo-neurasticity-protocol-e2e "npx playwright test --config playwright.protocol.config.ts <file>"`.
 
 Browser specs import `test` from `e2e/fixtures.ts`, so console, page and
 Firestore network permission denials fail the test, including denials in
