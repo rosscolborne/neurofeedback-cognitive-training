@@ -27,6 +27,23 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 - Do not deploy anything (Firebase, Vercel, Render, App Store) or link this
   repository to Waveable's hosting, Render service or Xcode Cloud workflows.
 
+## Prioritization
+
+Favor:
+
+1. user-facing product progress;
+2. QA, CI, testing and automation that materially increase safe development
+   velocity;
+3. bugs that cause likely user-visible failure, realistic security, privacy or
+   data-loss risk, or block near-term work.
+
+Do not spend significant effort on speculative hardening, obscure edge cases,
+architectural cleanup or low-probability concerns unless they meet one of
+these criteria or the user asks for it ([deep audit mode](#deep-audit-mode)).
+When a non-feature finding has no concrete near-term impact, create or update
+a Jira follow-up ([out-of-scope work](#out-of-scope-work)) and continue with
+higher-value work.
+
 ## Working on a card
 
 - Give each independent writable task or PR its own branch and git worktree,

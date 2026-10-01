@@ -146,6 +146,11 @@ changes only where dependencies require it.
   [review budget](../../../AGENTS.md#review-budget).
 - Work moves back to an earlier phase only as a fix and its verification.
   FOLLOW-UP findings go to cards, never to another fix round.
+- Fix rather than card a finding only with a concrete near-term
+  justification: a user-visible failure, a realistic security, privacy or
+  data-loss risk, a likely blocker to upcoming work, or a substantial gain in
+  safe development velocity. Otherwise card it and continue
+  ([prioritization](../../../AGENTS.md#prioritization)).
 
 ## Convergence and checkpoints
 
