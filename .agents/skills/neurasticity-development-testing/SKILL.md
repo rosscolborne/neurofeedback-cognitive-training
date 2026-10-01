@@ -41,11 +41,11 @@ NFCT ships as a responsive web app and as an iPhone app. Coverage runs in six de
 1. **Desktop Chromium**: the Playwright suites above.
 2. **Interactive Chromium at iPhone sizes**: exploratory and agent-driven. An agent operates the changed UI in real Chrome with the iPhone SE (3rd gen) and iPhone 17 device profiles ([exploratory QA](../nfct-exploratory-qa/SKILL.md#drive-the-browser)). Chromium mobile emulation: not iOS or Safari evidence.
 3. **Playwright WebKit with iPhone profiles**: `npm run test:e2e:webkit` runs the specs in `IOS_WEBKIT_SPECS` (`playwright.webkit.config.ts`) in Playwright WebKit as an iPhone SE (3rd gen, 375 × 667) and an iPhone 17 (402 pt wide). Install the browser once with `npx playwright install webkit`. CI runs it on every PR (`ios.yml`).
-4. **iOS Simulator and the native build**: `ios.yml` on GitHub-hosted macOS compiles the app, checks the Release build, and signs up and relaunches in WKWebView at `capacitor://localhost`. It needs no local Mac.
+4. **iOS Simulator and the native build**: `ios.yml` on GitHub-hosted macOS compiles the app, checks the Release build, and runs the [Simulator scenarios](../../../docs/nfct/ios.md#simulator-scenarios) through the real UI in WKWebView at `capacitor://localhost`: sign-up and relaunch, a whole Mental Math run saved, backgrounding and killing mid-run, and weekly on the oldest supported iOS. It needs no local Mac: `gh workflow run ios.yml --ref <branch> -f scenarios='<names>'` runs chosen scenarios on any branch and returns screenshots, logs and a summary ([how](../../../docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal)). macOS minutes are expensive, so run only the scenarios you need.
 5. **A physical iPhone**: suspension, interruptions, the keyboard and offline durability (NFCT-32's checklist).
 6. **A physical iPhone with a Muse headset**: real Bluetooth EEG on the device; see the hardware layer above.
 
-Playwright WebKit is current WebKit on Linux, not iOS WKWebView: never report it as iOS or Simulator evidence. Simulator evidence is not device evidence.
+Playwright WebKit is current WebKit on Linux, not iOS WKWebView: never report it as iOS or Simulator evidence. Simulator evidence is not device evidence. When a change alters a screen the Simulator scenarios drive (onboarding, the Train tab, Mental Math), update `scripts/ios/simulator-scenarios.mjs` in the same PR, as for `e2e/helpers/auth.ts`. Changing the Train tab or navigation does not start the macOS job on a pull request: dispatch `gh workflow run ios.yml --ref <branch> -f scenarios=mental-math`.
 
 For user-facing UI work:
 

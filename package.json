@@ -37,7 +37,7 @@
     "test:e2e:public": "npx playwright test --project=public",
     "test:e2e:messaging": "npx playwright test --project=messaging",
     "test:e2e:protocol": "npm run functions:build && firebase emulators:exec --only auth,firestore,functions --project demo-neurasticity-protocol-e2e \"playwright test --config playwright.protocol.config.ts\"",
-    "test:e2e:webkit": "firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e \"playwright test --config playwright.webkit.config.ts\"",
+    "test:e2e:webkit": "npm run functions:build && firebase emulators:exec --only auth,firestore,functions --project demo-neurasticity-protocol-e2e \"playwright test --config playwright.webkit.config.ts\"",
     "preview": "vite preview",
     "sync:ios": "npm run build && npx cap sync ios && npm run verify:ios-release",
     "sync:ios:emulators": "NODE_ENV=development VITE_E2E_EMULATORS=true VITE_FIREBASE_PROJECT_ID=demo-neurasticity-protocol-e2e VITE_FIREBASE_API_KEY=local-test-key vite build --mode development && npx cap sync ios && echo 'Synced an emulator bundle for Debug builds only; Release builds refuse it.'",
