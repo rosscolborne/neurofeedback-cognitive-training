@@ -716,6 +716,21 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-summary', 'record')).toBe('Not a record yetThis run can still set a record once level 1 is unlocked.');
     });
 
+    it('keeps the flagged copy for an unfinished run at a locked start level: an upgrade gives it no records or unlocks', async () => {
+      const h = harness();
+      h.press('Start at level 1');
+      h.advance(2_000);
+      h.press('Pause');
+      h.press('Quit run');
+      await h.flush();
+      const document = { ...h.saves[0]!.session, schemaVersion: 1, userId: 'player-1', seed: SEED, createdAt: h.saves[0]!.session.endedAt } as unknown as ClientSessionDocument;
+      const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
+      const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
+      h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
+      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when the server checked your run. It counts toward your totals, but not your records or unlocks.');
+      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set recordsNo record yet from level 1.');
+    });
+
     it('marks the picker’s best as provisional while a run the server hasn’t checked holds it', () => {
       const pending = sessionRecord('sessionBBBBBBBBBBBB1', playRun({ seed: SEED, startLevel: 1, correct: 7 }), { seed: SEED });
       const h = harness({ state: pickerState(null, [pending]) });

@@ -133,6 +133,17 @@ describe('post-session summary', () => {
     expect(both.record).toMatchObject({ reason: 'flagged', upgradable: false });
   });
 
+  it('never promises records to an unfinished run at a locked start level: the upgrade gives it none', () => {
+    const quit: RunOutcome = { ...playRun({ seed: SEED, startLevel: 2, correct: 3 }), status: 'abandoned' };
+    const decision = trusted(quit, null);
+    expect(decision.result).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked'] });
+    const checked = summary(quit, 'confirmed', pickerState(null, [stored(quit, decision.result)]));
+    expect(checked.verification).toEqual({ kind: 'flagged', reasons: ['start-level-locked'], upgradable: false });
+    expect(checked.record).toEqual({ kind: 'ineligible', startLevel: 2, reason: 'flagged', bestScore: null, upgradable: false });
+    // The preview says the same before the server has checked it.
+    expect(summary(quit, 'confirmed', pickerState(null, [stored(quit)])).record).toMatchObject({ reason: 'flagged', upgradable: false });
+  });
+
   it('says the totals include an unchecked run only when the preview counts this run, or another pending one', () => {
     // Predicted invalid (its questions are not from the seed it names): counted nowhere, so the totals are all checked.
     const outcome = climb();
