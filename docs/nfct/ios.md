@@ -157,11 +157,9 @@ Alongside these, `ios.yml` `release-bundle` runs on every PR. It builds and
 syncs the production bundle, runs `verify:ios-release`, and shows that the
 check fails on the emulator bundle.
 
-Known intermittent failure until NFCT-44 is fixed: the inherited role
-lookup gives up after 1.8 s and sends a signed-in user to role selection. A
-slow first Firestore connection in WebKit occasionally hits it, in the WebKit
-job and in the Simulator smoke relaunch. That is a product bug, not test
-flakiness, so it is not retried away.
+A signed-in account whose role has not been read yet stays on the loading
+screen; a failed read, or none within 15 s, shows a retryable error, never role
+selection (NFCT-44). A failure there is a product bug, so it is not retried away.
 
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView. It does not
 prove older iOS versions, the `capacitor://` origin, suspension, the software

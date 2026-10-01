@@ -262,7 +262,8 @@ export function App() {
         )}
         {roleUnavailable && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button type="button" className="btn btn-primary" onClick={retryRoleLookup}>Try again</button>
+            {/* Not while sign-out runs or asks about unsynced writes: a lookup that succeeds would close that step. */}
+            <button type="button" className="btn btn-primary" disabled={roleLookupSignOut.busy || roleLookupSignOut.phase === 'unsynced'} onClick={retryRoleLookup}>Try again</button>
             <button type="button" className="btn btn-secondary" disabled={roleLookupSignOut.busy} onClick={roleLookupSignOut.requestSignOut}>Sign out</button>
           </div>
         )}
