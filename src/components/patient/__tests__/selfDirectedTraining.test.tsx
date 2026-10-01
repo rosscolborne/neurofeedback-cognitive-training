@@ -57,7 +57,8 @@ const tab = (renderer: ReactTestRenderer, label: string) => act(() => {
 const hasText = (node: ReactTestInstance, value: string) => node.findAll((child) => child.children.some((entry) => typeof entry === 'string' && entry.includes(value))).length > 0;
 const button = (renderer: ReactTestRenderer, value: string) => renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === value || hasText(node, value));
 const factLabels = (renderer: ReactTestRenderer) => renderer.root.findAllByType('dt').map((node) => node.children.join(''));
-const trainCards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function');
+// Train's experience cards, as the button that starts each one (the name button stretched over the card).
+const trainCards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.type === 'li' && String(node.props.className).split(' ').includes('card-patient')).map((item) => item.findByType('button'));
 const sessionRunners = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'session-runner');
 
 describe('self-directed patient shell', () => {
@@ -79,9 +80,9 @@ describe('self-directed patient shell', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked())); });
     tab(renderer, 'Train');
-    const gameCard = renderer.root.findAll((node) => node.props.className === 'train-game-card')[0]!;
+    const gameCard = renderer.root.findAll((node) => node.type === 'li' && String(node.props.className).split(' ').includes('train-game-card'))[0]!;
     expect(hasText(gameCard, 'Mental Math')).toBe(true);
-    act(() => { gameCard.props.onClick(); });
+    act(() => { gameCard.findByType('button').props.onClick(); });
     const game = renderer.root.findAll((node) => (node.type as unknown) === 'mental-math-game');
     expect(game).toHaveLength(1);
     expect(game[0]!.props.eegProvider.source).toBe('simulated');
