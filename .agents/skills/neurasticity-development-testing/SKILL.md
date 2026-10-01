@@ -30,6 +30,25 @@ For non-hardware patient flows, use the normal UI: choose **Skip to Dashboard** 
 
 Test observable behavior, including meaningful empty, error, and negative states when their regression risk warrants it. Reuse the repository's auth and navigation helpers. Never alter production behavior or bypass real authentication to make an E2E test pass.
 
+## Phones, WebKit and iOS
+
+NFCT ships as a responsive web app and as an iPhone app. Coverage runs in five layers, cheapest first; each proves less than the next, and none substitutes for a higher one ([docs/nfct/ios.md](../../../docs/nfct/ios.md#checks-and-where-they-run)):
+
+1. **Desktop Chromium**: the Playwright suites above.
+2. **WebKit with iPhone profiles**: `npm run test:e2e:webkit` runs the specs in `IOS_WEBKIT_SPECS` (`playwright.webkit.config.ts`) in Playwright WebKit as an iPhone SE (3rd gen, 375 × 667) and an iPhone 17 (402 pt wide). Install the browser once with `npx playwright install webkit`. CI runs it on every PR (`ios.yml`).
+3. **iOS Simulator and the native build**: `ios.yml` on GitHub-hosted macOS compiles the app, checks the Release build, and signs up and relaunches in WKWebView at `capacitor://localhost`. It needs no local Mac.
+4. **A physical iPhone**: suspension, interruptions, the keyboard and offline durability (NFCT-32's checklist).
+5. **A real Muse headset**: the hardware layer above.
+
+Playwright WebKit is current WebKit on Linux, not iOS WKWebView: never report it as iOS or Simulator evidence. Simulator evidence is not device evidence.
+
+For user-facing UI work:
+
+- Check the changed screens at phone sizes as well as desktop: in portrait at 375 × 667 and about 400 pt wide. Look for horizontal overflow, clipped or overlapping text, primary actions below the fold, and touch targets under 44 pt. [Exploratory QA](../nfct-exploratory-qa/SKILL.md) does this for every user-facing change.
+- If a changed flow is in `IOS_WEBKIT_SPECS`, run `npm run test:e2e:webkit`. When a new spec covers a flow that matters on iPhone (sign-in and account, a game run, offline or persistence), add it to the list and confirm with `--list` that both iPhone projects discover it. Keep the list focused rather than running every spec in WebKit.
+- Treat a failure that happens only in WebKit as a finding until shown otherwise, not as flakiness.
+- Keep product code responsive, not phone-specific: the native target is iPhone-only, but the web app serves every size.
+
 ## Deterministic tests and exploratory QA
 
 This skill owns deterministic, repeatable coverage. Driving the running app in a browser to find what no test encodes yet belongs to [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md), which never substitutes for the coverage required here. When exploratory QA hands over a defect that reproduces reliably, the owner of the branch adds its regression test at the lowest layer that observes it; that is Playwright when only the UI shows it.

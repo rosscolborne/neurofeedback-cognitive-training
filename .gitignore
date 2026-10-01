@@ -52,5 +52,14 @@ __pycache__/
 # Capacitor copies the web build here on `cap sync`; never commit it
 ios/App/App/public/
 
+# Apple signing material and local signing settings never enter the repo
+# (npm run check:isolation refuses them too)
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+AuthKey_*.p8
+ios/signing.local.xcconfig
+
 # Per-user Claude Code settings; .claude/skills is a tracked symlink
 .claude/settings.local.json

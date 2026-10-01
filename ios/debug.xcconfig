@@ -1,1 +1,5 @@
 CAPACITOR_DEBUG = true
+
+// Signing stays out of the repository: put DEVELOPMENT_TEAM in this
+// gitignored file (see signing.local.xcconfig.example and docs/nfct/ios.md).
+#include? "signing.local.xcconfig"

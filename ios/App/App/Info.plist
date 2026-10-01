@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Waveable</string>
+        <string>NFCT</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -49,13 +49,11 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
@@ -64,12 +62,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Waveable connects via Bluetooth to your Muse EEG headband to provide real-time neurofeedback brain training and focus telemetry.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Waveable connects via Bluetooth to your Muse EEG headband to stream live neural telemetry during training sessions.</string>
+	<string>NFCT uses Bluetooth to connect a Muse headband, if you choose to use one, so it can show your EEG readings while you train. Every game works without a headband.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NFCT uses the camera only when you choose Take Photo for your profile picture.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

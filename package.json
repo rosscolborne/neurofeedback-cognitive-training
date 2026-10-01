@@ -27,12 +27,12 @@
     "test:e2e:public": "npx playwright test --project=public",
     "test:e2e:messaging": "npx playwright test --project=messaging",
     "test:e2e:protocol": "firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e \"playwright test --config playwright.protocol.config.ts\"",
+    "test:e2e:webkit": "firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e \"playwright test --config playwright.webkit.config.ts\"",
     "preview": "vite preview",
-    "sync:ios": "npm run build && npx cap sync ios",
-    "sync:mac": "npm run build && npx cap sync ios",
-    "build:mac": "bash build/package-mac.sh --local",
-    "export:mac:appstore": "bash build/package-mac.sh --app-store",
-    "export:mac:dmg": "bash build/package-mac.sh --dmg",
+    "sync:ios": "npm run build && npx cap sync ios && npm run verify:ios-release",
+    "sync:ios:emulators": "NODE_ENV=development VITE_E2E_EMULATORS=true VITE_FIREBASE_PROJECT_ID=demo-neurasticity-protocol-e2e VITE_FIREBASE_API_KEY=local-test-key vite build --mode development && npx cap sync ios && echo 'Synced an emulator bundle for Debug builds only; Release builds refuse it.'",
+    "verify:ios-release": "node scripts/verify-ios-release.mjs",
+    "ios:build": "bash scripts/ios/xcodebuild.sh",
     "open:xcode": "npx cap open ios"
   },
   "dependencies": {

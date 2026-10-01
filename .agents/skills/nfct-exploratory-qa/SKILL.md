@@ -157,9 +157,17 @@ Choose from these by risk; not every item applies to every change.
   or achievements, that is a bug.
 - **UI**: spacing, alignment, overflow and clipping; layout shifts when
   scores, feedback, timers or messages change; keyboard navigation, visible
-  focus and where focus lands after each step; a small window and a narrow,
-  phone-like width; stale UI after state changes; whether the journey is
-  coherent from start to finish.
+  focus and where focus lands after each step; stale UI after state changes;
+  whether the journey is coherent from start to finish.
+- **Phone sizes** (required for every user-facing change): repeat the changed
+  flow in portrait at 375 × 667 (iPhone SE) and at about 400 pt wide
+  (iPhone 17), with touch emulation where the tool allows, as well as at
+  desktop size. Look for horizontal scrolling, clipped or overlapping text,
+  primary actions below the fold, and touch targets under 44 pt. Where you
+  can drive WebKit (for example a scratch Playwright script with `webkit` and
+  `devices['iPhone SE (3rd gen)']`), run the smoke path there too. A desktop
+  browser at a phone width is not WebKit, and WebKit is not iOS: name what you
+  actually used. See the [device layers](../neurasticity-development-testing/SKILL.md#phones-webkit-and-ios).
 
 ## When something fails
 
@@ -191,7 +199,10 @@ cannot judge reliably:
 - visual polish, subjective UX quality, animation feel and design preference;
 - a real Muse headset, Bluetooth, physical sensors, and hardware timing or
   latency that cannot be simulated faithfully;
-- iOS and Capacitor builds.
+- what only a physical iPhone shows: suspension, interruptions, the software
+  keyboard, safe areas and real performance. CI's iOS Simulator smoke test
+  already covers launch, the `capacitor://` origin, sign-up and relaunch
+  ([docs/nfct/ios.md](../../../docs/nfct/ios.md#checks-and-where-they-run)).
 
 For each item give the account, the screen, the steps and the question to
 answer, so the human pass is a short, targeted check rather than a replay of
@@ -224,5 +235,6 @@ Then summarize:
 - **Deterministic tests** added or requested.
 - **Jira cards** created or proposed.
 - **Remaining human checks.**
-- **Not tested**, and why: for example physical hardware, iOS or Capacitor
-  builds, or tooling that could not observe the console.
+- **Not tested**, and why: for example physical hardware, a physical
+  iPhone, WebKit when the tool could not drive it, or tooling that could not
+  observe the console.

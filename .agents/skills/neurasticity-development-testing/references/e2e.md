@@ -13,6 +13,11 @@ and `src/services/firebaseConfig.ts` refuse the Waveable clinical project.
   TypeScript/build and clinical-isolation checks.
 - `npm run test:rules` runs the Firestore rules suite on the emulator (below).
 - `npm run test:e2e:protocol` runs the local emulator browser suite (below).
+- `npm run test:e2e:webkit` runs the specs listed in
+  `playwright.webkit.config.ts` from the same suite in Playwright WebKit, as
+  an iPhone SE (3rd gen) and an iPhone 17. Install WebKit once with
+  `npx playwright install webkit`. See
+  [Phones, WebKit and iOS](../SKILL.md#phones-webkit-and-ios).
 - `npm run test:e2e` runs the Playwright projects that need no Firebase at all:
   `public` (smoke; needs an app on `E2E_BASE_URL`, default
   `http://localhost:5173`) and `permission-guard` (offline self-test of the
@@ -24,8 +29,9 @@ and `src/services/firebaseConfig.ts` refuse the Waveable clinical project.
   `127.0.0.1:8000`) runs the two service-backed Vitest files; see the
   [README checks](../../../../README.md#checks).
 
-Playwright uses the system Google Chrome at `/usr/bin/google-chrome`, keeps
-video disabled, and retains traces/screenshots only for failures.
+Playwright uses the system Google Chrome at `/usr/bin/google-chrome`, except
+in the WebKit projects, keeps video disabled, and retains traces/screenshots
+only for failures.
 
 ## Local emulator suite
 

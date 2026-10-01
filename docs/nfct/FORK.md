@@ -39,6 +39,10 @@ WB-103 were deliberately not ported.
 
 - No clinical Firebase project, credentials, auto-deploy workflow or
   deployed E2E harness. `npm run check:isolation` enforces this in CI.
+- No Waveable Apple identity: NFCT-30 replaced the inherited bundle ID and
+  removed the Apple team, upload scripts and Xcode Cloud hooks.
+  `check:isolation` refuses them and any signing material
+  ([ios.md](ios.md#identity)).
 - `src/services/firebaseConfig.ts` has no default project and refuses the
   Waveable clinical project.
 - `brainflow_service/` is an inherited copy of the shared, product-neutral
