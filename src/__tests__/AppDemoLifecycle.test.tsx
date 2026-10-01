@@ -322,6 +322,27 @@ describe('mounted App account/workspace lifecycle', () => {
     renderer.unmount();
   });
 
+  it('waits for clinic settings still loading instead of reporting a missing clinic', async () => {
+    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
+    let finishLoad!: (snapshot: unknown) => void;
+    settings.load.mockReturnValueOnce(new Promise((resolve) => { finishLoad = resolve; }));
+    storage.createPatientInvitation.mockResolvedValueOnce({ id: 'INVITE' });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+
+    let invited!: Promise<unknown>;
+    act(() => {
+      invited = shell(renderer).props.onAddClient({ email: 'new@example.com', name: 'New Patient', condition: 'Peak Performance', assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 4 });
+    });
+    await act(async () => {
+      finishLoad({ clinicId: 'clinic-one', clinic: { id: 'clinic-one' }, practitioner: { id: 'clinician-one' }, brand: null });
+      await invited;
+    });
+
+    expect(storage.createPatientInvitation).toHaveBeenCalledWith(expect.objectContaining({ clinicId: 'clinic-one' }));
+    renderer.unmount();
+  });
+
   it('can invite immediately after completing fresh clinic setup', async () => {
     authState.value = { user: { uid: 'new-clinician' }, role: 'clinician', loading: false, isDemoWorkspace: false, logout: vi.fn() };
     settings.load.mockResolvedValueOnce({ clinicId: 'new-clinician', clinic: null, practitioner: null, brand: null });

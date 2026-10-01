@@ -43,6 +43,7 @@ jobs:
       - run: npm test
       - run: npm run test:e2e:typecheck
       - run: npm run test:rules:typecheck
+      - run: npm run test:repositories:typecheck
       - run: npm run functions:typecheck
       - run: npm run functions:build
 
@@ -70,6 +71,8 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npm ci --prefix functions
       - run: npm run test:rules
+      # Consumer repositories against the Auth and Firestore emulators, with firestore.rules loaded.
+      - run: npm run test:repositories
       # Builds functions/lib, then runs the processing core on the Firestore
       # emulator and the trigger on the Functions emulator (NFCT-19).
       - run: npm run test:functions

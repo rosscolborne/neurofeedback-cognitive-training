@@ -284,9 +284,10 @@ conflict.
 npm ci --legacy-peer-deps
 npm ci --prefix functions
 npm run check:isolation && npm run lint && npm run build && npm test
-npm run test:e2e:typecheck && npm run test:rules:typecheck
+npm run test:e2e:typecheck && npm run test:rules:typecheck && npm run test:repositories:typecheck
 npm run functions:typecheck && npm run functions:build
 npm run test:rules            # needs Java 21
+npm run test:repositories     # consumer repositories on the emulators; needs Java 21
 npm run test:functions        # Cloud Functions on the emulators; needs Java 21
 npm run test:e2e:protocol     # local emulator browser suite; needs Java 21
 ```

@@ -21,6 +21,8 @@
     "test:python": "uv run --extra test pytest",
     "test:rules:typecheck": "tsc -p tsconfig.rules.json",
     "test:rules": "firebase emulators:exec --only firestore --project demo-neurasticity-rules \"vitest run --config vitest.rules.config.ts\"",
+    "test:repositories:typecheck": "tsc -p tsconfig.repositories.json",
+    "test:repositories": "firebase emulators:exec --only auth,firestore --project demo-nfct-repositories \"vitest run --config vitest.repositories.config.ts\"",
     "simulate:mental-math": "tsx shared/games/mental-math/simulate.ts",
     "functions:build": "npm --prefix functions run build",
     "functions:typecheck": "tsc -p functions/tsconfig.json",

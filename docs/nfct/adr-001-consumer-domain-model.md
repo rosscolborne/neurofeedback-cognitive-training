@@ -54,13 +54,28 @@ Game-specific trials and metrics are validated by each game's own Zod schemas (`
 - The session has **no** `eegLinked` or other EEG flag, and its schema rejects unknown keys. A flag would go stale: sessions are immutable, but recordings can be deleted. "Does this session have EEG?" is the query `eegRecordings where gameSessionId == X`.
 - EEG is never required to play. It never feeds scores, records, unlocks, progression or domain metrics, and `shared/progress/` does not import the EEG module.
 
+**Writing a session and its recording (NFCT-20).** They are two writes, never one batch:
+
+1. The session is written on its own when the game ends (decision 5). Nothing about EEG can delay or refuse it.
+2. The recording is a separate create, written after the session is queued, and only once the server has confirmed consent (decision 11).
+
+- **Why not one batch.** A batch is all or nothing, so any EEG-side refusal would also discard the completed session: consent withdrawn on another device, a stale consent read, or invalid EEG data. After an app restart that loss would be silent. EEG is optional and must never cost play.
+- **Why it is safe.**
+  - The rules evaluate each recording create on its own when it reaches the server: the linked session must exist (`existsAfter`) and the profile must record consent (`getAfter`).
+  - The SDK sends one user's queued writes in order, including across tabs and after a restart (the queue is persistent). A recording queued after its session therefore arrives after it.
+  - If the session is refused, its recording is refused too, so no recording can exist without its session.
+  - Sessions stay create-only and recordings create-or-delete. A resend after a lost acknowledgement is refused as an update and never duplicates either document.
+- **One recording per session.** A recording's document ID is its session's ID, so the create-only rules refuse a second recording for a session from any tab, device or retry. A refused second write is reported as refused (`already-recorded`) unless the stored recording is exactly what it wrote (a lost acknowledgement). Once the user deletes a recording, the rules would accept a new one for that session, but the client never offers one again: the recording exists only in memory, in the run that captured it.
+- **Nothing relied on the atomicity.** Scoring and progression never read EEG, and "has EEG?" is still the `gameSessionId` query. On other devices a recording may briefly lag its session.
+- **Separate outcomes.** The client reports the session (queued, then acknowledged or refused) and the recording separately. A recording is queued, then acknowledged or refused with a reason; or it is skipped with a reason. The UI can therefore say "game saved, EEG not saved" and why.
+
 ### 4. Trust boundary
 
 The client writes only its profile preferences, a finished session (raw trials plus a display summary) and EEG recordings. Everything that counts is computed from the trials by trusted server code: validity, the score every screen uses, records and unlocks. Assume a motivated user can forge anything the client writes; the design limits that forgery to the forger's own view. Leaderboards would need server-issued seeds and server-timed trials, not more client validation.
 
 ### 5. Sessions are write-once
 
-The client generates the session ID when the game starts, so an EEG recording can reference it before anything is written. It writes the document once, when the session ends. Rules (NFCT-18) allow create only, with an exact key set and no `result` or `processing`. An offline retry either lands once or is refused as an update. Only trusted scoring adds `result` or `processing` afterwards (decision 12).
+The client generates the session ID when the game starts, so an EEG recording can reference it before anything is written. It writes the document once, when the session ends, on its own (decision 3). Rules (NFCT-18) allow create only, with an exact key set and no `result` or `processing`. An offline retry either lands once or is refused as an update. Only trusted scoring adds `result` or `processing` afterwards (decision 12).
 
 ### 6. Trusted server scoring and aggregates
 
@@ -204,7 +219,12 @@ So:
   - neurofeedback concepts such as `inZone`.
 
   The write schema rejects unknown keys, so these cannot be added silently, and readers drop any field they do not know. Raw capture, if ever wanted, is a separately consented schema version 2 backed by Cloud Storage.
-- **Consent.** Profile consent gates every write (enforced by rules). Recordings live as long as the account and are deletable by the user.
+- **Consent.** Profile consent gates every write, and the rules check it again when a recording reaches the server.
+  - **When the client writes a recording.** Only when consent is positively established: the server's copy of the profile, read when the game ends within a short bound (1.5 s), records consent, and this device has no unacknowledged consent change.
+  - **Never the cached profile.** A cached copy can still show consent withdrawn on another device. Offline, on a stalled connection, or without a timely server answer, the recording is not saved (`consent-unavailable`). The session is saved regardless.
+  - **The remaining window** runs from that read until the write reaches the server, normally milliseconds. If consent is withdrawn in it, the rules refuse the recording (`consent-withdrawn`). If the device goes offline in it, the recording waits in the device's queue, and the rules decide when it arrives.
+  - **A later relaxation is the owner's call.** Accepting a cached grant would keep EEG from offline play, and the rules would still refuse it if consent were gone. It was not chosen: a recording captured while consent was withdrawn elsewhere could be accepted under a later re-grant, and EEG would wait in the device's queue after a withdrawal.
+  - Recordings live as long as the account and are deletable by the user.
 - **Provenance.** Every recording carries `source: 'measured' | 'simulated'`. `device.model` always names the actual headset (`muse-2`, `muse-s`, `muse-s-athena` or `unknown`), never "simulated". Simulated recordings (demo mode, tests) keep that provenance wherever they appear. They are labelled as simulated and excluded from real EEG history and analytics. Whether production demo mode exists is NFCT-16's decision.
 
 ### 12. Trusted session processing (NFCT-19)

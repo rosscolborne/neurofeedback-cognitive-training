@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { EmailAuthProvider, reauthenticateWithCredential, signOut } from 'firebase/auth';
-import { auth } from '../../services/firebase';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth, firestoreCache } from '../../services/firebase';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSignOut } from '../account/useSignOut';
 import { ClientProfile, ClinicBrandConfig, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
 import { getCalibrationDisplayState } from '../../services/dataMappers';
 import { HomeScreen } from './HomeScreen';
@@ -167,11 +169,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
   const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
 
-  const handleLogout = async () => {
-    clearPendingInvitation();
-    await signOut(auth);
-    window.location.href = '/';
-  };
+  // Sign-out clears this device's Firestore cache and reloads the app; it asks
+  // first if some activity has not uploaded yet (AuthContext.logout).
+  const { logout } = useAuth();
+  const signOutFlow = useSignOut(logout);
+  const handleLogout = signOutFlow.requestSignOut;
 
   const handleLinkClinician = async () => {
     if (!invitationCode.trim()) return;
@@ -229,9 +231,19 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
       await storageEngine.preparePatientAccountDeletion(user.uid, (deactivated) => { deactivation.client = deactivated; });
       if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
-      await user.delete();
-      clearPendingInvitation();
-      window.location.href = '/welcome';
+      // Deleting the Auth account runs inside the cache cleanup, so its
+      // sign-out is not mistaken for an account change. Once it succeeds the
+      // deleted account's cached data and queued writes are removed from this
+      // device, and the app loads afresh at the welcome screen.
+      await firestoreCache.endSession({
+        reason: 'account-deleted',
+        signOut: false,
+        destination: '/welcome',
+        before: async () => {
+          await user.delete();
+          clearPendingInvitation();
+        },
+      });
     } catch (err) {
       if (deactivation.client) onClientPersistedElsewhere(deactivation.client);
       setAccountDeletionError(getAccountDeletionErrorMessage(err));
@@ -435,7 +447,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <p>Your clinic connection has been removed. Confirm your password to finish deleting your sign-in.</p>
       <button className="btn btn-secondary account-deletion-trigger account-deletion-finish" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
       {deletionPasswordForm}
-      <button className="btn btn-secondary" type="button" onClick={() => void handleLogout()}>Log Out</button>
+      <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={signOutFlow.busy}>{signOutFlow.busy ? 'Signing out…' : 'Log Out'}</button>
+      {signOutFlow.dialog}
     </div>;
   }
 
@@ -801,9 +814,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     Disconnect from Clinician
                   </button>
                 )}
-                <button type="button" className="list-row" onClick={handleLogout}>
+                <button type="button" className="list-row" onClick={handleLogout} disabled={signOutFlow.busy}>
                   <LogOut size={18} className="list-row-icon" aria-hidden="true" />
-                  Log Out
+                  {signOutFlow.busy ? 'Signing out…' : 'Log Out'}
                 </button>
               </div>
             </div>
@@ -896,6 +909,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           );
         })}
       </nav>
+      {signOutFlow.dialog}
     </div>
   );
 };
