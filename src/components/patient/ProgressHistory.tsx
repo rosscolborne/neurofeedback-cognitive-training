@@ -358,7 +358,7 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesS
 
       {/* Session History List with Mini-Gauges */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <h3 className="font-display" style={{ fontSize: '20px', color: 'var(--text-primary)' }}>
+        <h3 className="font-display" style={{ fontSize: '18px', color: 'var(--text-primary)' }}>
           Session History
         </h3>
         {journalSwitchMessage && journal?.clientId === client.id && <p role="status">Save or cancel the current journal before opening another session or range.</p>}
