@@ -1,12 +1,14 @@
 ---
 name: nfct-orchestration
-description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, or tracking parallel work to completion.
+description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR, owning agent topology, review and security-tier routing, and bounded convergence. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, choosing review depth, or tracking parallel work to completion or a checkpoint.
 ---
 
 # NFCT orchestration
 
 The orchestrator decomposes the objective, assigns streams and roles, tracks
-dependencies and completion, and routes findings to their owners. It does not
+dependencies and completion, and routes findings to their owners. It owns
+agent topology and review routing, and it keeps review within the
+[bounded review](../../../AGENTS.md#bounded-review) budget. It does not
 implement streams itself unless explicitly asked. It may act as the
 integrator under [nfct-integration](../nfct-integration/SKILL.md), but then it
 never reviews the integrated result. Point each stream at the skill that owns
@@ -57,10 +59,65 @@ implementer or integrator.
 | Integration | [nfct-integration](../nfct-integration/SKILL.md) | One integration PR and its integration report |
 | Deterministic testing | [testing](../neurasticity-development-testing/SKILL.md) | Tests in the PR, with commands and results. Usually the implementer or integrator; a separate stream for cross-card journeys such as NFCT-10 |
 | Exploratory QA (user-facing work) | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) | QA report: scenario results, evidence, and the remaining human checks |
-| Independent review | [nfct-pr-review](../nfct-pr-review/SKILL.md) | Classified findings and a verdict |
-| Security review (trust, auth or data boundaries) | [nfct-security-review](../nfct-security-review/SKILL.md) | Classified findings and a verdict |
+| Independent review | [nfct-pr-review](../nfct-pr-review/SKILL.md) | Labelled findings and a verdict |
+| Security review, at the [routed tier](#security-tier) | [nfct-security-review](../nfct-security-review/SKILL.md); LIGHT is part of the independent review | The tier, labelled findings and a verdict |
 | Follow-up cards | [Out-of-scope work](../../../AGENTS.md#out-of-scope-work) | Cards filed by the orchestrator |
 | Human checks and merge | The owner | The merge decision |
+
+## Review routing
+
+You choose the review gates and their depth; reviewers do not. Each gate runs
+within the [review budget](../../../AGENTS.md#review-budget).
+
+- The integration PR, or each independent PR, gets one independent review and
+  one security review at its tier.
+- A single stream gets its own review before integration only when it is
+  risky on its own.
+- User-facing work gets exploratory QA.
+
+### Security tier
+
+Route each reviewed PR to LIGHT, STANDARD or DEEP using the
+[tier table](../nfct-security-review/SKILL.md#review-tiers):
+
+- Judge what the change does, not which files it touches: a comment in
+  `firestore.rules` is LIGHT, a new `allow` is DEEP.
+- Between adjacent tiers, choose the lower unless a missed defect would be
+  materially harmful: cross-user exposure, an auth or rules bypass, secret
+  leakage, irreversible deletion, or exposure of EEG or health data.
+- For an integration PR, route by what integration adds: merge resolutions,
+  integration commits and cross-stream boundaries. Streams already
+  security-reviewed at the merged SHAs keep their result.
+- Use the tier the user asks for. If it is lower than this routing would
+  choose, say so in the report.
+- If a reviewer reports that the tier is too low, decide whether to run the
+  higher tier. That review then becomes the gate's one security review.
+
+Record the choice in the plan and the PR body as two short lines:
+
+```text
+Security review: STANDARD
+Reason: repository writes + offline persistent cache; no auth or rules changes.
+```
+
+## Agent topology
+
+You decide which agents exist, what each does and when each stops
+([agent topology](../../../AGENTS.md#agent-topology)).
+
+- Plan the agents with the streams: the implementers (see
+  [Plan the streams](#plan-the-streams)) and one integrator, then, for each
+  reviewed PR, one independent reviewer, one security reviewer for STANDARD
+  or DEEP, and one QA agent for user-facing work.
+- Brief every agent with its role, scope and, for reviewers, its tier, and
+  tell it to start no agents and to return its findings to you.
+- Give a verification pass to the agent that raised the findings, resuming it
+  where your tooling allows; otherwise brief a fresh agent with only the
+  findings and the fix commits.
+- Delegate starting agents only explicitly, naming which ones, for example
+  letting the integrator start its QA and reviewers.
+- More reviewers is not more safety. Add an agent only for a distinct risk
+  that no planned gate covers, and count it against the plan.
 
 ## Phases
 
@@ -74,7 +131,7 @@ changes only where dependencies require it.
 | 3. Integrate the finished streams into one branch | Integrator ([nfct-integration](../nfct-integration/SKILL.md)) |
 | 4. Run the combined deterministic suite | Integrator, per the [testing skill](../neurasticity-development-testing/SKILL.md) |
 | 5. Exploratory QA, where the work is user-facing | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
-| 6. Independent review, and security review where triggered | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
+| 6. Independent review, and security review at the [routed tier](#security-tier) | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
 | 7. CI green on the integration PR's final head: a merge gate, started and reported rather than waited for | Integrator starts it; whoever merges confirms it |
 | 8. Targeted human visual and hardware checks | Owner, from the QA report's HUMAN CHECK items |
 | 9. Merge | Owner |
@@ -85,19 +142,39 @@ changes only where dependencies require it.
 - A fix goes to the owner of the branch where the defect lives: a stream's
   implementer, or the integrator for integration defects (see
   [nfct-integration](../nfct-integration/SKILL.md#fix-what-belongs-here)). The
-  role that raised the finding re-verifies it.
-- Work moves back to an earlier phase only as a fix and its re-verification.
+  role that raised the finding verifies the fix once, within the
+  [review budget](../../../AGENTS.md#review-budget).
+- Work moves back to an earlier phase only as a fix and its verification.
+  FOLLOW-UP findings go to cards, never to another fix round.
+
+## Convergence and checkpoints
+
+- Track, for each PR, the review rounds, the agents started and the full-suite
+  runs against the plan.
+- After each gate's verification pass, apply the
+  [review budget](../../../AGENTS.md#review-budget) outcomes; do not start a
+  fresh review because a fix landed.
+- When a [checkpoint](../../../AGENTS.md#checkpoints) condition is met, start
+  nothing new, let running agents finish their current task or stop them, and
+  report the checkpoint with each stream's state.
+- In [deep audit mode](../../../AGENTS.md#deep-audit-mode), which only the
+  user can request, announce it, keep each extra pass inside the requested
+  scope, and still start every agent yourself.
 
 ## Completion
 
-Every stream returning successfully does not complete the objective. The
-orchestration's agent work is complete only when:
+Every stream returning successfully does not complete the objective, and
+neither does a search for every possible improvement. The orchestration's
+agent work is complete when:
 
-- the integration report says its agent work is complete or, for independent
-  PRs, the combined check has passed at the heads that will merge;
-- every applicable phase through review (1–6) has passed on the final head,
-  and its CI (7) has started;
-- the remaining human checks and follow-up cards are listed.
+- the requested functionality is implemented and integrated: the integration
+  report says its agent work is complete or, for independent PRs, the
+  combined check has passed at the heads that will merge;
+- the applicable tests pass, and the final head's CI (7) has started;
+- phases 4–6 have passed, with QA and the selected reviews finished within
+  their budget and no BLOCKER open;
+- open SHOULD-FIX and FOLLOW-UP findings are carded, and the remaining human
+  checks are listed.
 
 Report merge readiness separately, as
 [completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness) defines it: with CI pending, the
@@ -121,7 +198,11 @@ new commits instead of rebasing (see
 ## Report
 
 Give the stream plan (cards, owners, worktrees, dependencies, merge order),
-the state of each stream and the current phase, the integration report or a
-link to it, CI state and merge readiness, open findings by severity, follow-up cards, the remaining human
-checks, and what remains blocked. Once work is merged, have stale worktrees
-cleaned up per [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree).
+the state of each stream and the current phase, the security tier and reason
+for each reviewed PR, the review rounds, agents and full-suite runs used
+against the plan, the integration report or a link to it, CI state and merge
+readiness, open findings by severity, follow-up cards, the remaining human
+checks, and what remains blocked. At a checkpoint, also give why execution
+stopped and the recommended next action. Once work is merged, have stale
+worktrees cleaned up per
+[nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree).
