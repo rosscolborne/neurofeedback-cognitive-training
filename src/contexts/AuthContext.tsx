@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   EmailAuthProvider,
   User,
@@ -11,7 +11,8 @@ import {
   updatePassword,
   updateProfile,
 } from 'firebase/auth';
-import { auth, db } from '../services/firebase';
+import { auth, db, firestoreCache } from '../services/firebase';
+import type { CacheEndReason, CacheStatus } from '../services/firestoreCacheLifecycle';
 import { clearPendingInvitation } from '../services/pendingInvitation';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
@@ -28,6 +29,12 @@ import {
 
 export type UserRole = 'patient' | 'clinician' | null;
 
+/**
+ * `unsynced`: the signed-in user has writes the server has not accepted yet,
+ * so nothing was done; ask before calling `logout({ discardUnsyncedWrites: true })`.
+ */
+export type LogoutOutcome = 'signed-out' | 'unsynced';
+
 interface AuthContextType {
   user: User | null;
   role: UserRole;
@@ -39,7 +46,21 @@ interface AuthContextType {
   requestPasswordReset: (email: string) => Promise<void>;
   selectRole: (role: UserRole) => Promise<void>;
   loginAsDemoClinician: () => Promise<void>;
-  logout: () => Promise<void>;
+  /**
+   * Signs out and clears this device's Firestore cache, then reloads the app.
+   * Unless `discardUnsyncedWrites` is set, it first waits briefly for queued
+   * writes to upload and returns `unsynced` (doing nothing) if some remain.
+   */
+  logout: (options?: { discardUnsyncedWrites?: boolean }) => Promise<LogoutOutcome>;
+  /** The Firestore cache lifecycle's state, for the loading screen. */
+  cacheStatus: CacheStatus;
+  /** Why the session is ending, while `cacheStatus` is `ending`. */
+  cacheEndingReason: CacheEndReason | null;
+  /**
+   * Signs out without touching Firestore and loads the app afresh: the way
+   * out while the cache cannot be cleared yet (`blocked` or `failed`).
+   */
+  signOutWithoutFirestore: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -53,7 +74,10 @@ const AuthContext = createContext<AuthContextType>({
   requestPasswordReset: async () => {},
   selectRole: async () => {},
   loginAsDemoClinician: async () => {},
-  logout: async () => {},
+  logout: async () => 'signed-out',
+  cacheStatus: 'idle',
+  cacheEndingReason: null,
+  signOutWithoutFirestore: async () => {},
 });
 
 // Reliable Firestore role fetcher with timeout protection
@@ -128,12 +152,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // late signed-out notification must not tear down an active in-memory
         // demo workspace.
         if (demoTransitionRef.current || (isClinicianDemoWorkspace() && !currentUser)) return;
+        // An explicit sign-out or account deletion owns the screen until the
+        // page navigates away; its own auth events are not account changes.
+        if (firestoreCache.isEnding()) return;
 
         const generation = ++authGenerationRef.current;
         if (isClinicianDemoRestoreRequested()) {
           demoTransitionRef.current = 'restoring';
           try {
             if (currentUser) await signOut(auth);
+            if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
+            // The signed-out account's cached data goes before the demo starts.
+            if ((await firestoreCache.prepareForUser(null)).status !== 'ready') return;
             if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
             activateClinicianDemoWorkspace();
             identityRef.current = { kind: 'demo' };
@@ -152,6 +182,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         deactivateClinicianDemoWorkspace();
+        // Nothing reads Firestore for this account until the persistent cache
+        // is known to be its own or empty: hide the previous identity, then
+        // let the cache lifecycle clear another account's data first.
+        identityRef.current = null;
+        setUser(null);
+        setRole(null);
+        if (currentUser) setLoading(true);
+        const preparation = await firestoreCache.prepareForUser(currentUser?.uid ?? null);
+        if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
+        // Not ready: the page is reloading, a sign-out is completing (a new
+        // auth event follows) or the cache could not be cleared. Stay on the
+        // loading screen, which explains the last two.
+        if (preparation.status !== 'ready') {
+          // The account changed under this tab: a pending invitation belonged
+          // to the previous sign-in (App drops it on an account change, but
+          // the reload starts App afresh).
+          if (preparation.status === 'reloading') clearPendingInvitation();
+          if (preparation.status !== 'ending') setLoading(true);
+          return;
+        }
+
         identityRef.current = currentUser ? { kind: 'production', uid: currentUser.uid } : null;
         setUser(currentUser);
         setRole(null);
@@ -202,6 +253,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
 
+    // The new account writes only once the cache is its own (a previous
+    // account's data is cleared first).
+    if ((await firestoreCache.prepareForUser(cred.user.uid)).status !== 'ready') return;
     setUser(cred.user);
     setRole(null);
 
@@ -267,6 +321,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signOut(auth);
       if (!mountedRef.current || authGenerationRef.current !== generation || demoTransitionRef.current !== 'entering') return;
+      // No signed-in account's cached data stays behind the demo workspace.
+      if ((await firestoreCache.prepareForUser(null)).status !== 'ready') return;
+      if (!mountedRef.current || authGenerationRef.current !== generation || demoTransitionRef.current !== 'entering') return;
       try {
         activateClinicianDemoWorkspace();
         rememberClinicianDemoWorkspace();
@@ -310,7 +367,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
+  const logout = async ({ discardUnsyncedWrites = false }: { discardUnsyncedWrites?: boolean } = {}): Promise<LogoutOutcome> => {
+    // Queued writes are lost when the cache is cleared: give them a moment to
+    // upload, and let the user decide if some remain (usually offline). The
+    // in-memory demo workspace has no Firebase account and no queued writes.
+    if (!discardUnsyncedWrites && !isClinicianDemoWorkspace() && auth.currentUser && await firestoreCache.hasUnsyncedWrites()) {
+      return 'unsynced';
+    }
     ++authGenerationRef.current;
     clearPendingInvitation();
     demoTransitionRef.current = null;
@@ -319,14 +382,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     deactivateClinicianDemoWorkspace();
     setUser(null);
     setRole(null);
-    setLoading(false);
-    await signOut(auth).catch(() => {});
+    setLoading(true);
+    // Signs out (bounded), clears the cache and loads the app afresh. If the
+    // cleanup cannot finish, the user is still signed out and the next start
+    // finishes it before anything uses Firestore.
+    await firestoreCache.endSession({ reason: 'sign-out', signOut: true, destination: '/' });
+    return 'signed-out';
   };
 
   const demoWorkspace = isClinicianDemoWorkspace();
+  const cacheStatus = useSyncExternalStore(firestoreCache.subscribe, firestoreCache.getStatus, firestoreCache.getStatus);
+  // Read in the same render as the status change that accompanies it.
+  const cacheEndingReason = cacheStatus === 'ending' ? firestoreCache.getEndingReason() : null;
+
+  const signOutWithoutFirestore = async () => {
+    ++authGenerationRef.current;
+    clearPendingInvitation();
+    identityRef.current = null;
+    setUser(null);
+    setRole(null);
+    setLoading(true);
+    await firestoreCache.signOutWithoutFirestore();
+  };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, isDemoWorkspace: demoWorkspace }}>
+    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, loginAsDemoClinician, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, isDemoWorkspace: demoWorkspace }}>
       {children}
     </AuthContext.Provider>
   );

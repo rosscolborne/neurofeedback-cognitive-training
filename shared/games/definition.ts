@@ -32,6 +32,11 @@ export interface GameModeDefinition {
   readonly levels: readonly LevelDefinition[];
   /** True when the level ramps inside a session. */
   readonly adaptive: boolean;
+  /**
+   * The fixed run length in active time (pauses excluded), or null for an
+   * untimed mode. Mental Math timed-90: 90_000. Absent means untimed.
+   */
+  readonly runDurationMs?: number | null;
   /** The unlocked start level when there is no valid progress for this mode. */
   readonly initiallyUnlockedStartLevel: number;
   /**
@@ -150,6 +155,11 @@ function modeProblems(mode: GameModeDefinition): string[] {
     if (level.level !== index + 1) problems.push(`mode '${mode.id}': levels must be numbered 1..N in order`);
     if (level.label.trim().length === 0) problems.push(`mode '${mode.id}': level ${level.level} needs a label`);
   });
+  const { runDurationMs } = mode;
+  if (runDurationMs !== undefined && runDurationMs !== null
+    && (!isPositiveInt(runDurationMs) || runDurationMs > MAX_ACTIVE_DURATION_MS)) {
+    problems.push(`mode '${mode.id}': runDurationMs must be null or 1-${MAX_ACTIVE_DURATION_MS}`);
+  }
   const { initiallyUnlockedStartLevel: initial } = mode;
   if (!Number.isInteger(initial) || initial < 1 || initial > mode.levels.length) {
     problems.push(`mode '${mode.id}': initiallyUnlockedStartLevel must be a level of the mode`);
