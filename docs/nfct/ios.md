@@ -33,7 +33,10 @@ nothing:
    disagree.
 
 The display name and icon can change at any time; NFCT-34 sets the public
-ones.
+ones. The app's own screens name the product with `APP_DISPLAY_NAME` in
+`src/config/appIdentity.ts`, which a test keeps equal to `appName`, so a
+rename changes `appName`, `CFBundleDisplayName` in `ios/App/App/Info.plist`
+and `APP_DISPLAY_NAME` together.
 
 NFCT is a new app in the same Apple Developer account that holds Waveable's
 app, so only the app's own identity had to change. NFCT-30 replaced

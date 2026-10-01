@@ -26,7 +26,7 @@ describe('shared patient CSV delivery', () => {
     exportPatientSessionCsv(rows, status);
     expect(canShare).toHaveBeenCalledTimes(1);
     const file = share.mock.calls[0][0].files![0] as File;
-    expect(file.name).toMatch(/^waveable_progress_\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(file.name).toMatch(/^session_progress_\d{4}-\d{2}-\d{2}\.csv$/);
     expect(file.type).toBe('text/csv');
     expect(await file.text()).toContain('"Sep 27, 2026"');
     expect(await file.text()).toContain(',Yes');
@@ -73,7 +73,7 @@ describe('shared patient CSV delivery', () => {
     expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
     expect(link).toMatchObject({
       href: 'blob:patient-export', target: '_blank',
-      download: expect.stringMatching(/^waveable_progress_\d{4}-\d{2}-\d{2}\.csv$/),
+      download: expect.stringMatching(/^session_progress_\d{4}-\d{2}-\d{2}\.csv$/),
     });
     expect(appendChild).toHaveBeenCalledWith(link);
     expect(link.click).toHaveBeenCalledOnce();

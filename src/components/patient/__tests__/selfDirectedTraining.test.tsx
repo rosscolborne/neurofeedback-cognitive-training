@@ -5,6 +5,7 @@ import type { ClientProfile, ClinicBrandConfig } from '../../../types';
 import { createBlankProfile } from '../../../services/storageEngine';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { ClinicianManagedTrainingError } from '../../../services/patientTrainingAuthority';
+import { APP_DISPLAY_NAME } from '../../../config/appIdentity';
 
 const state = vi.hoisted(() => ({
   getSessions: vi.fn(async () => []), saveSelfDirectedTrainingSetup: vi.fn(), acceptPatientInvitation: vi.fn(), disconnectFromClinician: vi.fn(),
@@ -208,6 +209,26 @@ describe('self-directed patient shell', () => {
     expect(state.saveSelfDirectedTrainingSetup).toHaveBeenCalledTimes(1);
     act(() => button(renderer, 'Close')!.props.onClick());
     expect(renderer.root.findAllByType(SelfDirectedSetupModal)).toHaveLength(0);
+    await act(async () => { renderer.unmount(); });
+  });
+});
+
+describe('patient shell header name (NFCT-38)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it.each([
+    ['an unlinked patient', unlinked, APP_DISPLAY_NAME],
+    ['a clinician-linked patient', linked, brand.name],
+  ] as const)('names the app or clinic, never Waveable, for %s', async (_who, client, name) => {
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    expect(hasText(renderer.root.findByType('header'), name)).toBe(true);
+    expect(text(renderer)).not.toMatch(/waveable/i);
     await act(async () => { renderer.unmount(); });
   });
 });
