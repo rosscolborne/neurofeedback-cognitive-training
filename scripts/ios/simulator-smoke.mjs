@@ -83,7 +83,10 @@ export function summarize({ device, bundleId, userAgent, results }) {
     lines.push('', `### ${result.name}`, '', result.summary, '', '| Check | Result | Detail |', '| --- | --- | --- |');
     lines.push(...result.checks.map(([name, ok, detail]) => `| ${cell(name)} | ${ok ? 'PASS' : '**FAIL**'} | ${cell(detail)} |`));
     if (result.error) lines.push('', `Stopped at: \`${cell(result.error)}\``);
-    if (result.screen) lines.push('', `Screen at the failure: \`${cell(JSON.stringify(result.screen))}\``);
+    if (result.screen) {
+      const { when = 'at the failure', hash, headings, buttons, alerts } = result.screen;
+      lines.push('', `Screen ${when}: \`${cell(JSON.stringify({ hash, headings, buttons, alerts }))}\``);
+    }
     for (const note of result.notes) lines.push('', note);
     if (result.consoleErrors.length) lines.push('', 'Console errors (reported, not failed):', '', ...result.consoleErrors.map((line) => `- \`${cell(line)}\``));
     if (result.unhandledRejections.length) lines.push('', 'Unhandled promise rejections (reported, not failed):', '', ...result.unhandledRejections.map((line) => `- \`${cell(line)}\``));
@@ -158,11 +161,16 @@ export async function runScenario(name, { device, channel, emulators, out }) {
       await device.screenshot(join(dir, file));
       screenshots.push(file);
     } catch { /* the Simulator is gone */ }
-    screen = await app.snapshot();
+    // The page's own view when the step gave up, else what it shows now.
+    screen = caught?.result?.screen ? { ok: true, when: 'when the step gave up', ...caught.result.screen } : { when: 'after the failure', ...(await app.snapshot()) };
+    record({ action: 'screen', ok: true, screen, screenAfter: caught?.result?.screen ? await app.snapshot() : undefined });
   } finally {
     await device.kill();
   }
 
+  for (const step of steps.filter(({ stalledMs }) => stalledMs >= 2_000)) {
+    notes.push(`The page's JavaScript stalled for ${(step.stalledMs / 1_000).toFixed(1)} s during ${step.action} ${step.target} (reported, not failed).`);
+  }
   const launchesJudged = evaluateLaunches(logs.map(({ log }) => log));
   const allChecks = [
     ...checks,

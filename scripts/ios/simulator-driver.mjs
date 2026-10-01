@@ -229,8 +229,13 @@ export class AppDriver {
       result = { ok: false, reason: error.message };
     }
     const detail = result.ok ? (result.waited ? `waited: ${result.waited}` : undefined) : result.reason;
-    this.record({ action, target: description, ok: result.ok === true, ms: Date.now() - started, detail, scrolled: result.scrolled || undefined });
-    if (result.ok !== true) throw new StepError(`${action} ${description}: ${result.reason ?? 'failed'}`, result);
+    // A main thread that stalled for over a second during the step is worth knowing about, pass or fail.
+    const stalledMs = result.stalledMs >= 1_000 ? result.stalledMs : undefined;
+    this.record({ action, target: description, ok: result.ok === true, ms: Date.now() - started, detail, scrolled: result.scrolled || undefined, stalledMs });
+    if (result.ok !== true) {
+      const stall = stalledMs ? ` (the page's JavaScript was stalled for ${(stalledMs / 1_000).toFixed(1)} s)` : '';
+      throw new StepError(`${action} ${description}: ${result.reason ?? 'failed'}${stall}`, result);
+    }
     return result;
   }
 

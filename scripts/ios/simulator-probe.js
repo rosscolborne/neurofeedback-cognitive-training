@@ -234,28 +234,41 @@
     return `${describeTarget(condition.target)} to be ${condition.state ?? 'visible'}${extra}`;
   }
 
-  /** Polls `check` until it returns a value or the time runs out. */
+  /**
+   * Polls `check` until it returns a value or the time runs out. It also
+   * measures how long the page's main thread was stalled (a timer that fired
+   * late). A page that was frozen past the deadline gets one short grace to
+   * render what it was doing, and the stall is reported either way.
+   */
   async function until(check, timeout, gap = 100) {
-    const end = Date.now() + timeout;
+    let end = Date.now() + timeout;
+    let stalledMs = 0;
+    let graced = false;
     for (;;) {
       const value = check();
-      if (value) return value;
-      if (Date.now() >= end) return null;
+      if (value) return { value, stalledMs };
+      if (Date.now() >= end) {
+        if (stalledMs < 1_000 || graced) return { value: null, stalledMs };
+        graced = true;
+        end = Date.now() + 2_000;
+      }
+      const before = Date.now();
       await sleep(gap);
+      stalledMs = Math.max(stalledMs, Date.now() - before - gap);
     }
   }
 
   async function waitFor(conditions, timeout, gap) {
-    const found = await until(() => {
+    const { value, stalledMs } = await until(() => {
       for (const [index, condition] of conditions.entries()) {
         const seen = holds(condition);
         if (seen) return { index, ...seen };
       }
       return null;
     }, timeout, gap);
-    return found
-      ? { ok: true, ...found }
-      : { ok: false, reason: `Timed out after ${timeout} ms waiting for ${conditions.map(describeCondition).join(' or ')}.`, hash: location.hash };
+    return value
+      ? { ok: true, ...value, stalledMs }
+      : { ok: false, reason: `Timed out after ${timeout} ms waiting for ${conditions.map(describeCondition).join(' or ')}.`, stalledMs, screen: screenNow() };
   }
 
   /** Waits for a single visible, enabled element that a user could tap. */
@@ -263,7 +276,7 @@
     let last = '';
     let first = '';
     let scrolled = false;
-    const hit = await until(() => {
+    const { value: hit, stalledMs } = await until(() => {
       if (last && !first) first = last;
       const { element, reason } = single(target);
       if (!element) {
@@ -283,7 +296,8 @@
       return { element, ...result };
     }, timeout);
     // `waited` says what held a successful tap up, for the step log.
-    return hit ? { ...hit, scrolled, waited: first || last || undefined } : { reason: `Could not tap ${describeTarget(target)} within ${timeout} ms: ${last}.` };
+    return hit ? { ...hit, scrolled, stalledMs, waited: first || last || undefined }
+      : { reason: `Could not tap ${describeTarget(target)} within ${timeout} ms: ${last}.`, stalledMs, screen: screenNow() };
   }
 
   // ---- Commands ----
@@ -291,17 +305,18 @@
   const COMMANDS = {
     async tap({ target, timeout = 10_000, then }) {
       const hit = await actionable(target, timeout);
-      if (hit.reason) return { ok: false, reason: hit.reason };
+      if (hit.reason) return { ok: false, reason: hit.reason, stalledMs: hit.stalledMs, screen: hit.screen };
       dispatchTap(hit);
-      const tapped = { ok: true, tapped: describe(hit.target), at: hit.point, scrolled: hit.scrolled, waited: hit.waited };
+      const tapped = { ok: true, tapped: describe(hit.target), at: hit.point, scrolled: hit.scrolled, waited: hit.waited, stalledMs: hit.stalledMs };
       if (!then) return tapped;
       // Waits in the page straight after the tap, so a short-lived state (a feedback flash) is not missed.
       const after = await waitFor(then.conditions, then.timeout ?? 5_000, FAST_POLL_MS);
-      return { ...tapped, ok: after.ok, then: after, reason: after.reason };
+      const reason = after.ok ? undefined : `tapped, then: ${after.reason}`;
+      return { ...tapped, ok: after.ok, then: after, reason, stalledMs: Math.max(hit.stalledMs, after.stalledMs), screen: after.screen };
     },
     async fill({ target, value, timeout = 10_000 }) {
       const hit = await actionable(target, timeout);
-      if (hit.reason) return { ok: false, reason: hit.reason };
+      if (hit.reason) return { ok: false, reason: hit.reason, stalledMs: hit.stalledMs, screen: hit.screen };
       dispatchTap(hit);
       const input = hit.element;
       const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -315,34 +330,37 @@
     },
     async read({ target, timeout = 10_000 }) {
       let last = '';
-      const element = await until(() => {
+      const { value: element, stalledMs } = await until(() => {
         const { element: found, reason } = single(target);
         last = reason ?? '';
         return found ?? null;
       }, timeout);
-      if (!element) return { ok: false, reason: `Could not read ${describeTarget(target)} within ${timeout} ms: ${last}.` };
-      return { ok: true, text: elementText(element), name: accessibleName(element), enabled: isEnabled(element), checked: Boolean(element.checked) };
+      if (!element) return { ok: false, reason: `Could not read ${describeTarget(target)} within ${timeout} ms: ${last}.`, stalledMs, screen: screenNow() };
+      return { ok: true, text: elementText(element), name: accessibleName(element), enabled: isEnabled(element), checked: Boolean(element.checked), stalledMs };
     },
     async state() {
       return { ok: true, hash: location.hash, visibilityState: document.visibilityState, hasFocus: document.hasFocus(), now: Date.now(), lifecycle: [...lifecycle] };
     },
-    /** What is on screen, for failure reports: headings, controls, alerts and layout. */
     async snapshot() {
-      const visible = (selector) => [...document.querySelectorAll(selector)].filter(isVisible);
-      const cap = (items) => items.slice(0, 40);
-      return {
-        ok: true,
-        hash: location.hash,
-        visibilityState: document.visibilityState,
-        viewport: { width: window.innerWidth, height: window.innerHeight, visible: visibleScreen() },
-        horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-        headings: cap(visible(ROLES.heading).map((element) => accessibleName(element))),
-        buttons: cap(visible(ROLES.button).map((element) => `${accessibleName(element)}${isEnabled(element) ? '' : ' (disabled)'}`)),
-        fields: cap(visible('input, textarea, select').map((element) => `${element.type || element.tagName.toLowerCase()}: ${accessibleName(element)}`)),
-        alerts: cap(visible('[role="alert"], [role="status"]').map((element) => normalize(element.textContent)).filter(Boolean)),
-      };
+      return { ok: true, ...screenNow() };
     },
   };
+
+  /** What is on screen, for checkpoints and failures: headings, controls, alerts and layout. */
+  function screenNow() {
+    const visible = (selector) => [...document.querySelectorAll(selector)].filter(isVisible);
+    const cap = (items) => items.slice(0, 40);
+    return {
+      hash: location.hash,
+      visibilityState: document.visibilityState,
+      viewport: { width: window.innerWidth, height: window.innerHeight, visible: visibleScreen() },
+      horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      headings: cap(visible(ROLES.heading).map((element) => accessibleName(element))),
+      buttons: cap(visible(ROLES.button).map((element) => `${accessibleName(element)}${isEnabled(element) ? '' : ' (disabled)'}`)),
+      fields: cap(visible('input, textarea, select').map((element) => `${element.type || element.tagName.toLowerCase()}: ${accessibleName(element)}`)),
+      alerts: cap(visible('[role="alert"], [role="status"]').map((element) => normalize(element.textContent)).filter(Boolean)),
+    };
+  }
 
   // ---- The connection to the host ----
 

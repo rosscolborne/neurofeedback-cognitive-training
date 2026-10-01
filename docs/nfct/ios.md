@@ -270,8 +270,11 @@ cat "ios-sim-$run/summary.md"
 
 Then look at the screenshots (`<scenario>/NN-<checkpoint>.png`; a failed
 scenario adds `NN-failure.png`) and, for a failure, the `Stopped at` step in
-the summary, the screen outline at the failure, `steps.json` and the launch
-logs. `node scripts/ios/simulator-smoke.mjs list` describes the scenarios.
+the summary, the screen outline the page itself saw when the step gave up,
+`steps.json` and the launch logs. The agent also measures how long the page's
+main thread stalls during a wait: a stall over two seconds is reported in the
+summary, and a page frozen past a step's deadline gets a two-second grace to
+render before the step fails. `node scripts/ios/simulator-smoke.mjs list` describes the scenarios.
 
 A new scenario is an entry in `SCENARIOS`: an async `run(ctx)` using
 `ctx.launch()`, `ctx.relaunch()`, `ctx.app.tap/fill/wait/read`,
