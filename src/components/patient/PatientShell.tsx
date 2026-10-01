@@ -43,6 +43,7 @@ import {
 } from '../../services/clinicalProtocolTemplates';
 import { MentalMathGame } from '../../consumer/games/mentalMath/MentalMathGame';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
+import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
 // NFCT-21: Mental Math is reached from the Train tab until the consumer shell
 // exists (NFCT-6). Demo Mode's synthetic EEG is offered as an optional,
@@ -534,7 +535,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <BrandLogo size={28} variant="terracotta" />
           )}
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{isClinicianLinked ? brand.name : 'Waveable'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{isClinicianLinked ? brand.name : APP_DISPLAY_NAME}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>
