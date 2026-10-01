@@ -22,6 +22,8 @@ Use this skill when changing or reviewing Neurasticity behavior. Its purpose is 
 
 Choose the lowest layer that observes the behavior at risk. Add another layer when a real integration boundary matters, such as client transactions plus rules, or persistence plus UI reload. Check existing `e2e/` coverage before adding a browser test; update a clear existing test where possible. A static contract test does not replace runtime or rules evidence, and Demo Mode does not replace hardware evidence. See the [README checks](../../../README.md#checks) for current test commands.
 
+The emulator suites use fixed ports. When other agents share the machine, run them in your own [QA lane](../../../AGENTS.md#parallel-agents-qa-lanes) (`scripts/qa-lane.sh exec <lane> -- npm run test:rules`): lanes run in parallel, suites within one lane one at a time.
+
 ## Playwright behavior
 
 Read [the E2E reference](references/e2e.md) before adding or running authenticated Playwright tests.
@@ -34,19 +36,20 @@ Test observable behavior, including meaningful empty, error, and negative states
 
 ## Phones, WebKit and iOS
 
-NFCT ships as a responsive web app and as an iPhone app. Coverage runs in five layers, cheapest first; each proves less than the next, and none substitutes for a higher one ([docs/nfct/ios.md](../../../docs/nfct/ios.md#checks-and-where-they-run)):
+NFCT ships as a responsive web app and as an iPhone app. Coverage runs in six device layers, cheapest first; each proves less than the next, and none substitutes for a higher one ([docs/nfct/ios.md](../../../docs/nfct/ios.md#checks-and-where-they-run)):
 
 1. **Desktop Chromium**: the Playwright suites above.
-2. **WebKit with iPhone profiles**: `npm run test:e2e:webkit` runs the specs in `IOS_WEBKIT_SPECS` (`playwright.webkit.config.ts`) in Playwright WebKit as an iPhone SE (3rd gen, 375 × 667) and an iPhone 17 (402 pt wide). Install the browser once with `npx playwright install webkit`. CI runs it on every PR (`ios.yml`).
-3. **iOS Simulator and the native build**: `ios.yml` on GitHub-hosted macOS compiles the app, checks the Release build, and signs up and relaunches in WKWebView at `capacitor://localhost`. It needs no local Mac.
-4. **A physical iPhone**: suspension, interruptions, the keyboard and offline durability (NFCT-32's checklist).
-5. **A real Muse headset**: the hardware layer above.
+2. **Interactive Chromium at iPhone sizes**: exploratory and agent-driven. An agent operates the changed UI in real Chrome with the iPhone SE (3rd gen) and iPhone 17 device profiles ([exploratory QA](../nfct-exploratory-qa/SKILL.md#drive-the-browser)). Chromium mobile emulation: not iOS or Safari evidence.
+3. **Playwright WebKit with iPhone profiles**: `npm run test:e2e:webkit` runs the specs in `IOS_WEBKIT_SPECS` (`playwright.webkit.config.ts`) in Playwright WebKit as an iPhone SE (3rd gen, 375 × 667) and an iPhone 17 (402 pt wide). Install the browser once with `npx playwright install webkit`. CI runs it on every PR (`ios.yml`).
+4. **iOS Simulator and the native build**: `ios.yml` on GitHub-hosted macOS compiles the app, checks the Release build, and signs up and relaunches in WKWebView at `capacitor://localhost`. It needs no local Mac.
+5. **A physical iPhone**: suspension, interruptions, the keyboard and offline durability (NFCT-32's checklist).
+6. **A physical iPhone with a Muse headset**: real Bluetooth EEG on the device; see the hardware layer above.
 
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView: never report it as iOS or Simulator evidence. Simulator evidence is not device evidence.
 
 For user-facing UI work:
 
-- Check the changed screens at phone sizes as well as desktop: in portrait at 375 × 667 and about 400 pt wide. Look for horizontal overflow, clipped or overlapping text, primary actions below the fold, and touch targets under 44 pt. [Exploratory QA](../nfct-exploratory-qa/SKILL.md) does this for every user-facing change.
+- Check the changed screens at phone sizes as well as desktop: in portrait at 375 × 667 and about 400 pt wide. Look for horizontal overflow, clipped or overlapping text, primary actions below the fold, and touch targets under 44 pt. [Exploratory QA](../nfct-exploratory-qa/SKILL.md) does this interactively (layer 2) for every user-facing change; screenshots alone do not count.
 - If a changed flow is in `IOS_WEBKIT_SPECS`, run `npm run test:e2e:webkit`. When a new spec covers a flow that matters on iPhone (sign-in and account, a game run, offline or persistence), add it to the list and confirm with `--list` that both iPhone projects discover it. Keep the list focused rather than running every spec in WebKit.
 - Treat a failure that happens only in WebKit as a finding until shown otherwise, not as flakiness.
 - Keep product code responsive, not phone-specific: the native target is iPhone-only, but the web app serves every size.

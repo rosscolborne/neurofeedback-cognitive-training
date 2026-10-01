@@ -40,6 +40,8 @@ e2e/.cleanup-reports/
 e2e/.auth/
 playwright-report/
 test-results/
+# Playwright CLI output from interactive QA (scripts/qa-browser.sh)
+.playwright-cli/
 
 # Local Python environment and test artifacts
 .venv/

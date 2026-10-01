@@ -392,3 +392,34 @@ The scheduled sweep does not run locally, because there is no Pub/Sub
 emulator. The CLI's Node-version and Application Default Credentials warnings
 are expected: with a `demo-` project, anything not emulated fails rather than
 reaching a real project.
+
+### Parallel agents: QA lanes
+
+The emulator and Vite ports are fixed, so on a shared machine each agent runs
+the emulators, Vite, emulator-backed suites and its browser in its own QA
+lane: a private loopback network (Linux, no root, no port or config changes).
+Name the lane after your stream or run; `exec` works from any later shell
+call, the environment (such as `JAVA_HOME`) passes through, and servers you
+start in the background stay in the lane:
+
+```bash
+scripts/qa-lane.sh up nfct22
+scripts/qa-lane.sh exec nfct22 -- npm run test:rules        # any suite, unchanged
+scripts/qa-lane.sh exec nfct22 -- npx firebase emulators:start --only auth,firestore,functions --project demo-neurasticity-protocol-e2e
+scripts/qa-lane.sh exec nfct22 -- env VITE_E2E_EMULATORS=true VITE_FIREBASE_PROJECT_ID=demo-neurasticity-protocol-e2e \
+  VITE_FIREBASE_API_KEY=local-test-key npx vite --host 127.0.0.1 --port 5193
+scripts/qa-lane.sh list
+scripts/qa-lane.sh down nfct22                              # stops everything in the lane
+```
+
+- A lane has no internet: run installs, `npx playwright install`, downloads,
+  `git` and `gh` outside it. Web fonts from Google Fonts do not load in it.
+- Its servers are reachable only from inside it, so run the browser there too
+  ([interactive browser QA](.agents/skills/nfct-exploratory-qa/SKILL.md#drive-the-browser)).
+- Processes appear as root inside (your files stay yours), so Chrome there
+  needs its sandbox off; `.playwright/cli.config.json` does that for
+  `scripts/qa-browser.sh`, and Playwright's test runner already does.
+- `down` your lane when you finish. It stops only processes in that lane.
+
+Without lanes (not Linux, or unprivileged user namespaces disabled; the script
+says which), run emulator-backed work one at a time per machine.
