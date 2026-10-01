@@ -43,6 +43,8 @@ import {
 import { MentalMathGame } from '../../consumer/games/mentalMath/MentalMathGame';
 import { MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
 import type { MentalMathView } from '../../consumer/games/mentalMath/MentalMathScreen';
+import { HomeOverview } from '../../consumer/overview/HomeOverview';
+import { ProgressOverview } from '../../consumer/overview/ProgressOverview';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
 import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
@@ -307,6 +309,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </form>
   ));
 
+  // Mental Math opens over the shell from Home, Train or Progress; leaving it returns to the same tab.
+  const openMentalMath = (view: MentalMathView) => {
+    setMentalMathView(view);
+    setMentalMathOwnerId(client.id);
+  };
+
   const handleStartSession = (exp: ExperienceType) => {
     if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
     setSessionOwnerId(client.id);
@@ -508,6 +516,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             onStartSession={handleStartSession}
             onOpenProtocolDetails={() => setShowProtocolDetails(true)}
             onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
+            gamesSection={(
+              <HomeOverview
+                playerId={client.id}
+                onPlay={() => openMentalMath('picker')}
+                onOpenProgress={() => setActiveTab('progress')}
+                onOpenGameProgress={() => openMentalMath('progress')}
+              />
+            )}
           />
         )}
 
@@ -576,7 +592,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'progress' && (
           <ProgressHistory
             client={client}
-            gamesSection={<MentalMathProgressCard onOpen={() => { setMentalMathView('progress'); setMentalMathOwnerId(client.id); }} />}
+            gamesSection={(
+              <ProgressOverview
+                playerId={client.id}
+                onPlay={() => openMentalMath('picker')}
+                games={<MentalMathProgressCard onOpen={() => openMentalMath('progress')} />}
+              />
+            )}
           />
         )}
 

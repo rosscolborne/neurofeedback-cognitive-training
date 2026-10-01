@@ -40,7 +40,8 @@ describe('Progress CSV caller', () => {
   });
 
   it('shows only supported milestones, never the retired Tidal Garden badge', async () => {
-    state.getSessions.mockResolvedValueOnce([]);
+    // Milestones belong to the neurofeedback section, which shows them once there is a session.
+    state.getSessions.mockResolvedValueOnce([session('one', Date.now() - 86_400_000)]);
     let renderer!: ReactTestRenderer;
     // A legacy profile can still hold a grown garden; there is no garden to show for it.
     await act(async () => { renderer = create(<ProgressHistory client={{ ...client, tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: [], lastWatered: '' } }} />); });
