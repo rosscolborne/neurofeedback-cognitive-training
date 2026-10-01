@@ -11,12 +11,10 @@ export interface ExperienceCatalogueEntry {
   description: string;
   icon: React.FC<{ size?: number }>;
   tag: string;
-  badge: string;
-  gradient: string;
 }
 
 export const EXPERIENCE_CATALOGUE: Record<ExperienceType, ExperienceCatalogueEntry> = {
-  'neuro-gambit': { id: 'neuro-gambit', name: 'NeuroGambit', icon: Crown, description: 'Tactical chess calculation, impulse gating & post-blunder tilt reset', tag: 'Chess', badge: 'NEW • Chess', gradient: 'linear-gradient(135deg, rgba(232, 150, 122, 0.25), rgba(92, 140, 70, 0.25))' },
+  'neuro-gambit': { id: 'neuro-gambit', name: 'NeuroGambit', icon: Crown, description: 'Tactical chess calculation, impulse gating & post-blunder tilt reset', tag: 'Chess' },
 };
 
 export function getAssignedExperienceIds(allowedExperiences: ExperienceType[]): ExperienceType[] {

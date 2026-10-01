@@ -38,8 +38,9 @@ const train = (renderer: ReactTestRenderer) => {
   if (!button) throw new Error('Train tab missing');
   act(() => button.props.onClick());
 };
-const card = (renderer: ReactTestRenderer, name: string) => renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function' && node.findAll((child) => child.children.includes(name)).length > 0)[0];
-const cards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function');
+// Train's experience cards, as the button that starts each one (the name button stretched over the card).
+const cards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.type === 'li' && String(node.props.className).split(' ').includes('card-patient')).map((item) => item.findByType('button'));
+const card = (renderer: ReactTestRenderer, name: string) => cards(renderer).find((button) => button.children.includes(name));
 const begin = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes(' Begin Session')).length > 0)!.props.onClick;
 
 describe('patient assigned catalogue', () => {
@@ -59,14 +60,14 @@ describe('patient assigned catalogue', () => {
     expect(text(renderer)).toContain('NeuroGambit');
     train(renderer);
     expect(cards(renderer)).toHaveLength(1);
-    const staleTrainClick = card(renderer, 'NeuroGambit').props.onClick;
+    const staleTrainClick = card(renderer, 'NeuroGambit')!.props.onClick;
     await act(async () => { renderer.update(shell(profile([]))); });
     expect(card(renderer, 'NeuroGambit')).toBeUndefined();
     act(() => staleStart('neuro-gambit'));
     act(() => staleTrainClick());
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
     await act(async () => { renderer.update(shell(profile(['neuro-gambit']))); });
-    act(() => card(renderer, 'NeuroGambit').props.onClick());
+    act(() => card(renderer, 'NeuroGambit')!.props.onClick());
     expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('neuro-gambit');
     await act(async () => { renderer.unmount(); });
   });

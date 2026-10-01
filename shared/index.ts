@@ -7,6 +7,7 @@ export * from './domains';
 export * from './games/definition';
 export * from './games/seed';
 export * from './games/mental-math';
+export * from './games/catalogue';
 export * from './schemas/read';
 export * from './schemas/profile';
 export * from './schemas/gameSession';

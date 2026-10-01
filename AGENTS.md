@@ -319,9 +319,11 @@ iOS ([docs/nfct/ios.md](docs/nfct/ios.md)): `npm test` includes the iOS
 project contract tests, and `npm run sync:ios` builds, syncs and runs the
 release check (`npm run verify:ios-release`). `.github/workflows/ios.yml` runs
 the WebKit iPhone suite on every PR (`npm run test:e2e:webkit` locally, after
-`npx playwright install webkit`; needs Java 21) and, when native-relevant
-files change, an unsigned Xcode build and an iOS Simulator smoke test on
-GitHub-hosted macOS. On a Mac, `npm run sync:ios && npm run ios:build` runs
+`npx playwright install webkit` and `npm ci --prefix functions`; it starts the
+Functions emulator; needs Java 21) and, when native-relevant
+files change, an unsigned Xcode build and the iOS Simulator scenarios on
+GitHub-hosted macOS, which agents can also run on any branch
+([Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)). On a Mac, `npm run sync:ios && npm run ios:build` runs
 the same Xcode build.
 
 ## Stage 1 test coverage
