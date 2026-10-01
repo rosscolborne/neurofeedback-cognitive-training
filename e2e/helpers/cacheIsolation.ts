@@ -278,6 +278,16 @@ export async function scanFirestoreIndexedDb(needles: string[]): Promise<{ datab
     return { databases: names, hits };
 }
 
+/**
+ * Queues `count` cache reads on the app's Firestore instance without waiting
+ * for them. Every later Firestore operation, including applying a write to the
+ * cache, waits behind them on the SDK's queue, as on a slow device.
+ */
+export function occupyFirestoreQueue(count: number): void {
+    const reference = doc(db, 'users', signedInUid());
+    for (let index = 0; index < count; index += 1) void getDocFromCache(reference).catch(() => undefined);
+}
+
 export async function setNetwork(enabled: boolean): Promise<void> {
     await (enabled ? enableNetwork(db) : disableNetwork(db));
 }

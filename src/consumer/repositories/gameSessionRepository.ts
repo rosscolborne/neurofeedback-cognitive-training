@@ -40,6 +40,7 @@ import {
   assertNoReservedKeys,
   assertNoUndefined,
   ConsumerWriteValidationError,
+  localWriteApplied,
   pendingWrite,
   withSdkValidation,
   type PendingWrite,
@@ -152,9 +153,11 @@ export interface StartedGameSession {
   readonly userId: string;
   /**
    * Writes the finished session once, on its own. Resolves once the write is
-   * queued (so it works offline, and never waits on the network);
-   * `acknowledged` settles when the server accepts or refuses it. A handle
-   * saves at most once: after the write is queued, every further call throws.
+   * stored in this device's cache and queued, so it survives a reload or a
+   * closed tab from then on (it works offline, and never waits on the
+   * network); `acknowledged` settles when the server accepts or refuses it. A
+   * handle saves at most once: after the write is queued, every further call
+   * throws.
    *
    * EEG is not part of this write. To keep the run's EEG recording, call
    * `eegRecordingRepository.saveRecording(saved, draft)` after this resolves;
@@ -333,9 +336,14 @@ export function createGameSessionRepository(
         const parsed = gameSessionCreateSchemaFor(input.definition, serverTimestampSchema).safeParse(write);
         if (!parsed.success) throw new ConsumerWriteValidationError('game session', parsed.error.issues);
 
-        const commit = withSdkValidation('game session', () => setDoc(gameSessionRef(firestore, userId, sessionId), toSdkTimestamps(parsed.data)));
+        const reference = gameSessionRef(firestore, userId, sessionId);
+        const commit = withSdkValidation('game session', () => setDoc(reference, toSdkTimestamps(parsed.data)));
         state = 'saved';
-        return { sessionId, userId, ...pendingWrite(commit) };
+        const pending = pendingWrite(commit);
+        // Report the run as saved on this device only once it is: until the
+        // SDK has stored the write, a reload or a closed tab would lose it.
+        await localWriteApplied(reference);
+        return { sessionId, userId, ...pending };
       } finally {
         // Nothing was queued: the handle can still save.
         if (state === 'saving') state = 'ready';

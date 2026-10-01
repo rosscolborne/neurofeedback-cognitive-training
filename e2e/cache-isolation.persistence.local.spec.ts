@@ -275,9 +275,14 @@ test('the same account keeps its offline data across a reload, and it uploads la
     await arriveAtPatientDashboard(page);
 
     // Firestore unreachable (the app itself still loads): a game is saved and stays queued.
+    // With the SDK's queue busy, as on a slow device, the write reaches the
+    // cache well after save() is called, so this reload keeps it only if
+    // save() resolves once the write is stored (NFCT-41, NFCT-42).
     await context.route(`${FIRESTORE}/**`, (route) => route.abort());
     const queued = await page.evaluate(async () => {
-        const saved = await (await import('/e2e/helpers/cacheIsolation.ts')).saveGameSession({ withEeg: false, waitForServer: false });
+        const helper = await import('/e2e/helpers/cacheIsolation.ts');
+        helper.occupyFirestoreQueue(200);
+        const saved = await helper.saveGameSession({ withEeg: false, waitForServer: false });
         return `users/${saved.uid}/gameSessions/${saved.sessionId}`;
     });
 

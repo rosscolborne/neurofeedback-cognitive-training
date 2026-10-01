@@ -1,4 +1,4 @@
-import { FirestoreError, Timestamp } from 'firebase/firestore';
+import { FirestoreError, getDocFromCache, Timestamp, type DocumentReference } from 'firebase/firestore';
 import type { z } from 'zod';
 import { withServerClockAt } from './serverClock';
 
@@ -22,6 +22,23 @@ export function pendingWrite(commit: Promise<void>): PendingWrite {
   // The caller may never await it; a refusal must not become an unhandled rejection.
   commit.catch(() => undefined);
   return { acknowledged: commit };
+}
+
+/**
+ * Resolves once a write the caller has just issued for `reference` has been
+ * applied to the local cache: with the persistent cache, stored in IndexedDB,
+ * so it survives a reload or a closed tab. `setDoc` only hands the write to
+ * the SDK's queue; this cache read joins the same queue behind it, so it
+ * settles after the write is stored. It never waits on the network. Only the
+ * ordering matters: if the read itself fails (for example the instance was
+ * terminated by a sign-out), the write's own promise reports what happened.
+ */
+export async function localWriteApplied(reference: DocumentReference): Promise<void> {
+  try {
+    await getDocFromCache(reference);
+  } catch {
+    // See above: the read is a barrier, not a check.
+  }
 }
 
 /** A write the repository refused before sending it: it would break the shared schema or the rules. */
