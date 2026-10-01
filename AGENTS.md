@@ -37,9 +37,10 @@ Favor:
 3. bugs that cause likely user-visible failure, realistic security, privacy or
    data-loss risk, or block near-term work.
 
-Do not spend significant effort on speculative hardening, obscure edge cases,
-architectural cleanup or low-probability concerns unless they meet one of
-these criteria or the user asks for it ([deep audit mode](#deep-audit-mode)).
+Do not spend significant effort on speculative hardening, architectural
+cleanup, or low-probability edge cases unless they cause meaningful user harm,
+data loss, security/privacy exposure, block upcoming work, or materially
+improve safe development velocity.
 When a non-feature finding has no concrete near-term impact, create or update
 a Jira follow-up ([out-of-scope work](#out-of-scope-work)) and continue with
 higher-value work.
