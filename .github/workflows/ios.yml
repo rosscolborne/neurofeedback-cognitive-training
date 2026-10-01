@@ -4,7 +4,21 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Weekly: the native job on the oldest supported iOS runtime (below).
+    - cron: '17 6 * * 1'
   workflow_dispatch:
+    inputs:
+      scenarios:
+        description: 'Simulator scenarios to run, space-separated (smoke, mental-math, lifecycle); empty runs all'
+        required: false
+        default: ''
+        type: string
+      ios_runtimes:
+        description: 'Older iOS runtimes to run the scenarios on instead of the newest, oldest first; the first that installs and boots is used (for example 16.4 17.5 18.6)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -27,6 +41,7 @@ concurrency:
 jobs:
   release-bundle:
     name: Release-bundle safety
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -48,6 +63,7 @@ jobs:
 
   webkit:
     name: WebKit iPhone (Playwright)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -81,15 +97,16 @@ jobs:
     timeout-minutes: 5
     outputs:
       native: ${{ steps.filter.outputs.native }}
+      scenarios: ${{ steps.filter.outputs.scenarios }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
       # macOS minutes are expensive, so pull requests run the native job only
-      # when they change something the Xcode build or the Simulator smoke
-      # test depends on. Web-only changes cannot break the native compile and
-      # are covered by the jobs above and ci.yml. Pushes to main and manual
-      # runs always run it, so drift is caught on main.
+      # when they change something the Xcode build or the Simulator scenarios
+      # depend on. Other web-only changes cannot break the native compile and
+      # are covered by the jobs above and ci.yml. Pushes to main, manual runs
+      # and the weekly run always run it, so drift is caught on main.
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
@@ -99,11 +116,19 @@ jobs:
             exit 0
           fi
           # The checkout is the PR merged into its base: HEAD^1 is the base.
-          git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
-          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
+          # Unit tests next to the code cannot change what the Simulator runs.
+          git diff --name-only HEAD^1 HEAD | grep -v '/__tests__/' > "$RUNNER_TEMP/changed.txt" || true
+          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/App\.tsx$|src/contexts/AuthContext\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/|src/consumer/games/mentalMath/)'
           if grep -qE "$native_paths" "$RUNNER_TEMP/changed.txt"; then
             echo "native=true" >> "$GITHUB_OUTPUT"
             grep -E "$native_paths" "$RUNNER_TEMP/changed.txt"
+            # Every scenario when Mental Math or the driver changes; otherwise the smoke scenario
+            # (sign-up and relaunch) is enough. Dispatch the others for anything else they drive.
+            if grep -qE '^(src/consumer/games/mentalMath/|scripts/ios/|\.github/workflows/ios\.yml$)' "$RUNNER_TEMP/changed.txt"; then
+              echo "scenarios=" >> "$GITHUB_OUTPUT"
+            else
+              echo "scenarios=smoke" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "native=false" >> "$GITHUB_OUTPUT"
             echo "No native-relevant changes; the macOS job is skipped."
@@ -119,6 +144,12 @@ jobs:
     timeout-minutes: 50
     env:
       XCODE_APP: /Applications/Xcode_26.5.app
+      # The weekly run checks the oldest supported iOS (16.4, ADR-002) with
+      # the smoke scenario. Playwright WebKit is always the latest WebKit, so
+      # this is the only automated check that the bundle runs on it. The
+      # runtime is a multi-gigabyte download: never on pull requests.
+      IOS_RUNTIMES: ${{ github.event_name == 'schedule' && '16.4 17.5 18.6' || inputs.ios_runtimes }}
+      REQUESTED_SCENARIOS: ${{ github.event_name == 'schedule' && 'smoke' || github.event_name == 'pull_request' && needs.changes.outputs.scenarios || inputs.scenarios }}
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -129,7 +160,7 @@ jobs:
           {
             echo "IOS_DERIVED_DATA=$RUNNER_TEMP/DerivedData"
             echo "IOS_SOURCE_PACKAGES=$RUNNER_TEMP/SourcePackages"
-            echo "SMOKE_OUT=$RUNNER_TEMP/ios-simulator-smoke"
+            echo "SIMULATOR_OUT=$RUNNER_TEMP/ios-simulator-scenarios"
           } >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
@@ -174,27 +205,51 @@ jobs:
           fi
           grep -F "error: The web bundle" "$RUNNER_TEMP/release-guard.log"
 
-      # 3. Simulator smoke: the emulator Debug build on an iPhone Simulator.
+      # 3. Simulator scenarios: the emulator Debug build on an iPhone
+      # Simulator, driven through the real UI (docs/nfct/ios.md).
+      - name: Choose the Simulator scenarios
+        run: |
+          # Names and versions only: both lists are passed to a shell below.
+          if [[ ! "$REQUESTED_SCENARIOS" =~ ^[a-z,\ -]*$ ]] || [[ ! "$IOS_RUNTIMES" =~ ^[0-9.\ ]*$ ]]; then
+            echo "::error::scenarios may contain only scenario names, and ios_runtimes only versions such as 16.4"
+            exit 1
+          fi
+          echo "SCENARIOS=$REQUESTED_SCENARIOS" >> "$GITHUB_ENV"
+          node scripts/ios/simulator-smoke.mjs list $REQUESTED_SCENARIOS
       - name: Pick an iPhone Simulator
         id: simulator
-        run: echo "udid=$(node scripts/ios/simulator-smoke.mjs pick)" >> "$GITHUB_OUTPUT"
+        # Bounds the runtime downloads (15 min each) on the minimum-iOS path.
+        timeout-minutes: 35
+        run: |
+          mkdir -p "$SIMULATOR_OUT"
+          if [ -n "$IOS_RUNTIMES" ]; then
+            # Installs the first of these runtimes that works and reports which.
+            udid=$(node scripts/ios/simulator-runtime.mjs "$SIMULATOR_OUT/runtime.json" $IOS_RUNTIMES)
+            echo "destination=generic/platform=iOS Simulator" >> "$GITHUB_OUTPUT"
+          else
+            udid=$(node scripts/ios/simulator-smoke.mjs pick)
+            echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
       - name: Build the emulator Debug app for the Simulator
         env:
-          UDID: ${{ steps.simulator.outputs.udid }}
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
         run: |
           node scripts/ios/simulator-smoke.mjs inject
-          npm run ios:build -- Debug "platform=iOS Simulator,id=$UDID"
+          npm run ios:build -- Debug "$DESTINATION"
           node scripts/ios/check-built-app.mjs "$IOS_DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app" Debug
-      - name: Simulator smoke against the emulators
+      - name: Simulator scenarios against the emulators
+        # All three scenarios take about 6 minutes; this also bounds every simctl call.
+        timeout-minutes: 20
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
         run: >-
           npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e
-          "node scripts/ios/simulator-smoke.mjs run '$IOS_DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app' '$UDID' '$SMOKE_OUT'"
+          "node scripts/ios/simulator-smoke.mjs run '$IOS_DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app' '$UDID' '$SIMULATOR_OUT' $SCENARIOS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ios-simulator-smoke
-          path: ${{ runner.temp }}/ios-simulator-smoke
+          name: ios-simulator-scenarios
+          path: ${{ runner.temp }}/ios-simulator-scenarios
           if-no-files-found: ignore
           retention-days: 14
