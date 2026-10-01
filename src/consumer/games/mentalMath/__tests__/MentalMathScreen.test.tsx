@@ -272,7 +272,7 @@ describe('MentalMathScreen', () => {
 
   it.each([
     ['consent-required', 'Simulated EEG (Demo Mode) was not saved: saving EEG needs your EEG consent.'],
-    ['consent-unavailable', 'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed: you were offline or the connection was too slow.'],
+    ['consent-unavailable', 'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).'],
     ['invalid', 'Simulated EEG (Demo Mode) was not saved: the recording was incomplete.'],
     ['session-not-saved', 'Simulated EEG (Demo Mode) was not saved because the run was not saved.'],
     ['owner-changed', 'Simulated EEG (Demo Mode) was not saved because you signed out.'],
@@ -321,7 +321,7 @@ describe('MentalMathScreen', () => {
     await h.flush();
     expect(h.recordingSaves).toHaveBeenCalledTimes(1);
     expect(h.saveStatus()).toBe('Saved on this device. Uploading to your account…');
-    expect(h.eegStatus()).toBe('Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed: you were offline or the connection was too slow.');
+    expect(h.eegStatus()).toBe('Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).');
   });
 
   it('never makes the session wait on EEG: with the recording still checking consent, the run is saved', async () => {

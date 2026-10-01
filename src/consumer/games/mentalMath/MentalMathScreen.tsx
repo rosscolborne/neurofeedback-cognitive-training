@@ -480,7 +480,7 @@ function eegMessage(eeg: EegState, { label, source }: EegInfo): string {
         case 'consent-required':
           return `${label} was not saved: saving EEG needs your EEG consent.`;
         case 'consent-unavailable':
-          return `${label} wasn’t saved because your EEG consent couldn’t be confirmed: you were offline or the connection was too slow.`;
+          return `${label} wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).`;
         case 'consent-withdrawn':
           return `${label} was not saved: your EEG consent was withdrawn.`;
         case 'invalid':
