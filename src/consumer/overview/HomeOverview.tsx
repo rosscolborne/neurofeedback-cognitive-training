@@ -39,6 +39,10 @@ import './overview.css';
 /** Recent runs shown on Home. */
 export const HOME_RECENT_RUNS = 3;
 
+/** Home's game openers, which get focus back when the game closes (NFCT-52). */
+export const HOME_PLAY_BUTTON_ID = 'ov-home-play';
+export const HOME_ALL_RUNS_BUTTON_ID = 'ov-home-all-runs';
+
 const defaultSources: OverviewSources = { stats: statsRepository, profile: profileRepository, gameSessions: gameSessionRepository };
 
 export interface HomeOverviewProps {
@@ -169,7 +173,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
           </div>
         </div>
         <p className="ov-hero-text" data-overview="hero-text">{heroText(phase, nudge, view)}</p>
-        <button type="button" className="btn btn-primary ov-play" onClick={onPlay}>
+        <button id={HOME_PLAY_BUTTON_ID} type="button" className="btn btn-primary ov-play" onClick={onPlay}>
           <Play size={18} fill="currentColor" aria-hidden="true" /> Play Mental Math
         </button>
       </section>
@@ -204,7 +208,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
         <section className="ov-card" aria-labelledby="ov-recent-title" data-overview="recent-runs">
           <div className="ov-card-head">
             <h2 id="ov-recent-title" className="ov-card-title">Recent runs</h2>
-            <button type="button" className="btn btn-ghost mm-link" onClick={onOpenGameProgress} aria-label="All Mental Math runs and records">
+            <button id={HOME_ALL_RUNS_BUTTON_ID} type="button" className="btn btn-ghost mm-link" onClick={onOpenGameProgress} aria-label="All Mental Math runs and records">
               All runs <ChevronRight size={16} aria-hidden="true" />
             </button>
           </div>

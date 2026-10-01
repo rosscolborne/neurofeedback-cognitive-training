@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard } from './helpers/auth';
 import { readGameSessions } from './helpers/localEmulator';
@@ -63,6 +64,32 @@ async function expectVerified(page: Page): Promise<void> {
   await expect(verification(page)).toHaveText('Verified', { timeout: 30_000 });
 }
 
+/**
+ * Records the height of the record and unlock cards at every change, from the
+ * summary's first render (NFCT-52). A MutationObserver sees each state React
+ * commits, however briefly it lasts, with no timing in the test.
+ */
+async function watchHighlightHeights(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const seen: Array<{ name: string; text: string; height: number }> = [];
+    (window as unknown as { nfctHighlightHeights: typeof seen }).nfctHighlightHeights = seen;
+    const record = () => {
+      for (const name of ['record', 'unlock']) {
+        const card = document.querySelector(`[data-summary="${name}"]`);
+        if (!card) continue;
+        const entry = { name, text: card.textContent ?? '', height: Math.round(card.getBoundingClientRect().height) };
+        const last = seen.filter((item) => item.name === name).at(-1);
+        if (last?.text !== entry.text || last.height !== entry.height) seen.push(entry);
+      }
+    };
+    new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+}
+
+async function highlightHeights(page: Page): Promise<Array<{ name: string; text: string; height: number }>> {
+  return page.evaluate(() => (window as unknown as { nfctHighlightHeights: Array<{ name: string; text: string; height: number }> }).nfctHighlightHeights);
+}
+
 /** Back to the picker, once it has loaded the player's levels (page time must flow for Firestore meanwhile). */
 async function playAgain(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Play again', exact: true }).click();
@@ -77,6 +104,7 @@ test('the summary shows a provisional score at once, then the server score, its 
   for (const correct of CLIMB) await answer(page, correct);
   // Offline when the run ends: it is saved on this device, and nothing can verify it yet.
   await context.setOffline(true);
+  await watchHighlightHeights(page);
   await runOut(page);
   await expect(page.locator('#mm-handoff-title')).toHaveText('Run complete');
   await expect(page.locator('#mm-handoff-title')).toBeFocused();
@@ -95,6 +123,12 @@ test('the summary shows a provisional score at once, then the server score, its 
     .map((selector) => document.querySelector(selector)!.getBoundingClientRect()).map(({ top, height }) => [Math.round(top), Math.round(height)]));
   const provisionalLayout = await layout();
   expect(await readGameSessions(uid)).toHaveLength(0);
+  // NFCT-52: the cards kept one height from "Loading…" to the preview, so nothing below them moved.
+  const heights = await highlightHeights(page);
+  expect(heights.filter((entry) => entry.text.includes('Loading your'))).toHaveLength(2);
+  for (const name of ['record', 'unlock']) {
+    expect(new Set(heights.filter((entry) => entry.name === name).map((entry) => entry.height)), `${name} heights: ${JSON.stringify(heights)}`).toHaveProperty('size', 1);
+  }
 
   // Back online: the run uploads, onGameSessionCreated scores it, and the result replaces the preview.
   await context.setOffline(false);
@@ -147,7 +181,7 @@ test('a lower-scoring repeat is not a new best, and each start level keeps its o
   const repeat = await newestResult(uid);
   expect(repeat.score).toBeLessThan(levelOne.score);
   expect(repeat.personalBest).toBe(false);
-  await expect(record(page)).toHaveText(`Your best from level 1: ${format(levelOne.score)}Records are kept separately for each start level.`);
+  await expect(record(page)).toHaveText(`Your best from level 1: ${format(levelOne.score)}Each start level has its own records.`);
   await expect(page.getByText('New personal best')).toHaveCount(0);
 
   // 4. A run from level 2 has its own record class: its first run is a new best there, whatever level 1's best is.
@@ -158,7 +192,7 @@ test('a lower-scoring repeat is not a new best, and each start level keeps its o
   const levelTwo = await newestResult(uid);
   expect(levelTwo.personalBest).toBe(true);
   await expect(record(page)).toContainText('New personal best');
-  await expect(record(page)).toContainText('for runs from level 2');
+  await expect(record(page)).toContainText('From level 2:');
 
   // The game's progress keeps the two bests apart.
   await page.getByRole('button', { name: 'Records and history', exact: true }).click();
@@ -246,7 +280,7 @@ test('simulated EEG never changes the server score, and nothing EEG-derived appe
   expect(withEeg.metrics).toEqual(withoutEeg.metrics);
   await expect(shownScore(page)).toHaveText(format(withoutEeg.score));
   // An equal score from the same start level does not take the record: the earlier run keeps it.
-  await expect(record(page)).toHaveText(`Your best from level 1: ${format(withoutEeg.score)}Records are kept separately for each start level.`);
+  await expect(record(page)).toHaveText(`Your best from level 1: ${format(withoutEeg.score)}Each start level has its own records.`);
 
   // Nothing EEG-derived in the results, totals or progress; only the recording's own save status mentions EEG.
   const eegWords = /EEG|µV|alpha|theta|beta|gamma|delta|focus|calm|zone/i;
@@ -257,4 +291,170 @@ test('simulated EEG never changes the server score, and nothing EEG-derived appe
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
   await expect(page.locator('li[data-history-row]')).toHaveCount(2);
   await expect(page.locator('.mm-progress')).not.toContainText(eegWords);
+});
+
+// NFCT-52: leaving the game. On a phone the summary's sticky Done sits right
+// over the bottom navigation that replaces it; the player here is
+// self-directed (Home, Train, Progress and Profile), as in the QA report,
+// where a double tap on Done opened Progress.
+test.describe('leaving Mental Math on a phone', () => {
+  const { viewport, deviceScaleFactor, isMobile, hasTouch } = devices['iPhone 17'];
+  test.use({ viewport, deviceScaleFactor, isMobile, hasTouch });
+
+  /** Signs up a new self-directed player through the UI and opens the Train tab. */
+  async function signUpAndOpenTrain(page: Page): Promise<void> {
+    await page.goto('/#/signup');
+    await page.getByPlaceholder('How should we call you?').fill('Leaving Mental Math');
+    await page.getByPlaceholder('you@example.com').fill(`leave-mm-${randomUUID().slice(0, 12)}@example.test`);
+    await page.getByPlaceholder('At least 6 characters').fill('LocalEmulator!123');
+    await page.getByRole('button', { name: 'Create Account' }).click();
+    await page.getByRole('button', { name: /Train my brain/ }).click();
+    await arriveAtPatientDashboard(page);
+    await page.getByRole('button', { name: 'Train', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Train', exact: true })).toBeVisible();
+  }
+
+  const trainHeading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Train', exact: true });
+  const mentalMathCard = (page: Page) => page.getByRole('main').getByRole('button', { name: 'Mental Math', exact: true });
+
+  /**
+   * A quit run's summary, opened from `opener` (Train's Mental Math card by default), with page time stopped (it
+   * moves only with runFor). Returns the centre of Done, and a count of the input events that reach the page,
+   * taken before the app (or its guard) sees them.
+   */
+  async function quitToSummary(page: Page, opener = mentalMathCard(page)): Promise<{ x: number; y: number; seen: (type: string) => Promise<number> }> {
+    await opener.tap();
+    await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
+    await startRun(page, 1);
+    await page.clock.runFor(1_000);
+    await page.getByRole('button', { name: 'Pause', exact: true }).tap();
+    await page.getByRole('button', { name: 'Quit run', exact: true }).tap();
+    await expect(page.locator('#mm-handoff-title')).toHaveText('Run ended early');
+    await page.evaluate(() => {
+      const seen: Record<string, number> = {};
+      (window as unknown as { nfctInput: Record<string, number> }).nfctInput = seen;
+      for (const type of ['pointerdown', 'pointerup', 'click']) window.addEventListener(type, () => { seen[type] = (seen[type] ?? 0) + 1; }, { capture: true });
+    });
+    const done = await page.getByRole('button', { name: 'Done', exact: true }).boundingBox();
+    return {
+      x: done!.x + done!.width / 2,
+      y: done!.y + done!.height / 2,
+      seen: (type) => page.evaluate((name) => (window as unknown as { nfctInput: Record<string, number> }).nfctInput[name] ?? 0, type),
+    };
+  }
+
+  test('a double tap on Done closes the game once: the second tap never opens the tab under it, and focus returns to the game’s card', async ({ page, browserName }) => {
+    await page.clock.install();
+    await signUpAndOpenTrain(page);
+    // Page time stops in the run and moves only with runFor, so the taps below are exactly 150 ms apart.
+    const { x, y, seen } = await quitToSummary(page);
+
+    await page.touchscreen.tap(x, y);
+    await expect(trainHeading(page)).toBeVisible();
+    await expect(mentalMathCard(page)).toBeFocused();
+    // The bottom tab now under the finger.
+    expect(await page.evaluate(([px, py]) => document.elementFromPoint(px, py)?.closest('button')?.textContent?.trim(), [x, y])).toBe('Progress');
+
+    await page.clock.runFor(150);
+    await page.touchscreen.tap(x, y);
+    // The second tap reached the page and was dropped there: Train stays, with focus on the card.
+    // Dropping its press makes WebKit cancel the click too; Chromium still sends the click, which is dropped as well.
+    await expect.poll(() => seen('pointerdown')).toBe(2);
+    if (browserName === 'chromium') await expect.poll(() => seen('click')).toBe(2);
+    await expect(trainHeading(page)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toHaveCount(0);
+    await expect(mentalMathCard(page)).toBeFocused();
+
+    // Once the double-tap window has passed, a tap on the same spot opens Progress.
+    await page.clock.runFor(500);
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
+  });
+
+  test('a second press made inside the double-tap window but released after it still never opens the tab under Done', async ({ page }) => {
+    await page.clock.install();
+    await signUpAndOpenTrain(page);
+    const { x, y, seen } = await quitToSummary(page);
+    await page.touchscreen.tap(x, y);
+    await expect(trainHeading(page)).toBeVisible();
+
+    // Pressed 350 ms after Done, released at 450 ms: past the 400 ms window, the click still belongs to that press.
+    await page.clock.runFor(350);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.clock.runFor(100);
+    const released = await seen('pointerup');
+    await page.mouse.up();
+    // A click follows its pointerup in the same task, so once the release has been seen, its click has been handled.
+    await expect.poll(() => seen('pointerup')).toBe(released + 1);
+    await expect(trainHeading(page)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toHaveCount(0);
+
+    await page.clock.runFor(1_100);
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
+  });
+
+  test('Done on a scrolled summary returns to the top of the screen that opened the game, with its opener in view and focused', async ({ page }) => {
+    await page.clock.install();
+    await signUpAndOpenTrain(page);
+    const scrollY = () => page.evaluate(() => window.scrollY);
+    const doneAtTheBottom = async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      expect(await scrollY()).toBeGreaterThan(0);
+      await page.getByRole('button', { name: 'Done', exact: true }).tap();
+    };
+
+    // From Train.
+    await quitToSummary(page);
+    await doneAtTheBottom();
+    await expect(trainHeading(page)).toBeVisible();
+    expect(await scrollY()).toBe(0);
+    await expect(mentalMathCard(page)).toBeInViewport();
+    await expect(mentalMathCard(page)).toBeFocused();
+
+    // From Home's Play (NFCT-13): the Play card and the streak are on screen, not above it.
+    // Page time flows again so the picker can load the player's levels; the next run stops it again.
+    await page.clock.resume();
+    await page.getByRole('button', { name: 'Home', exact: true }).tap();
+    const homePlay = page.getByRole('main').getByRole('button', { name: 'Play Mental Math', exact: true });
+    await quitToSummary(page, homePlay);
+    await doneAtTheBottom();
+    await expect(homePlay).toBeInViewport();
+    expect(await scrollY()).toBe(0);
+    await expect(homePlay).toBeFocused();
+  });
+
+  test('Back returns focus to the control that opened each screen', async ({ page }) => {
+    await signUpAndOpenTrain(page);
+
+    // Train → Mental Math: the picker's heading has focus; its Progress and Back return it.
+    await mentalMathCard(page).click();
+    await expect(page.getByRole('heading', { name: 'Mental Math', exact: true })).toBeFocused();
+    const topBarProgress = page.getByRole('button', { name: 'Progress', exact: true });
+    await topBarProgress.click();
+    await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(topBarProgress).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(trainHeading(page)).toBeVisible();
+    await expect(mentalMathCard(page)).toBeFocused();
+
+    // Home's Play button (NFCT-13) → the picker → Back.
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    const homePlay = page.getByRole('main').getByRole('button', { name: 'Play Mental Math', exact: true });
+    await homePlay.click();
+    await expect(page.getByRole('heading', { name: 'Mental Math', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(homePlay).toBeFocused();
+
+    // The Progress tab's Records button → the game's progress → Back.
+    await page.getByRole('button', { name: 'Progress', exact: true }).click();
+    const records = page.getByRole('button', { name: 'Mental Math records and history', exact: true });
+    await records.click();
+    await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
+    await expect(records).toBeFocused();
+  });
 });

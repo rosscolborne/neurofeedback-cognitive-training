@@ -104,7 +104,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(achievementRow(page, 'first-run')).toHaveAttribute('data-earned', 'true');
   await expect(achievementRow(page, 'first-run')).toContainText('Earned');
   await expect(overview(page, 'recent-runs').locator('li[data-history-row]')).toHaveCount(1);
-  await expect(overview(page, 'recent-runs')).toContainText('Personal best');
+  await expect(overview(page, 'recent-runs')).toContainText('New best');
 
   // Progress lists it as earned, with the run on this week's calendar.
   await page.getByRole('button', { name: 'See all achievements', exact: true }).click();

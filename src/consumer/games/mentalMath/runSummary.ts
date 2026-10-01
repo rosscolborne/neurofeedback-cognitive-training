@@ -1,12 +1,15 @@
 import { Timestamp } from 'firebase/firestore';
 import {
+  GAME_MODULE_REGISTRY,
   GAME_SESSION_SCHEMA_VERSION,
   maxLevelOf,
   mentalMath,
   unlockedStartLevel,
+  upgradeBlocker,
   type GameModeDefinition,
   type GameProgress,
   type ServerResult,
+  type SessionProgressFields,
 } from '@nfct/shared';
 import type { ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import type { RunOutcome } from './runController';
@@ -29,8 +32,12 @@ export type Verification =
   /** No trusted result yet; the values are this device's preview. */
   | { readonly kind: 'provisional'; readonly detail: 'saving' | 'on-device' | 'checking' | 'delayed' }
   | { readonly kind: 'verified' }
-  /** Counts in totals, never in records or unlocks. */
-  | { readonly kind: 'flagged'; readonly reasons: readonly string[] }
+  /**
+   * Counts in totals, not in records or unlocks. `upgradable`: only its start
+   * level was locked, so trusted scoring makes it valid once that level is
+   * unlocked (ADR-001 decision 12's upgrade).
+   */
+  | { readonly kind: 'flagged'; readonly reasons: readonly string[]; readonly upgradable: boolean }
   /** Counts nowhere. */
   | { readonly kind: 'invalid'; readonly reasons: readonly string[] }
   | { readonly kind: 'not-saved' };
@@ -44,7 +51,9 @@ export type RecordLine =
   | { readonly kind: 'pending'; readonly startLevel: number }
   | { readonly kind: 'new-best'; readonly startLevel: number; readonly metrics: readonly RecordMetric[] }
   | { readonly kind: 'best-so-far'; readonly startLevel: number; readonly bestScore: number | null }
-  | { readonly kind: 'ineligible'; readonly startLevel: number; readonly reason: 'abandoned' | 'flagged' | 'invalid' | 'not-saved'; readonly bestScore: number | null };
+  | { readonly kind: 'ineligible'; readonly startLevel: number; readonly reason: 'abandoned' | 'invalid' | 'not-saved'; readonly bestScore: number | null }
+  /** `upgradable`: flagged only for its locked start level, so it can still set a record once that level unlocks. */
+  | { readonly kind: 'ineligible'; readonly startLevel: number; readonly reason: 'flagged'; readonly bestScore: number | null; readonly upgradable: boolean };
 
 export type UnlockLine =
   | { readonly kind: 'loading' }
@@ -64,7 +73,10 @@ export interface RunStats {
 export interface Totals {
   readonly sessionsCompleted: number;
   readonly activeMs: number;
-  /** Includes runs trusted scoring has not checked yet (this one or others on this device). */
+  /**
+   * The totals count a run trusted scoring has not checked yet: this one, when
+   * the preview counts it, or another still pending on this device.
+   */
   readonly includesUnverified: boolean;
 }
 
@@ -133,6 +145,12 @@ export function bestsFor(progress: GameProgress | null, startLevel: number): Par
 
 const RECORD_METRICS: readonly RecordMetric[] = ['score', 'correct', 'peakLevel'];
 
+/** A flagged run that the start-level upgrade can still make valid: its only flag is `start-level-locked`. */
+function upgradableLater(session: SessionProgressFields, progress: GameProgress | null): boolean {
+  const blocker = upgradeBlocker(session, progress, GAME_MODULE_REGISTRY);
+  return blocker === null || blocker === 'still-locked';
+}
+
 export interface RunSummaryInput {
   readonly outcome: RunOutcome;
   readonly environment: SessionEnvironment;
@@ -153,18 +171,28 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   const base = state === null ? null : currentProgress(state, run.sessionId);
   let shown: ServerResult | null = null;
   let after: GameProgress | null = base?.progress ?? null;
+  /** The preview counted this run in the totals (an invalid run, or one this build cannot preview, counts nowhere). */
+  let previewCounted = false;
+  /** The session with the result shown, as the upgrade would judge it. */
+  let judged: SessionProgressFields | null = null;
   if (trusted) {
     // Trusted scoring wrote the result and progress in one commit, which the cached progress already holds.
     shown = trusted;
+    judged = stored!.session;
   } else if (base !== null && save !== 'failed') {
-    const decision = previewDecision(base.progress, run.sessionId, clientSessionDocument(outcome, environment, run));
+    const document = clientSessionDocument(outcome, environment, run);
+    const decision = previewDecision(base.progress, run.sessionId, document);
     shown = decision?.result ?? null;
     after = decision?.progress ?? after;
+    previewCounted = decision !== null && decision.result.validity !== 'invalid';
+    // The client document holds every field the upgrade reads (game, version, mode, start level).
+    if (decision) judged = { ...document, result: decision.result } as unknown as SessionProgressFields;
   }
+  const upgradable = shown?.validity === 'flagged' && judged !== null && upgradableLater(judged, after);
 
   const verification: Verification = save === 'failed' ? { kind: 'not-saved' }
     : trusted?.validity === 'valid' ? { kind: 'verified' }
-      : trusted?.validity === 'flagged' ? { kind: 'flagged', reasons: trusted.reasons }
+      : trusted?.validity === 'flagged' ? { kind: 'flagged', reasons: trusted.reasons, upgradable }
         : trusted?.validity === 'invalid' ? { kind: 'invalid', reasons: trusted.reasons }
           : {
             kind: 'provisional',
@@ -195,7 +223,7 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   else if (state === null) record = { kind: 'loading' };
   else if (shown === null) record = { kind: 'pending', startLevel };
   else if (shown.validity === 'invalid') record = { kind: 'ineligible', startLevel, reason: 'invalid', bestScore };
-  else if (shown.validity === 'flagged') record = { kind: 'ineligible', startLevel, reason: 'flagged', bestScore };
+  else if (shown.validity === 'flagged') record = { kind: 'ineligible', startLevel, reason: 'flagged', bestScore, upgradable };
   else if (outcome.status !== 'completed') record = { kind: 'ineligible', startLevel, reason: 'abandoned', bestScore };
   else if (shown.personalBest) {
     // Which records it set, as progress shows them now; the result's flag says it set at least one.
@@ -213,7 +241,7 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   const totals: Totals | null = state === null ? null : {
     sessionsCompleted: after?.sessionsCompleted ?? 0,
     activeMs: after?.activeMs ?? 0,
-    includesUnverified: (base?.previewed ?? false) || (!trusted && save !== 'failed'),
+    includesUnverified: (base?.previewed ?? false) || previewCounted,
   };
 
   return { status: outcome.status, startLevel, verification, score, breakdown, stats, record, unlock, totals };

@@ -80,6 +80,9 @@ function dayLabel(day: ActivityDay, today: LocalDate): string {
   return `${when}: ${finished}, ${formatPlayTime(day.activeMs)} played`;
 }
 
+/** The empty state's Play button, which gets focus back when the game closes (NFCT-52). */
+export const PROGRESS_PLAY_BUTTON_ID = 'ov-progress-play';
+
 export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
   playerId,
   onPlay,
@@ -136,7 +139,7 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
         <section className="ov-card ov-empty" aria-labelledby="ov-progress-empty-title" data-overview="progress-empty">
           <h2 id="ov-progress-empty-title" className="ov-card-title">No runs yet</h2>
           <p className="ov-help">Play Mental Math to start your streak, fill in your activity and earn achievements.</p>
-          <button type="button" className="btn btn-primary" onClick={onPlay}>
+          <button id={PROGRESS_PLAY_BUTTON_ID} type="button" className="btn btn-primary" onClick={onPlay}>
             <Play size={18} fill="currentColor" aria-hidden="true" /> Play Mental Math
           </button>
         </section>

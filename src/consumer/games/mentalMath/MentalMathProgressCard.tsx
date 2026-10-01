@@ -3,7 +3,8 @@ import { Calculator, ChevronRight } from 'lucide-react';
 import { mentalMath } from '@nfct/shared';
 import { progressRepository } from '../../repositories';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
-import { gameOverview } from './progressSummary';
+import { progressCardSummary } from './progressSummary';
+import { ProvisionalTag } from './ProvisionalTag';
 import { currentProgress } from './startLevel';
 import './mentalMath.css';
 
@@ -12,6 +13,9 @@ import './mentalMath.css';
 // progress only; the Progress tab redesign is NFCT-13.
 
 const numberFormat = new Intl.NumberFormat();
+
+/** The card's Records button, which gets focus back when the game's progress closes. */
+export const MENTAL_MATH_PROGRESS_CARD_BUTTON_ID = 'mm-progress-card-open';
 
 export const MentalMathProgressCard: React.FC<{
   readonly onOpen: () => void;
@@ -31,7 +35,7 @@ export const MentalMathProgressCard: React.FC<{
   }, [progress]);
 
   const overview = useMemo(
-    () => (state === null || state === 'unavailable' ? null : gameOverview(currentProgress(state).progress)),
+    () => (state === null || state === 'unavailable' ? null : progressCardSummary(currentProgress(state))),
     [state],
   );
   const summary = state === 'unavailable' ? 'Your game progress couldn’t be loaded right now.'
@@ -43,9 +47,12 @@ export const MentalMathProgressCard: React.FC<{
       <span className="mm-progress-card-icon" aria-hidden="true"><Calculator size={20} /></span>
       <div className="mm-progress-card-text">
         <h2 id="mm-progress-card-title" className="mm-progress-card-title">Mental Math</h2>
-        <p className="mm-help" data-progress-card="summary">{summary}</p>
+        <p className="mm-help" data-progress-card="summary">
+          {summary}
+          {overview?.provisional && <> <ProvisionalTag /></>}
+        </p>
       </div>
-      <button type="button" className="btn btn-ghost mm-link" onClick={onOpen} aria-label="Mental Math records and history">
+      <button id={MENTAL_MATH_PROGRESS_CARD_BUTTON_ID} type="button" className="btn btn-ghost mm-link" onClick={onOpen} aria-label="Mental Math records and history">
         Records <ChevronRight size={16} aria-hidden="true" />
       </button>
     </section>
