@@ -17,6 +17,7 @@ export * from './progress/applySession';
 export * from './processing/reasons';
 export * from './processing/clock';
 export * from './processing/registry';
+export * from './processing/compatibility';
 export * from './processing/modules';
 export * from './processing/evaluate';
 export * from './processing/decide';

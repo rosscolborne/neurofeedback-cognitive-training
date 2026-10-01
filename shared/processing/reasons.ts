@@ -12,6 +12,12 @@ import { MAX_RESULT_REASONS, type SessionValidity } from '../schemas/gameSession
 // REASON_OUTCOMES). The codes below are trusted scoring's own, checked by the
 // generic pipeline for every game. They must never collide with a game's
 // codes (a registry test checks this).
+//
+// Codes are append-only, like a game version's: a stored result keeps the
+// codes it was written with, and the start-level upgrade looks each one up
+// here (an unknown code blocks it), so a code is never renamed, removed or
+// given another outcome. A new check that can change validity also needs a
+// scoringVersion bump (ADR-001 decision 8).
 
 export type ReasonOutcome = 'invalid' | 'flagged' | 'diagnostic';
 
@@ -41,8 +47,14 @@ export const SERVER_REASON_OUTCOMES = Object.freeze({
   'late-upload': 'diagnostic',
   /** The device's wall-clock span (endedAt - startedAt) is shorter than the reported active time. */
   'wall-clock-short': 'diagnostic',
-  /** `localDate` is more than one day from the date of `endedAt` in the session's `timezone`. */
+  /**
+   * `localDate` is more than one day from the date of the server's `createdAt`
+   * in the session's `timezone` (design section F: the anti-backfill check;
+   * honest offline sessions uploaded days later raise it too).
+   */
   'local-date-mismatch': 'diagnostic',
+  /** `localDate` is more than one day from the date of the device's own `endedAt` in the session's `timezone`. */
+  'local-date-inconsistent': 'diagnostic',
   /** `timezone` is not a time zone this runtime knows, so `localDate` could not be checked. */
   'unknown-timezone': 'diagnostic',
   /** The reason list was cut to MAX_RESULT_REASONS; this marker takes the last slot. */

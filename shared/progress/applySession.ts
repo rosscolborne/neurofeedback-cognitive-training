@@ -324,11 +324,12 @@ export interface StoredGameSession {
 
 /**
  * Rebuilds one game's progress from its stored sessions. Each processed
- * session is replayed once, in play order (endedAt, then ID), from its stored
- * trusted result: nothing is revalidated or rescored, so sessions of earlier
- * game versions keep the outcome they were given and their records stay in
- * the archive. Sessions without a result are skipped; trusted scoring applies
- * them when it processes them.
+ * session is replayed once from its stored trusted result, in a fixed replay
+ * order (endedAt, then ID) that only makes the replay deterministic: the
+ * result is the same for any order. Nothing is revalidated or rescored, so
+ * sessions of earlier game versions keep the outcome they were given and
+ * their records stay in the archive. Sessions without a result are skipped;
+ * trusted scoring applies them when it processes them.
  */
 export function rebuildProgress<Trial, Metrics extends object>(
   definition: GameDefinition<Trial, Metrics>,

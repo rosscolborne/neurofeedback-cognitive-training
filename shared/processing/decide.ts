@@ -192,6 +192,30 @@ export function upgradeBlocker(
   return null;
 }
 
+/**
+ * The start levels of one game mode where an upgradable session can be:
+ * above the lowest `initiallyUnlockedStartLevel` of any registered version's
+ * mode (a session at or below it can never be start-level-locked), up to the
+ * highest `unlockedStartLevel` that `progress` gives any of them. Empty when
+ * `from > to`. The upgrade scan reads exactly these levels.
+ */
+export function upgradeScanLevels(
+  registry: GameModuleRegistry,
+  gameId: string,
+  modeId: string,
+  progress: GameProgress | null,
+): { readonly from: number; readonly to: number } {
+  const modes = registry.modules
+    .filter((module) => module.gameId === gameId)
+    .map((module) => findMode(module.definition, modeId))
+    .filter((mode): mode is GameModeDefinition => mode !== undefined);
+  if (modes.length === 0) return { from: 1, to: 0 };
+  return {
+    from: Math.min(...modes.map((mode) => mode.initiallyUnlockedStartLevel)) + 1,
+    to: Math.max(...modes.map((mode) => unlockedStartLevel(mode, progress))),
+  };
+}
+
 export type UpgradeContext = {
   readonly sessionId: string;
   /** Server clock: becomes `progress.updatedAt`. The result keeps its original processedAt. */

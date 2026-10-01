@@ -7,9 +7,18 @@ import { serverReason, type ReasonEntry } from './reasons';
 // offline legitimately arrive late, so none of these proves a session was
 // forged. The rules already refuse what is clearly impossible on create
 // (`startedAt < endedAt <= request.time + 5 min`, `createdAt == request.time`),
-// and the session schema refuses `endedAt <= startedAt`. Stage 2 (streaks)
-// may decide that `local-date-mismatch` excludes a session from streaks.
-
+// and the session schema refuses `endedAt <= startedAt`.
+//
+// localDate is checked twice, against two different clocks, because the two
+// comparisons answer different questions:
+// - 'local-date-mismatch' (design section F): localDate against the server's
+//   `createdAt`. The server clock cannot be set back, so this is the
+//   anti-backfill signal Stage 2 streaks need. An honest session played
+//   offline and uploaded more than a day later raises it too: from the
+//   server's point of view its date really is in the past.
+// - 'local-date-inconsistent': localDate against the device's own `endedAt`.
+//   The client's fields disagree with each other (a date or time-zone bug, or
+//   an edited localDate), whatever the server clock says.
 export const CLOCK_TOLERANCES = Object.freeze({
   /** How far the device's endedAt may run ahead of the server's createdAt (the rules allow 5 minutes). */
   deviceAheadMs: 60_000,
@@ -17,7 +26,7 @@ export const CLOCK_TOLERANCES = Object.freeze({
   lateUploadMs: 7 * 24 * 60 * 60 * 1_000,
   /** Rounding slack when comparing the wall-clock span with the active time. */
   wallClockSlackMs: 1_000,
-  /** How many calendar days localDate may be from endedAt's date in the session's zone. */
+  /** How many calendar days localDate may be from the date of createdAt (or of endedAt) in the session's zone. */
   localDateDays: 1,
 });
 
@@ -72,11 +81,14 @@ export function clockDiagnostics(facts: ClockFacts): ReasonEntry[] {
     reasons.push(serverReason('wall-clock-short'));
   }
 
+  const createdDay = calendarDayIn(facts.timezone, createdMs);
   const endedDay = calendarDayIn(facts.timezone, endedMs);
-  if (endedDay === null) {
+  if (createdDay === null || endedDay === null) {
     reasons.push(serverReason('unknown-timezone'));
-  } else if (Math.abs(calendarDayOf(facts.localDate) - endedDay) > CLOCK_TOLERANCES.localDateDays) {
-    reasons.push(serverReason('local-date-mismatch'));
+    return reasons;
   }
+  const localDay = calendarDayOf(facts.localDate);
+  if (Math.abs(localDay - createdDay) > CLOCK_TOLERANCES.localDateDays) reasons.push(serverReason('local-date-mismatch'));
+  if (Math.abs(localDay - endedDay) > CLOCK_TOLERANCES.localDateDays) reasons.push(serverReason('local-date-inconsistent'));
   return reasons;
 }

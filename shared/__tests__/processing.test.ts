@@ -18,6 +18,7 @@ import {
   SERVER_REASON_OUTCOMES,
   serverResultWriteSchema,
   upgradeBlocker,
+  upgradeScanLevels,
   upgradeSession,
   type GameProgress,
   type ReasonEntry,
@@ -166,24 +167,33 @@ describe('evaluateSession', () => {
     expect(evaluation.entries).toEqual([
       { code: 'late-upload', outcome: 'diagnostic' },
       { code: 'local-date-mismatch', outcome: 'diagnostic' },
+      { code: 'local-date-inconsistent', outcome: 'diagnostic' },
     ]);
+    const { result } = decideSession(evaluation, null, { sessionId: 'session-00000001', processedAt: ts(T0), registry: GAME_MODULE_REGISTRY });
+    expect(result).toMatchObject({ validity: 'valid', reasons: ['late-upload', 'local-date-mismatch', 'local-date-inconsistent'] });
   });
 
-  it('raises every v1 reason and every trusted-scoring reason that can accompany them: exactly the 20 a result holds', () => {
+  it('raises every v1 reason and every trusted-scoring reason that can accompany them, cut to the 20 a result holds', () => {
     const evaluation = evaluateSession(forgedEverything(ts, T0), { uid: UID, sessionId: 'bad' });
 
     expect(evaluation.kind).toBe('invalid');
-    const reasons = codes(evaluation);
-    expect(reasons).toHaveLength(MAX_RESULT_REASONS);
-    expect(new Set(reasons)).toEqual(new Set([
+    const raised = [
       ...Object.keys(mm.REASON_OUTCOMES),
-      'user-id-mismatch', 'session-id-invalid', 'device-clock-ahead', 'wall-clock-short', 'local-date-mismatch',
-    ]));
-    // Most severe first: every invalid code before every flagged one, then diagnostics.
+      'user-id-mismatch', 'session-id-invalid', 'device-clock-ahead', 'wall-clock-short', 'local-date-mismatch', 'local-date-inconsistent',
+    ];
+    expect(raised).toHaveLength(MAX_RESULT_REASONS + 1);
     const severity = (code: string) => ({ invalid: 0, flagged: 1, diagnostic: 2 })[
       (mm.REASON_OUTCOMES as Record<string, string>)[code] ?? (SERVER_REASON_OUTCOMES as Record<string, string>)[code]!
     ]!;
-    expect(reasons.map(severity)).toEqual([...reasons.map(severity)].sort());
+    const reasons = codes(evaluation);
+    // One code too many: the most severe 19 are kept, then the truncation marker.
+    expect(reasons).toHaveLength(MAX_RESULT_REASONS);
+    expect(reasons[MAX_RESULT_REASONS - 1]).toBe('reasons-truncated');
+    const kept = reasons.slice(0, -1);
+    expect(kept.every((code) => raised.includes(code))).toBe(true);
+    // Only diagnostics are ever cut: every invalid and flagged code is kept, most severe first.
+    for (const code of raised.filter((candidate) => severity(candidate) < 2)) expect(kept).toContain(code);
+    expect(kept.map(severity)).toEqual([...kept.map(severity)].sort());
     const decision = decideSession(evaluation as Exclude<SessionEvaluation, { kind: 'unsupported' }>, null, {
       sessionId: 'bad', processedAt: ts(T0), registry: GAME_MODULE_REGISTRY,
     });
@@ -213,30 +223,46 @@ describe('clockDiagnostics', () => {
   };
   const found = (change: Partial<typeof facts>) => clockDiagnostics({ ...facts, ...change }).map(({ code }) => code);
 
-  it('finds nothing for an honest session, and tolerates offline delay and small skew', () => {
+  it('finds nothing for an honest session, and tolerates small skew', () => {
     expect(new Date(T0).toISOString().slice(0, 10)).toBe('2026-09-21');
     expect(found({})).toEqual([]);
-    expect(found({ createdAt: ts(T0 + CLOCK_TOLERANCES.lateUploadMs) })).toEqual([]);
     expect(found({ createdAt: ts(T0 - CLOCK_TOLERANCES.deviceAheadMs) })).toEqual([]);
     expect(found({ localDate: '2026-09-20' })).toEqual([]);
     expect(found({ localDate: '2026-09-22' })).toEqual([]);
+    // Uploaded the next day: still within a day of the server's date.
+    expect(found({ createdAt: ts(T0 + 20 * 60 * MINUTE) })).toEqual([]);
   });
 
   it('notes a device clock ahead of the server, a late upload and a short wall-clock span', () => {
     expect(found({ createdAt: ts(T0 - CLOCK_TOLERANCES.deviceAheadMs - 1) })).toEqual(['device-clock-ahead']);
-    expect(found({ createdAt: ts(T0 + CLOCK_TOLERANCES.lateUploadMs + 1) })).toEqual(['late-upload']);
+    // A week-old offline session is also more than a day from the server's date.
+    expect(found({ createdAt: ts(T0 + CLOCK_TOLERANCES.lateUploadMs) })).toEqual(['local-date-mismatch']);
+    expect(found({ createdAt: ts(T0 + CLOCK_TOLERANCES.lateUploadMs + 1) })).toEqual(['late-upload', 'local-date-mismatch']);
     expect(found({ startedAt: ts(T0 - 80_000) })).toEqual(['wall-clock-short']);
   });
 
-  it('checks localDate against endedAt in the stated zone, one day either way', () => {
-    expect(found({ localDate: '2026-09-23' })).toEqual(['local-date-mismatch']);
-    expect(found({ localDate: '2026-09-19' })).toEqual(['local-date-mismatch']);
+  it('checks localDate against the server createdAt (local-date-mismatch, design F) and the device endedAt (local-date-inconsistent)', () => {
+    const DAY = 24 * 60 * MINUTE;
+    // Both clocks agree with each other; localDate agrees with neither.
+    expect(found({ localDate: '2026-09-23' })).toEqual(['local-date-mismatch', 'local-date-inconsistent']);
+    expect(found({ localDate: '2026-09-19' })).toEqual(['local-date-mismatch', 'local-date-inconsistent']);
+    // Played offline on the 21st, uploaded on the 24th: consistent on the device, but a backfill as the server sees it.
+    expect(found({ createdAt: ts(T0 + 3 * DAY) })).toEqual(['local-date-mismatch']);
+    // The device clock was set back three days and localDate follows it: only the server clock catches that.
+    expect(found({ startedAt: ts(T0 - 3 * DAY - 100_000), endedAt: ts(T0 - 3 * DAY), localDate: '2026-09-18' })).toEqual(['local-date-mismatch']);
+    // The device clock was set back, but localDate is today's: the client's own fields disagree.
+    expect(found({ startedAt: ts(T0 - 3 * DAY - 100_000), endedAt: ts(T0 - 3 * DAY) })).toEqual(['local-date-inconsistent']);
     // 01:30 UTC on the 22nd is still the 21st in Toronto and already the 22nd in Tokyo.
     const lateEvening = Date.UTC(2026, 8, 22, 1, 30);
-    expect(found({ endedAt: ts(lateEvening), createdAt: ts(lateEvening), startedAt: ts(lateEvening - 100_000), localDate: '2026-09-20' }))
-      .toEqual([]);
-    expect(found({ endedAt: ts(lateEvening), createdAt: ts(lateEvening), startedAt: ts(lateEvening - 100_000), localDate: '2026-09-20', timezone: 'Asia/Tokyo' }))
-      .toEqual(['local-date-mismatch']);
+    const evening = { endedAt: ts(lateEvening), createdAt: ts(lateEvening), startedAt: ts(lateEvening - 100_000), localDate: '2026-09-20' };
+    expect(found(evening)).toEqual([]);
+    expect(found({ ...evening, timezone: 'Asia/Tokyo' })).toEqual(['local-date-mismatch', 'local-date-inconsistent']);
+  });
+
+  it('keeps every clock check a diagnostic', () => {
+    for (const code of ['device-clock-ahead', 'late-upload', 'wall-clock-short', 'local-date-mismatch', 'local-date-inconsistent', 'unknown-timezone'] as const) {
+      expect(SERVER_REASON_OUTCOMES[code], code).toBe('diagnostic');
+    }
   });
 
   it('notes a time zone it does not know instead of failing', () => {
@@ -426,6 +452,55 @@ describe('flagged -> valid upgrade', () => {
     expect(upgradeSession(stored(lockedRaw, flagged), locked.progress!, {
       sessionId: 'session-locked-0001', upgradedAt: ts(T0), registry: GAME_MODULE_REGISTRY,
     })).toBeNull();
+  });
+});
+
+describe('upgrade predicate and fixpoint', () => {
+  const withoutWriteTime = ({ updatedAt: _updatedAt, ...rest }: GameProgress) => rest;
+
+  it('upgrades a session whose other reasons are diagnostics, keeping them: the same result as play order', () => {
+    // A disagreeing summary and client peak are diagnostics: they must not decide validity, so they must not block the upgrade.
+    const lockedRaw: Record<string, unknown> = { ...session({ seed: 41, startLevel: 3, targetPeak: 6, endedAtMs: T0 }), peakLevel: 9 };
+    const summary = lockedRaw.summary as Record<string, unknown>;
+    const noisy = { ...lockedRaw, summary: { ...summary, score: 1 } };
+    const unlockingRaw = session({ seed: 42, startLevel: 1, targetPeak: 5, endedAtMs: T0 - 10 * MINUTE });
+
+    const locked = decide(noisy, null, 'session-noisy-00001', T0 + MINUTE);
+    expect(locked.result).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked', 'peak-level-mismatch', 'summary-mismatch'] });
+    const unlocking = decide(unlockingRaw, locked.progress, 'session-unlock-0002', T0 + 2 * MINUTE);
+    const upgraded = upgradeSession(stored(noisy, locked.result), unlocking.progress!, {
+      sessionId: 'session-noisy-00001', upgradedAt: ts(T0 + 3 * MINUTE), registry: GAME_MODULE_REGISTRY,
+    })!;
+
+    const inPlayOrder = decide(noisy, decide(unlockingRaw, null, 'session-unlock-0002', T0 + MINUTE).progress, 'session-noisy-00001', T0 + 2 * MINUTE);
+    expect(inPlayOrder.result).toMatchObject({ validity: 'valid', reasons: ['peak-level-mismatch', 'summary-mismatch'] });
+    expect(upgraded.result).toMatchObject({
+      validity: 'valid', reasons: ['peak-level-mismatch', 'summary-mismatch', 'start-level-unlocked-later'], processedAt: locked.result.processedAt,
+    });
+    expect(withoutWriteTime(upgraded.progress!)).toEqual(withoutWriteTime(inPlayOrder.progress!));
+  });
+
+  it('keeps a mutually locked pair flagged in every order: neither may unlock the other', () => {
+    // A (start 3, peak 6) would unlock B; B (start 5, peak 7) would unlock A; nothing else unlocks either.
+    const a = session({ seed: 43, startLevel: 3, targetPeak: 6, endedAtMs: T0 });
+    const b = session({ seed: 44, startLevel: 5, targetPeak: 7, endedAtMs: T0 + MINUTE });
+    for (const [first, second] of [[a, b], [b, a]] as const) {
+      const one = decide(first, null, first === a ? 'session-pair-a0001' : 'session-pair-b0001', T0 + 2 * MINUTE);
+      const two = decide(second, one.progress, second === a ? 'session-pair-a0001' : 'session-pair-b0001', T0 + 3 * MINUTE);
+      expect([one.result.validity, two.result.validity]).toEqual(['flagged', 'flagged']);
+      expect(one.unlockRaised || two.unlockRaised).toBe(false);
+      for (const [raw, decision] of [[first, one], [second, two]] as const) {
+        expect(upgradeBlocker(stored(raw, decision.result), two.progress, GAME_MODULE_REGISTRY)).toBe('still-locked');
+      }
+      expect(two.progress).toMatchObject({ bestPeakLevel: {}, bests: {}, sessionsCompleted: 2 });
+    }
+  });
+
+  it('scans only the levels that can hold an upgradable session', () => {
+    expect(upgradeScanLevels(GAME_MODULE_REGISTRY, mm.GAME_ID, mm.MODE_ID, null)).toEqual({ from: 2, to: 1 });
+    const progress = decide(session({ startLevel: 1, targetPeak: 6 }), null, 'session-scan-00001', T0).progress!;
+    expect(upgradeScanLevels(GAME_MODULE_REGISTRY, mm.GAME_ID, mm.MODE_ID, progress)).toEqual({ from: 2, to: 5 });
+    expect(upgradeScanLevels(GAME_MODULE_REGISTRY, mm.GAME_ID, 'no-such-mode', progress)).toEqual({ from: 1, to: 0 });
   });
 });
 
