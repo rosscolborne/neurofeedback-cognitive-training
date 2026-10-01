@@ -28,12 +28,14 @@ integration report. Everything else keeps its owner:
 ## Inventory the streams
 
 Read the parent objective: the epic or cards, their acceptance criteria, and
-the parts of the Stage 1 design and ADRs they touch. Then, for every stream:
+the parts of the Stage 1 design and ADRs they touch. Then, for every stream,
+compare it with its PR's base (`baseRefName`), which for a stacked PR is
+another stream's branch rather than `main`:
 
 ```bash
 gh pr view <n> --json number,title,url,baseRefName,headRefName,headRefOid,reviewDecision,statusCheckRollup
-git log --oneline origin/main..origin/<branch>
-git diff --stat origin/main...origin/<branch>
+git log --oneline origin/<base>..origin/<branch>
+git diff --stat origin/<base>...origin/<branch>
 ```
 
 Also read its PR description, its review findings and how they were resolved,
@@ -41,8 +43,10 @@ and the tests it reports. A stream is ready when it is pushed and clean, its
 targeted tests pass, and it has no open blockers. Report a stream that is not
 ready to the orchestrator instead of integrating a moving target.
 
-From here, stream branches are frozen inputs: their owners push only fixes
-routed back from integration, so you know what to merge again.
+From here, stream branches are frozen inputs. Their owners push only fixes
+routed back from integration, as new commits: no rebase and no force-push. A
+stream stacked on the fixed one need not pick the fix up, because integration
+merges the base again.
 
 ## Order the merges
 
@@ -61,7 +65,7 @@ Write down the order and the predicted conflicts.
 
 Create the integration branch and worktree from `origin/main` per
 [nfct-worktrees](../nfct-worktrees/SKILL.md#integration-worktrees), then merge
-each stream in order with `git merge --no-ff origin/<branch>`.
+each stream in order with `git merge --no-ff --no-edit origin/<branch>`.
 
 - Merge every stream, even when an earlier merge already brought in some of
   its commits, so that each merge commit names one stream.
@@ -71,8 +75,14 @@ each stream in order with `git merge --no-ff origin/<branch>`.
 - Never rewrite, rebase or push to a stream branch.
 - To pick up a newer `origin/main`, merge it into the integration branch
   rather than rebasing, so stream commits keep their SHAs.
-- When a stream owner pushes a routed fix, see what changed with
-  `git range-diff <old-head>...origin/<branch>`, then merge the branch again.
+- When a stream owner pushes a routed fix, see what it added with
+  `git log --oneline <old-head>..origin/<branch>`, then merge the branch
+  again.
+- If a stream was rewritten anyway (its old head is no longer an ancestor of
+  the new one), do not merge both copies. Rebuild the integration branch from
+  `origin/main`, push it with `--force-with-lease` (it is your branch), and
+  record the rebuild in the report. Do this before review starts where you
+  can.
 
 ## Resolve conflicts by intent
 
@@ -105,7 +115,7 @@ A clean merge can still be wrong. Check the combined result for:
   explained by another stream or a recorded decision:
 
   ```bash
-  git diff origin/<branch> HEAD -- $(git diff --name-only origin/main...origin/<branch>)
+  git diff origin/<branch> HEAD -- $(git diff --name-only origin/<base>...origin/<branch>)
   ```
 
 - **Stale tests**: tests pinned to behavior another stream changed, tests that
@@ -178,8 +188,8 @@ report.
 Once the deterministic suite passes, push the integration branch
 (`git push -u origin HEAD`) and open one draft PR against `main`. Title it
 with the objective and its cards, list the stream PRs it supersedes, and keep
-the [report](#report) in its body current. Mark it ready for review once every
-gate has passed.
+the [report](#report) in its body current. Mark it ready for review when you
+request independent review.
 
 ## Hand off and clean up
 
@@ -187,15 +197,17 @@ gate has passed.
   remaining human checks and merges. Recommend a merge commit rather than a
   squash; it keeps each stream's commits and SHAs, so the stream branches pass
   the merged check in
-  [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree).
+  [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree). After
+  a squash merge they fail that check, and removing them then needs the
+  owner's say-so, as for abandoned work.
 - A stream PR that GitHub does not mark merged, such as one based on another
   stream's branch, is closed as superseded with a link to the integration PR,
   by the owner, or by you when delegated.
 - Remove the review, QA and probe worktrees you created, stop the emulators
   and dev servers you started, and delete scratch files. Keep the integration
-  worktree while its PR is open. After the merge, clean it and the stream
-  worktrees up per
-  [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree).
+  worktree while its PR is open, and clean it up after the merge per
+  [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree). Stream
+  worktrees belong to their owners; the orchestrator arranges their cleanup.
 
 ## Independent PRs
 
@@ -203,13 +215,17 @@ Only when the user explicitly asks for separate PRs:
 
 - Test the combination in a disposable
   [integration check](../nfct-worktrees/SKILL.md#integration-worktrees),
-  merging the streams in their intended merge order, and run the same
-  validation gates. Never push it.
+  merging the streams in their intended merge order. Never push it.
+- On the check, run the deterministic suite and, for user-facing work,
+  exploratory QA at the check's local SHA. Review and CI run on each stream's
+  own PR instead.
 - Conflicts and defects go back to each stream's owner as findings. They fix
   and push their own branches, and you re-check in a fresh integration check.
-- Each PR is reviewed and merged on its own, in the recorded order. The
-  objective is complete only when the combined check has passed at the heads
-  that will merge.
+- Each PR merges on its own, in the recorded order. Before merging a stacked
+  PR, retarget it to `main` once its base has merged
+  (`gh pr edit <n> --base main`); otherwise it merges into its base branch.
+- The objective is complete only when the combined check has passed at the
+  heads that will merge.
 
 ## Report
 

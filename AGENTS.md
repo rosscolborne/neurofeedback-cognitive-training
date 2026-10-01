@@ -79,9 +79,9 @@ scope: fix it, or report it as a blocker.
 - Read-only roles (reviewers and independent QA) put it in their report and
   do not change Jira.
 - The orchestrator files it, or, without one, the agent running the task.
-  Search the NFCT project for an existing card first, then create a Task and
-  link it to the card where the work was found. Without Jira access, list it
-  in the report for the owner to file.
+  Search the NFCT project for an existing card first, then create the card in
+  the NFCT project and link it to the card where the work was found. Without
+  Jira access, list it in the report for the owner to file.
 
 ## Skills
 

@@ -59,8 +59,11 @@ git log --oneline origin/main..HEAD   # only this task's commits
 git merge-base --is-ancestor origin/main HEAD && echo "based on origin/main"
 ```
 
-Only the branch's owner rebases it. If a rebase rewrites published history,
-push with `git push --force-with-lease`, never plain `--force`.
+Only the branch's owner rebases it, and not once an integration has merged
+it: then fixes go on as new commits (see
+[nfct-integration](../nfct-integration/SKILL.md#inventory-the-streams)). If a
+rebase rewrites published history, push with `git push --force-with-lease`,
+never plain `--force`.
 
 ## Review worktrees
 
@@ -77,7 +80,9 @@ git -C "$PRIMARY" worktree add --detach "$PRIMARY-review-pr<n>" FETCH_HEAD
 
 An independent [exploratory QA](../nfct-exploratory-qa/SKILL.md) pass runs
 the app from the same kind of worktree, named `$PRIMARY-qa-pr<n>` so it does
-not collide with a reviewer's.
+not collide with a reviewer's. For an integration check, which has no PR, use
+the check's local SHA instead of `FETCH_HEAD` and name it
+`$PRIMARY-qa-<slug>`.
 
 It has no `node_modules`; run `npm ci --legacy-peer-deps` in it before running
 tests. It has no branch and no PR lifecycle. Never commit or push from it
@@ -174,10 +179,10 @@ done
 - `unpushed` counts commits on no remote branch. For an integration check
   these are its disposable test merges.
 - A detached worktree is a review, QA or integration-check worktree
-  (`-review-pr<n>`, `-qa-pr<n>`, `-integration-check-<slug>`). A worktree on
-  an `integration/<slug>` branch is a task worktree. `pr=none` with a dirty
-  tree usually means work in progress. Leave both to their owner unless the
-  lifecycle rules say otherwise.
+  (`-review-pr<n>`, `-qa-pr<n>` or `-qa-<slug>`, `-integration-check-<slug>`).
+  A worktree on an `integration/<slug>` branch is a task worktree. `pr=none`
+  with a dirty tree usually means work in progress. Leave both to their owner
+  unless the lifecycle rules say otherwise.
 - Active-agent check, **Linux only**: look for processes running in the
   worktree, then for recent edits:
 

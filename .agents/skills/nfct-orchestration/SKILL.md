@@ -35,6 +35,9 @@ its procedure rather than restating it.
   same surface; sequence them, or land the shared contract first.
 - Give each writable stream its own worktree, created from the right base per
   [nfct-worktrees](../nfct-worktrees/SKILL.md#create).
+- The emulator and Vite ports are fixed per machine. Schedule emulator-backed
+  runs (the rules, Functions and Playwright suites, and browser QA) one at a
+  time across streams.
 - Keep each implementation stream scoped to its card. A stream that finds
   unrelated work hands it back as
   [out-of-scope work](../../../AGENTS.md#out-of-scope-work) instead of
@@ -105,7 +108,9 @@ only when explicitly delegated, and never a PR it implemented or integrated.
 If an upstream contract changes (a type, path, rule or interface), pause the
 downstream streams that depend on it. Reassess their plans, have their owners
 rebase them, or stop them, rather than letting them finish against a stale
-contract.
+contract. Once integration has merged a stream, its owner adds fixes as new
+commits instead of rebasing (see
+[nfct-integration](../nfct-integration/SKILL.md#inventory-the-streams)).
 
 ## Report
 

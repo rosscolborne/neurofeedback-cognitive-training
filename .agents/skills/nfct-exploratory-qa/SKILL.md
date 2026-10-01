@@ -1,6 +1,6 @@
 ---
 name: nfct-exploratory-qa
-description: Test user-facing NFCT changes like a user by driving a real browser against the locally running app on the emulators, with scenarios derived from the card and diff, and report evidence-backed results. Use for exploratory, manual-style or agent-driven browser QA of a card, PR, branch or integration result, including UI checks, or to replace a manual click-through. Writing deterministic Playwright tests belongs to neurasticity-development-testing.
+description: Test user-facing NFCT changes like a user by driving a real browser against the locally running app on the emulators, with scenarios derived from the card and diff, and report evidence-backed results. Use when asked for exploratory, manual-style or agent-driven browser QA of a card, PR, branch or integration result, including UI checks, or to replace a manual click-through. Writing deterministic Playwright tests belongs to neurasticity-development-testing.
 ---
 
 # NFCT exploratory browser QA
@@ -30,15 +30,20 @@ It complements deterministic tests; it does not replace them:
   The procedure is the same.
 
 Either way, the owner of the branch under test makes every fix, in their own
-worktree: you, for self-QA; otherwise hand the finding to them. Out-of-scope
-defects become [follow-up cards](../../../AGENTS.md#out-of-scope-work), never
-part of this change.
+worktree: you, for self-QA; otherwise hand the finding to them. On an
+integration branch, hand it to the integrator, who decides whether it is an
+integration defect or belongs to one stream
+([nfct-integration](../nfct-integration/SKILL.md#fix-what-belongs-here)).
+Out-of-scope defects become
+[follow-up cards](../../../AGENTS.md#out-of-scope-work), never part of this
+change.
 
 ## Plan before opening the browser
 
 1. Read the card; for an integration branch, read the integration report and
    every stream's card. List the acceptance criteria and the flows they name.
-2. Read the diff against its target, normally `git diff origin/main...HEAD`.
+2. Read the diff against its target: the PR's base, or `origin/main` for an
+   integration branch (`git diff origin/<base>...HEAD`).
    Note the routes, components, state, data paths, rules and Functions it
    touches.
 3. Map what the change can affect: user roles and account states, screens,
@@ -64,7 +69,8 @@ back in. Watch the console throughout.
 
 1. Run the exact commit under test and record its SHA: in the branch's own
    worktree for self-QA, otherwise in a detached
-   [QA worktree](../nfct-worktrees/SKILL.md#review-worktrees) at the head.
+   [QA worktree](../nfct-worktrees/SKILL.md#review-worktrees) at the head (for
+   an unpushed integration check, at the check's local SHA).
    Install what the branch's [Checks](../../../AGENTS.md#checks) install.
 2. Start the emulators and app per
    [Running locally](../../../AGENTS.md#running-locally). Also start every
@@ -190,6 +196,13 @@ cannot judge reliably:
 For each item give the account, the screen, the steps and the question to
 answer, so the human pass is a short, targeted check rather than a replay of
 the app.
+
+## Finish
+
+Stop the emulators and dev server you started, so the next run or test suite
+can use the ports, then remove your QA worktree per
+[nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-review-qa-and-integration-check-worktrees).
+Keep the evidence until the findings are handed over.
 
 ## Report
 
