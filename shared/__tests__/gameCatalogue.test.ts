@@ -4,6 +4,7 @@ import {
   DOMAIN_LABELS,
   GAME_CATALOGUE,
   GAME_ICON_KEYS,
+  GAME_MODULE_REGISTRY,
   domainWeightsSchema,
   mentalMath,
   slugIdSchema,
@@ -28,6 +29,12 @@ describe('game catalogue', () => {
       expect(listing.summary).toMatch(/^[A-Z].{9,79}\.$/);
       expect(GAME_ICON_KEYS).toContain(listing.icon);
       expect(domainWeightsSchema.safeParse(listing.definition.domainWeights).success).toBe(true);
+    }
+  });
+
+  it('lists each game at the version trusted scoring treats as current', () => {
+    for (const listing of GAME_CATALOGUE) {
+      expect(GAME_MODULE_REGISTRY.current(listing.definition.id)?.definition).toBe(listing.definition);
     }
   });
 
