@@ -1483,7 +1483,7 @@ input, select, textarea, button {
   border: 0;
 }
 
-/* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
+/* Train catalogue: one card per experience or game. */
 .train-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1584,31 +1584,6 @@ input, select, textarea, button {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   transition: border-color 0.2s ease;
-}
-
-.train-card-research {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  /* A utility link: quieter than the category tag and pushed to the far edge, away from the choice itself. */
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 500;
-  text-decoration: none;
-}
-
-.train-card-research:hover {
-  color: var(--brand-primary);
-}
-
-.train-card-research:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 1px;
 }
 
 /* Narrow phones: one experience per row, icon beside the text, so names and descriptions stay readable. */

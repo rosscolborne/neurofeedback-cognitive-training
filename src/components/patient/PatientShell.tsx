@@ -13,7 +13,6 @@ import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { SelfDirectedSetupModal } from './SelfDirectedSetupModal';
 import { DisconnectClinicianDialog } from './DisconnectClinicianDialog';
-import { EducationHub } from './EducationHub';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
 import { PatientMessagingView } from './PatientMessagingView';
@@ -21,7 +20,7 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
 import { FactGrid, type Fact } from '../ui/FactGrid';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { storageEngine } from '../../services/storageEngine';
@@ -86,7 +85,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationAccepted,
   onInvitationDismissed,
 }) => {
-  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   const [mentalMathOwnerId, setMentalMathOwnerId] = useState<string | null>(null);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
@@ -563,7 +562,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           <HomeScreen
             client={client}
             onStartSession={handleStartSession}
-            onNavigateTab={setActiveTab}
             onOpenProtocolDetails={() => setShowProtocolDetails(true)}
             onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
           />
@@ -601,18 +599,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     <p id={`train-desc-${exp.id}`} className="train-card-desc">{exp.description}</p>
                     <div className="train-card-foot">
                       <span className="status-tag status-tag-active train-card-tag">{exp.badge}</span>
-                      {exp.researchUrl && (
-                        <a
-                          href={exp.researchUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="train-card-research"
-                          aria-label={`Research for ${exp.name} (opens in a new tab)`}
-                        >
-                          <BookOpen size={12} aria-hidden="true" /> Research
-                        </a>
-                      )}
                     </div>
                   </div>
                 );
@@ -642,8 +628,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             </section>
           </div>
         )}
-
-        {activeTab === 'education' && <EducationHub />}
 
         {activeTab === 'progress' && <ProgressHistory client={client} />}
 
@@ -903,7 +887,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {[
           { id: 'home', label: 'Home', icon: Home },
           { id: 'sessions', label: 'Train', icon: Compass },
-          { id: 'education', label: 'Science', icon: BookOpen },
           { id: 'progress', label: 'Progress', icon: Activity },
           { id: 'messages', label: 'Messages', icon: MessageSquare },
           { id: 'appointments', label: 'Visits', icon: CalendarDays },

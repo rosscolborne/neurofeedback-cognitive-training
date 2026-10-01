@@ -27,7 +27,7 @@ describe('patient training authority', () => {
   });
 
   it('hides only clinician-dependent destinations while self-directed', () => {
-    for (const tab of ['home', 'sessions', 'education', 'progress', 'profile']) {
+    for (const tab of ['home', 'sessions', 'progress', 'profile']) {
       expect(isPatientTabAvailable(tab, 'self-directed')).toBe(true);
       expect(isPatientTabAvailable(tab, 'clinician')).toBe(true);
     }

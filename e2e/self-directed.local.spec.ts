@@ -18,11 +18,11 @@ const EXPERIENCE_NAMES: Record<string, string> = {
   'eeg-mandala': 'Generative Mandala',
 };
 const defaults = (protocol: Parameters<typeof getClinicalProtocolTemplate>[0]) => [...getClinicalProtocolTemplate(protocol)!.recommendedExperiences];
-const PATIENT_TABS = ['Home', 'Train', 'Science', 'Progress', 'Profile'];
+const PATIENT_TABS = ['Home', 'Train', 'Progress', 'Profile'];
 
 async function expectNavigation(page: Page, linked: boolean) {
   const nav = page.locator('nav').last();
-  await expect(nav.getByRole('button')).toHaveCount(linked ? 7 : 5);
+  await expect(nav.getByRole('button')).toHaveCount(linked ? 6 : 4);
   for (const name of PATIENT_TABS) await expect(nav.getByRole('button', { name, exact: true })).toBeVisible();
   for (const name of ['Messages', 'Visits']) {
     await expect(nav.getByRole('button', { name, exact: true })).toHaveCount(linked ? 1 : 0);

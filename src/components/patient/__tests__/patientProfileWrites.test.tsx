@@ -33,7 +33,6 @@ vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../EducationHub', () => ({ EducationHub: 'education-hub' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));

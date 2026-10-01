@@ -7,7 +7,7 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { Play, ChevronRight, BookOpen, Brain } from 'lucide-react';
+import { Play, ChevronRight, Brain } from 'lucide-react';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { useScrollEdges } from '../ui/useScrollEdges';
 import {
@@ -17,7 +17,6 @@ import {
 interface HomeScreenProps {
   client: ClientProfile;
   onStartSession: (exp: ExperienceType) => void;
-  onNavigateTab: (tab: 'home' | 'sessions' | 'education' | 'progress' | 'profile') => void;
   onOpenProtocolDetails?: () => void;
   /** Present only while the patient owns their training setup (no active clinician). */
   onOpenTrainingSetup?: () => void;
@@ -35,7 +34,6 @@ function getGreeting(): string {
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   client,
   onStartSession,
-  onNavigateTab,
   onOpenProtocolDetails,
   onOpenTrainingSetup,
 }) => {
@@ -294,45 +292,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           )}
         </div>
-      </div>
-
-      {/* Education Hub Banner */}
-      <div
-        onClick={() => onNavigateTab('education')}
-        className="card-patient"
-        style={{
-          cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '16px 20px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--status-completed-bg)',
-              color: 'var(--status-completed)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <BookOpen size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Neurofeedback Science Hub
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Explore how brainwave biofeedback shapes neuroplasticity
-            </div>
-          </div>
-        </div>
-        <ChevronRight size={18} color="var(--text-tertiary)" />
       </div>
     </div>
   );

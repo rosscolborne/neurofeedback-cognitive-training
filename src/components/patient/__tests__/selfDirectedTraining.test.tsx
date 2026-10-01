@@ -28,7 +28,6 @@ vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../EducationHub', () => ({ EducationHub: 'education-hub' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
@@ -93,7 +92,7 @@ describe('self-directed patient shell', () => {
   it('gives an unlinked patient a clean five-tab shell with the default protocol and no care-team gaps', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked())); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(text(renderer)).toContain('Self-directed');
     expect(button(renderer, 'Change training setup')).toBeDefined();
     tab(renderer, 'Train');
@@ -110,7 +109,7 @@ describe('self-directed patient shell', () => {
   it('shows Messages and Visits only while linked, following relationship changes and falling back to Home', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(linked())); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Messages', 'Visits', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Messages', 'Visits', 'Profile']);
     expect(text(renderer)).toContain('Clinician-managed');
     expect(button(renderer, 'Change training setup')).toBeUndefined();
     tab(renderer, 'Profile');
@@ -123,7 +122,7 @@ describe('self-directed patient shell', () => {
 
     // The clinician removes the relationship (Firestore writes null link fields).
     await act(async () => { renderer.update(shell({ ...linked(), clinicianId: null as never, clinicId: null as never })); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-messages')).toHaveLength(0);
     expect(renderer.root.findAllByType(HomeScreen)).toHaveLength(1);
     expect(button(renderer, 'Change training setup')).toBeDefined();
@@ -319,7 +318,7 @@ describe('clinician relationship lifecycle', () => {
     expect(renderer.root.findAllByType(DisconnectClinicianDialog)).toHaveLength(0);
 
     await act(async () => { renderer.update(shell(disconnected)); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Science', 'Progress', 'Profile']);
+    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(button(renderer, 'Change Training Setup')).toBeDefined();
     expect(button(renderer, 'Disconnect from Clinician')).toBeUndefined();
     expect(text(renderer)).not.toContain('Connected to your clinician');

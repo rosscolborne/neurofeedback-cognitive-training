@@ -16,7 +16,6 @@ vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../EducationHub', () => ({ EducationHub: 'education-hub' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
@@ -45,13 +44,14 @@ const begin = (renderer: ReactTestRenderer) => renderer.root.findAllByType('butt
 describe('patient assigned catalogue', () => {
   beforeEach(() => { vi.clearAllMocks(); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 
-  it('has one stable entry per experience and preserves names, descriptions, and research links', () => {
+  it('has one stable entry per experience and preserves names and descriptions', () => {
     expect(EXPERIENCE_IDS).toHaveLength(13);
     expect(new Set(EXPERIENCE_IDS).size).toBe(13);
     expect(Object.keys(EXPERIENCE_CATALOGUE).sort()).toEqual([...EXPERIENCE_IDS].sort());
-    expect(EXPERIENCE_CATALOGUE['narrative-story']).toMatchObject({ name: 'Contemplative Reading', description: 'Calm mindfulness reflections guided by neurofeedback therapy', researchUrl: 'https://doi.org/10.1145/1978942.1978958' });
-    expect(EXPERIENCE_CATALOGUE['eeg-mandala']).toMatchObject({ name: 'Generative Mandala', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' });
-    for (const id of EXPERIENCE_IDS) expect(EXPERIENCE_CATALOGUE[id]).toMatchObject({ id, name: expect.any(String), description: expect.any(String), researchUrl: expect.stringMatching(/^https:\/\/doi.org\//) });
+    expect(EXPERIENCE_CATALOGUE['narrative-story']).toMatchObject({ name: 'Contemplative Reading', description: 'Calm mindfulness reflections guided by neurofeedback therapy' });
+    expect(EXPERIENCE_CATALOGUE['eeg-mandala']).toMatchObject({ name: 'Generative Mandala' });
+    for (const id of EXPERIENCE_IDS) expect(EXPERIENCE_CATALOGUE[id]).toMatchObject({ id, name: expect.any(String), description: expect.any(String) });
+    for (const id of EXPERIENCE_IDS) expect(EXPERIENCE_CATALOGUE[id]).not.toHaveProperty('researchUrl');
   });
 
   it('keeps Home pills and Train cards on resolved X/Y, guards stale callbacks, and reselects after assignment changes', async () => {
@@ -99,9 +99,9 @@ describe('patient assigned catalogue', () => {
   it('reselects a newly assigned Home card and blocks a stale Begin callback', async () => {
     const onStartSession = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<HomeScreen client={profile(['skyline-drift', 'neuro-gambit'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
+    await act(async () => { renderer = create(<HomeScreen client={profile(['skyline-drift', 'neuro-gambit'])} onStartSession={onStartSession} />); });
     const staleBegin = begin(renderer);
-    await act(async () => { renderer.update(<HomeScreen client={profile(['narrative-story'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
+    await act(async () => { renderer.update(<HomeScreen client={profile(['narrative-story'])} onStartSession={onStartSession} />); });
     expect(text(renderer)).toContain('Contemplative Reading');
     expect(text(renderer)).not.toContain('Skyline Drift');
     act(() => staleBegin());
@@ -109,9 +109,9 @@ describe('patient assigned catalogue', () => {
     act(() => begin(renderer)());
     expect(onStartSession).toHaveBeenCalledWith('narrative-story');
     onStartSession.mockClear();
-    await act(async () => { renderer.update(<HomeScreen client={profile(['skyline-drift', 'neuro-gambit'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
+    await act(async () => { renderer.update(<HomeScreen client={profile(['skyline-drift', 'neuro-gambit'])} onStartSession={onStartSession} />); });
     act(() => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.some((value) => typeof value === 'string' && value.includes('Skyline Drift'))).length > 0)!.props.onClick({ currentTarget: { scrollIntoView: vi.fn() } }));
-    await act(async () => { renderer.update(<HomeScreen client={profile(['neuro-gambit', 'skyline-drift'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
+    await act(async () => { renderer.update(<HomeScreen client={profile(['neuro-gambit', 'skyline-drift'])} onStartSession={onStartSession} />); });
     act(() => begin(renderer)());
     expect(onStartSession).toHaveBeenCalledWith('neuro-gambit');
     await act(async () => { renderer.unmount(); });
