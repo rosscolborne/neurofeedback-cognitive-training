@@ -18,8 +18,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# No secrets and no Firebase configuration: unit tests use an inert demo
-# project, and every Firebase-backed test runs against local emulators.
+# No secrets. Unit tests use an inert demo project, and every Firebase-backed
+# test runs against local emulators, except the nfct-dev canary: one consumer
+# journey against the real backend TestFlight uses, as an ordinary user with
+# nfct-dev's public web config (docs/nfct/nfct-dev-canary.md).
 # Nothing here deploys: the Cloud Functions codebase (functions/) is only
 # type-checked, built and tested on the emulators.
 # The embedded brainflow_service/ is owned by the shared brainflow-service
@@ -34,34 +36,32 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      backend: ${{ steps.filter.outputs.backend }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
       # Pull requests that change only documentation or agent instructions
       # skip the emulator job; `web` always runs, since check:isolation scans
-      # every tracked file. Any other change, a failed diff and manual runs
-      # run it. Keep docs_paths in step with ios.yml.
+      # every tracked file. The nfct-dev canary also skips changes that cannot
+      # alter how the web app talks to the backend (scripts/ci/classify-changes.sh).
+      # Any other change, a failed diff or classification, and manual runs
+      # run them.
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" != pull_request ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
+            printf 'code=true\nbackend=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # The checkout is the PR merged into its base: HEAD^1 is the base.
-          if ! git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
+          if ! git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt" ||
+            ! bash scripts/ci/classify-changes.sh "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/classes.txt"; then
+            printf 'code=true\nbackend=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          docs_paths='^(docs/|\.agents/|\.claude/|[^/]+\.md$)|(^|/)README\.md$'
-          if grep -vqE "$docs_paths" "$RUNNER_TEMP/changed.txt"; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "code=false" >> "$GITHUB_OUTPUT"
-            echo "Documentation or agent instructions only; the emulator job is skipped."
-          fi
+          tee -a "$GITHUB_OUTPUT" < "$RUNNER_TEMP/classes.txt"
 
   web:
     # Draft pull requests skip the whole workflow; see the comment under `on:`.
@@ -128,9 +128,86 @@ jobs:
       - run: npx playwright test --project=permission-guard
       # Local-emulator browser suite; Playwright uses /usr/bin/google-chrome.
       - run: npm run test:e2e:protocol
+      # The nfct-dev canary's journey and cleanup, rehearsed on the emulators,
+      # so a red canary with a green rehearsal points at the backend.
+      - name: Rehearse the nfct-dev canary on the emulators
+        env:
+          NFCT_CANARY_TARGET: emulators
+        run: npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e "node scripts/canary/canary.mjs run"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-results
           path: test-results/
+          retention-days: 7
+
+  canary:
+    name: nfct-dev canary
+    needs: [changes, web]
+    # As for emulators: a failed change detection runs it, and drafts skip it
+    # (web is skipped). It runs beside the emulators job, not after it.
+    if: >-
+      !cancelled() && needs.web.result == 'success' &&
+      (needs.changes.result == 'failure' || needs.changes.outputs.backend == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # nfct-dev's web config, the same values as the Xcode Cloud workflow's
+    # environment. It is public (it ships in every build), so it lives in
+    # repository variables, not secrets. There are no secrets here: the
+    # canary signs up and cleans up as an ordinary user.
+    env:
+      NFCT_CANARY_TARGET: nfct-dev
+      VITE_FIREBASE_API_KEY: ${{ vars.NFCT_DEV_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.NFCT_DEV_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.NFCT_DEV_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.NFCT_DEV_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NFCT_DEV_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.NFCT_DEV_FIREBASE_APP_ID }}
+    steps:
+      # A fork's code would get the shared backend; a maintainer pushes the
+      # branch to this repository instead. Failing, not skipping, keeps the
+      # required check from passing.
+      - name: Same-repository pull requests only
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::The nfct-dev canary does not run pull requests from forks. Push the branch to this repository and open the pull request from there."
+          exit 1
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - name: Build the production bundle with nfct-dev's web config
+        run: node scripts/canary/canary.mjs build
+      # Written before the account exists, so cleanup can find a partial run.
+      - name: Create the disposable identity
+        id: identity
+        env:
+          NFCT_CANARY_IDENTITY_FILE: ${{ runner.temp }}/nfct-canary/identity.json
+        run: node scripts/canary/canary.mjs prepare
+      # One fresh account, one iPhone-sized Chromium, no retries.
+      - name: Consumer journey against nfct-dev
+        env:
+          NFCT_CANARY_IDENTITY_FILE: ${{ runner.temp }}/nfct-canary/identity.json
+        run: npx playwright test --config playwright.canary.config.ts
+      # Runs after a failure or cancellation too. A cleanup problem is
+      # reported as a warning without changing the journey's result; the
+      # owner-run cleanup removes what is left.
+      - name: Clean up the disposable account
+        if: always() && steps.identity.outcome != 'skipped'
+        continue-on-error: true
+        env:
+          NFCT_CANARY_IDENTITY_FILE: ${{ runner.temp }}/nfct-canary/identity.json
+        run: node scripts/canary/canary.mjs cleanup
+      # Screenshots only: Playwright's error context records typed values,
+      # including the password, and this repository's artifacts are public.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: nfct-dev-canary-screenshots
+          path: test-results/canary/**/*.png
+          if-no-files-found: ignore
           retention-days: 7

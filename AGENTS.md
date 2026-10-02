@@ -10,8 +10,12 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   credentials, service accounts or deployed rules, and never add a default
   Firebase project. `src/services/firebaseConfig.ts` must keep failing closed.
   `npm run check:isolation` must stay green.
-- **All Firebase-backed tests run against local emulators.** Do not add
-  deployed-project E2E, service-account keys or `.env` files to the repo.
+- **All Firebase-backed tests run against local emulators**, with one
+  exception: CI's [nfct-dev canary](docs/nfct/nfct-dev-canary.md), a single
+  consumer journey against `nfct-dev` as an ordinary user, with no secrets and
+  no Admin SDK. Do not add other deployed-project tests, service-account keys
+  or `.env` files to the repo, and do not give a pull request job privileged
+  Firebase credentials.
 - **`brainflow_service/` is not owned here.** It is an inherited copy of the
   shared `brainflow-service` repository. Do not modify, refactor or extend it;
   backend changes go to `brainflow-service`.
@@ -48,7 +52,10 @@ higher-value work.
 ## Working on a card
 
 - Give each independent writable task or PR its own branch and git worktree,
-  based on current `origin/main` unless it deliberately stacks on another PR.
+  based on current `origin/development` unless it deliberately stacks on
+  another PR. Pull requests target `development`; only `development` is
+  promoted to `main`. Where a skill still says `origin/main`, use
+  `origin/development`.
   Never modify another task's worktree or uncommitted work.
 - An open PR keeps its worktree. It becomes eligible for cleanup only once the
   PR is merged or abandoned **and** the worktree is clean and fully pushed.
@@ -340,6 +347,27 @@ native-relevant files change, an unsigned Xcode build and an iOS Simulator
 smoke test on GitHub-hosted macOS. On a Mac,
 `npm run sync:ios && npm run ios:build` runs the same Xcode build.
 
+nfct-dev canary ([docs/nfct/nfct-dev-canary.md](docs/nfct/nfct-dev-canary.md)):
+`ci.yml`'s `nfct-dev canary` job builds the PR's production bundle with
+`nfct-dev`'s web config and runs the critical consumer journey (sign-up,
+Train my brain, Mental Math, a saved run, signing in again) against the real
+backend TestFlight uses. It runs on ready PRs unless every changed file is
+clearly non-runtime (`scripts/ci/classify-changes.sh`). The `emulators` job
+rehearses the same journey on the emulators; run that rehearsal locally
+(needs Java 21):
+
+```bash
+NFCT_CANARY_TARGET=emulators npx firebase emulators:exec --only auth,firestore \
+  --project demo-neurasticity-protocol-e2e "node scripts/canary/canary.mjs run"
+```
+
+Agents do not run the canary against `nfct-dev` themselves; CI does. A red
+canary with a green rehearsal means the deployed backend or its configuration
+does not match the branch: report it as a blocker with the failing step, and
+never work around it in the app. Deploying rules or indexes to `nfct-dev` is
+the owner's step; for a PR that changes them, follow
+[rules and index changes](docs/nfct/nfct-dev-canary.md#rules-and-index-changes).
+
 ## Stage 1 test coverage
 
 Every user-facing Stage 1 card adds or updates deterministic Playwright
@@ -402,7 +430,11 @@ persistence, training-flow or other stateful behavior:
   Playwright coverage instead of relying only on exploratory QA.
 - Treat critical user journeys as regression boundaries: a change that touches
   or can affect one verifies that journey before the PR is marked ready for
-  review.
+  review. Drive the fresh consumer journey with the shared helpers in
+  `e2e/helpers/journeys.ts` (`signUpFreshAccountThroughUi`,
+  `completeConsumerOnboarding`, `openGameFromTrain`). The nfct-dev canary and
+  its emulator rehearsal already use them. A spec that seeds a
+  clinician-linked patient does not cover consumer sign-up and onboarding.
 - If missing test infrastructure blocks a realistic journey (for example, no
   deterministic way to create a fresh test account), do not bypass that part
   silently or claim it was verified. Report the gap as a blocker and create or
