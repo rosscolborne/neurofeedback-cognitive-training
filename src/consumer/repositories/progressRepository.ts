@@ -43,7 +43,8 @@ export interface ProgressRepository {
    * Progress plus the newest sessions of the game (default 20, at most 100),
    * delivered together only when both listeners are in sync and both parts
    * come from the same source (server or cache). Pending sessions older than
-   * that window are not included.
+   * that window are not included. A failed read stops both listeners and
+   * reaches `onError` as a ProgressReadError naming the read.
    */
   subscribeToProgressWithRecentSessions(
     gameId: string,
@@ -55,6 +56,27 @@ export interface ProgressRepository {
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+/** The reads that subscribeToProgressWithRecentSessions combines. */
+export type ProgressRead = 'progress' | 'recent sessions';
+
+/**
+ * A failed read of subscribeToProgressWithRecentSessions: which read failed,
+ * with the Firestore error code (for example `permission-denied`, or
+ * `failed-precondition` while a composite index is missing or still
+ * building). The original error is the cause.
+ */
+export class ProgressReadError extends Error {
+  readonly code: string | undefined;
+
+  constructor(readonly read: ProgressRead, cause: unknown) {
+    const error = asError(cause);
+    super(error.message, { cause: error });
+    this.name = 'ProgressReadError';
+    const code = (cause as { code?: unknown } | null)?.code;
+    this.code = typeof code === 'string' ? code : undefined;
+  }
 }
 
 export function createProgressRepository(context: ConsumerFirestoreContext): ProgressRepository {
@@ -86,10 +108,10 @@ export function createProgressRepository(context: ConsumerFirestoreContext): Pro
         stopped = true;
         unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe());
       };
-      const fail = (error: unknown) => {
+      const fail = (read: ProgressRead) => (error: unknown) => {
         if (stopped) return;
         stop();
-        onError(asError(error));
+        onError(new ProgressReadError(read, error));
       };
       const publish = () => {
         if (stopped || !changed || !progress || !sessions) return;
@@ -110,7 +132,7 @@ export function createProgressRepository(context: ConsumerFirestoreContext): Pro
       unsubscribers.push(onSnapshot(progressRef(firestore, uid, gameId), { includeMetadataChanges: true }, (snapshot) => {
         progress = readDocument('progress', snapshot, (raw) => readGameProgress(raw));
         changed = true;
-      }, fail));
+      }, fail('progress')));
       unsubscribers.push(onSnapshot(
         historyQuery(context, uid, gameId, limit(boundedPageSize(options.recentLimit))),
         { includeMetadataChanges: true },
@@ -120,7 +142,7 @@ export function createProgressRepository(context: ConsumerFirestoreContext): Pro
           sessions = { recentSessions: readable, unreadableSessions: unreadable, fromCache: snapshot.metadata.fromCache };
           changed = true;
         },
-        fail,
+        fail('recent sessions'),
       ));
       // Fires after every listener has received the snapshots of one consistent state.
       unsubscribers.push(onSnapshotsInSync(firestore, publish));

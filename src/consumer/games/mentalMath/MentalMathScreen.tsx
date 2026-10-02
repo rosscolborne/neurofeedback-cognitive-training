@@ -228,6 +228,22 @@ type PickerData =
   | { readonly status: 'ready'; readonly choices: StartLevelChoices }
   | { readonly status: 'unavailable'; readonly choices: StartLevelChoices };
 
+/**
+ * Logs why the player's progress could not be loaded, for diagnosis (CI logs,
+ * browser developer tools, Web Inspector on a device); the player only sees
+ * the friendly "couldn't be loaded" state. Logged: the read that failed (from
+ * the repository's ProgressReadError), the Firestore error code and message,
+ * with any users/<id> path segment redacted. Never document contents.
+ */
+function logProgressReadFailure(error: unknown): void {
+  const { read, code, message } = (error ?? {}) as { read?: unknown; code?: unknown; message?: unknown };
+  console.warn('Mental Math progress could not be loaded', {
+    read: typeof read === 'string' ? read : 'unknown',
+    code: typeof code === 'string' ? code : 'unknown',
+    message: (typeof message === 'string' ? message : String(error)).replace(/\busers\/[^/\s]+/g, 'users/{uid}'),
+  });
+}
+
 const StartLevelPicker: React.FC<{
   readonly progress: MentalMathScreenProps['progress'];
   readonly eegProvider: EegCaptureProvider | null;
@@ -249,8 +265,12 @@ const StartLevelPicker: React.FC<{
     try {
       stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, (state: ProgressWithRecentSessions) => {
         apply({ status: 'ready', choices: startLevelChoices(state) });
-      }, () => apply({ status: 'unavailable', choices: startLevelChoices(null) }));
-    } catch {
+      }, (error) => {
+        logProgressReadFailure(error);
+        apply({ status: 'unavailable', choices: startLevelChoices(null) });
+      });
+    } catch (error) {
+      logProgressReadFailure(error);
       apply({ status: 'unavailable', choices: startLevelChoices(null) });
     }
     return () => stop();
