@@ -69,6 +69,9 @@ describe('classify-changes', () => {
     expect(classify(null)).toEqual(RUNS_BOTH);
     const result = spawnSync('bash', ['scripts/ci/classify-changes.sh'], { encoding: 'utf8' });
     expect(result.stdout).toBe('code=true\nbackend=true\n');
+    // grep fails (status 2) on a directory: that runs everything too.
+    const unreadable = spawnSync('bash', ['scripts/ci/classify-changes.sh', directory], { encoding: 'utf8' });
+    expect(unreadable.stdout).toBe('code=true\nbackend=true\n');
   });
 
   it('skips the same documentation paths as ios.yml', () => {

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  cleanedCompletely,
   cleanUpIdentity,
   formatCleanupReport,
   newIdentity,
@@ -15,17 +16,25 @@ import {
 // The nfct-dev canary's identity and user-level cleanup (scripts/canary/canary.mjs).
 // No network: cleanup runs against a recorded fake of the two REST APIs.
 
-const nfctDev = { VITE_FIREBASE_PROJECT_ID: 'nfct-dev', VITE_FIREBASE_API_KEY: 'public-web-key' };
+const nfctDev = {
+  NFCT_CANARY_TARGET: 'nfct-dev',
+  VITE_FIREBASE_PROJECT_ID: 'nfct-dev',
+  VITE_FIREBASE_AUTH_DOMAIN: 'nfct-dev.firebaseapp.com',
+  VITE_FIREBASE_API_KEY: 'public-web-key',
+};
 
 describe('resolveCanaryTarget', () => {
   it('targets nfct-dev only, and the emulators only when asked', () => {
     expect(resolveCanaryTarget(nfctDev)).toMatchObject({ name: 'nfct-dev', projectId: 'nfct-dev', authBase: 'https://identitytoolkit.googleapis.com/v1' });
     expect(resolveCanaryTarget({ NFCT_CANARY_TARGET: 'emulators' })).toMatchObject({ projectId: 'demo-neurasticity-protocol-e2e', authBase: 'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1' });
     expect(() => resolveCanaryTarget({ ...nfctDev, VITE_FIREBASE_PROJECT_ID: 'some-other-project' })).toThrow(/only against nfct-dev/);
-    expect(() => resolveCanaryTarget({ VITE_FIREBASE_API_KEY: 'k' })).toThrow(/only against nfct-dev/);
-    expect(() => resolveCanaryTarget({ VITE_FIREBASE_PROJECT_ID: 'nfct-dev' })).toThrow(/VITE_FIREBASE_API_KEY/);
+    expect(() => resolveCanaryTarget({ ...nfctDev, VITE_FIREBASE_PROJECT_ID: undefined })).toThrow(/only against nfct-dev/);
+    expect(() => resolveCanaryTarget({ ...nfctDev, VITE_FIREBASE_AUTH_DOMAIN: 'elsewhere.firebaseapp.com' })).toThrow(/VITE_FIREBASE_AUTH_DOMAIN/);
+    expect(() => resolveCanaryTarget({ ...nfctDev, VITE_FIREBASE_API_KEY: '' })).toThrow(/VITE_FIREBASE_API_KEY/);
     expect(() => resolveCanaryTarget({ ...nfctDev, VITE_E2E_EMULATORS: 'true' })).toThrow(/VITE_E2E_EMULATORS/);
-    expect(() => resolveCanaryTarget({ NFCT_CANARY_TARGET: 'production' })).toThrow(/Unknown NFCT_CANARY_TARGET/);
+    // The target is always explicit: no default sends a local run to nfct-dev.
+    expect(() => resolveCanaryTarget({ ...nfctDev, NFCT_CANARY_TARGET: undefined })).toThrow(/Set NFCT_CANARY_TARGET/);
+    expect(() => resolveCanaryTarget({ NFCT_CANARY_TARGET: 'production' })).toThrow(/Set NFCT_CANARY_TARGET/);
   });
 });
 
@@ -70,7 +79,8 @@ describe('the identity file', () => {
 describe('cleanUpIdentity', () => {
   const target = resolveCanaryTarget(nfctDev);
   const identity = { displayName: 'NFCT Smoke', email: 'nfct-smoke+1-1-abcdefghij@example.test', password: 'the-password-Aa1!' };
-  const idToken = 'the-id-token';
+  const token = (aud) => `header.${Buffer.from(JSON.stringify({ aud, sub: 'uid-1' })).toString('base64url')}.signature`;
+  const idToken = token('nfct-dev');
 
   /** A fake of the two REST APIs that records each call. */
   function backend(responses) {
@@ -97,6 +107,15 @@ describe('cleanUpIdentity', () => {
     expect(JSON.parse(calls[2].init.body)).toEqual({ idToken });
     expect(report).toMatchObject({ uid: 'uid-1', account: 'deleted', deleted: ['clients/uid-1', 'Auth account'], problems: [] });
     expect(report.residue).toEqual([expect.stringMatching(/^users\/uid-1 /)]);
+    expect(cleanedCompletely(report)).toBe(true);
+  });
+
+  it('never deletes anything when the API key signed in to another project', async () => {
+    const { calls, fetchImpl } = backend({ [signIn]: [200, { localId: 'uid-1', idToken: token('another-project') }] });
+    const report = await cleanUpIdentity(target, identity, { fetchImpl });
+    expect(calls.map(({ key }) => key)).toEqual([signIn]);
+    expect(report.problems).toEqual([expect.stringMatching(/project 'another-project', not nfct-dev; nothing was deleted/)]);
+    expect(cleanedCompletely(report)).toBe(false);
   });
 
   it('is idempotent: an account that does not exist is already clean', async () => {
@@ -113,6 +132,8 @@ describe('cleanUpIdentity', () => {
     const report = await cleanUpIdentity(target, identity, { fetchImpl });
     expect(report).toMatchObject({ account: 'deleted', deleted: ['Auth account'], problems: [] });
     expect(report.residue[0]).toBe('clients/uid-1 (PERMISSION_DENIED (HTTP 403))');
+    // The rehearsal treats this as broken cleanup; against nfct-dev it is residue.
+    expect(cleanedCompletely(report)).toBe(false);
   });
 
   it('reports a failure it cannot finish, without the password or token', async () => {

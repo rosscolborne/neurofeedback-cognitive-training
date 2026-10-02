@@ -7,14 +7,14 @@ import { CANARY_BASE_URL, CANARY_PORT, canaryDevice } from './e2e/canary/device'
 // `node scripts/canary/canary.mjs run` (or CI's steps), which creates the
 // account's identity file first and cleans up afterwards.
 //
-// NFCT_CANARY_TARGET:
-// - nfct-dev (default): serves the production bundle in dist/, built by
+// NFCT_CANARY_TARGET (required):
+// - nfct-dev: serves the production bundle in dist/, built by
 //   `node scripts/canary/canary.mjs build` with nfct-dev's web config.
 // - emulators: the same journey against the local Auth and Firestore
 //   emulators and the emulator dev server, a deterministic rehearsal that CI
 //   runs in the emulators job.
-const target = process.env.NFCT_CANARY_TARGET ?? 'nfct-dev';
-if (target !== 'nfct-dev' && target !== 'emulators') throw new Error(`Unknown NFCT_CANARY_TARGET '${target}'`);
+const target = process.env.NFCT_CANARY_TARGET;
+if (target !== 'nfct-dev' && target !== 'emulators') throw new Error(`Set NFCT_CANARY_TARGET to nfct-dev or emulators (got '${target ?? ''}')`);
 
 const server = target === 'nfct-dev'
   ? `vite preview --host 127.0.0.1 --port ${CANARY_PORT} --strictPort`

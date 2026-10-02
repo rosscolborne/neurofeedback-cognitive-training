@@ -432,9 +432,9 @@ persistence, training-flow or other stateful behavior:
   or can affect one verifies that journey before the PR is marked ready for
   review. Drive the fresh consumer journey with the shared helpers in
   `e2e/helpers/journeys.ts` (`signUpFreshAccountThroughUi`,
-  `completeConsumerOnboarding`, `openGameFromTrain`), which the nfct-dev
-  canary also uses. A spec that seeds a clinician-linked patient does not
-  cover consumer sign-up and onboarding.
+  `completeConsumerOnboarding`, `openGameFromTrain`). The nfct-dev canary and
+  its emulator rehearsal already use them. A spec that seeds a
+  clinician-linked patient does not cover consumer sign-up and onboarding.
 - If missing test infrastructure blocks a realistic journey (for example, no
   deterministic way to create a fresh test account), do not bypass that part
   silently or claim it was verified. Report the gap as a blocker and create or

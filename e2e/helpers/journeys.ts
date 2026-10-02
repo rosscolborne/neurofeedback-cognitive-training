@@ -1,8 +1,9 @@
 import { expect, type Page } from '@playwright/test';
 
 // Critical consumer journeys through the real UI, from a real entry state.
-// Shared by the emulator suites and the nfct-dev canary (e2e/canary), so the
-// canary and the deterministic tests drive the same screens the same way.
+// The nfct-dev canary (e2e/canary) and its emulator rehearsal use them; new
+// emulator specs of these journeys should too, so the canary and the
+// deterministic tests drive the same screens the same way.
 // Role, label and text locators only; update these helpers when the
 // onboarding or Train screens change, along with scripts/ios/simulator-probe.js.
 // Nothing here may import the emulator helpers (localEmulator.ts) or the

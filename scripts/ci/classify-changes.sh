@@ -33,14 +33,25 @@ non_backend_paths="${docs_paths}"'|^(e2e/|tests/|ios/|ci_scripts/|scripts/ios/|b
 # e2e/ is otherwise test-only. A test keeps this in step with its imports.
 canary_paths='^(e2e/canary/|e2e/fixtures\.ts$|e2e/helpers/(auth|journeys)\.ts$)'
 
-if grep -vqE "$docs_paths" "$changed"; then
-  echo "code=true"
-else
-  echo "code=false"
-fi
+# any_line matches|differs <pattern>: whether any line matches the pattern,
+# or any line does not. A grep error (status 2) runs everything, like any
+# other unexpected result.
+any_line() {
+  local invert=
+  if [ "$1" = differs ]; then invert=-v; fi
+  grep $invert -E "$2" "$changed" > /dev/null
+  local status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "code=true"
+    echo "backend=true"
+    exit 0
+  fi
+  return "$status"
+}
 
-if grep -qE "$canary_paths" "$changed" || grep -vqE "$non_backend_paths" "$changed"; then
-  echo "backend=true"
-else
-  echo "backend=false"
-fi
+code=false
+backend=false
+if any_line differs "$docs_paths"; then code=true; fi
+if any_line matches "$canary_paths" || any_line differs "$non_backend_paths"; then backend=true; fi
+echo "code=$code"
+echo "backend=$backend"

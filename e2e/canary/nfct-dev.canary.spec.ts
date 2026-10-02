@@ -24,12 +24,22 @@ import { canaryDevice } from './device';
 // trusted scoring (a session `result`, progress) here only once Functions are
 // deployed to nfct-dev.
 
-/** Generous ceilings that only a request loop would reach (a normal run makes far fewer). */
-const REQUEST_CEILING = { auth: 40, firestore: 250 } as const;
+/**
+ * Generous ceilings that only a request loop would reach (a normal run makes
+ * about 5 Auth and 30 Firestore requests). Passing one closes the browser
+ * context at once, so a looping branch cannot spend the shared project's
+ * daily quota before the test times out. The variables exist only to prove
+ * that stop locally with a tiny ceiling.
+ */
+const REQUEST_CEILING = {
+  auth: Number(process.env.NFCT_CANARY_AUTH_CEILING ?? 40),
+  firestore: Number(process.env.NFCT_CANARY_FIRESTORE_CEILING ?? 250),
+} as const;
 
-type Usage = Record<'auth' | 'firestore' | 'otherGoogle', number>;
+type Category = 'auth' | 'firestore' | 'otherGoogle';
+type Usage = Record<Category, number> & { stopped?: string };
 
-function categoryOf(request: Request): keyof Usage | null {
+function categoryOf(request: Request): Category | null {
   const url = new URL(request.url());
   if (/^(identitytoolkit|securetoken)\.googleapis\.com$/.test(url.hostname) || /^\/(identitytoolkit|securetoken)\.googleapis\.com\//.test(url.pathname)) return 'auth';
   if (url.hostname === 'firestore.googleapis.com' || url.pathname.includes('/google.firestore.v1.Firestore/')) return 'firestore';
@@ -40,7 +50,12 @@ function categoryOf(request: Request): keyof Usage | null {
 function recordFirebaseRequests(usage: Usage, context: BrowserContext): void {
   context.on('request', (request) => {
     const category = categoryOf(request);
-    if (category) usage[category] += 1;
+    if (!category) return;
+    usage[category] += 1;
+    if (category !== 'otherGoogle' && usage[category] > REQUEST_CEILING[category] && !usage.stopped) {
+      usage.stopped = `more than ${REQUEST_CEILING[category]} ${category === 'auth' ? 'Auth' : 'Firestore'} requests (a listener or write loop?)`;
+      void context.close().catch(() => {});
+    }
   });
 }
 
@@ -84,13 +99,16 @@ test('a fresh consumer signs up, onboards, saves a Mental Math run and signs bac
         await context.close();
       }
     });
+  } catch (error) {
+    // Report the loop, not the closed page it left behind.
+    if (usage.stopped) throw new Error(`Stopped the journey: ${usage.stopped}`, { cause: error });
+    throw error;
   } finally {
-    const summary = `Firebase requests by this run: Auth ${usage.auth}, Firestore ${usage.firestore}, other Google APIs ${usage.otherGoogle}`;
+    const summary = `Firebase requests by this run: Auth ${usage.auth}, Firestore ${usage.firestore}, other Google APIs ${usage.otherGoogle}${usage.stopped ? ` (stopped: ${usage.stopped})` : ''}`;
     console.log(summary);
     await testInfo.attach('firebase-requests.json', { body: JSON.stringify(usage), contentType: 'application/json' });
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${summary}\n`);
   }
 
-  expect(usage.auth, 'Auth requests (a loop?)').toBeLessThanOrEqual(REQUEST_CEILING.auth);
-  expect(usage.firestore, 'Firestore requests (a listener or write loop?)').toBeLessThanOrEqual(REQUEST_CEILING.firestore);
+  expect(usage.stopped, 'Request ceiling').toBeUndefined();
 });

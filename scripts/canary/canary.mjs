@@ -13,8 +13,10 @@
 // No Admin SDK, no service account and no privileged credential. The password
 // and ID token are never printed.
 //
-// NFCT_CANARY_TARGET=emulators rehearses the same journey and cleanup against
-// the local Auth and Firestore emulators (run it under `firebase emulators:exec`).
+// NFCT_CANARY_TARGET (required) is `nfct-dev`, or `emulators` to rehearse the
+// same journey and cleanup against the local Auth and Firestore emulators
+// (run it under `firebase emulators:exec`). The rehearsal fails if cleanup
+// does not remove the account; against nfct-dev a cleanup problem is a warning.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -35,7 +37,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 /** Which backend the canary talks to, and how; throws on anything unexpected. */
 export function resolveCanaryTarget(env) {
-  const name = env.NFCT_CANARY_TARGET || 'nfct-dev';
+  const name = env.NFCT_CANARY_TARGET;
   if (name === 'emulators') {
     return {
       name,
@@ -45,11 +47,15 @@ export function resolveCanaryTarget(env) {
       firestoreBase: 'http://127.0.0.1:8080/v1',
     };
   }
-  if (name !== 'nfct-dev') throw new Error(`Unknown NFCT_CANARY_TARGET '${name}' (use nfct-dev or emulators)`);
+  if (name !== 'nfct-dev') throw new Error(`Set NFCT_CANARY_TARGET to nfct-dev or emulators (got '${name ?? ''}')`);
   if (env.VITE_E2E_EMULATORS) throw new Error('VITE_E2E_EMULATORS must not be set for the nfct-dev canary');
   const projectId = (env.VITE_FIREBASE_PROJECT_ID ?? '').trim();
   if (projectId !== CANARY_PROJECT_ID) {
     throw new Error(`The canary runs only against ${CANARY_PROJECT_ID}; VITE_FIREBASE_PROJECT_ID is '${projectId || '(unset)'}'`);
+  }
+  const authDomain = (env.VITE_FIREBASE_AUTH_DOMAIN ?? '').trim();
+  if (authDomain !== `${CANARY_PROJECT_ID}.firebaseapp.com`) {
+    throw new Error(`VITE_FIREBASE_AUTH_DOMAIN must be ${CANARY_PROJECT_ID}.firebaseapp.com (got '${authDomain || '(unset)'}')`);
   }
   const apiKey = (env.VITE_FIREBASE_API_KEY ?? '').trim();
   if (!apiKey) throw new Error('VITE_FIREBASE_API_KEY is not set');
@@ -160,6 +166,14 @@ export async function cleanUpIdentity(target, identity, { fetchImpl = fetch } = 
   }
   report.uid = session.localId;
   report.account = 'present';
+  // The API key decides which project Auth answered for. Never act on an
+  // account in a project other than the canary's.
+  const audience = tokenAudience(session.idToken);
+  if (audience !== target.projectId) {
+    report.account = 'unknown';
+    report.problems.push(`the API key signed in to project '${audience}', not ${target.projectId}; nothing was deleted`);
+    return report;
+  }
   try {
     await deleteOwnDocument(target, session.idToken, `clients/${session.localId}`, fetchImpl);
     report.deleted.push(`clients/${session.localId}`);
@@ -175,6 +189,20 @@ export async function cleanUpIdentity(target, identity, { fetchImpl = fetch } = 
     report.problems.push(`Auth account deletion failed: ${error.message}`);
   }
   return report;
+}
+
+/** The `aud` claim (the Firebase project) of an ID token; it is not verified, only read. */
+function tokenAudience(idToken) {
+  try {
+    return JSON.parse(Buffer.from(String(idToken).split('.')[1], 'base64url').toString('utf8')).aud ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The rehearsal's bar: the account and its clients/{uid} profile are both gone. */
+export function cleanedCompletely(report) {
+  return report.problems.length === 0 && report.account === 'deleted' && report.deleted.includes(`clients/${report.uid}`);
 }
 
 export function formatCleanupReport(target, report) {
@@ -204,11 +232,12 @@ function prepare(env, out) {
   return identity;
 }
 
+/** Cleans up the identity file's account, if there is one; returns the report, or null. */
 async function cleanup(env, out) {
   const path = identityPath(env);
   if (!existsSync(path)) {
     out('No canary identity file: no account was created, so there is nothing to clean up.');
-    return true;
+    return null;
   }
   const target = resolveCanaryTarget(env);
   const report = await cleanUpIdentity(target, readIdentityFile(path));
@@ -216,7 +245,7 @@ async function cleanup(env, out) {
   lines.forEach((line) => out(line));
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `\n### ${lines[0]}\n\n${lines.slice(1).join('\n')}\n`);
   for (const problem of report.problems) out(`::warning title=nfct-dev canary cleanup::${problem}`);
-  return report.problems.length === 0;
+  return report;
 }
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -242,8 +271,13 @@ function build(env, out) {
   out(`Built the production bundle for ${CANARY_PROJECT_ID}.`);
 }
 
-/** Local convenience: a private identity file, the canary, then cleanup whatever happened. */
+/**
+ * A private identity file, the canary, then cleanup whatever happened. Against
+ * nfct-dev it builds the bundle first, so it never serves a stale dist/.
+ */
 async function run(env, out) {
+  const target = resolveCanaryTarget(env);
+  if (target.name === 'nfct-dev') build(env, out);
   const directory = mkdtempSync(join(tmpdir(), 'nfct-canary-'));
   const runEnv = { ...env, NFCT_CANARY_IDENTITY_FILE: join(directory, 'identity.json') };
   let status = 1;
@@ -258,9 +292,16 @@ async function run(env, out) {
     process.off('SIGINT', ignore);
     process.off('SIGTERM', ignore);
   } finally {
-    const cleaned = await cleanup(runEnv, out);
+    const report = await cleanup(runEnv, out);
     rmSync(directory, { recursive: true, force: true });
-    if (!cleaned) out('Cleanup did not finish; see above. The canary result is unaffected.');
+    if (report && !cleanedCompletely(report)) {
+      if (target.name === 'emulators' && status === 0) {
+        out('The rehearsal passed, but cleanup did not remove the account and its clients profile: cleanup is broken.');
+        status = 1;
+      } else if (report.problems.length > 0) {
+        out('Cleanup did not finish; see above.');
+      }
+    }
   }
   return status;
 }
@@ -270,7 +311,7 @@ async function main(argv, env) {
   switch (argv[0]) {
     case 'build': build(env, out); return 0;
     case 'prepare': prepare(env, out); return 0;
-    case 'cleanup': return (await cleanup(env, out)) ? 0 : 1;
+    case 'cleanup': return ((await cleanup(env, out))?.problems.length ?? 0) === 0 ? 0 : 1;
     case 'run': return run(env, out);
     default:
       throw new Error('Usage: node scripts/canary/canary.mjs build|prepare|cleanup|run');

@@ -105,6 +105,7 @@ describe('cleanup-canary-accounts', () => {
     expect(auth.users.has(canary.uid)).toBe(true);
 
     await expect(runCanaryCleanup(['--project', 'nfct-dev'], {}, out)).rejects.toThrow(/without --live/);
+    await expect(runCanaryCleanup(['--project', 'some-other-project', '--live'], {}, out)).rejects.toThrow(/only against nfct-dev/);
     await expect(runCanaryCleanup(['--project', 'nfct-dev', '--live'], { FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099' }, out)).rejects.toThrow(/Unset FIREBASE_AUTH_EMULATOR_HOST/);
     await expect(runCanaryCleanup(['--project', CORE_PROJECT], { FIRESTORE_EMULATOR_HOST: env.FIRESTORE_EMULATOR_HOST }, out)).rejects.toThrow(/FIREBASE_AUTH_EMULATOR_HOST too/);
     await expect(runCanaryCleanup(['--project', CORE_PROJECT, '--older-than-minutes', '5'], env, out, { db, auth })).rejects.toThrow(/older-than-minutes/);

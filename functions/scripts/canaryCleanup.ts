@@ -13,10 +13,13 @@ import { resolveTarget, type CliEnvironment, type Output, type Target } from './
 //
 // Safety, beyond cli.ts's (no default project; --live for a real one):
 // - a dry run unless --delete is given;
-// - only accounts whose email matches the canary pattern exactly, both in Auth
-//   and in the profile; any other account is refused and never printed;
-// - only accounts older than --older-than-minutes (default 120, at least 30),
-//   by the server's clock (Auth creation time or the profile's create time);
+// - only nfct-dev, or a demo-* project on the emulators;
+// - only accounts whose email matches the canary pattern exactly: the Auth
+//   account's email when there is an account (it decides), otherwise the
+//   profile's; any other account is refused and never printed;
+// - only accounts created more than --older-than-minutes ago (default 120, at
+//   least 30): the creation time is the server's (the Auth account's, or the
+//   profile's create time), compared with this machine's clock;
 // - at most --max accounts (default 25); a larger plan aborts before deleting.
 // Credentials are the operator's Application Default Credentials, never a key
 // in the repository, and never a CI job's.
@@ -26,6 +29,9 @@ export const SMOKE_EMAIL_PATTERN = /^nfct-smoke\+[a-z0-9]{1,24}-[0-9]{1,4}-[a-z2
 const SMOKE_PREFIX = 'nfct-smoke+';
 // ',' follows '+', so [SMOKE_PREFIX, SMOKE_PREFIX_END) holds every email with the prefix.
 const SMOKE_PREFIX_END = 'nfct-smoke,';
+
+/** The only real project the canary uses, and so the only one this cleans up. */
+const CANARY_PROJECT_ID = 'nfct-dev';
 
 const isCanaryEmail = (email: unknown): email is string => typeof email === 'string' && SMOKE_EMAIL_PATTERN.test(email);
 
@@ -156,6 +162,7 @@ export async function runCanaryCleanup(argv: readonly string[], env: CliEnvironm
   });
   const target = resolveTarget(values.project, values.live, env);
   assertAuthTarget(target, env);
+  if (!target.emulator && target.projectId !== CANARY_PROJECT_ID) throw new Error(`The canary runs only against ${CANARY_PROJECT_ID}; refusing ${target.projectId}`);
   const number = (name: string, value: string, min: number, max: number) => {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed < min || parsed > max) throw new Error(`--${name} must be an integer from ${min} to ${max}`);

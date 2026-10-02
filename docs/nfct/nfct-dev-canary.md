@@ -55,9 +55,10 @@ serves the bundle with `vite preview` and drives it as an ordinary user:
    the server.
 
 The permission-denied guard in `e2e/fixtures.ts` also fails the run on any
-denied Firestore request. The spec fails if the browser makes more Firebase
-requests than generous ceilings allow, which catches a listener or write loop,
-and it writes the request counts to the job summary.
+denied Firestore request. If the browser passes a generous ceiling of Auth or
+Firestore requests (a listener or write loop), the spec closes the browser
+context at once and fails, so a looping branch cannot spend the shared
+project's quota. It writes the request counts to the job summary.
 
 Not checked yet:
 
@@ -74,7 +75,7 @@ skipped only when **every** changed file is on its skip list:
 | Skipped | Paths |
 | --- | --- |
 | Documentation and agent instructions | `docs/`, `.agents/`, `.claude/`, top-level `*.md`, any `README.md` |
-| Tests and test configuration | `e2e/` (except below), `tests/`, `__tests__/`, `*.test.*`, the other Playwright and Vitest configs, test `tsconfig`s |
+| Tests and test configuration | `e2e/` (except below), `tests/`, `__tests__/`, `*.test.{ts,tsx,js,mjs}`, `playwright.config.ts`, `playwright.protocol.config.ts`, `playwright.webkit.config.ts`, `vitest.<name>.config.ts`, the e2e, rules, repositories and shared-test `tsconfig`s |
 | Native iOS and its tooling | `ios/`, `ci_scripts/`, `scripts/ios/` |
 | The inherited BrainFlow service | `brainflow_service/`, `pyproject.toml`, `uv.lock` |
 | Cloud Functions, while none are deployed to nfct-dev | `functions/` (remove it from the list once Functions are deployed) |
@@ -105,6 +106,10 @@ Other safety properties:
 The `emulators` job also rehearses the same journey and cleanup on the
 emulators ("Rehearse the nfct-dev canary on the emulators"). How the two
 results combine:
+
+The rehearsal also fails if cleanup did not remove the account and its
+`clients/{uid}` profile. A cleanup regression therefore shows up there, not as
+residue on nfct-dev.
 
 | Rehearsal | Canary | Meaning |
 | --- | --- | --- |
@@ -190,13 +195,15 @@ npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-acco
 
 The cleanup's safety rules (`functions/scripts/canaryCleanup.ts`):
 
-- There is no default project, `--live` is needed for a real one, and it is a
-  dry run without `--delete`.
-- It touches only accounts whose Auth email and profile email both match the
-  exact canary pattern. An Auth account with any other email is refused, even
-  if its profile claims a canary email, and is never printed.
-- `--older-than-minutes` defaults to 120 and is at least 30, measured by
-  server-side creation times.
+- There is no default project. The only real project it accepts is
+  `nfct-dev`, and only with `--live`. It is a dry run without `--delete`.
+- It touches only accounts whose email matches the exact canary pattern: the
+  Auth account's email when the account exists (that email decides), otherwise
+  the profile's. An Auth account with any other email is refused, even if its
+  profile claims a canary email, and is never printed.
+- `--older-than-minutes` defaults to 120 and is at least 30. It compares the
+  server's creation time (the Auth account's, or the profile's) with the local
+  clock.
 - A plan larger than `--max` (default 25) aborts before anything is deleted.
 
 Scheduled cleanup can come later if the residue grows. It would run as a
@@ -225,10 +232,28 @@ credentials, never from a pull request.
 2. **Deploy the repository's rules and indexes to nfct-dev** (NFCT-24),
    following [rules and indexes](#rules-and-index-changes). Until then the
    canary fails at "Train my brain", exactly as the TestFlight build does.
-3. **Require the check:** add `nfct-dev canary` to the `development` branch
-   ruleset's required status checks.
+3. **Require the checks.** As of 2026-10-02, the `development` ruleset has no
+   required status checks at all, only deletion, non-fast-forward and
+   pull-request rules. A skipped required check counts as passing: the canary
+   and `emulators` skip when `web` fails, so requiring the canary alone would
+   let a PR with a red `web` merge. Require them together:
+   - CI: `Code changes`, `web`, `emulators`, `nfct-dev canary`;
+   - iOS: `Native changes`, `Release-bundle safety`, `WebKit iPhone (Playwright)`;
+   - optionally `Xcode build and Simulator smoke`.
 4. Keep the fork-workflow approval setting at its default or stricter
    (Settings > Actions > General). The job refuses fork pull requests anyway.
+
+## Running it by hand
+
+CI runs the canary. The owner can run it against nfct-dev from their own
+machine. The target is always explicit, and `run` builds the bundle first:
+
+```bash
+NFCT_CANARY_TARGET=nfct-dev VITE_FIREBASE_API_KEY=… VITE_FIREBASE_AUTH_DOMAIN=nfct-dev.firebaseapp.com \
+  VITE_FIREBASE_PROJECT_ID=nfct-dev VITE_FIREBASE_APP_ID=… node scripts/canary/canary.mjs run
+```
+
+Agents run only the emulator rehearsal (AGENTS.md, Checks).
 
 ## Rules and index changes
 
@@ -245,6 +270,9 @@ checks:
 3. **The candidate rules on the real backend before merge.** While TestFlight
    is internal-only, the owner does this by hand:
    - Validate one rules pull request at a time; nfct-dev is shared.
+   - Deploy only once the pull request's security review (DEEP tier for rules)
+     has passed, and only from the reviewed head commit. A rules bypass would
+     otherwise be live on a project that holds testers' data.
    - Deploy the candidate rules and indexes:
      `npx firebase deploy --only firestore --project dev`. Answer **No** to
      deleting indexes, and never pass `--force`.
@@ -284,8 +312,12 @@ Until then, the owner can compare deployed rules in the Firebase console.
   security-sensitive. `main` is protected separately by
   `main-source-guard.yml`.
 - **Slow sign-in:** on `development`, the app treats a role lookup slower than
-  1.8 seconds as "no role" (NFCT-44, in PR #26). A slow real-backend sign-in can
-  then land on role selection and fail step 6. That is the product bug, not a
-  flaky test.
+  1.8 seconds as "no role" (NFCT-44). A slow real-backend sign-in can then land
+  on role selection and fail step 6. That is the product bug, not a flaky
+  test. Its fix is in PR #26, which targets `main`; it has to land on
+  `development` before the canary becomes a required check.
+- **Public configuration:** the repository variables appear in the public
+  Actions logs. They are nfct-dev's web config, which every build of the app
+  already contains.
 - **Coverage:** the canary does not cover WebKit, the iOS shell or Bluetooth;
   the other layers do.
