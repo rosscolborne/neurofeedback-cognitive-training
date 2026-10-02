@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ignoreRepeatInput, inputOriginOf, type InputOrigin } from './gameExit';
-import type { GameScreenView } from './gameScreens';
+import type { GameScreenView } from './gameScreenView';
 
 const CAPTURE = { capture: true } as const;
 

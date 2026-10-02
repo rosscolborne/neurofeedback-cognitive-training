@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { browserGameClock } from '../../clock/gameClock';
 import type { EegCaptureProvider } from '../../eeg/eegCapture';
 import { eegRecordingRepository, gameSessionRepository, progressRepository } from '../../repositories';
-import type { GameScreenView } from '../gameScreens';
+import type { GameScreenView } from '../gameScreenView';
 import { MentalMathScreen } from './MentalMathScreen';
 import { APP_VERSION, deviceTimezone, type SessionEnvironment } from './sessionDraft';
 
