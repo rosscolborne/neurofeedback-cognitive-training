@@ -123,10 +123,13 @@ Plain branch pushes and draft PRs do not run CI. Open a PR targeting
 `development` as a draft (`gh pr create --draft`) once a remote PR is useful,
 and keep it draft while implementation, review and local testing continue.
 Mark it ready for review only when the branch is ready to consume CI, never
-just for an early CI signal. Once a PR is ready, each push to it reruns the
-full suite: test locally, batch related changes, and push when a coherent
-batch is ready, not after each small edit. After a CI failure, diagnose and
-fix it locally and batch the next push where practical.
+just for an early CI signal. Before substantial rework of a ready PR, such as
+merging its base with conflicts or a review fix pass, convert it back to draft
+(`gh pr ready --undo <n>`, which also cancels its running CI) and mark it
+ready again once the reworked batch passes locally. Once a PR is ready, each
+push to it reruns the full suite: test locally, batch related changes, and
+push when a coherent batch is ready, not after each small edit. After a CI
+failure, diagnose and fix it locally and batch the next push where practical.
 
 With CI pending, the report says so plainly, for example:
 
@@ -139,9 +142,12 @@ check, first confirms that required CI is green on the exact head being
 merged (`gh pr checks <n>`). A PR whose CI failed is not merge-ready; the
 branch owner fixes the failure before it merges.
 
-Wait for CI only when the user asks you to, when the task is to diagnose or
-fix CI or to get a PR green, or when an automation genuinely needs the result
-to decide what work happens next.
+Wait for CI only when the user explicitly asks you to wait, or when the task
+is to diagnose a CI failure or to change CI itself and only a run can verify
+it. Asking for a PR to be merge-ready or safe to merge, or for its CI status,
+is not a request to wait: report CI as pending and finish. While you do wait,
+stop as soon as a required job fails and act on that job's log; do not wait
+for the other jobs first.
 
 ## Bounded review
 

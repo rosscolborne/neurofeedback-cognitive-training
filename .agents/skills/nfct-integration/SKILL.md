@@ -195,8 +195,8 @@ one.
 4. **Final validation.** If anything was committed after gate 1's run, rerun
    the full deterministic suite once on the final head. This is the one
    combined validation pass the report cites; do not rerun it after each fix.
-5. **CI.** Push the final head and confirm its CI has started, then report;
-   do not wait for it to finish
+5. **CI.** Push the final head, mark the PR ready for review, and confirm its
+   CI has started, then report; do not wait for it to finish
    ([completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)). CI is a merge gate: the PR is
    merge-ready only when CI is green on that head. If CI has failed by the
    time you report, or a later check finds it failed, the PR is not
@@ -218,10 +218,11 @@ report.
 ## Open the integration PR
 
 Once the deterministic suite passes, push the integration branch
-(`git push -u origin HEAD`) and open one draft PR against `main`. Title it
-with the objective and its cards, list the stream PRs it supersedes, and keep
-the [report](#report) in its body current. Mark it ready for review when you
-request independent review.
+(`git push -u origin HEAD`) and open one draft PR against `development`. Title
+it with the objective and its cards, list the stream PRs it supersedes, and
+keep the [report](#report) in its body current. Keep it draft through review,
+fixes and the final validation; reviewers work from the branch. Mark it ready
+for review only at step 5, when its final head is ready to consume CI.
 
 ## Hand off and clean up
 
