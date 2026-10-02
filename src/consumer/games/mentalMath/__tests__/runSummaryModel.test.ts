@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mentalMath, type GameProgress, type ServerResult } from '@nfct/shared';
 import type { GameSessionRecord } from '../../../repositories/gameSessionRepository';
 import type { RunOutcome } from '../runController';
-import { clientSessionDocument, nextUnlock, runSummary, type RunIdentity, type SaveStatus } from '../runSummary';
+import { clientSessionDocument, nextUnlock, runSummary, type RunIdentity, type SaveStatus } from '../runSummaryModel';
 import { previewDecision } from '../startLevel';
 import { pickerState, playRun, progressWith, sessionRecord } from './fixtures';
 

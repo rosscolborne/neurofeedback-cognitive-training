@@ -1,6 +1,6 @@
 import { maxLevelOf, mentalMath, unlockedStartLevel, type GameProgress } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../repositories/gameSessionRepository';
-import { bestsFor, nextUnlock, type UnlockLine } from './runSummary';
+import { bestsFor, nextUnlock, type UnlockLine } from './runSummaryModel';
 import { timed90, type CurrentProgress } from './startLevel';
 
 // Mental Math's per-game progress (NFCT-22), as pure view models: bests per

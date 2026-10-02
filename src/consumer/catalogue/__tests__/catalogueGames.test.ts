@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_CATALOGUE, type GameListing, type GameModeDefinition } from '@nfct/shared';
-import { catalogueGames, runLengthLabel, toCatalogueGame } from '../gameCatalogue';
+import { catalogueGames, runLengthLabel, toCatalogueGame } from '../catalogueGames';
 
 const mode = (id: string, levels: number, runDurationMs?: number | null): GameModeDefinition => ({
   id,

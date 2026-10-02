@@ -14,7 +14,7 @@ import {
 import type { DocumentRead } from '../../firestore/reads';
 import type { GameSessionHistoryEntry, GameSessionHistoryPage } from '../../repositories/gameSessionRepository';
 import type { AchievementsRead, DailyStatsRead } from '../../repositories/statsRepository';
-import { clientSessionDocument } from '../../games/mentalMath/runSummary';
+import { clientSessionDocument } from '../../games/mentalMath/runSummaryModel';
 import { previewDecision } from '../../games/mentalMath/startLevel';
 import { playRun } from '../../games/mentalMath/__tests__/fixtures';
 import type { OverviewClock, OverviewSources } from '../usePlayerOverview';

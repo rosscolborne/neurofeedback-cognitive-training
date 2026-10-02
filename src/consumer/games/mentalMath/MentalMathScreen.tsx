@@ -12,7 +12,7 @@ import { ProvisionalTag } from './ProvisionalTag';
 import { MentalMathRunController, type RunOutcome, type RunSnapshot } from './runController';
 import type { EegInfo, EegState, SaveState } from './runSave';
 import { RunSummary } from './RunSummary';
-import { bestsFor, type RunIdentity } from './runSummary';
+import { bestsFor, type RunIdentity } from './runSummaryModel';
 import { buildSessionDraft, type SessionEnvironment } from './sessionDraft';
 import { currentProgress, startLevelChoices, type StartLevelChoices } from './startLevel';
 import { documentVisibility, type VisibilitySource } from './visibility';

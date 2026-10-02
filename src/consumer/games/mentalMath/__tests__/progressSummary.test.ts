@@ -2,7 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 import { describe, expect, it } from 'vitest';
 import { readSessionProgressFields, type ServerResult } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../../repositories/gameSessionRepository';
-import { clientSessionDocument } from '../runSummary';
+import { clientSessionDocument } from '../runSummaryModel';
 import { formatPlayTime, gameOverview, historyRow, progressCardSummary } from '../progressSummary';
 import { currentProgress, previewDecision } from '../startLevel';
 import { pickerState, playRun, progressWith, sessionRecord } from './fixtures';

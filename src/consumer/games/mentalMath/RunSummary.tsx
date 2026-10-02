@@ -14,7 +14,7 @@ import {
   type RunSummaryModel,
   type UnlockLine,
   type Verification,
-} from './runSummary';
+} from './runSummaryModel';
 import type { SessionEnvironment } from './sessionDraft';
 
 // The post-session summary (NFCT-22). It shows this device's provisional

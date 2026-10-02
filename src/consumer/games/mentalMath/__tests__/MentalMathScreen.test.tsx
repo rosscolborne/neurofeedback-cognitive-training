@@ -17,7 +17,7 @@ import { MentalMathScreen, type MentalMathScreenProps, type MentalMathView } fro
 import type { VisibilitySource } from '../visibility';
 import { FEEDBACK_MS } from '../runController';
 import type { MentalMathSessionDraft } from '../sessionDraft';
-import { clientSessionDocument } from '../runSummary';
+import { clientSessionDocument } from '../runSummaryModel';
 import { previewDecision, type ClientSessionDocument } from '../startLevel';
 import { answerOf, pickerState, playRun, progressWith, sessionRecord } from './fixtures';
 import { ManualClock } from './manualClock';

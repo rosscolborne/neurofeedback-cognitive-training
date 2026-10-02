@@ -3,7 +3,7 @@ import { Calculator, ChartNoAxesColumnIncreasing, Timer, type LucideIcon } from 
 import type { GameIconKey } from '@nfct/shared';
 import { gameCardId } from './cardIds';
 import { CatalogueCard, type CatalogueCardFact } from './CatalogueCard';
-import { catalogueGames, runLengthLabel, type CatalogueGame } from './gameCatalogue';
+import { catalogueGames, runLengthLabel, type CatalogueGame } from './catalogueGames';
 
 // The Games section of the Train tab (NFCT-12): one card per game in the
 // code-owned catalogue, in catalogue order, each filed under its domains.
