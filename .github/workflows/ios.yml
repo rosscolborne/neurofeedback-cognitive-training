@@ -101,8 +101,8 @@ jobs:
       # test depends on. Web-only changes cannot break the native compile and
       # are covered by the jobs above and ci.yml. Manual runs always run it.
       # Pull requests that change only documentation or agent instructions
-      # also skip the release-bundle and WebKit jobs; any other change or a
-      # failed diff runs them. Keep docs_paths in step with ci.yml.
+      # also skip the release-bundle, WebKit and native jobs; any other change
+      # or a failed diff runs them. Keep docs_paths in step with ci.yml.
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
@@ -125,7 +125,7 @@ jobs:
             echo "code=false" >> "$GITHUB_OUTPUT"
             echo "Documentation or agent instructions only; the release-bundle and WebKit jobs are skipped."
           fi
-          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package-lock\.json$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
+          native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package(-lock)?\.json$|\.nvmrc$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$|src/main\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/)'
           if grep -qE "$native_paths" "$RUNNER_TEMP/changed.txt"; then
             echo "native=true" >> "$GITHUB_OUTPUT"
             grep -E "$native_paths" "$RUNNER_TEMP/changed.txt"
@@ -137,7 +137,7 @@ jobs:
   native:
     name: Xcode build and Simulator smoke
     needs: changes
-    if: needs.changes.outputs.native == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.native == 'true'
     # Pinned image and Xcode. Capacitor 8.5 needs Xcode 26; 26.5 matches an
     # installed iOS 26.5 Simulator runtime on this image.
     runs-on: macos-26
