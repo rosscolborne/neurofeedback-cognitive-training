@@ -311,11 +311,14 @@ Until then, the owner can compare deployed rules in the Firebase console.
   (`pull_request`), so it could weaken this job. Review workflow changes as
   security-sensitive. `main` is protected separately by
   `main-source-guard.yml`.
-- **Slow sign-in:** on `development`, the app treats a role lookup slower than
-  1.8 seconds as "no role" (NFCT-44). A slow real-backend sign-in can then land
-  on role selection and fail step 6. That is the product bug, not a flaky
-  test. Its fix is in PR #26, which targets `main`; it has to land on
-  `development` before the canary becomes a required check.
+- **Slow sign-in:** a slow real-backend role lookup keeps the loading screen
+  and, after 15 seconds or a failed read, shows a retryable "Your account
+  couldn't be loaded" screen; it never treats the account as having no role
+  (NFCT-44, landed through PR #26). If step 6 times out there, read it as a
+  slow or failing backend, not a flaky test.
+  `e2e/returning-user.auth-handoffs.local.spec.ts` covers the slow-lookup
+  case on the emulators. The precondition for making the canary a required
+  check is met.
 - **Public configuration:** the repository variables appear in the public
   Actions logs. They are nfct-dev's web config, which every build of the app
   already contains.

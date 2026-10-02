@@ -5,7 +5,8 @@ import { expect, type Page } from '@playwright/test';
 // emulator specs of these journeys should too, so the canary and the
 // deterministic tests drive the same screens the same way.
 // Role, label and text locators only; update these helpers when the
-// onboarding or Train screens change, along with scripts/ios/simulator-probe.js.
+// onboarding, Home or Train screens change, along with the Simulator scenarios
+// (scripts/ios/simulator-scenarios.mjs).
 // Nothing here may import the emulator helpers (localEmulator.ts) or the
 // Admin SDK: the canary runs these helpers against a real project.
 
@@ -18,8 +19,8 @@ export type FreshAccount = {
 /** The role-selection screen's title; its product name changes with branding. */
 export const roleSelectionHeading = (page: Page) => page.getByRole('heading', { name: /^How will you use /, level: 1 });
 
-/** The signed-in consumer home (the patient dashboard). */
-export const consumerHome = (page: Page) => page.getByText('Training Session', { exact: true });
+/** The signed-in consumer home: its primary action, playing a game (NFCT-13's games-first Home). */
+export const consumerHome = (page: Page) => page.getByRole('button', { name: 'Play Mental Math', exact: true });
 
 /**
  * Starts signed out at `/`, opens Create Account from the Welcome screen and

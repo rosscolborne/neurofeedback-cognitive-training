@@ -54,5 +54,5 @@ test('an onboarded consumer who reloads while their role is slow to load is neve
   expect(delayed, 'The role read should have been slowed').toBeGreaterThan(0);
   expect(await page.evaluate(() => (window as unknown as { __nfctRoleSelectionSeen: { roleSelection: boolean } }).__nfctRoleSelectionSeen.roleSelection),
     'Role selection must never appear while the role is still loading').toBe(false);
-  await expect(page.getByRole('alert').filter({ hasText: "couldn't be loaded" })).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: /couldn.t be loaded/ })).toHaveCount(0);
 });
