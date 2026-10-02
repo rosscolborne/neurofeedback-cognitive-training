@@ -94,7 +94,11 @@ jobs:
   emulators:
     runs-on: ubuntu-latest
     needs: [changes, web]
-    if: needs.changes.outputs.code == 'true'
+    # A failed change detection runs the job rather than skipping it, since a
+    # skipped required check counts as passing. Drafts skip (web is skipped).
+    if: >-
+      !cancelled() && needs.web.result == 'success' &&
+      (needs.changes.result == 'failure' || needs.changes.outputs.code == 'true')
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

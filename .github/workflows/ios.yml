@@ -32,7 +32,11 @@ jobs:
   release-bundle:
     name: Release-bundle safety
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # A failed change detection runs the job rather than skipping it, since a
+    # skipped required check counts as passing. Drafts skip (changes is skipped).
+    if: >-
+      !cancelled() &&
+      (needs.changes.result == 'failure' || needs.changes.outputs.code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -55,7 +59,11 @@ jobs:
   webkit:
     name: WebKit iPhone (Playwright)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # A failed change detection runs the job rather than skipping it, since a
+    # skipped required check counts as passing. Drafts skip (changes is skipped).
+    if: >-
+      !cancelled() &&
+      (needs.changes.result == 'failure' || needs.changes.outputs.code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -137,7 +145,11 @@ jobs:
   native:
     name: Xcode build and Simulator smoke
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.native == 'true'
+    # As above: a failed change detection runs it too.
+    if: >-
+      !cancelled() &&
+      (needs.changes.result == 'failure' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.native == 'true'))
     # Pinned image and Xcode. Capacitor 8.5 needs Xcode 26; 26.5 matches an
     # installed iOS 26.5 Simulator runtime on this image.
     runs-on: macos-26
