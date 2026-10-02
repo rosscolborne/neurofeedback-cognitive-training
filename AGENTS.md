@@ -332,11 +332,13 @@ More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/ne
 iOS ([docs/nfct/ios.md](docs/nfct/ios.md)): `npm test` includes the iOS
 project contract tests, and `npm run sync:ios` builds, syncs and runs the
 release check (`npm run verify:ios-release`). `.github/workflows/ios.yml` runs
-the WebKit iPhone suite on every PR (`npm run test:e2e:webkit` locally, after
-`npx playwright install webkit`; needs Java 21) and, when native-relevant
-files change, an unsigned Xcode build and an iOS Simulator smoke test on
-GitHub-hosted macOS. On a Mac, `npm run sync:ios && npm run ios:build` runs
-the same Xcode build.
+on PRs targeting `development` and skips its jobs while the PR is a draft.
+Once the PR is ready for review, it runs the WebKit iPhone suite unless only
+documentation or agent instructions changed (`npm run test:e2e:webkit`
+locally, after `npx playwright install webkit`; needs Java 21) and, when
+native-relevant files change, an unsigned Xcode build and an iOS Simulator
+smoke test on GitHub-hosted macOS. On a Mac,
+`npm run sync:ios && npm run ios:build` runs the same Xcode build.
 
 ## Stage 1 test coverage
 
