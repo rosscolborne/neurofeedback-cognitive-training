@@ -199,20 +199,25 @@ Xcode version and Simulator runtimes. In order:
    checkpoint), and overall `summary.md` and `results.json`. The summary is
    also on the run page.
 
-Pull requests run it only when they change native-relevant paths (unit tests
-in `__tests__/` do not count):
+`ios.yml` runs on ready (non-draft) pull requests into `development`, on
+manual runs and weekly; `main` is the TestFlight release branch and gets no
+CI of its own (AGENTS.md "Checks"). A pull request that changes only
+documentation or agent instructions skips the release-bundle, WebKit and
+native jobs. Otherwise it runs the native job only when it changes native-relevant paths (unit tests in
+`__tests__/` do not count), or when change detection fails:
 
-- `ios/`, `capacitor.config.*`, `package-lock.json`, `vite.config.ts`;
+- `ios/`, `capacitor.config.*`, `package.json`, `package-lock.json`,
+  `.nvmrc`, `vite.config.ts`;
 - the iOS scripts and the workflow;
 - what the scenarios drive: the Firebase setup, `src/App.tsx` and
   `AuthContext.tsx`, the onboarding screens and Mental Math
   (`src/consumer/games/mentalMath/`).
 
 A pull request runs every scenario when it changes Mental Math, the iOS
-scripts or the workflow, and only `smoke` otherwise. Pushes to `main` and
-manual runs run every scenario; the weekly run runs `smoke` on the oldest
-supported iOS. A skipped job reports success, so the job can be a required
-check.
+scripts or the workflow, and only `smoke` otherwise. Manual runs run every
+scenario unless told otherwise; the weekly run runs `smoke` on the oldest
+supported iOS, against `development`. A skipped job reports success, so a
+required check must be required together with `Native changes`.
 
 Changing the Train tab or navigation (for example `PatientShell.tsx`) does
 not start the macOS job: dispatch `-f scenarios=mental-math` for that branch
@@ -300,8 +305,10 @@ and the Firestore decoding.
 
 The image has only its newest runtimes, and Playwright WebKit is always the
 latest WebKit, so neither shows that the bundle still runs on the oldest iOS
-the app supports (16.4). The native job therefore runs weekly (Mondays) on
-`main` with the `smoke` scenario on iOS 16.4: `scripts/ios/simulator-runtime.mjs`
+the app supports (16.4). The native job therefore runs weekly (Mondays)
+against `development` with the `smoke` scenario on iOS 16.4 (GitHub runs
+schedules from the default branch, so the weekly run starts once this
+workflow is on `main`): `scripts/ios/simulator-runtime.mjs`
 downloads the runtime (`xcodebuild -downloadPlatform iOS -buildVersion`),
 creates an iPhone SE (3rd generation), the smallest supported screen, and
 boots it. If a runtime cannot be installed or booted, it tries the next one
