@@ -377,6 +377,35 @@ behavior instead of browser tests.
 - Cover the card's user-visible behavior. Do not add broad or flaky browser
   tests just to have E2E coverage.
 
+### User-facing and stateful changes
+
+Green existing tests and a page that renders do not prove a user-facing change
+works. For any change to user-facing, navigation, authentication, onboarding,
+persistence, training-flow or other stateful behavior:
+
+- Exercise it through the real UI, using
+  [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md)
+  and [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md);
+  they are required procedure, not optional reading.
+- Run the nearest realistic end-to-end journey from a real entry state, not
+  by jumping to the changed route or component. Auth or onboarding work starts
+  signed out and goes through account creation or sign-in and onboarding;
+  training-entry work navigates through the user-facing entry point and
+  confirms the training experience is reached.
+- Assert the outcome of each interaction (navigation, persisted state,
+  enabled or disabled controls, visible roles or options, successful
+  completion), not only that something rendered.
+- Check whether existing tests actually exercise the changed journey and
+  assertions. Where the behavior suits deterministic automation, add or update
+  Playwright coverage instead of relying only on exploratory QA.
+- Treat critical user journeys as regression boundaries: a change that touches
+  or can affect one verifies that journey before the PR is marked ready for
+  review.
+- If missing test infrastructure blocks a realistic journey (for example, no
+  deterministic way to create a fresh test account), do not bypass that part
+  silently or claim it was verified. Report the gap as a blocker and create or
+  recommend the infrastructure it needs.
+
 ## Running locally
 
 Development is emulator-first. The NFCT dev Firebase project is `nfct-dev`
