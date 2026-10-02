@@ -91,21 +91,35 @@ higher-value work.
 Finishing an agent task and a PR being ready to merge are separate states:
 
 - **Agent task complete**: the implementation or integration work is
-  finished, the required local checks have passed, the PR is pushed, its CI
-  has started, and known findings are reported.
+  finished, the required local checks have passed, the PR is pushed and
+  marked ready for review, its CI has started, and known findings are
+  reported.
 - **Merge-ready**: every required merge gate is satisfied on the PR's current
   head, including green remote CI and any required review and QA.
 
 Do not hold your final response waiting for GitHub CI:
 
 1. Run every required local check before pushing.
-2. Push, or open or update the PR.
-3. Confirm CI has started for the pushed commit with
-   `gh run list --branch <branch> --commit <sha>`. A new run can take up to
-   a minute to appear; if none does, start it with
-   `gh workflow run ci.yml --ref <branch>`.
+2. Push, or open or update the PR, and mark it ready for review
+   (`gh pr ready <n>`) if it is still a draft.
+3. Once a ready PR targeting `development` is opened or updated, confirm CI
+   has started for the pushed commit with
+   `gh run list --branch <branch> --commit <sha>`; a new run can take up to
+   a minute to appear. A branch without a ready PR targeting `development`
+   gets no automatic CI run. Do not start full CI by hand merely because no run
+   exists; use `gh workflow run` only for a specific reason to validate
+   outside the normal PR flow.
 4. Report the PR URL and the current CI state, including *pending*, and
    finish. Do not poll or `--watch` the run.
+
+Plain branch pushes and draft PRs do not run CI. Open a PR targeting
+`development` as a draft (`gh pr create --draft`) once a remote PR is useful,
+and keep it draft while implementation, review and local testing continue.
+Mark it ready for review only when the branch is ready to consume CI, never
+just for an early CI signal. Once a PR is ready, each push to it reruns the
+full suite: test locally, batch related changes, and push when a coherent
+batch is ready, not after each small edit. After a CI failure, diagnose and
+fix it locally and batch the next push where practical.
 
 With CI pending, the report says so plainly, for example:
 
@@ -318,11 +332,13 @@ More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/ne
 iOS ([docs/nfct/ios.md](docs/nfct/ios.md)): `npm test` includes the iOS
 project contract tests, and `npm run sync:ios` builds, syncs and runs the
 release check (`npm run verify:ios-release`). `.github/workflows/ios.yml` runs
-the WebKit iPhone suite on every PR (`npm run test:e2e:webkit` locally, after
-`npx playwright install webkit`; needs Java 21) and, when native-relevant
-files change, an unsigned Xcode build and an iOS Simulator smoke test on
-GitHub-hosted macOS. On a Mac, `npm run sync:ios && npm run ios:build` runs
-the same Xcode build.
+on PRs targeting `development` and skips its jobs while the PR is a draft.
+Once the PR is ready for review, it runs the WebKit iPhone suite unless only
+documentation or agent instructions changed (`npm run test:e2e:webkit`
+locally, after `npx playwright install webkit`; needs Java 21) and, when
+native-relevant files change, an unsigned Xcode build and an iOS Simulator
+smoke test on GitHub-hosted macOS. On a Mac,
+`npm run sync:ios && npm run ios:build` runs the same Xcode build.
 
 ## Stage 1 test coverage
 
@@ -362,6 +378,35 @@ behavior instead of browser tests.
   (check with `npx playwright test --list --project=<name>`).
 - Cover the card's user-visible behavior. Do not add broad or flaky browser
   tests just to have E2E coverage.
+
+### User-facing and stateful changes
+
+Green existing tests and a page that renders do not prove a user-facing change
+works. For any change to user-facing, navigation, authentication, onboarding,
+persistence, training-flow or other stateful behavior:
+
+- Exercise it through the real UI, using
+  [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md)
+  and [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md);
+  they are required procedure, not optional reading.
+- Run the nearest realistic end-to-end journey from a real entry state, not
+  by jumping to the changed route or component. Auth or onboarding work starts
+  signed out and goes through account creation or sign-in and onboarding;
+  training-entry work navigates through the user-facing entry point and
+  confirms the training experience is reached.
+- Assert the outcome of each interaction (navigation, persisted state,
+  enabled or disabled controls, visible roles or options, successful
+  completion), not only that something rendered.
+- Check whether existing tests actually exercise the changed journey and
+  assertions. Where the behavior suits deterministic automation, add or update
+  Playwright coverage instead of relying only on exploratory QA.
+- Treat critical user journeys as regression boundaries: a change that touches
+  or can affect one verifies that journey before the PR is marked ready for
+  review.
+- If missing test infrastructure blocks a realistic journey (for example, no
+  deterministic way to create a fresh test account), do not bypass that part
+  silently or claim it was verified. Report the gap as a blocker and create or
+  recommend the infrastructure it needs.
 
 ## Running locally
 
