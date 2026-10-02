@@ -385,7 +385,10 @@ What the repository provides, and CI proves on every native run:
   refuses to start Firebase at launch (`firebaseConfig.ts` fails closed), and
   the hook prints a warning. They are not secret. Until NFCT-24 deploys the
   consumer rules, `nfct-dev` denies all reads and writes, so a TestFlight
-  build can launch but cannot sign in or sync.
+  build can launch but cannot sign in or sync. CI's
+  [nfct-dev canary](nfct-dev-canary.md) builds every runtime PR with the same
+  values from repository variables (`NFCT_DEV_FIREBASE_*`), and runs the
+  consumer journey against `nfct-dev`; keep the two sets identical.
 - Optional `NFCT_DEVELOPMENT_TEAM` workflow variable: the hook writes it to
   the gitignored `ios/signing.local.xcconfig`. Set it only if Xcode Cloud's
   archive reports that no team is selected; Xcode Cloud normally signs with

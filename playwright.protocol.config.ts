@@ -1,7 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
-// Emulator-only. This repository has no deployed-project E2E; every signed-in
-// browser test runs here against the local Auth and Firestore emulators.
+// Emulator-only. Every signed-in browser test runs here against the local Auth
+// and Firestore emulators; the only deployed-project test is the nfct-dev
+// canary (playwright.canary.config.ts).
 export default defineConfig({
   testDir: './e2e',
   testMatch: /(?:protocol|messaging|persistence|lifecycle|invitation-handoffs|session-handoffs|auth-handoffs|self-directed)\.local\.spec\.ts/,

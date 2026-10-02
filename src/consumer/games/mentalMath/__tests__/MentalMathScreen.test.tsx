@@ -12,7 +12,7 @@ import type {
   SavedGameSession,
   StartedGameSession,
 } from '../../../repositories/gameSessionRepository';
-import type { ProgressWithRecentSessions } from '../../../repositories/progressRepository';
+import { ProgressReadError, type ProgressWithRecentSessions } from '../../../repositories/progressRepository';
 import { MentalMathScreen, type MentalMathScreenProps, type MentalMathView } from '../MentalMathScreen';
 import type { VisibilitySource } from '../visibility';
 import { FEEDBACK_MS } from '../runController';
@@ -45,8 +45,10 @@ type SaveRecording = (session: Pick<SavedGameSession, 'sessionId' | 'userId'>, d
 /** A recording queued and then acknowledged by the server. */
 const acknowledgedRecording: SaveRecording = async (session) => ({ status: 'queued', recordingId: session.sessionId, serverOutcome: Promise.resolve({ status: 'acknowledged' }) });
 
-function harness({ state = pickerState(null), eegProvider = null, saveImpl, saveRecording = acknowledgedRecording, getGameSession = vi.fn(), history = { entries: [], unreadable: [], nextCursor: null, fromCache: false }, listGameSessionHistory = vi.fn(), initialView } = {} as {
+function harness({ state = pickerState(null), progressError, eegProvider = null, saveImpl, saveRecording = acknowledgedRecording, getGameSession = vi.fn(), history = { entries: [], unreadable: [], nextCursor: null, fromCache: false }, listGameSessionHistory = vi.fn(), initialView } = {} as {
   state?: ProgressWithRecentSessions; eegProvider?: EegCaptureProvider | null;
+  /** The progress read fails with this error instead of delivering `state`. */
+  progressError?: Error;
   /** The live first history page. */
   history?: GameSessionHistoryPage;
   listGameSessionHistory?: (options: unknown) => Promise<GameSessionHistoryPage>;
@@ -88,7 +90,11 @@ function harness({ state = pickerState(null), eegProvider = null, saveImpl, save
   /** While set, new listeners get nothing until `publish`, as while Firestore is still reading. */
   let holdProgress = false;
   const progress = {
-    subscribeToProgressWithRecentSessions: vi.fn((_gameId: string, _options: object, onNext: (value: ProgressWithRecentSessions) => void) => {
+    subscribeToProgressWithRecentSessions: vi.fn((_gameId: string, _options: object, onNext: (value: ProgressWithRecentSessions) => void, onError: (error: Error) => void) => {
+      if (progressError) {
+        onError(progressError);
+        return () => {};
+      }
       progressListeners.add(onNext);
       if (!holdProgress) onNext(latest);
       return () => { progressListeners.delete(onNext); };
@@ -162,6 +168,47 @@ afterEach(() => {
 });
 
 describe('MentalMathScreen', () => {
+  describe('when the progress read fails', () => {
+    const FRIENDLY = 'Your progress couldn’t be loaded, so only level 1 is available right now.';
+    const levelsHelp = (h: ReturnType<typeof harness>) => textOf(h.root().find((node) => node.props.id === 'mm-levels-help'));
+
+    it('shows the friendly state and offers level 1, and logs the read, code and message for diagnosis', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // What real Firestore sends while the history query's composite index is still building.
+      const indexBuilding = Object.assign(new Error('The query requires an index. That index is currently building and cannot be used yet. See its status here: https://console.firebase.google.com/v1/r/project/nfct-dev/firestore/indexes?create_composite=abc'), { code: 'failed-precondition' });
+      const h = harness({ progressError: new ProgressReadError('recent sessions', indexBuilding) });
+
+      expect(levelsHelp(h)).toBe(FRIENDLY);
+      expect(h.radio(1).props.checked).toBe(true);
+      expect(h.radio(2).props.disabled).toBe(true);
+      expect(h.buttons('Start at level 1')[0]?.props.disabled).toBe(false);
+      // The player never sees the backend error.
+      expect(textOf(h.root())).not.toMatch(/index|failed-precondition|console\.firebase/);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith('Mental Math progress could not be loaded', {
+        read: 'recent sessions',
+        code: 'failed-precondition',
+        message: indexBuilding.message,
+      });
+      warn.mockRestore();
+    });
+
+    it('logs an error without a read or code as unknown, and never a user ID in a path', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const h = harness({ progressError: new Error('Missing or insufficient permissions for users/Xq81uidXYZ/progress/mental-math') });
+
+      expect(levelsHelp(h)).toBe(FRIENDLY);
+      expect(warn).toHaveBeenCalledWith('Mental Math progress could not be loaded', {
+        read: 'unknown',
+        code: 'unknown',
+        message: 'Missing or insufficient permissions for users/{uid}/progress/mental-math',
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('Xq81uidXYZ');
+      warn.mockRestore();
+    });
+  });
+
   it('offers start levels 1 to the unlocked level, locks the rest, and defaults to the last start level', () => {
     const last = sessionRecord('sessionAAAAAAAAAAAA1', playRun({ seed: SEED, startLevel: 2, correct: 0 }), { awaitingResult: false, seed: SEED });
     const h = harness({ state: pickerState(progressWith(4), [last]) });

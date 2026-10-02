@@ -10,8 +10,12 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   credentials, service accounts or deployed rules, and never add a default
   Firebase project. `src/services/firebaseConfig.ts` must keep failing closed.
   `npm run check:isolation` must stay green.
-- **All Firebase-backed tests run against local emulators.** Do not add
-  deployed-project E2E, service-account keys or `.env` files to the repo.
+- **All Firebase-backed tests run against local emulators**, with one
+  exception: CI's [nfct-dev canary](docs/nfct/nfct-dev-canary.md), a single
+  consumer journey against `nfct-dev` as an ordinary user, with no secrets and
+  no Admin SDK. Do not add other deployed-project tests, service-account keys
+  or `.env` files to the repo, and do not give a pull request job privileged
+  Firebase credentials.
 - **`brainflow_service/` is not owned here.** It is an inherited copy of the
   shared `brainflow-service` repository. Do not modify, refactor or extend it;
   backend changes go to `brainflow-service`.
@@ -48,7 +52,10 @@ higher-value work.
 ## Working on a card
 
 - Give each independent writable task or PR its own branch and git worktree,
-  based on current `origin/main` unless it deliberately stacks on another PR.
+  based on current `origin/development` unless it deliberately stacks on
+  another PR. Pull requests target `development`; only `development` is
+  promoted to `main`. Where a skill still says `origin/main`, use
+  `origin/development`.
   Never modify another task's worktree or uncommitted work.
 - An open PR keeps its worktree. It becomes eligible for cleanup only once the
   PR is merged or abandoned **and** the worktree is clean and fully pushed.
@@ -91,21 +98,35 @@ higher-value work.
 Finishing an agent task and a PR being ready to merge are separate states:
 
 - **Agent task complete**: the implementation or integration work is
-  finished, the required local checks have passed, the PR is pushed, its CI
-  has started, and known findings are reported.
+  finished, the required local checks have passed, the PR is pushed and
+  marked ready for review, its CI has started, and known findings are
+  reported.
 - **Merge-ready**: every required merge gate is satisfied on the PR's current
   head, including green remote CI and any required review and QA.
 
 Do not hold your final response waiting for GitHub CI:
 
 1. Run every required local check before pushing.
-2. Push, or open or update the PR.
-3. Confirm CI has started for the pushed commit with
-   `gh run list --branch <branch> --commit <sha>`. A new run can take up to
-   a minute to appear; if none does, start it with
-   `gh workflow run ci.yml --ref <branch>`.
+2. Push, or open or update the PR, and mark it ready for review
+   (`gh pr ready <n>`) if it is still a draft.
+3. Once a ready PR targeting `development` is opened or updated, confirm CI
+   has started for the pushed commit with
+   `gh run list --branch <branch> --commit <sha>`; a new run can take up to
+   a minute to appear. A branch without a ready PR targeting `development`
+   gets no automatic CI run. Do not start full CI by hand merely because no run
+   exists; use `gh workflow run` only for a specific reason to validate
+   outside the normal PR flow.
 4. Report the PR URL and the current CI state, including *pending*, and
    finish. Do not poll or `--watch` the run.
+
+Plain branch pushes and draft PRs do not run CI. Open a PR targeting
+`development` as a draft (`gh pr create --draft`) once a remote PR is useful,
+and keep it draft while implementation, review and local testing continue.
+Mark it ready for review only when the branch is ready to consume CI, never
+just for an early CI signal. Once a PR is ready, each push to it reruns the
+full suite: test locally, batch related changes, and push when a coherent
+batch is ready, not after each small edit. After a CI failure, diagnose and
+fix it locally and batch the next push where practical.
 
 With CI pending, the report says so plainly, for example:
 
@@ -318,13 +339,36 @@ More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/ne
 iOS ([docs/nfct/ios.md](docs/nfct/ios.md)): `npm test` includes the iOS
 project contract tests, and `npm run sync:ios` builds, syncs and runs the
 release check (`npm run verify:ios-release`). `.github/workflows/ios.yml` runs
-the WebKit iPhone suite on every PR (`npm run test:e2e:webkit` locally, after
-`npx playwright install webkit` and `npm ci --prefix functions`; it starts the
-Functions emulator; needs Java 21) and, when native-relevant
+on PRs targeting `development` and skips its jobs while the PR is a draft.
+Once the PR is ready for review, it runs the WebKit iPhone suite unless only
+documentation or agent instructions changed (`npm run test:e2e:webkit`
+locally, after `npx playwright install webkit` and `npm ci --prefix functions`;
+it starts the Functions emulator; needs Java 21) and, when native-relevant
 files change, an unsigned Xcode build and the iOS Simulator scenarios on
 GitHub-hosted macOS, which agents can also run on any branch
-([Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)). On a Mac, `npm run sync:ios && npm run ios:build` runs
-the same Xcode build.
+([Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)). On a Mac,
+`npm run sync:ios && npm run ios:build` runs the same Xcode build.
+
+nfct-dev canary ([docs/nfct/nfct-dev-canary.md](docs/nfct/nfct-dev-canary.md)):
+`ci.yml`'s `nfct-dev canary` job builds the PR's production bundle with
+`nfct-dev`'s web config and runs the critical consumer journey (sign-up,
+Train my brain, Mental Math, a saved run, signing in again) against the real
+backend TestFlight uses. It runs on ready PRs unless every changed file is
+clearly non-runtime (`scripts/ci/classify-changes.sh`). The `emulators` job
+rehearses the same journey on the emulators; run that rehearsal locally
+(needs Java 21):
+
+```bash
+NFCT_CANARY_TARGET=emulators npx firebase emulators:exec --only auth,firestore \
+  --project demo-neurasticity-protocol-e2e "node scripts/canary/canary.mjs run"
+```
+
+Agents do not run the canary against `nfct-dev` themselves; CI does. A red
+canary with a green rehearsal means the deployed backend or its configuration
+does not match the branch: report it as a blocker with the failing step, and
+never work around it in the app. Deploying rules or indexes to `nfct-dev` is
+the owner's step; for a PR that changes them, follow
+[rules and index changes](docs/nfct/nfct-dev-canary.md#rules-and-index-changes).
 
 ## Stage 1 test coverage
 
@@ -364,6 +408,39 @@ behavior instead of browser tests.
   (check with `npx playwright test --list --project=<name>`).
 - Cover the card's user-visible behavior. Do not add broad or flaky browser
   tests just to have E2E coverage.
+
+### User-facing and stateful changes
+
+Green existing tests and a page that renders do not prove a user-facing change
+works. For any change to user-facing, navigation, authentication, onboarding,
+persistence, training-flow or other stateful behavior:
+
+- Exercise it through the real UI, using
+  [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md)
+  and [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md);
+  they are required procedure, not optional reading.
+- Run the nearest realistic end-to-end journey from a real entry state, not
+  by jumping to the changed route or component. Auth or onboarding work starts
+  signed out and goes through account creation or sign-in and onboarding;
+  training-entry work navigates through the user-facing entry point and
+  confirms the training experience is reached.
+- Assert the outcome of each interaction (navigation, persisted state,
+  enabled or disabled controls, visible roles or options, successful
+  completion), not only that something rendered.
+- Check whether existing tests actually exercise the changed journey and
+  assertions. Where the behavior suits deterministic automation, add or update
+  Playwright coverage instead of relying only on exploratory QA.
+- Treat critical user journeys as regression boundaries: a change that touches
+  or can affect one verifies that journey before the PR is marked ready for
+  review. Drive the fresh consumer journey with the shared helpers in
+  `e2e/helpers/journeys.ts` (`signUpFreshAccountThroughUi`,
+  `completeConsumerOnboarding`, `openGameFromTrain`). The nfct-dev canary and
+  its emulator rehearsal already use them. A spec that seeds a
+  clinician-linked patient does not cover consumer sign-up and onboarding.
+- If missing test infrastructure blocks a realistic journey (for example, no
+  deterministic way to create a fresh test account), do not bypass that part
+  silently or claim it was verified. Report the gap as a blocker and create or
+  recommend the infrastructure it needs.
 
 ## Running locally
 

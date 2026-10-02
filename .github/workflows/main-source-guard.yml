@@ -1,0 +1,35 @@
+name: Main source guard
+
+on:
+  # pull_request_target runs this file as it is on main, so a pull request
+  # cannot weaken the guard by editing it. It never checks out or runs pull
+  # request code and has no permissions or secrets. `edited` covers a pull
+  # request retargeted to main.
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+# main is the TestFlight release branch (Xcode Cloud builds every main
+# commit). Full CI runs on development; this check only lets the main
+# ruleset refuse pull requests from any branch other than this repository's
+# development (a fork's development branch is refused too).
+
+jobs:
+  require-development-source:
+    name: Require development source
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Head branch must be development
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" != "$REPO" ] || [ "$HEAD_REF" != "development" ]; then
+            echo "::error::Only $REPO:development may be merged into main (head: $HEAD_REPO:$HEAD_REF)"
+            exit 1
+          fi
+          echo "Head is $REPO:development."

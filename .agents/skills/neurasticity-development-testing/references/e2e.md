@@ -1,9 +1,12 @@
 # E2E testing
 
-This repository has **no deployed-project E2E**. Every signed-in browser test
-runs against the local Firebase Auth and Firestore emulators. Never point a
-test, helper or script at a real Firebase project; `npm run check:isolation`
-and `src/services/firebaseConfig.ts` refuse the Waveable clinical project.
+Every signed-in browser test runs against the local Firebase Auth and
+Firestore emulators, except the [nfct-dev canary](../../../../docs/nfct/nfct-dev-canary.md):
+one CI job that runs the consumer journey in `e2e/helpers/journeys.ts`
+against `nfct-dev` as an ordinary user. Never point any other test, helper or
+script at a real Firebase project, and never give one Admin or
+service-account credentials; `npm run check:isolation` and
+`src/services/firebaseConfig.ts` refuse the Waveable clinical project.
 
 ## Current test entry points
 
@@ -13,6 +16,10 @@ and `src/services/firebaseConfig.ts` refuse the Waveable clinical project.
   TypeScript/build and clinical-isolation checks.
 - `npm run test:rules` runs the Firestore rules suite on the emulator (below).
 - `npm run test:e2e:protocol` runs the local emulator browser suite (below).
+- The nfct-dev canary (`playwright.canary.config.ts`) runs in CI. Rehearse it
+  on the emulators with `NFCT_CANARY_TARGET=emulators npx firebase
+  emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e
+  "node scripts/canary/canary.mjs run"`.
 - `npm run test:e2e:webkit` runs the specs listed in
   `playwright.webkit.config.ts` from the same suite in Playwright WebKit, as
   an iPhone SE (3rd gen) and an iPhone 17. Install WebKit once with
