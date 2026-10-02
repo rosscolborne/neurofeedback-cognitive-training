@@ -200,7 +200,12 @@ function tokenAudience(idToken) {
   }
 }
 
-/** The rehearsal's bar: the account and its clients/{uid} profile are both gone. */
+/**
+ * The rehearsal's bar: the account and its clients/{uid} profile are both
+ * gone. The dashboard creates clients/{uid} during the journey, and the rules
+ * refuse to delete one that does not exist; when the consumer model stops
+ * creating it (NFCT-4, NFCT-20), drop it from this bar.
+ */
 export function cleanedCompletely(report) {
   return report.problems.length === 0 && report.account === 'deleted' && report.deleted.includes(`clients/${report.uid}`);
 }
@@ -252,10 +257,12 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 /** The production bundle the canary serves, built with the nfct-dev web config, then checked. */
 function build(env, out) {
-  const target = resolveCanaryTarget(env);
-  if (target.name !== 'nfct-dev') throw new Error('build is for the nfct-dev target; the emulator rehearsal uses the dev server');
+  if (env.NFCT_CANARY_TARGET !== 'nfct-dev') throw new Error('build is for NFCT_CANARY_TARGET=nfct-dev; the emulator rehearsal uses the dev server');
   const missing = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID'].filter((name) => !(env[name] ?? '').trim());
-  if (missing.length > 0) throw new Error(`Missing ${missing.join(', ')}: the nfct-dev web config (repository variables in CI)`);
+  if (missing.length > 0) {
+    throw new Error(`Missing ${missing.join(', ')}: nfct-dev's web config. In CI, set the repository variables ${missing.map((name) => name.replace('VITE_FIREBASE_', 'NFCT_DEV_FIREBASE_')).join(', ')} (docs/nfct/nfct-dev-canary.md#owner-setup)`);
+  }
+  resolveCanaryTarget(env);
   const result = spawnSync('npx', ['vite', 'build', '--mode', 'production'], { cwd: repositoryRoot, stdio: 'inherit', env });
   if (result.status !== 0) throw new Error('vite build failed');
   const dist = join(repositoryRoot, 'dist');

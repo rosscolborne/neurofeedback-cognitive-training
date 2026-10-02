@@ -31,9 +31,15 @@ import { canaryDevice } from './device';
  * daily quota before the test times out. The variables exist only to prove
  * that stop locally with a tiny ceiling.
  */
+function ceiling(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
+  return value;
+}
+
 const REQUEST_CEILING = {
-  auth: Number(process.env.NFCT_CANARY_AUTH_CEILING ?? 40),
-  firestore: Number(process.env.NFCT_CANARY_FIRESTORE_CEILING ?? 250),
+  auth: ceiling('NFCT_CANARY_AUTH_CEILING', 40),
+  firestore: ceiling('NFCT_CANARY_FIRESTORE_CEILING', 250),
 } as const;
 
 type Category = 'auth' | 'firestore' | 'otherGoogle';
