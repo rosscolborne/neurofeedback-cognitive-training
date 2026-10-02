@@ -17,6 +17,8 @@ const IOS_WEBKIT_SPECS = [
   'auth-handoffs.local.spec.ts',
   'password-reset.auth-handoffs.local.spec.ts',
   'account-deletion-lifecycle.local.spec.ts',
+  // NFCT-44: an onboarded consumer reloading while their role is slow to load.
+  'returning-user.auth-handoffs.local.spec.ts',
   // Stage 1 (NFCT-20, NFCT-21): Mental Math run lifecycle, cache isolation and
   // offline cache.
   'mental-math.lifecycle.local.spec.ts',
