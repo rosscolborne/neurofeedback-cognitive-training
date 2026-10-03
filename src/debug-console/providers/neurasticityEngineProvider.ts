@@ -1,3 +1,4 @@
+import { APP_DISPLAY_NAME } from "../../config/appIdentity";
 import { eegEngine } from "../../services/eegEngine";
 import type { EEGDataPoint } from "../../types";
 import type {
@@ -35,12 +36,12 @@ export class NeurasticityEngineProvider implements EegProvider {
         ? {
             id: "brainflow-muse-athena",
             label: "Muse Athena",
-            description: "Waveable BrainFlow connection",
+            description: `${APP_DISPLAY_NAME} BrainFlow connection`,
           }
         : {
             id: "muse-athena-bluetooth",
             label: "Muse Athena - Bluetooth",
-            description: "Waveable Bluetooth connection",
+            description: `${APP_DISPLAY_NAME} Bluetooth connection`,
           };
   }
 
@@ -70,7 +71,7 @@ export class NeurasticityEngineProvider implements EegProvider {
     this.deviceInfo = {
       label: result.deviceName ?? "Muse Athena",
       model: this.kind === "brainflow" ? "Muse Athena via BrainFlow" : "Muse Athena via Bluetooth",
-      providerName: this.kind === "brainflow" ? "Waveable BrainFlow" : "Waveable Bluetooth",
+      providerName: `${APP_DISPLAY_NAME} ${this.kind === "brainflow" ? "BrainFlow" : "Bluetooth"}`,
       capabilities: [
         {
           kind: "eeg",
@@ -80,7 +81,7 @@ export class NeurasticityEngineProvider implements EegProvider {
       ],
     };
     this.events.onDeviceInfo(this.deviceInfo);
-    this.events.onState("streaming", "Receiving EEG through Waveable");
+    this.events.onState("streaming", `Receiving EEG through ${APP_DISPLAY_NAME}`);
   }
 
   async disconnect(reason = "Disconnected") {

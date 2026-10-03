@@ -15,99 +15,14 @@ import {
 } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
-import { getTidalGardenSessionXp } from '../../services/dataMappers';
 import { resolveTrainingAuthority } from '../../services/patientTrainingAuthority';
 import { describeActiveReward, describeBrainFlowScore } from './trainingTelemetry';
-import { SkylineDriftCanvas } from '../experiences/SkylineDriftCanvas';
-import { TidalGardenCanvas } from '../experiences/TidalGardenCanvas';
-import { BreathWeaveCanvas } from '../experiences/BreathWeaveCanvas';
-import { SignalSortGame } from '../experiences/SignalSortGame';
-import { RhythmLockGame } from '../experiences/RhythmLockGame';
-import { MediaModePlayer } from '../experiences/MediaModePlayer';
-import { SoundscapePlayer } from '../experiences/SoundscapePlayer';
-import { MandalaBreathing } from '../experiences/MandalaBreathing';
-import { EegMandalaCanvas } from '../experiences/EegMandalaCanvas';
-import { GenerativeWebXRCanvas } from '../experiences/GenerativeWebXRCanvas';
-import { GenerativeMusicMode } from '../experiences/GenerativeMusicMode';
-import { NarrativeTherapyMode } from '../experiences/NarrativeTherapyMode';
 import { NeuroGambitExperience } from '../experiences/NeuroGambitExperience';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { Play, Pause, Wifi, Volume2, VolumeX, Activity, Brain } from 'lucide-react';
 import { EXPERIENCE_CATALOGUE } from './experienceCatalogue';
 
 const MODALITY_BRIEFING_DATA: Record<ExperienceType, { title: string; mechanism: string; benefit: string; instructions: string }> = {
-  'skyline-drift': {
-    title: 'Skyline Drift',
-    mechanism: 'Uses SMR (12-15Hz) neurofeedback to control horizontal movement.',
-    benefit: 'Trains the brain to sustain attention while maintaining physical relaxation, heavily prescribed for ADHD and motor control.',
-    instructions: 'Keep your body still and hold a soft focus on the center. The path straightens as you settle into your target state.',
-  },
-  'tidal-garden': {
-    title: 'Tidal Garden',
-    mechanism: 'Utilizes Alpha (8–13 Hz) amplitude training to govern environmental growth.',
-    benefit: 'Teaches the brain to rapidly decouple from stress and lower cortisol levels, treating general anxiety.',
-    instructions: 'Relax your jaw and shoulders. Allow your mind to wander gently. The garden flourishes when you achieve deep relaxation.',
-  },
-  'breath-weave': {
-    title: 'Breath Weave',
-    mechanism: 'Combines slow-cortical potential (SCP) shifts with rhythmic visual pacing.',
-    benefit: 'Synchronizes respiration with brainwave states, improving heart-rate variability (HRV) and vagal tone.',
-    instructions: 'Breathe in time with the visual expansion and contraction. Let the colors guide your nervous system into equilibrium.',
-  },
-  'signal-sort': {
-    title: 'Signal Sort',
-    mechanism: 'Leverages Beta (15-20Hz) operant conditioning through discrete cognitive tasks.',
-    benefit: 'Enhances executive function, working memory, and sharpens analytical focus.',
-    instructions: 'Sort the incoming signals as quickly as possible. Your score increases when you maintain sharp, active concentration.',
-  },
-  'rhythm-lock': {
-    title: 'Rhythm Lock',
-    mechanism: 'Trains Theta-Beta ratio optimization through rhythmic timing.',
-    benefit: 'Reduces impulsivity and improves timing circuits in the basal ganglia.',
-    instructions: 'Tap or focus precisely on the beat. The game rewards calm anticipation rather than anxious, early reactions.',
-  },
-  'media-mode': {
-    title: 'Media Mode',
-    mechanism: 'Applies Alpha/Theta thresholding to control video opacity and volume.',
-    benefit: 'Conditions the brain to maintain a relaxed, receptive state while engaging with external stimuli.',
-    instructions: 'Watch the video. If your mind wanders or you become tense, the screen will dim. Relax to restore clarity.',
-  },
-  'soundscape-mode': {
-    title: 'Soundscape Mode',
-    mechanism: 'Uses multi-band frequency analysis to modulate binaural audio layers.',
-    benefit: 'Promotes deep auditory processing and hemispheric synchronization.',
-    instructions: 'Close your eyes. Listen to the layers of sound. The audio will harmonize as your brainwaves balance.',
-  },
-  'mandala': {
-    title: 'Mandala Breathing',
-    mechanism: 'Alpha (8–13 Hz) and Theta (4–8 Hz) coherence visually construct geometric patterns.',
-    benefit: 'Facilitates transition into flow states and deep mindfulness practices.',
-    instructions: 'Focus on the center of the mandala. Let your breath guide the geometry. The pattern completes as you achieve inner stillness.',
-  },
-  'eeg-mandala': {
-    title: 'Generative Mandella',
-    mechanism: 'Maps EEG state to ornamental character while recent target-zone performance controls drawing precision.',
-    benefit: 'Creates an enduring visual history in which regulated periods produce cleaner, richer radial ornament.',
-    instructions: 'Watch the mandala grow from the center. Settle into your target state; each new curve records the quality of that moment.',
-  },
-  'immersive-3d': {
-    title: 'Generative XR',
-    mechanism: 'Translates real-time coherence metrics into dynamic 3D spatial particle systems.',
-    benefit: 'Provides powerful, immediate visual biofeedback, accelerating the brain\'s operant conditioning loop.',
-    instructions: 'Observe the 3D space. Your coherence score directly manipulates the gravity, color, and flow of the particles.',
-  },
-  'generative-music': {
-    title: 'Generative Music',
-    mechanism: 'Maps real-time EEG band powers to generative musical parameters — alpha selects pitch, attention drives tempo, coherence adds harmonic richness.',
-    benefit: 'Provides immediate, intuitive auditory neurofeedback through brain-generated music. Sustained target states produce melodic clarity; drift results in muffled, sparse output.',
-    instructions: 'Use headphones for best effect. Select a mode (Melody, Synth, or Drums). Your brain activity directly creates the music — relax into the target state to hear it bloom.',
-  },
-  'narrative-story': {
-    title: 'Narrative Therapy',
-    mechanism: 'Advances narrative progression only when target EEG thresholds are sustained.',
-    benefit: 'Enhances emotional resilience and cognitive reframing by rewarding regulated states with story resolution.',
-    instructions: 'Follow the story. The narrative will pause if you become overly stressed or distracted. Breathe to continue the journey.',
-  },
   'neuro-gambit': {
     title: 'NeuroGambit',
     mechanism: 'Tracks Frontal Midline Theta (AF7/AF8) for deep calculation, down-trains Frontal High-Beta under clock stress, and conditions Temporoparietal Alpha (TP9/TP10) for post-blunder recovery.',
@@ -207,7 +122,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const totalSecondsElapsedRef = useRef(0);
   const [inZoneSeconds, setInZoneSeconds] = useState(0);
-  const [inZoneMeasuredSeconds, setInZoneMeasuredSeconds] = useState(0);
   const inZoneSecondsRef = useRef(0);
   const inZoneMeasuredSecondsRef = useRef(0);
 
@@ -451,7 +365,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     return () => {
       unsubscribe();
       eegEngine.stop();
-      audioEngine.stopAll();
     };
   }, [adaptiveEngine, isDemoSession, isFitAccepted, runtimeConfig]);
 
@@ -512,7 +425,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       // unavailable protocol metric should keep this value indeterminate.
       if (currentData?.inZoneAvailable) {
         inZoneMeasuredSecondsRef.current += 1;
-        setInZoneMeasuredSeconds(inZoneMeasuredSecondsRef.current);
         if (currentData.inZone) {
           inZoneSecondsRef.current += 1;
           setInZoneSeconds(inZoneSecondsRef.current);
@@ -720,9 +632,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
 
   const remainingSeconds = Math.max(0, sessionTotalDuration - totalSecondsElapsed);
   const worstQuality = eegData?.signalQuality || 'good';
-  const inZonePercent = inZoneMeasuredSeconds > 0
-    ? Math.min(100, Math.round((inZoneSeconds / inZoneMeasuredSeconds) * 100))
-    : null;
 
   return (
     <div
@@ -897,62 +806,6 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       {/* Main Experience Viewport */}
       <main style={{ flex: 1, minHeight: 0, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
         <div style={{ flex: 1, minHeight: 0, borderRadius: 'var(--radius-lg)', overflow: 'hidden', position: 'relative' }}>
-          {selectedExperience === 'skyline-drift' && (
-            <SkylineDriftCanvas
-              eegData={eegData}
-              assignedProtocol={runtimeConfig!.protocol}
-              recentInZonePercent={inZonePercent}
-              isPaused={isPaused}
-            />
-          )}
-          {selectedExperience === 'tidal-garden' && client.tidalGardenState && (
-            <TidalGardenCanvas 
-              eegData={eegData} 
-              stage={client.tidalGardenState.stage} 
-              growthPoints={client.tidalGardenState.growthPoints + getTidalGardenSessionXp(inZoneSeconds, sessionTotalDuration, totalSecondsElapsed)}
-              inZonePercent={inZonePercent ?? undefined}
-              isPaused={isPaused} 
-            />
-          )}
-          {selectedExperience === 'tidal-garden' && !client.tidalGardenState && (
-            <div role="status" style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', padding: '24px', textAlign: 'center' }}>
-              Garden progress is unavailable for this account. Return to the dashboard and {resolveTrainingAuthority(client) === 'clinician' ? 'ask your clinician to review the training assignment' : 'try opening Tidal Garden again'}.
-            </div>
-          )}
-          {selectedExperience === 'breath-weave' && (
-            <BreathWeaveCanvas eegData={eegData} isPaused={isPaused} />
-          )}
-          {selectedExperience === 'signal-sort' && (
-            <SignalSortGame eegData={eegData} isPaused={isPaused} />
-          )}
-          {selectedExperience === 'rhythm-lock' && (
-            <RhythmLockGame eegData={eegData} isPaused={isPaused} />
-          )}
-          {selectedExperience === 'media-mode' && (
-            <MediaModePlayer eegData={eegData} isPaused={isPaused} />
-          )}
-          {selectedExperience === 'soundscape-mode' && (
-            <SoundscapePlayer eegData={eegData} isPaused={isPaused} />
-          )}
-          {selectedExperience === 'mandala' && (
-            <MandalaBreathing eegData={eegData} isPaused={isPaused} />
-          )}
-          {selectedExperience === 'eeg-mandala' && (
-            <EegMandalaCanvas
-              eegData={eegData}
-              recentInZonePercent={recentInZonePercent}
-              isPaused={isPaused}
-            />
-          )}
-          {selectedExperience === 'immersive-3d' && (
-            <GenerativeWebXRCanvas eegData={eegData} />
-          )}
-          {selectedExperience === 'generative-music' && (
-            <GenerativeMusicMode eegData={eegData} />
-          )}
-          {selectedExperience === 'narrative-story' && (
-            <NarrativeTherapyMode eegData={eegData} />
-          )}
           {selectedExperience === 'neuro-gambit' && (
             <NeuroGambitExperience eegData={eegData} isPaused={isPaused} isDemoSession={isDemoSession} patientId={client.id} savedBaselineModel={client.individualBaselineModel} onBaselinePersisted={onBaselinePersisted ?? (() => {})} />
           )}

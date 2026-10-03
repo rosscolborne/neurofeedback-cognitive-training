@@ -4,28 +4,12 @@ import { expect, test } from './fixtures';
 import { arriveAtClinicianDashboard, arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
 import { findPendingLifecycleInvitation, readLifecycleHistoryState, readLifecycleRecords, readPendingInvitationState, seedFutureLifecycleAppointment, seedLifecycleHistory, seedLinkedPatient, seedPendingLifecycleInvitation } from './helpers/localEmulator';
 
-const allExperienceNames = [
-  'Skyline Drift', 'Tidal Garden', 'Breath Weave', 'Signal Sort', 'Rhythm Lock',
-  'Media Mode', 'Soundscape Mode', 'Mandala Breathing', 'Generative Mandala',
-  'Generative XR', 'Generative Music', 'Contemplative Reading', 'NeuroGambit',
-];
-const alphaNames = [
-  'Tidal Garden', 'Breath Weave', 'Soundscape Mode', 'Mandala Breathing',
-  'Generative Mandala', 'Generative XR', 'Generative Music', 'Contemplative Reading',
-];
-const alphaIds = [
-  'immersive-3d', 'generative-music', 'narrative-story', 'tidal-garden',
-  'breath-weave', 'soundscape-mode', 'mandala', 'eeg-mandala',
-];
-const thetaNames = [
-  'Skyline Drift', 'Signal Sort', 'Rhythm Lock', 'Media Mode',
-  'Generative Mandala', 'Generative XR', 'Generative Music',
-  'Contemplative Reading', 'NeuroGambit',
-];
-const thetaIds = [
-  'immersive-3d', 'generative-music', 'narrative-story', 'skyline-drift',
-  'signal-sort', 'media-mode', 'rhythm-lock', 'eeg-mandala', 'neuro-gambit',
-];
+// Every protocol template now recommends the one remaining experience, NeuroGambit.
+const allExperienceNames = ['NeuroGambit'];
+const alphaIds = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
+const alphaNames = ['NeuroGambit'];
+const thetaIds = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
+const thetaNames = ['NeuroGambit'];
 
 async function expectPatientCatalogue(page: Page, names: string[]) {
   await page.getByRole('button', { name: 'Home', exact: true }).click();
@@ -186,7 +170,8 @@ test('unlink preserves the training list and Garden; a new invitation replaces t
   const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
   const staleCustomProtocol = { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Old custom reward' };
   const fixture = await seedLinkedPatient({
-    assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['tidal-garden'],
+    // An explicit empty list, so keeping it on unlink and replacing it on relink are both visible.
+    assignedProtocol: 'theta-beta-ratio', allowedExperiences: [],
     customProtocolConfig: staleCustomProtocol, tidalGardenState: garden, completedSessionsCount: 4,
   });
   await seedLifecycleHistory(fixture);
@@ -199,7 +184,7 @@ test('unlink preserves the training list and Garden; a new invitation replaces t
     await arriveAtClinicianDashboard(clinician);
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
-    await expectPatientCatalogue(patient, ['Tidal Garden']);
+    await expectPatientCatalogue(patient, []);
 
     const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
     clinician.once('dialog', (dialog) => { void dialog.accept(); });
@@ -207,9 +192,9 @@ test('unlink preserves the training list and Garden; a new invitation replaces t
     await expect(rosterRow).toHaveCount(0);
     await patient.reload();
     await arriveAtPatientDashboard(patient);
-    await expectPatientCatalogue(patient, ['Tidal Garden']);
+    await expectPatientCatalogue(patient, []);
     expect(await readCurrentPatientAssignment(patient)).toMatchObject({
-      assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['tidal-garden'],
+      assignedProtocol: 'theta-beta-ratio', allowedExperiences: [],
       customProtocolConfig: staleCustomProtocol, completedSessionsCount: 4, tidalGardenState: garden,
     });
     expect(await readLifecycleHistoryState(fixture.patient.uid, fixture.clinician.uid)).toEqual({

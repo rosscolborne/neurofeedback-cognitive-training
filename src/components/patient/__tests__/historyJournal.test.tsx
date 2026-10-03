@@ -8,7 +8,7 @@ vi.mock('../../../services/storageEngine', () => ({ storageEngine: storage, INIT
 import { ProgressHistory } from '../ProgressHistory';
 
 const client = (id: string): ClientProfile => ({ id, name: id, email: `${id}@example.test`, status: 'active', assignedProtocol: 'theta-beta-ratio', allowedExperiences: [], brainMaps: [], badges: [], completedSessionsCount: 1, currentStreak: 0 });
-const session = (patientId = 'p'): SessionRecord => ({ id: 'historical', patientId, patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27', timestamp: Date.now(), protocol: 'alpha-enhancement', experience: 'tidal-garden', durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 2, finalThreshold: 0.7, clinicianNotes: 'Clinician feedback', patientNotes: 'Original', moodRating: 2 });
+const session = (patientId = 'p'): SessionRecord => ({ id: 'historical', patientId, patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27', timestamp: Date.now(), protocol: 'alpha-enhancement', experience: 'neuro-gambit', durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 2, finalThreshold: 0.7, clinicianNotes: 'Clinician feedback', patientNotes: 'Original', moodRating: 2 });
 const text = (r: ReactTestRenderer) => JSON.stringify(r.toJSON());
 const click = async (r: ReactTestRenderer, label: string) => {
   const button = r.root.findAllByType('button').find((b) => b.children.filter((child): child is string => typeof child === 'string').join('').includes(label));

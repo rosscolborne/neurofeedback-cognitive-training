@@ -11,17 +11,31 @@ import protocol from './playwright.protocol.config';
 // WebKit engine differences and small-screen, touch and mobile layout
 // problems. It does not prove older iOS versions, the capacitor:// origin,
 // suspension, the software keyboard, safe areas or Bluetooth; the iOS
-// Simulator smoke test and real iPhones cover those (docs/nfct/ios.md).
+// Simulator scenarios and real iPhones cover those (docs/nfct/ios.md).
 const IOS_WEBKIT_SPECS = [
   // Sign-in, credentials and account deletion.
   'auth-handoffs.local.spec.ts',
   'password-reset.auth-handoffs.local.spec.ts',
   'account-deletion-lifecycle.local.spec.ts',
+  // NFCT-44: an onboarded consumer reloading while their role is slow to load.
+  'returning-user.auth-handoffs.local.spec.ts',
   // Stage 1 (NFCT-20, NFCT-21): Mental Math run lifecycle, cache isolation and
-  // offline cache. They join this run as soon as they land on main.
+  // offline cache.
   'mental-math.lifecycle.local.spec.ts',
   'cache-isolation.persistence.local.spec.ts',
   'offline-cache.persistence.local.spec.ts',
+  // NFCT-22: the post-session summary and progress, through trusted scoring
+  // (needs the Functions emulator, which test:e2e:webkit starts).
+  'mental-math-summary.lifecycle.local.spec.ts',
+  // NFCT-12: the Train game catalogue, the way into every game, at phone widths.
+  'train-catalogue.self-directed.local.spec.ts',
+  // NFCT-33: iPhone polish. The account forms and dialogs and the bundled
+  // fonts; the run screen's touch handling, HUD widths and keypad.
+  'iphone-forms.auth-handoffs.local.spec.ts',
+  'mental-math-touch.lifecycle.local.spec.ts',
+  // NFCT-13: Home's Play, streak and achievements, and Progress, after a run
+  // scored by trusted scoring.
+  'home-progress.lifecycle.local.spec.ts',
 ];
 
 export default defineConfig({

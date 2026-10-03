@@ -16,7 +16,6 @@ vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../EducationHub', () => ({ EducationHub: 'education-hub' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
@@ -39,79 +38,60 @@ const train = (renderer: ReactTestRenderer) => {
   if (!button) throw new Error('Train tab missing');
   act(() => button.props.onClick());
 };
-const card = (renderer: ReactTestRenderer, name: string) => renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function' && node.findAll((child) => child.children.includes(name)).length > 0)[0];
+// Train's experience cards, as the button that starts each one (the name button stretched over the card).
+const cards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.type === 'li' && String(node.props.className).split(' ').includes('card-patient')).map((item) => item.findByType('button'));
+const card = (renderer: ReactTestRenderer, name: string) => cards(renderer).find((button) => button.children.includes(name));
 const begin = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes(' Begin Session')).length > 0)!.props.onClick;
 
 describe('patient assigned catalogue', () => {
   beforeEach(() => { vi.clearAllMocks(); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 
-  it('has one stable entry per experience and preserves names, descriptions, and research links', () => {
-    expect(EXPERIENCE_IDS).toHaveLength(13);
-    expect(new Set(EXPERIENCE_IDS).size).toBe(13);
+  it('has one stable entry per experience: NeuroGambit, the only remaining EEG experience', () => {
+    expect(EXPERIENCE_IDS).toEqual(['neuro-gambit']);
     expect(Object.keys(EXPERIENCE_CATALOGUE).sort()).toEqual([...EXPERIENCE_IDS].sort());
-    expect(EXPERIENCE_CATALOGUE['narrative-story']).toMatchObject({ name: 'Contemplative Reading', description: 'Calm mindfulness reflections guided by neurofeedback therapy', researchUrl: 'https://doi.org/10.1145/1978942.1978958' });
-    expect(EXPERIENCE_CATALOGUE['eeg-mandala']).toMatchObject({ name: 'Generative Mandala', researchUrl: 'https://doi.org/10.1007/s10484-012-9204-4' });
-    for (const id of EXPERIENCE_IDS) expect(EXPERIENCE_CATALOGUE[id]).toMatchObject({ id, name: expect.any(String), description: expect.any(String), researchUrl: expect.stringMatching(/^https:\/\/doi.org\//) });
+    expect(EXPERIENCE_CATALOGUE['neuro-gambit']).toMatchObject({ id: 'neuro-gambit', name: 'NeuroGambit', description: expect.any(String) });
+    expect(EXPERIENCE_CATALOGUE['neuro-gambit']).not.toHaveProperty('researchUrl');
   });
 
-  it('keeps Home pills and Train cards on resolved X/Y, guards stale callbacks, and reselects after assignment changes', async () => {
-    const xy = profile(['skyline-drift', 'neuro-gambit', 'skyline-drift']);
+  it('keeps Home pills and Train cards on the resolved assignment and guards stale callbacks after it changes', async () => {
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(xy)); });
-    const home = renderer.root.findByType(HomeScreen);
-    const staleStart = home.props.onStartSession;
-    expect(text(renderer)).toContain('Skyline Drift');
+    await act(async () => { renderer = create(shell(profile(['neuro-gambit', 'neuro-gambit']))); });
+    const staleStart = renderer.root.findByType(HomeScreen).props.onStartSession;
     expect(text(renderer)).toContain('NeuroGambit');
-    expect(text(renderer)).not.toContain('Tidal Garden');
     train(renderer);
-    expect(card(renderer, 'Skyline Drift')).toBeDefined();
-    expect(card(renderer, 'NeuroGambit')).toBeDefined();
-    expect(card(renderer, 'Tidal Garden')).toBeUndefined();
-    const staleTrainClick = card(renderer, 'Skyline Drift').props.onClick;
-    act(() => staleStart('tidal-garden'));
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
-    await act(async () => { renderer.update(shell(profile(['narrative-story']))); });
-    expect(card(renderer, 'Contemplative Reading')).toBeDefined();
-    expect(text(renderer)).toContain(EXPERIENCE_CATALOGUE['narrative-story'].description);
-    expect(card(renderer, 'Skyline Drift')).toBeUndefined();
-    act(() => staleStart('skyline-drift'));
+    expect(cards(renderer)).toHaveLength(1);
+    const staleTrainClick = card(renderer, 'NeuroGambit')!.props.onClick;
+    await act(async () => { renderer.update(shell(profile([]))); });
+    expect(card(renderer, 'NeuroGambit')).toBeUndefined();
+    act(() => staleStart('neuro-gambit'));
     act(() => staleTrainClick());
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
-    await act(async () => { renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Home')!.props.onClick(); });
-    expect(text(renderer)).toContain('Calm mindfulness reflections guided by neurofeedback therapy');
-    expect(text(renderer)).not.toContain('Skyline Drift');
-    train(renderer);
-    act(() => card(renderer, 'Contemplative Reading').props.onClick());
-    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('narrative-story');
+    await act(async () => { renderer.update(shell(profile(['neuro-gambit']))); });
+    act(() => card(renderer, 'NeuroGambit')!.props.onClick());
+    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('neuro-gambit');
     await act(async () => { renderer.unmount(); });
   });
 
   it('preserves a running session across an assignment refresh', async () => {
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(profile(['skyline-drift']))); });
-    act(() => renderer.root.findByType(HomeScreen).props.onStartSession('skyline-drift'));
-    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('skyline-drift');
-    await act(async () => { renderer.update(shell(profile(['narrative-story']))); });
-    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('skyline-drift');
+    await act(async () => { renderer = create(shell(profile(['neuro-gambit']))); });
+    act(() => renderer.root.findByType(HomeScreen).props.onStartSession('neuro-gambit'));
+    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('neuro-gambit');
+    await act(async () => { renderer.update(shell(profile([]))); });
+    expect(renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.selectedExperience).toBe('neuro-gambit');
     await act(async () => { renderer.unmount(); });
   });
 
-  it('reselects a newly assigned Home card and blocks a stale Begin callback', async () => {
+  it('blocks a stale Begin callback after the assignment is removed and begins again once reassigned', async () => {
     const onStartSession = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<HomeScreen client={profile(['skyline-drift', 'neuro-gambit'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
+    await act(async () => { renderer = create(<HomeScreen client={profile(['neuro-gambit'])} onStartSession={onStartSession} />); });
     const staleBegin = begin(renderer);
-    await act(async () => { renderer.update(<HomeScreen client={profile(['narrative-story'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
-    expect(text(renderer)).toContain('Contemplative Reading');
-    expect(text(renderer)).not.toContain('Skyline Drift');
+    await act(async () => { renderer.update(<HomeScreen client={profile([])} onStartSession={onStartSession} />); });
+    expect(text(renderer)).toContain('No assigned experience');
     act(() => staleBegin());
     expect(onStartSession).not.toHaveBeenCalled();
-    act(() => begin(renderer)());
-    expect(onStartSession).toHaveBeenCalledWith('narrative-story');
-    onStartSession.mockClear();
-    await act(async () => { renderer.update(<HomeScreen client={profile(['skyline-drift', 'neuro-gambit'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
-    act(() => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.some((value) => typeof value === 'string' && value.includes('Skyline Drift'))).length > 0)!.props.onClick({ currentTarget: { scrollIntoView: vi.fn() } }));
-    await act(async () => { renderer.update(<HomeScreen client={profile(['neuro-gambit', 'skyline-drift'])} onStartSession={onStartSession} onNavigateTab={vi.fn()} />); });
+    await act(async () => { renderer.update(<HomeScreen client={profile(['neuro-gambit'])} onStartSession={onStartSession} />); });
     act(() => begin(renderer)());
     expect(onStartSession).toHaveBeenCalledWith('neuro-gambit');
     await act(async () => { renderer.unmount(); });
@@ -125,8 +105,7 @@ describe('patient assigned catalogue', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked)); });
     train(renderer);
-    expect(renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')).toHaveLength(tbr.length);
-    expect(readClientProfile({ ...profile([]), allowedExperiences: ['spatial-audio'] }).allowedExperiences).toEqual(['generative-music']);
+    expect(cards(renderer)).toHaveLength(tbr.length);
     expect(readClientProfile({ ...profile([]), allowedExperiences: [] }).allowedExperiences).toEqual([]);
     const missing = profile([]) as Partial<ClientProfile>;
     delete missing.allowedExperiences;
@@ -159,44 +138,38 @@ describe('patient assigned catalogue', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('keeps NeuroGambit excluded by a selected template after a persisted reload', async () => {
-    const template = getClinicalProtocolTemplate('alpha-enhancement')!;
-    expect(template.recommendedExperiences).not.toContain('neuro-gambit');
-    const persisted = { ...profile(EXPERIENCE_IDS), allowedExperiences: [...template.recommendedExperiences] };
-    const reloaded = readClientProfile(persisted);
-    expect(reloaded.allowedExperiences).toEqual(template.recommendedExperiences);
-    expect(readClientProfile(persisted).allowedExperiences).not.toContain('neuro-gambit');
-    expect(getAssignedExperienceIds(reloaded.allowedExperiences)).not.toContain('neuro-gambit');
-    expect(canStartAssignedExperience(reloaded.allowedExperiences, 'neuro-gambit')).toBe(false);
+  it('grants nothing for stored retired experience IDs and does not substitute NeuroGambit', async () => {
+    // A legacy profile can still name experiences that no longer exist; they are read as stored and ignored.
+    const retired = readClientProfile({ ...profile([]), allowedExperiences: ['skyline-drift', 'spatial-audio'] });
+    expect(retired.allowedExperiences).toEqual(['skyline-drift', 'spatial-audio']);
+    expect(getAssignedExperienceIds(retired.allowedExperiences)).toEqual([]);
+    expect(canStartAssignedExperience(retired.allowedExperiences, 'neuro-gambit')).toBe(false);
 
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(reloaded)); });
+    await act(async () => { renderer = create(shell(retired)); });
+    expect(text(renderer)).toContain('No assigned experience');
     expect(text(renderer)).not.toContain('NeuroGambit');
-    const staleHomeStart = renderer.root.findByType(HomeScreen).props.onStartSession;
-    act(() => staleHomeStart('neuro-gambit'));
+    act(() => renderer.root.findByType(HomeScreen).props.onStartSession('neuro-gambit'));
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
     train(renderer);
-    expect(card(renderer, 'NeuroGambit')).toBeUndefined();
-    expect(card(renderer, 'Mandala Breathing')).toBeDefined();
+    expect(cards(renderer)).toHaveLength(0);
     await act(async () => { renderer.unmount(); });
   });
 
   it('treats an explicit empty list as no Home or Train experiences and blocks stale starts', async () => {
     expect(getAssignedExperienceIds([])).toEqual([]);
     expect(canStartAssignedExperience([], 'neuro-gambit')).toBe(false);
-    expect(canStartAssignedExperience([], 'skyline-drift')).toBe(false);
     const empty = readClientProfile(profile([]));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(profile(['skyline-drift']))); });
+    await act(async () => { renderer = create(shell(profile(['neuro-gambit']))); });
     const staleStart = renderer.root.findByType(HomeScreen).props.onStartSession;
     await act(async () => { renderer.update(shell(empty)); });
     expect(text(renderer)).toContain('No assigned experience');
     expect(renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes(' Begin Session')).length > 0)?.props.disabled).toBe(true);
-    act(() => staleStart('skyline-drift'));
     act(() => staleStart('neuro-gambit'));
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'session-runner')).toHaveLength(0);
     train(renderer);
-    expect(renderer.root.findAll((node) => node.props.className === 'card-patient' && typeof node.props.onClick === 'function')).toHaveLength(0);
+    expect(cards(renderer)).toHaveLength(0);
     await act(async () => { renderer.unmount(); });
   });
 });

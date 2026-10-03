@@ -13,7 +13,6 @@ import { PostSessionSummary } from './PostSessionSummary';
 import { ProtocolDetailsModal } from './ProtocolDetailsModal';
 import { SelfDirectedSetupModal } from './SelfDirectedSetupModal';
 import { DisconnectClinicianDialog } from './DisconnectClinicianDialog';
-import { EducationHub } from './EducationHub';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
 import { PatientMessagingView } from './PatientMessagingView';
@@ -21,9 +20,10 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, BookOpen, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink, Calculator } from 'lucide-react';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink } from 'lucide-react';
 import { FactGrid, type Fact } from '../ui/FactGrid';
-import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
+import { canStartAssignedExperience } from './experienceCatalogue';
+import { TrainTab } from './TrainTab';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
@@ -41,13 +41,22 @@ import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
 } from '../../services/clinicalProtocolTemplates';
-import { MentalMathGame } from '../../consumer/games/mentalMath/MentalMathGame';
+import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
+import { GameScreen } from '../../consumer/games/GameScreen';
+import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
+import { useOpenGame } from '../../consumer/games/useOpenGame';
+import { HOME_ALL_RUNS_BUTTON_ID, HOME_PLAY_BUTTON_ID, HomeOverview } from '../../consumer/overview/HomeOverview';
+import { PROGRESS_PLAY_BUTTON_ID, ProgressOverview } from '../../consumer/overview/ProgressOverview';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
+import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
-// NFCT-21: Mental Math is reached from the Train tab until the consumer shell
-// exists (NFCT-6). Demo Mode's synthetic EEG is offered as an optional,
-// clearly simulated recording; the game never needs it.
+// NFCT-21, NFCT-12: games open from the Train tab's catalogue until the
+// consumer shell exists (NFCT-6). Demo Mode's synthetic EEG is offered as an
+// optional, clearly simulated recording; a game never needs it.
 const demoModeEegProvider = createDemoModeEegProvider();
+
+/** Where focus goes when a closed game's opener is gone: the current tab (NFCT-52). */
+const currentTabButton = () => document.querySelector<HTMLElement>('.patient-bottom-nav [aria-current="page"]');
 
 // Same day-month-year style as session history, so dates read alike across Profile and Progress.
 const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
@@ -86,19 +95,19 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   onInvitationAccepted,
   onInvitationDismissed,
 }) => {
-  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'education' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  // Home's "See all achievements" opens Progress at its achievements (NFCT-13). The request lasts
+  // only for the Progress visit it opened: leaving Progress drops it (see below, after activeTab).
+  const [progressFocus, setProgressFocus] = useState<'achievements' | null>(null);
+  const [progressFocusTab, setProgressFocusTab] = useState<string>('home');
   const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
-  const [mentalMathOwnerId, setMentalMathOwnerId] = useState<string | null>(null);
+  // The open catalogue game (NFCT-12), and the view it opens on: its start
+  // screen, or its progress (NFCT-22's Progress-tab card). Closing it returns
+  // focus to the control that opened it (NFCT-52).
+  const [openGame, setOpenGame, closeGame] = useOpenGame(currentTabButton);
   const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
-  const [sessionClient, setSessionClient] = useState<ClientProfile | null>(null);
-  const [gardenOpening, setGardenOpening] = useState<'idle' | 'pending' | 'error'>('idle');
-  const [gardenOpeningOwnerId, setGardenOpeningOwnerId] = useState<string | null>(null);
-  const [gardenOpeningError, setGardenOpeningError] = useState<string | null>(null);
-  const gardenRequestSequence = useRef(0);
   const currentClientId = useRef(client.id);
-  const currentClient = useRef(client);
   const currentAllowedExperiences = useRef(client.allowedExperiences);
-  useLayoutEffect(() => { currentClient.current = client; }, [client]);
   useLayoutEffect(() => { currentAllowedExperiences.current = client.allowedExperiences; }, [client.allowedExperiences]);
   useEffect(() => {
     currentClientId.current = client.id;
@@ -157,6 +166,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const isClinicianLinked = trainingAuthority === 'clinician';
   // Clinician-dependent destinations follow the live relationship; a hidden tab falls back to Home.
   const activeTab = isPatientTabAvailable(requestedTab, trainingAuthority) ? requestedTab : 'home';
+  // Any change to a tab other than Progress drops a pending "See all achievements" request, so a later,
+  // ordinary visit to Progress opens at the top (state adjusted while rendering, not in an effect).
+  if (progressFocusTab !== activeTab) {
+    setProgressFocusTab(activeTab);
+    if (activeTab !== 'progress' && progressFocus !== null) setProgressFocus(null);
+  }
   // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
   const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
     && client.acceptedInvitationId.toUpperCase() === initialInvitationCode.toUpperCase();
@@ -311,53 +326,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </form>
   ));
 
-  const handleStartSession = (exp: ExperienceType): void | Promise<void> => {
+  const handleStartSession = (exp: ExperienceType) => {
     if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
-    if (exp !== 'tidal-garden' || client.tidalGardenState) {
-      setSessionClient(null);
-      setSessionOwnerId(client.id);
-      setActiveSessionExp(exp);
-      return;
-    }
-    setGardenOpeningOwnerId(client.id);
-    setGardenOpening('pending');
-    setGardenOpeningError(null);
-    const requestSequence = ++gardenRequestSequence.current;
-    return (async () => {
-      try {
-        const ensured = await storageEngine.ensureTidalGardenState(client.id);
-        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
-        const latestClient = currentClient.current;
-        if (!canStartAssignedExperience(latestClient.allowedExperiences, exp)) {
-          setGardenOpening('idle');
-          return;
-        }
-        const assignmentChangedSinceRequest = latestClient.allowedExperiences.length !== client.allowedExperiences.length
-          || latestClient.allowedExperiences.some((id, index) => id !== client.allowedExperiences[index]);
-        const resolvedClient = latestClient === client
-          ? ensured
-          : {
-            ...latestClient,
-            allowedExperiences: assignmentChangedSinceRequest
-              ? latestClient.allowedExperiences : ensured.allowedExperiences,
-            tidalGardenState: latestClient.tidalGardenState ?? ensured.tidalGardenState,
-          };
-        onClientPersistedElsewhere(resolvedClient);
-        setGardenOpening('idle');
-        if (!canStartAssignedExperience(ensured.allowedExperiences, exp)) return;
-        setSessionClient(resolvedClient);
-        setSessionOwnerId(client.id);
-        setActiveSessionExp(exp);
-      } catch (error) {
-        if (gardenRequestSequence.current !== requestSequence || currentClientId.current !== client.id) return;
-        if (!canStartAssignedExperience(currentClient.current.allowedExperiences, exp)) {
-          setGardenOpening('idle');
-          return;
-        }
-        setGardenOpeningError(error instanceof Error ? error.message : 'Tidal Garden could not be opened.');
-        setGardenOpening('error');
-      }
-    })();
+    setSessionOwnerId(client.id);
+    setActiveSessionExp(exp);
   };
 
   const handleSessionComplete = async (session: SessionRecord) => {
@@ -395,7 +367,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         autoComplete="off"
         autoFocus={!!initialInvitationCode}
         className="font-mono"
-        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '14px', letterSpacing: '0.06em' }}
+        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '16px', letterSpacing: '0.06em' }}
       />
       <div style={{ color: 'var(--text-secondary)', fontSize: '11px', lineHeight: 1.4 }}>
         Use the code from your clinician. You must be signed in with the email address they invited.
@@ -427,30 +399,20 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     exportPatientSessionCsv(allSessions, setExportStatus);
   };
 
-  if (mentalMathOwnerId === client.id) {
-    return <MentalMathGame eegProvider={demoModeEegProvider} onExit={() => setMentalMathOwnerId(null)} />;
+  if (openGame && openGame.ownerId === client.id) {
+    return <GameScreen gameId={openGame.gameId} initialView={openGame.initialView} eegProvider={demoModeEegProvider} onExit={closeGame} />;
   }
 
   if (activeSessionExp && sessionOwnerId === client.id) {
     return (
       <SessionRunner
-        client={sessionClient?.id === client.id ? sessionClient : client}
+        client={client}
         onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
-        onCancel={() => { setActiveSessionExp(null); setSessionClient(null); }}
+        onCancel={() => setActiveSessionExp(null)}
       />
     );
-  }
-
-  if (gardenOpening !== 'idle' && gardenOpeningOwnerId === client.id) {
-    return <div style={{ padding: '24px' }}>
-      {gardenOpening === 'pending' ? <p>Opening Tidal Garden…</p> : <>
-        <p role="alert">{gardenOpeningError}</p>
-        <button className="btn btn-primary" onClick={() => void handleStartSession('tidal-garden')}>Retry</button>
-        <button className="btn btn-ghost" onClick={() => setGardenOpening('idle')}>Back</button>
-      </>}
-    </div>;
   }
 
   if (client.accountDeletionStartedAt) {
@@ -534,7 +496,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             <BrandLogo size={28} variant="terracotta" />
           )}
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{isClinicianLinked ? brand.name : 'Waveable'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{isClinicianLinked ? brand.name : APP_DISPLAY_NAME}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>
@@ -563,89 +525,41 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           <HomeScreen
             client={client}
             onStartSession={handleStartSession}
-            onNavigateTab={setActiveTab}
             onOpenProtocolDetails={() => setShowProtocolDetails(true)}
             onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
+            gamesSection={(
+              <HomeOverview
+                playerId={client.id}
+                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, returnFocusTo: HOME_PLAY_BUTTON_ID })}
+                onOpenAchievements={() => { setProgressFocus('achievements'); setActiveTab('progress'); }}
+                onOpenGameProgress={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: HOME_ALL_RUNS_BUTTON_ID })}
+              />
+            )}
           />
         )}
 
         {activeTab === 'sessions' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '30px' }}>
-            <div>
-              <h1 className="font-display" style={{ fontSize: '28px', fontWeight: 400 }}>
-                Training Modalities
-              </h1>
-              <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                Choose your experience and begin training.
-              </p>
-            </div>
-
-            <div className="train-grid">
-              {getAssignedExperienceIds(client.allowedExperiences).map(id => {
-                const exp = EXPERIENCE_CATALOGUE[id];
-                const Icon = exp.icon;
-                return (
-                  <div
-                    key={exp.id}
-                    onClick={() => handleStartSession(exp.id)}
-                    className="card-patient"
-                    style={{ background: exp.gradient }}
-                  >
-                    <div className="train-card-icon" aria-hidden="true">
-                      <Icon size={22} />
-                    </div>
-                    {/* The whole card starts the session; this button makes it reachable by keyboard and assistive tech. */}
-                    <button type="button" className="train-card-name" aria-describedby={`train-desc-${exp.id}`}>
-                      {exp.name}
-                    </button>
-                    <p id={`train-desc-${exp.id}`} className="train-card-desc">{exp.description}</p>
-                    <div className="train-card-foot">
-                      <span className="status-tag status-tag-active train-card-tag">{exp.badge}</span>
-                      {exp.researchUrl && (
-                        <a
-                          href={exp.researchUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="train-card-research"
-                          aria-label={`Research for ${exp.name} (opens in a new tab)`}
-                        >
-                          <BookOpen size={12} aria-hidden="true" /> Research
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <section aria-labelledby="train-games-title" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-              <div>
-                <h2 id="train-games-title" style={{ fontSize: '18px', fontWeight: 700 }}>Games</h2>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Cognitive games. No headset needed.</p>
-              </div>
-              <div className="train-grid">
-                <div className="train-game-card" onClick={() => setMentalMathOwnerId(client.id)}>
-                  <div className="train-card-icon" aria-hidden="true">
-                    <Calculator size={22} />
-                  </div>
-                  {/* The whole card opens the game; this button makes it reachable by keyboard and assistive tech. */}
-                  <button type="button" className="train-card-name" aria-describedby="train-desc-mental-math">
-                    Mental Math
-                  </button>
-                  <p id="train-desc-mental-math" className="train-card-desc">A 90-second arithmetic run that adapts as you play.</p>
-                  <div className="train-card-foot">
-                    <span className="status-tag status-tag-neutral train-card-tag">Game</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
+          <TrainTab
+            allowedExperiences={client.allowedExperiences}
+            onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: client.id, returnFocusTo: gameCardButtonId(gameId) })}
+            onStartExperience={handleStartSession}
+          />
         )}
 
-        {activeTab === 'education' && <EducationHub />}
-
-        {activeTab === 'progress' && <ProgressHistory client={client} />}
+        {activeTab === 'progress' && (
+          <ProgressHistory
+            client={client}
+            gamesSection={(
+              <ProgressOverview
+                playerId={client.id}
+                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, returnFocusTo: PROGRESS_PLAY_BUTTON_ID })}
+                focusSection={progressFocus}
+                onSectionFocused={() => setProgressFocus(null)}
+                games={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
+              />
+            )}
+          />
+        )}
 
         {activeTab === 'messages' && (
           <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
@@ -903,7 +817,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {[
           { id: 'home', label: 'Home', icon: Home },
           { id: 'sessions', label: 'Train', icon: Compass },
-          { id: 'education', label: 'Science', icon: BookOpen },
           { id: 'progress', label: 'Progress', icon: Activity },
           { id: 'messages', label: 'Messages', icon: MessageSquare },
           { id: 'appointments', label: 'Visits', icon: CalendarDays },

@@ -1,0 +1,49 @@
+name: Web (Linux)
+
+# Lint, the production build, unit tests and the typechecks. Manual, or called
+# by Pre-merge validation (ci.yml); nothing runs it on a push. Run the same
+# commands locally first (AGENTS.md "Checks"): this is the independent,
+# clean-machine run of them.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # github.workflow is the caller's name when called, so a manual run and a
+  # Pre-merge validation run of the same branch do not cancel each other.
+  group: ${{ github.workflow }}-web-${{ github.ref }}
+  cancel-in-progress: true
+
+# No secrets. Unit tests use an inert demo project. The embedded
+# brainflow_service/ is owned by the shared brainflow-service repository,
+# which runs its pytest suite; it is not tested here.
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      # @elata-biosciences/eeg-web-ble@0.12.0 declares a peer on a
+      # non-existent @elata-biosciences/eeg-web@^0.2.1.
+      - run: npm ci --legacy-peer-deps
+      - run: npm ci --prefix functions
+      - run: npm run check:isolation
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:e2e:typecheck
+      - run: npm run test:rules:typecheck
+      - run: npm run test:repositories:typecheck
+      - run: npm run functions:typecheck
+      - run: npm run functions:build

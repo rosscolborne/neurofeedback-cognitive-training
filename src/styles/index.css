@@ -3,6 +3,8 @@
    White-Label Neurofeedback Platform CSS Architecture
    ========================================================================== */
 
+@import './fonts.css';
+
 :root {
   /* White-Label Brand Tokens (Dynamically overridden via brandEngine) */
   --brand-primary: #E8967A;
@@ -76,31 +78,6 @@
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 }
 
-.eeg-mandala-experience {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 280px;
-  overflow: hidden;
-  border-radius: 24px;
-  background: #d4b895;
-  box-shadow: inset 0 0 0 1px rgba(96, 108, 56, 0.2);
-}
-
-.eeg-mandala-experience canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.eeg-mandala-vignette {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  box-shadow: inset 0 0 70px rgba(96, 108, 56, 0.24);
-}
-
 /* Base Reset */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -120,9 +97,31 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* iOS keeps text at the size the CSS sets; pinch-zoom enlarges it (NFCT-33:
+   index.html's viewport and capacitor.config.ts's ios.zoomEnabled). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 /* Form controls otherwise fall back to the browser's system and monospace fonts. */
 input, select, textarea, button {
   font-family: inherit;
+}
+
+/* Taps on controls act at once, and quick repeated taps never zoom the page. */
+a, button, input, label, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Modal overlays keep dialogs 16px from each edge and clear of the notch,
+   Dynamic Island and home indicator (the iOS web view draws under them). */
+.overlay-safe-area {
+  padding:
+    max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
 }
 
 /* Typography Utility Classes */
@@ -190,9 +189,25 @@ input, select, textarea, button {
   font-size: 16px;
 }
 
-.btn-primary:hover {
-  background-color: var(--brand-primary-hover);
-  transform: translateY(-1px);
+/* Hover styles apply only where a pointer can hover, so they never stick after a tap. */
+@media (hover: hover) {
+  .btn-primary:hover {
+    background-color: var(--brand-primary-hover);
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--brand-primary-subtle);
+  }
+
+  .btn-ghost:hover {
+    background-color: var(--surface-patient-recessed);
+    color: var(--text-primary);
+  }
+
+  .btn-dense:hover {
+    background-color: #2D3A44;
+  }
 }
 
 .btn-primary:active {
@@ -208,21 +223,12 @@ input, select, textarea, button {
   font-size: 15px;
 }
 
-.btn-secondary:hover {
-  background-color: var(--brand-primary-subtle);
-}
-
 .btn-ghost {
   background-color: transparent;
   color: var(--text-secondary);
   border-radius: var(--radius-md);
   padding: 8px 16px;
   font-size: 14px;
-}
-
-.btn-ghost:hover {
-  background-color: var(--surface-patient-recessed);
-  color: var(--text-primary);
 }
 
 .btn-dense {
@@ -232,10 +238,6 @@ input, select, textarea, button {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
-}
-
-.btn-dense:hover {
-  background-color: #2D3A44;
 }
 
 .messaging-search {
@@ -598,8 +600,10 @@ input, select, textarea, button {
   border-top: 0;
 }
 
-.list-row:hover:not(:disabled) {
-  background: var(--surface-patient-base);
+@media (hover: hover) {
+  .list-row:hover:not(:disabled) {
+    background: var(--surface-patient-base);
+  }
 }
 
 .list-row:focus-visible {
@@ -1483,43 +1487,110 @@ input, select, textarea, button {
   border: 0;
 }
 
-/* Train catalogue: choosing an experience is the job, research is a quiet secondary link. */
-.train-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.train-grid > .card-patient {
-  position: relative;
+/* Train (NFCT-12): the game catalogue, then optional headset training. Every
+   card is one row, icon beside the text, at every width: the shell column is
+   at most 480px, and a row leaves room for domains and facts. */
+.train-tab {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-5);
+  padding-bottom: 30px;
+}
+
+.train-tab-header h1 {
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.train-tab-header p {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.train-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.train-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.train-section-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.train-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.train-section-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.train-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The hairline card surface of .card-patient, which only the experience cards
+   carry (the e2e suites count them). */
+.train-grid > .train-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 4px;
+  align-items: start;
   min-width: 0;
   padding: 16px;
-  overflow: hidden;
+  background-color: var(--surface-patient-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.train-card > :not(.train-card-icon) {
+  grid-column: 2;
+  min-width: 0;
 }
 
 .train-card-icon {
   display: flex;
+  grid-row: 1 / span 4;
   align-items: center;
   justify-content: center;
   width: 42px;
   height: 42px;
-  margin-bottom: 4px;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--brand-primary-subtle);
   color: var(--brand-primary);
 }
 
 .train-card-name {
+  justify-self: start;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-primary);
-  font: 600 15px/1.25 var(--font-body);
+  font: 600 16px/1.3 var(--font-body);
   text-align: left;
   cursor: pointer;
 }
@@ -1529,7 +1600,7 @@ input, select, textarea, button {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  border-radius: var(--radius-lg);
 }
 
 .train-card-name:focus-visible {
@@ -1542,25 +1613,17 @@ input, select, textarea, button {
 }
 
 .train-card-desc {
-  display: -webkit-box;
   margin: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
   color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.train-card-foot {
+.train-card-tags {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
   gap: 6px;
-  width: 100%;
-  margin-top: auto;
-  padding-top: 6px;
+  margin: 4px 0 0;
 }
 
 .train-card-tag {
@@ -1568,84 +1631,46 @@ input, select, textarea, button {
   font-size: 11px;
 }
 
-/* A game on the Train tab (NFCT-21): styled like an experience card, but not
-   part of the assigned experience catalogue, so it is not a .card-patient. */
-.train-grid > .train-game-card {
-  position: relative;
+.train-card-foot {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-  padding: 16px;
-  overflow: hidden;
-  cursor: pointer;
-  background-color: var(--surface-patient-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  transition: border-color 0.2s ease;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.train-card-research {
-  position: relative;
-  z-index: 1;
+.train-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.train-card-fact {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  /* A utility link: quieter than the category tag and pushed to the far edge, away from the choice itself. */
+  gap: 5px;
+}
+
+.train-card-fact svg {
+  flex-shrink: 0;
   color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 500;
-  text-decoration: none;
 }
 
-.train-card-research:hover {
+.train-card-cta {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
   color: var(--brand-primary);
-}
-
-.train-card-research:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 1px;
-}
-
-/* Narrow phones: one experience per row, icon beside the text, so names and descriptions stay readable. */
-@media (max-width: 419px) {
-  .train-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .train-grid > .card-patient {
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
-    column-gap: 14px;
-    row-gap: 3px;
-    align-items: start;
-    padding: 14px 16px;
-  }
-
-  .train-card-icon {
-    grid-row: 1 / span 3;
-    margin-bottom: 0;
-  }
-
-  .train-card-name,
-  .train-card-desc,
-  .train-card-foot {
-    grid-column: 2;
-  }
-
-  .train-card-desc {
-    -webkit-line-clamp: 2;
-  }
-
-  .train-card-foot {
-    gap: 12px;
-    padding-top: 4px;
-  }
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* NeuroGambit compact controls. */
@@ -1694,8 +1719,10 @@ input, select, textarea, button {
   cursor: pointer;
 }
 
-.ng-quiet-action:hover {
-  background: var(--surface-patient-recessed);
+@media (hover: hover) {
+  .ng-quiet-action:hover {
+    background: var(--surface-patient-recessed);
+  }
 }
 
 .ng-quiet-action:focus-visible,
@@ -1777,8 +1804,10 @@ input, select, textarea, button {
   cursor: pointer;
 }
 
-.protocol-chip:hover {
-  border-color: var(--text-tertiary);
+@media (hover: hover) {
+  .protocol-chip:hover {
+    border-color: var(--text-tertiary);
+  }
 }
 
 .protocol-chip:focus-visible {
@@ -1816,10 +1845,6 @@ input, select, textarea, button {
 @keyframes gentleFloat {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
-}
-
-.animate-breathe {
-  animation: breathingPulse 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 .animate-float {
@@ -2035,8 +2060,10 @@ input, select, textarea, button {
   border-color: var(--account-deletion-red);
 }
 
-.account-deletion-trigger:hover {
-  background-color: var(--status-alert-bg);
+@media (hover: hover) {
+  .account-deletion-trigger:hover {
+    background-color: var(--status-alert-bg);
+  }
 }
 
 .account-deletion-finish {
@@ -2088,7 +2115,8 @@ input, select, textarea, button {
   border-radius: var(--radius-sm);
   background: #FFFFFF;
   color: var(--text-primary);
-  font-size: 13px;
+  /* 16px: iOS zooms into a smaller field on focus. */
+  font-size: 16px;
 }
 
 .account-deletion-password:focus-visible {
@@ -2122,8 +2150,10 @@ input, select, textarea, button {
   font-size: 13px;
 }
 
-.account-deletion-submit:hover:not(:disabled) {
-  filter: brightness(0.94);
+@media (hover: hover) {
+  .account-deletion-submit:hover:not(:disabled) {
+    filter: brightness(0.94);
+  }
 }
 
 .account-deletion-trigger:disabled,

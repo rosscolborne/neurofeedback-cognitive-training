@@ -14,7 +14,6 @@ const adminDb = getFirestore(initializeApp({ projectId }, `session-history-${ran
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-const EXPERIENCES = ['skyline-drift', 'tidal-garden', 'rhythm-lock', 'signal-sort', 'breath-weave'];
 const REFLECTIONS = ['Calmer by the end.', 'Hard to settle at first.', 'Felt steady and focused.', 'Tired but kept going.'];
 
 /** 12 sessions in the past week, 20 in the past 30 days, 28 in all; newest first. */
@@ -42,7 +41,7 @@ export async function seedSessionHistory(fixture: LocalPatientFixture, now = Dat
     const base = {
       id, patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
       patientName: fixture.name, timestamp, date: new Date(timestamp).toLocaleDateString(), schemaVersion: 2,
-      experience: EXPERIENCES[index % EXPERIENCES.length],
+      experience: 'neuro-gambit',
       protocol: index % 2 === 0 ? 'theta-beta-ratio' : 'alpha-enhancement',
       isDemo: false, adaptiveAdjustmentsCount: index % 4, finalThreshold: 0.6 + (index % 5) / 20,
     };

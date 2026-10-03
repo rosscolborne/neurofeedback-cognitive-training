@@ -1,213 +1,161 @@
-name: CI
+name: Pre-merge validation
 
+# The full remote validation a pull request into development needs before it
+# merges. Nothing runs it on a push: run it on the PR's branch once the final
+# head has passed the local checks (AGENTS.md "Completion and merge
+# readiness"):
+#
+#   gh workflow run ci.yml --ref <branch>
+#
+# It calls the Web (web.yml), Backend (backend.yml) and iOS (ios.yml)
+# workflows, skipping what the branch's changes relative to development
+# cannot affect (scripts/ci/classify-changes.sh), and reports one commit
+# status, "Pre-merge validation", on the head it validated. Checks from a
+# manual run do not appear on the pull request; that status does, so it is
+# what the development ruleset can require.
 on:
-  # Draft PRs report every job as skipped. Marking one ready for review
-  # (ready_for_review) runs the suite on its head; later pushes to a ready PR
-  # (synchronize) rerun it. Converting back to draft (converted_to_draft)
-  # starts a skipped run that cancels any in-progress one through the
-  # concurrency group; pushes while draft skip again.
-  pull_request:
-    branches: [development]
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
+    inputs:
+      full:
+        description: 'Run every job, including those the changes relative to development do not need'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A newer run on the same branch supersedes this one.
+  group: pre-merge-${{ github.ref }}
   cancel-in-progress: true
-
-# No secrets. Unit tests use an inert demo project, and every Firebase-backed
-# test runs against local emulators, except the nfct-dev canary: one consumer
-# journey against the real backend TestFlight uses, as an ordinary user with
-# nfct-dev's public web config (docs/nfct/nfct-dev-canary.md).
-# Nothing here deploys: the Cloud Functions codebase (functions/) is only
-# type-checked, built and tested on the emulators.
-# The embedded brainflow_service/ is owned by the shared brainflow-service
-# repository, which runs its pytest suite; it is not tested here.
 
 jobs:
   changes:
-    name: Code changes
-    # Draft pull requests skip the whole workflow; see the comment under `on:`.
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    name: Changes relative to development
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
     outputs:
       code: ${{ steps.filter.outputs.code }}
       backend: ${{ steps.filter.outputs.backend }}
+      native: ${{ steps.filter.outputs.native }}
+      scenarios: ${{ steps.filter.outputs.scenarios }}
+      behind: ${{ steps.filter.outputs.behind }}
     steps:
+      - name: Report the run as pending on the head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA"
+          -f state=pending -f context='Pre-merge validation'
+          -f description='Running' -f target_url="$TARGET_URL" > /dev/null
+      # Every branch's history, without file contents (the diff needs only
+      # names).
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      # Pull requests that change only documentation or agent instructions
-      # skip the emulator job; `web` always runs, since check:isolation scans
-      # every tracked file. The nfct-dev canary also skips changes that cannot
-      # alter how the web app talks to the backend (scripts/ci/classify-changes.sh).
-      # Any other change, a failed diff or classification, and manual runs
-      # run them.
+          fetch-depth: 0
+          filter: blob:none
+      # The branch's own changes: from where it left development to its head.
+      # Run on development itself the listing is empty, which runs
+      # everything, as do a failed diff or classification and `full`.
       - id: filter
         env:
-          EVENT: ${{ github.event_name }}
+          FULL: ${{ inputs.full }}
         run: |
-          if [ "$EVENT" != pull_request ]; then
-            printf 'code=true\nbackend=true\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # The checkout is the PR merged into its base: HEAD^1 is the base.
-          if ! git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt" ||
+          if [ "$FULL" = true ] ||
+            ! base=$(git merge-base origin/development HEAD) ||
+            ! git diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt" ||
             ! bash scripts/ci/classify-changes.sh "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/classes.txt"; then
-            printf 'code=true\nbackend=true\n' >> "$GITHUB_OUTPUT"
-            exit 0
+            printf 'code=true\nbackend=true\nnative=true\nscenarios=\n' > "$RUNNER_TEMP/classes.txt"
           fi
           tee -a "$GITHUB_OUTPUT" < "$RUNNER_TEMP/classes.txt"
+          # The run tests the head alone, not the merge GitHub will make, so
+          # the result fails a head that lacks development's latest commit
+          # (the jobs still run, for their findings).
+          if git merge-base --is-ancestor origin/development HEAD; then
+            echo "behind=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "behind=true" >> "$GITHUB_OUTPUT"
+            echo "::error::This head does not contain development's latest commit. Merge development into the branch, push, and run this again."
+          fi
 
   web:
-    # Draft pull requests skip the whole workflow; see the comment under `on:`.
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            functions/package-lock.json
-      # @elata-biosciences/eeg-web-ble@0.12.0 declares a peer on a
-      # non-existent @elata-biosciences/eeg-web@^0.2.1.
-      - run: npm ci --legacy-peer-deps
-      - run: npm ci --prefix functions
-      - run: npm run check:isolation
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
-      - run: npm run test:e2e:typecheck
-      - run: npm run test:rules:typecheck
-      - run: npm run test:repositories:typecheck
-      - run: npm run functions:typecheck
-      - run: npm run functions:build
+    uses: ./.github/workflows/web.yml
 
-  emulators:
-    runs-on: ubuntu-latest
+  backend:
     needs: [changes, web]
-    # A failed change detection runs the job rather than skipping it, since a
-    # skipped required check counts as passing. Drafts skip (web is skipped).
+    # Only after web passes. A failed change detection runs it rather than
+    # skipping it (see result).
     if: >-
       !cancelled() && needs.web.result == 'success' &&
-      (needs.changes.result == 'failure' || needs.changes.outputs.code == 'true')
-    timeout-minutes: 30
+      (needs.changes.result != 'success' || needs.changes.outputs.code == 'true')
+    uses: ./.github/workflows/backend.yml
+    with:
+      emulators: ${{ needs.changes.result != 'success' || needs.changes.outputs.code == 'true' }}
+      canary: ${{ needs.changes.result != 'success' || needs.changes.outputs.backend == 'true' }}
+
+  ios:
+    needs: changes
+    # Beside web, as before. A failed change detection runs everything.
+    if: >-
+      !cancelled() &&
+      (needs.changes.result != 'success' || needs.changes.outputs.code == 'true')
+    uses: ./.github/workflows/ios.yml
+    with:
+      native: ${{ needs.changes.result != 'success' || needs.changes.outputs.native == 'true' }}
+      scenarios: ${{ needs.changes.outputs.scenarios }}
+
+  result:
+    name: Pre-merge result
+    needs: [changes, web, backend, ios]
+    # Runs after a failure or cancellation too, so the status never stays
+    # pending and a skipped job never passes by accident.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            functions/package-lock.json
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/firebase/emulators
-          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - run: npm ci --legacy-peer-deps
-      - run: npm ci --prefix functions
-      - run: npm run test:rules
-      # Consumer repositories against the Auth and Firestore emulators, with firestore.rules loaded.
-      - run: npm run test:repositories
-      # Builds functions/lib, then runs the processing core on the Firestore
-      # emulator and the trigger on the Functions emulator (NFCT-19).
-      - run: npm run test:functions
-      - run: npx playwright test --project=permission-guard
-      # Local-emulator browser suite; Playwright uses /usr/bin/google-chrome.
-      - run: npm run test:e2e:protocol
-      # The nfct-dev canary's journey and cleanup, rehearsed on the emulators,
-      # so a red canary with a green rehearsal points at the backend.
-      - name: Rehearse the nfct-dev canary on the emulators
+      - name: Decide and report the commit status
         env:
-          NFCT_CANARY_TARGET: emulators
-        run: npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e "node scripts/canary/canary.mjs run"
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-results
-          path: test-results/
-          retention-days: 7
-
-  canary:
-    name: nfct-dev canary
-    needs: [changes, web]
-    # As for emulators: a failed change detection runs it, and drafts skip it
-    # (web is skipped). It runs beside the emulators job, not after it.
-    if: >-
-      !cancelled() && needs.web.result == 'success' &&
-      (needs.changes.result == 'failure' || needs.changes.outputs.backend == 'true')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # nfct-dev's web config, the same values as the Xcode Cloud workflow's
-    # environment. It is public (it ships in every build), so it lives in
-    # repository variables, not secrets. There are no secrets here: the
-    # canary signs up and cleans up as an ordinary user.
-    env:
-      NFCT_CANARY_TARGET: nfct-dev
-      VITE_FIREBASE_API_KEY: ${{ vars.NFCT_DEV_FIREBASE_API_KEY }}
-      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.NFCT_DEV_FIREBASE_AUTH_DOMAIN }}
-      VITE_FIREBASE_PROJECT_ID: ${{ vars.NFCT_DEV_FIREBASE_PROJECT_ID }}
-      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.NFCT_DEV_FIREBASE_STORAGE_BUCKET }}
-      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NFCT_DEV_FIREBASE_MESSAGING_SENDER_ID }}
-      VITE_FIREBASE_APP_ID: ${{ vars.NFCT_DEV_FIREBASE_APP_ID }}
-    steps:
-      # A fork's code would get the shared backend; a maintainer pushes the
-      # branch to this repository instead. Failing, not skipping, keeps the
-      # required check from passing.
-      - name: Same-repository pull requests only
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+          GH_TOKEN: ${{ github.token }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          BEHIND: ${{ needs.changes.outputs.behind }}
+          WEB: ${{ needs.web.result }}
+          BACKEND: ${{ needs.backend.result }}
+          IOS: ${{ needs.ios.result }}
         run: |
-          echo "::error::The nfct-dev canary does not run pull requests from forks. Push the branch to this repository and open the pull request from there."
-          exit 1
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci --legacy-peer-deps
-      - name: Build the production bundle with nfct-dev's web config
-        run: node scripts/canary/canary.mjs build
-      # Written before the account exists, so cleanup can find a partial run.
-      - name: Create the disposable identity
-        id: identity
-        env:
-          NFCT_CANARY_IDENTITY_FILE: ${{ runner.temp }}/nfct-canary/identity.json
-        run: node scripts/canary/canary.mjs prepare
-      # One fresh account, one iPhone-sized Chromium, no retries.
-      - name: Consumer journey against nfct-dev
-        env:
-          NFCT_CANARY_IDENTITY_FILE: ${{ runner.temp }}/nfct-canary/identity.json
-        run: npx playwright test --config playwright.canary.config.ts
-      # Runs after a failure or cancellation too. A cleanup problem is
-      # reported as a warning without changing the journey's result; the
-      # owner-run cleanup removes what is left.
-      - name: Clean up the disposable account
-        if: always() && steps.identity.outcome != 'skipped'
-        continue-on-error: true
-        env:
-          NFCT_CANARY_IDENTITY_FILE: ${{ runner.temp }}/nfct-canary/identity.json
-        run: node scripts/canary/canary.mjs cleanup
-      # Screenshots only: Playwright's error context records typed values,
-      # including the password, and this repository's artifacts are public.
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: nfct-dev-canary-screenshots
-          path: test-results/canary/**/*.png
-          if-no-files-found: ignore
-          retention-days: 7
+          failed=
+          [ "$WEB" = success ] || failed="$failed web=$WEB"
+          # Backend and iOS may skip only because the change detection ran and
+          # found documentation alone; any other skip fails.
+          for job in "backend=$BACKEND" "ios=$IOS"; do
+            result=${job#*=}
+            if [ "$result" = success ]; then continue; fi
+            if [ "$result" = skipped ] && [ "$CHANGES" = success ] && [ "$CODE" = false ]; then continue; fi
+            failed="$failed $job"
+          done
+          # A head that does not contain development's latest commit was not
+          # tested as it would merge. Unknown (failed change detection) counts
+          # as behind.
+          if [ "$BEHIND" != false ]; then failed="$failed behind-development"; fi
+          if [[ " $WEB $BACKEND $IOS " == *" cancelled "* ]]; then
+            state=error
+            description="Cancelled"
+          elif [ -n "$failed" ]; then
+            state=failure
+            description="Failed:$failed"
+          else
+            state=success
+            description="Passed on ${GITHUB_SHA:0:7}"
+          fi
+          echo "$state: $description"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" -f context='Pre-merge validation' \
+            -f description="$description" -f target_url="$TARGET_URL" > /dev/null
+          [ "$state" = success ]

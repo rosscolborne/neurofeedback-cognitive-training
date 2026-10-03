@@ -9,6 +9,7 @@ import {
   GameSessionAlreadySavedError,
   GameSessionOwnerChangedError,
   InvalidSessionSeedError,
+  type GameSessionHistoryPage,
   type GameSessionRecord,
 } from '../../src/consumer/repositories/gameSessionRepository';
 import {
@@ -431,3 +432,74 @@ describe('reading history', () => {
     expect(read.status === 'readable' && read.data.session.result?.validity).toBe('valid');
   });
 });
+
+describe('reading history rows (NFCT-22)', () => {
+  async function saveSessions(device: Awaited<ReturnType<typeof signedInDevice>>, endedMinutesAgo: number[]) {
+    const ids: string[] = [];
+    for (const minutes of endedMinutesAgo) {
+      const started = device.sessions.startGameSession();
+      await (await started.save({ definition: testGame, session: sessionDraft({}, minutes) })).acknowledged;
+      ids.push(started.sessionId);
+    }
+    return ids;
+  }
+
+  it('pages history rows newest first, and the live first page continues with the same cursor', async () => {
+    const device = await signedInDevice();
+    const newestFirst = (await saveSessions(device, [50, 40, 30, 20, 10])).reverse();
+
+    const pages: GameSessionHistoryPage[] = [];
+    const stop = device.sessions.subscribeToGameSessionHistory({ gameId: 'mental-math', pageSize: 2 }, (page) => pages.push(page), (error) => { throw error; });
+    await eventually(() => expect(pages.at(-1)?.entries.map((entry) => entry.id)).toEqual(newestFirst.slice(0, 2)));
+    stop();
+    const live = pages.at(-1)!;
+    expect(live.entries[0]!.session).toMatchObject({ gameId: 'mental-math', modeId: 'timed-90', startLevel: 1, status: 'completed', activeDurationMs: 90_000 });
+    expect(live.entries[0]).toMatchObject({ awaitingResult: true, hasPendingWrites: false });
+    // History rows never carry trials or the client's summary.
+    expect(Object.keys(live.entries[0]!.session)).not.toContain('trials');
+    expect(Object.keys(live.entries[0]!.session)).not.toContain('summary');
+
+    const second = await device.sessions.listGameSessionHistory({ gameId: 'mental-math', pageSize: 2, cursor: live.nextCursor });
+    const third = await device.sessions.listGameSessionHistory({ gameId: 'mental-math', pageSize: 2, cursor: second.nextCursor });
+    expect(second.entries.map((entry) => entry.id)).toEqual(newestFirst.slice(2, 4));
+    expect(third.entries.map((entry) => entry.id)).toEqual(newestFirst.slice(4));
+    expect(third.nextCursor).toBeNull();
+    await expect(device.sessions.listGameSessionHistory({ cursor: live.nextCursor })).rejects.toThrow(/different list/);
+  });
+
+  it('shows a session whose client summary the full reader refuses, with its trusted result', async () => {
+    const device = await signedInDevice();
+    const uid = device.player.uid;
+    const id = device.sessions.startGameSession().sessionId;
+    const path = `users/${uid}/gameSessions/${id}`;
+    // The rules accept any number in the display summary, NaN and the infinities included.
+    const written = sessionDocument(uid, { createdAt: serverTimestamp() });
+    await rawClientWrite(device, path, { ...written, summary: { ...(written.summary as object), score: Number.NaN, accuracy: Number.POSITIVE_INFINITY } });
+    // Trusted scoring records the disagreement as a diagnostic and still scores the trials.
+    await serverWrite({ [path]: { ...(await serverRead(path)), result: { ...trustedResult(), reasons: ['summary-mismatch'] } } });
+
+    const full = await device.sessions.listGameSessions({ gameId: 'mental-math' });
+    expect(full.sessions).toEqual([]);
+    expect(full.unreadable.map((item) => item.id)).toEqual([id]);
+
+    const history = await device.sessions.listGameSessionHistory({ gameId: 'mental-math' });
+    expect(history.unreadable).toEqual([]);
+    expect(history.entries).toHaveLength(1);
+    expect(history.entries[0]).toMatchObject({ id, awaitingResult: false });
+    expect(history.entries[0]!.session.result).toMatchObject({ validity: 'valid', score: 180, reasons: ['summary-mismatch'] });
+  });
+
+  it('reports a session no reader supports as unreadable, and pages past it', async () => {
+    const device = await signedInDevice();
+    const [saved] = await saveSessions(device, [30]);
+    const uid = device.player.uid;
+    await serverWrite({ [`users/${uid}/gameSessions/unreadable-session-0001`]: sessionDocument(uid, { schemaVersion: 99 }, 10) });
+
+    const first = await device.sessions.listGameSessionHistory({ pageSize: 1 });
+    const second = await device.sessions.listGameSessionHistory({ pageSize: 1, cursor: first.nextCursor });
+    expect(first.entries).toEqual([]);
+    expect(first.unreadable.map((item) => item.id)).toEqual(['unreadable-session-0001']);
+    expect(second.entries.map((entry) => entry.id)).toEqual([saved]);
+  });
+});
+

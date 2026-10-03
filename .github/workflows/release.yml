@@ -1,0 +1,39 @@
+name: Release (development → main)
+
+# The release-specific checks for a development → main promotion, which
+# TestFlight ships (Xcode Cloud builds every main commit). The development
+# validation is not repeated here: each pull request into development passed
+# Pre-merge validation (ci.yml). This runs what a release adds on the exact
+# tree main will hold: the production bundle's release check, and the Xcode
+# Cloud post-clone hook with an unsigned Release build on macOS. No WebKit
+# suite and no Simulator scenarios. "Require development source"
+# (main-source-guard.yml) stays the check on where the promotion comes from.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Release
+    # Drafts skip it; marking the promotion ready for review runs it. A pull
+    # request from anywhere but this repository's development fails "Require
+    # development source" and does not get macOS minutes.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'development')
+    uses: ./.github/workflows/ios.yml
+    with:
+      webkit: false
+      native: true
+      simulator: false

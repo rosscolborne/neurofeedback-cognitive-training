@@ -69,6 +69,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
 
   return (
     <div
+      className="overlay-safe-area"
       style={{
         position: 'fixed',
         inset: 0,
@@ -78,7 +79,6 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px',
       }}
     >
       <div
@@ -93,7 +93,7 @@ export const HeadsetFitModal: React.FC<HeadsetFitModalProps> = ({ onConfirmReady
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
-          maxHeight: '92vh',
+          maxHeight: '100%',
           overflowY: 'auto',
         }}
       >

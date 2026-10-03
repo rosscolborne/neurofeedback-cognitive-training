@@ -5,8 +5,10 @@ import {
   outcomeFromResult,
   readGameSession,
   readGameSessionFor,
+  readSessionAggregateFields,
   readSessionProgressFields,
   serverResultWriteSchema,
+  SESSION_AGGREGATE_FIELDS,
   SESSION_PROGRESS_FIELDS,
   SESSION_SEED_MAX,
   sessionProcessingWriteSchema,
@@ -277,6 +279,15 @@ describe('game session schema', () => {
       expect(readSessionProgressFields(projection)).toMatchObject({ gameId: 'fixture-game', startLevel: 2, result: session.result });
       expect(readSessionProgressFields(unprocessedSession()).result).toBeUndefined();
       expect(() => readSessionProgressFields({ ...projection, schemaVersion: 2 })).toThrow(DomainReadError);
+    });
+
+    it('adds only the local date for the stats (NFCT-13): still no trials, summary or client peak', () => {
+      const session = storedSession();
+      const projection = Object.fromEntries(SESSION_AGGREGATE_FIELDS.map((field) => [field, session[field]]));
+
+      expect([...SESSION_AGGREGATE_FIELDS].sort()).toEqual([...SESSION_PROGRESS_FIELDS, 'localDate'].sort());
+      expect(readSessionAggregateFields(projection)).toMatchObject({ localDate: '2026-09-29', startLevel: 2, result: session.result });
+      expect(() => readSessionAggregateFields({ ...projection, localDate: '2026-02-30' })).toThrow(DomainReadError);
     });
   });
 });

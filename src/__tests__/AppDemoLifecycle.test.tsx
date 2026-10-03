@@ -6,7 +6,7 @@ const authState = vi.hoisted(() => ({
   value: { user: { uid: 'demo-clinician', displayName: 'Sample clinician' }, role: 'clinician', loading: false, isDemoWorkspace: true, logout: vi.fn() } as Record<string, unknown>,
 }));
 const storage = vi.hoisted(() => ({
-  getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
+  getBrandConfig: vi.fn(() => ({ clinicId: 'app', name: 'NFCT', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' })),
   getClients: vi.fn(), getPatientInvitationsForClinician: vi.fn(), getCurrentClient: vi.fn(),
   subscribeToClientRoster: vi.fn((_onChange: () => void, _onError: (error: Error) => void) => vi.fn()),
   getClinicBrandConfig: vi.fn(), createPatientInvitation: vi.fn(), cancelPatientInvitation: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('../services/storageEngine', () => ({ storageEngine: storage }));
 vi.mock('../services/eegEngine', () => ({ eegEngine: baselineEngine }));
 vi.mock('../services/brandEngine', () => ({
   applyBrandToDOM: vi.fn(),
-  BRAND_PRESETS: [{ clinicId: 'app', name: 'Waveable', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }],
+  BRAND_PRESETS: [{ clinicId: 'app', name: 'NFCT', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }],
 }));
 vi.mock('../services/clinicSettingsRepository', () => ({
   clinicSettingsRepository: settings,
@@ -30,6 +30,7 @@ vi.mock('../components/clinician/ClinicianShell', () => ({ ClinicianShell: 'clin
 vi.mock('../components/patient/PatientShell', () => ({ PatientShell: 'patient-shell' }));
 vi.mock('../components/brand/ClinicCustomizerModal', () => ({ ClinicCustomizerModal: 'brand-modal' }));
 vi.mock('../components/brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
+vi.mock('../components/account/UnsyncedSignOutDialog', () => ({ UnsyncedSignOutDialog: 'unsynced-dialog' }));
 vi.mock('../pages/onboarding/Welcome', () => ({ Welcome: 'welcome-page' }));
 vi.mock('../pages/onboarding/SignUp', () => ({ SignUp: 'signup-page' }));
 vi.mock('../pages/onboarding/Login', () => ({ Login: 'login-page' }));
@@ -391,7 +392,7 @@ describe('mounted App account/workspace lifecycle', () => {
     });
 
     expect(shell(renderer).props.patientInvitations).toEqual([]);
-    expect(shell(renderer).props.brand.name).toBe('Waveable');
+    expect(shell(renderer).props.brand.name).toBe('NFCT');
     renderer.unmount();
   });
 
@@ -439,6 +440,76 @@ describe('mounted App account/workspace lifecycle', () => {
     await act(async () => { retry!.props.onClick(); await flush(); });
     expect(shell(renderer).props.patientInvitations).toEqual([{ id: 'retry-invitation' }]);
     expect(JSON.stringify(renderer.toJSON())).not.toContain('invitation query offline');
+    renderer.unmount();
+  });
+
+  it('keeps a signed-in account whose role is unknown on the loading screen with a retry, never role selection (NFCT-44)', async () => {
+    const retryRoleLookup = vi.fn();
+    const logout = vi.fn().mockResolvedValueOnce('unsynced');
+    const labels = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button').map((button) => button.children.join(''));
+    const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
+    // Still reading the role: the plain loading screen, nothing to act on.
+    authState.value = { user: { uid: 'patient-a' }, role: null, loading: true, roleLookupFailed: false, retryRoleLookup, isDemoWorkspace: false, logout, cacheStatus: 'idle' };
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    expect(rolePages(renderer)).toHaveLength(0);
+    expect(labels(renderer)).toEqual([]);
+
+    authState.value = { ...authState.value, roleLookupFailed: true };
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(rolePages(renderer)).toHaveLength(0);
+    expect(renderer.root.findByProps({ role: 'alert' }).findByType('strong').children.join('')).toBe('Your account couldn’t be loaded.');
+    expect(labels(renderer)).toEqual(['Try again', 'Sign out']);
+    expect(storage.getCurrentClient).not.toHaveBeenCalled();
+
+    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
+    await act(async () => { button('Try again').props.onClick(); });
+    expect(retryRoleLookup).toHaveBeenCalledOnce();
+
+    // Sign-out found unsynced writes and asks: a retry must not close that question.
+    const unsyncedDialog = () => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(logout).toHaveBeenCalledOnce();
+    expect(unsyncedDialog()).toHaveLength(1);
+    expect(button('Try again').props.disabled).toBe(true);
+    await act(async () => { unsyncedDialog()[0].props.onStaySignedIn(); });
+    expect(unsyncedDialog()).toHaveLength(0);
+    expect(button('Try again').props.disabled).toBe(false);
+
+    // Nor while a sign-out runs.
+    let finish!: (outcome: string) => void;
+    logout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(button('Try again').props.disabled).toBe(true);
+    expect(button('Sign out').props.disabled).toBe(true);
+    await act(async () => { finish('signed-out'); await flush(); });
+    expect(logout).toHaveBeenCalledTimes(2);
+    expect(retryRoleLookup).toHaveBeenCalledOnce();
+    renderer.unmount();
+  });
+
+  it('keeps the unsynced-writes question when the role arrives while it is open (NFCT-44 automatic retry)', async () => {
+    const logout = vi.fn().mockResolvedValueOnce('unsynced');
+    const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
+    const unsyncedDialog = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
+    authState.value = { user: { uid: 'patient-a' }, role: null, loading: true, roleLookupFailed: true, retryRoleLookup: vi.fn(), isDemoWorkspace: false, logout, cacheStatus: 'idle' };
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(unsyncedDialog(renderer)).toHaveLength(1);
+
+    // The lookup retried by itself and the server confirmed a new account: no role.
+    authState.value = { ...authState.value, loading: false, roleLookupFailed: false };
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(unsyncedDialog(renderer)).toHaveLength(1);
+    expect(rolePages(renderer)).toHaveLength(0);
+    expect(button('Try again').props.disabled).toBe(true);
+
+    // Staying signed in lets the app continue with the role it now has.
+    await act(async () => { unsyncedDialog(renderer)[0].props.onStaySignedIn(); await flush(); });
+    expect(unsyncedDialog(renderer)).toHaveLength(0);
+    expect(renderer.root.findAllByType('button').map((node) => node.children.join(''))).not.toContain('Try again');
     renderer.unmount();
   });
 });

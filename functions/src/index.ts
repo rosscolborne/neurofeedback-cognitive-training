@@ -14,8 +14,9 @@ import { sweepSessions } from './sweep';
 // deploys are manual, by the owner, to a named project (AGENTS.md).
 //
 // Trust boundary: this code is the only writer of `result` and `processing`
-// on users/{uid}/gameSessions/{sessionId} and of users/{uid}/progress/{gameId}
-// (the rules deny clients both). It trusts only the session document's path,
+// on users/{uid}/gameSessions/{sessionId}, of users/{uid}/progress/{gameId},
+// and of users/{uid}/stats/summary, dailyStats/{localDate} and
+// achievements/{id} (NFCT-13; the rules deny clients all of them). It trusts only the session document's path,
 // its server-clock createdAt, and its own frozen game-version modules; every
 // other field is client-written and re-derived or bounded. It never reads
 // eegRecordings. It reads accountDeletions/{uid} and writes nothing for a user
@@ -38,8 +39,9 @@ const context = processingContext(getFirestore(initializeApp()), {
 /**
  * Scores a newly created game session: validates it with its game version's
  * schemas, rescores it from its trials, runs the plausibility checks, and
- * writes `result` (performanceIndex null) and progress/{gameId} in one
- * transaction, exactly once. Retries are enabled; see handleSessionCreated.
+ * writes `result` (performanceIndex null), progress/{gameId}, stats/summary,
+ * dailyStats/{localDate} and any achievements it earns in one transaction,
+ * exactly once. Retries are enabled; see handleSessionCreated.
  */
 export const onGameSessionCreated = onDocumentCreated(
   { document: 'users/{uid}/gameSessions/{sessionId}', retry: true },

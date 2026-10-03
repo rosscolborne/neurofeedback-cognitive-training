@@ -5,6 +5,7 @@ import { createEegRecordingRepository } from './eegRecordingRepository';
 import { createGameSessionRepository } from './gameSessionRepository';
 import { createProfileRepository } from './profileRepository';
 import { createProgressRepository } from './progressRepository';
+import { createStatsRepository } from './statsRepository';
 
 // The consumer repositories, bound to the app's Firestore (persistent offline
 // cache) and Auth. UI code imports these; tests build their own with the
@@ -25,6 +26,7 @@ export const gameSessionRepository = createGameSessionRepository(context, {
   seedSource: import.meta.env.DEV ? e2eSessionSeedSource(import.meta.env) : undefined,
 });
 export const progressRepository = createProgressRepository(context);
+export const statsRepository = createStatsRepository(context);
 
 export { SignInRequiredError, InvalidDocumentIdError } from '../firestore/context';
 export type { DocumentRead, SnapshotState, UnreadableDocument } from '../firestore/reads';
@@ -47,6 +49,8 @@ export {
   InvalidSessionSeedError,
   type GameSessionCursor,
   type GameSessionDraft,
+  type GameSessionHistoryEntry,
+  type GameSessionHistoryPage,
   type GameSessionPage,
   type GameSessionRecord,
   type GameSessionRepository,
@@ -58,3 +62,4 @@ export {
   type StartedGameSession,
 } from './gameSessionRepository';
 export type { ProgressRepository, ProgressWithRecentSessions } from './progressRepository';
+export type { AchievementsRead, DailyStatsRead, StatsRepository } from './statsRepository';

@@ -1,0 +1,510 @@
+/* Home and Progress around game performance (NFCT-13). Same column, surfaces and tokens as the patient app. */
+
+.ov-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ov-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-patient-card);
+}
+
+.ov-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 44px;
+  margin: calc(-1 * var(--space-2)) 0;
+}
+
+.ov-card-title {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* A heading focused from another screen: clear of the sticky top bar, focused without a ring (it is not a control). */
+.ov-scroll-target {
+  scroll-margin-top: calc(88px + env(safe-area-inset-top, 0px));
+}
+
+.ov-scroll-target:focus {
+  outline: none;
+}
+
+.ov-help {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ov-eyebrow {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---- Play (Home's primary action) ---- */
+
+.ov-hero {
+  gap: var(--space-4);
+}
+
+.ov-hero-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ov-hero-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background-color: var(--brand-primary-subtle);
+  color: var(--brand-primary);
+}
+
+.ov-hero-title {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+/* Two lines reserved, so the message never moves the button when the stats arrive. */
+.ov-hero-text {
+  min-height: calc(2 * 1.45em);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.ov-play {
+  width: 100%;
+  min-height: 52px;
+}
+
+/* ---- Streak ---- */
+
+.ov-streak-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ov-streak-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-tertiary);
+}
+
+.ov-streak-main[data-alive='true'] .ov-streak-icon {
+  background-color: var(--brand-primary-subtle);
+  color: var(--brand-primary);
+}
+
+.ov-streak-figure {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ov-streak-value {
+  color: var(--text-primary);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ov-streak-unit {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Seven days, one column each. */
+.ov-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ov-week-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-patient-recessed);
+  color: var(--brand-on-primary);
+}
+
+.ov-week-day[data-trained='true'] .ov-week-dot {
+  background-color: var(--brand-primary);
+}
+
+.ov-week-day[data-today='true'] .ov-week-dot {
+  border-color: var(--brand-primary);
+}
+
+.ov-week-day[data-future='true'] .ov-week-dot {
+  background-color: transparent;
+  border: 1.5px dashed var(--border-default);
+}
+
+.ov-week-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.ov-week-day[data-today='true'] .ov-week-label {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.ov-divider {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---- Weekly goal ---- */
+
+.ov-goal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ov-goal-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ov-goal-label {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ov-goal-value {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background-color: var(--brand-primary-subtle);
+}
+
+.ov-meter-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background-color: var(--brand-primary);
+}
+
+/* ---- Achievements ---- */
+
+.ov-achievements {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov-ach {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ov-ach:last-child {
+  border-bottom: 0;
+}
+
+.ov-ach-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-tertiary);
+}
+
+.ov-ach[data-earned='true'] .ov-ach-icon {
+  background-color: var(--status-completed-bg);
+  color: var(--status-completed);
+}
+
+.ov-ach-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ov-ach-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ov-ach[data-earned='false'] .ov-ach-title {
+  color: var(--text-secondary);
+}
+
+.ov-ach-desc {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ov-ach-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.ov-ach[data-earned='true'] .ov-ach-meta {
+  color: var(--status-completed);
+}
+
+.ov-subheading {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---- Progress: all-time figures ---- */
+
+.ov-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-3);
+  margin: 0;
+}
+
+.ov-kpis > div {
+  min-width: 0;
+}
+
+.ov-kpis dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ov-kpis dd {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* ---- Progress: activity calendar ---- */
+
+.ov-segmented {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-xl);
+  background-color: var(--surface-patient-recessed);
+}
+
+.ov-segment {
+  flex: 1;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 14px var(--font-body);
+  cursor: pointer;
+}
+
+.ov-segment[aria-pressed='true'] {
+  background-color: var(--surface-patient-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.ov-segment:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.ov-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  text-align: center;
+}
+
+.ov-totals > div {
+  min-width: 0;
+}
+
+.ov-totals > div + div {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.ov-totals dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.ov-totals dd {
+  margin: 0 0 2px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+/* Values above their labels, in a grid that keeps the labels on one line. */
+.ov-totals > div {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+}
+
+.ov-cal-head,
+.ov-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov-cal-head {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.ov-cal-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 36px;
+  max-height: 52px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov-cal-day[data-active='true'] {
+  background-color: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+
+.ov-cal-day[data-today='true'] {
+  border-color: var(--brand-primary);
+}
+
+.ov-cal-day[data-today='true'][data-active='false'] {
+  color: var(--text-primary);
+}
+
+.ov-cal-day[data-future='true'] {
+  border: 1.5px dashed var(--border-default);
+  background-color: transparent;
+  color: var(--text-secondary);
+}
+
+/* ---- Empty states ---- */
+
+.ov-empty {
+  align-items: flex-start;
+}
+
+.ov-empty .btn {
+  width: 100%;
+  min-height: 48px;
+}
+
+.ov-status {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 360px) {
+  .ov-card {
+    padding: var(--space-4);
+  }
+
+  .ov-week-dot {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ov-kpis dd {
+    font-size: 20px;
+  }
+}

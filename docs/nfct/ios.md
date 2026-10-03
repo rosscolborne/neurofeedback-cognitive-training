@@ -33,7 +33,10 @@ nothing:
    disagree.
 
 The display name and icon can change at any time; NFCT-34 sets the public
-ones.
+ones. The app's own screens name the product with `APP_DISPLAY_NAME` in
+`src/config/appIdentity.ts`, which a test keeps equal to `appName`, so a
+rename changes `appName`, `CFBundleDisplayName` in `ios/App/App/Info.plist`
+and `APP_DISPLAY_NAME` together.
 
 NFCT is a new app in the same Apple Developer account that holds Waveable's
 app, so only the app's own identity had to change. NFCT-30 replaced
@@ -64,6 +67,7 @@ Xcode Cloud workflow and app record belong to Waveable; NFCT gets its own
 | Devices | iPhone only | `TARGETED_DEVICE_FAMILY = 1` | Not Mac ("Designed for iPhone") or Vision Pro |
 | Orientation | Portrait on iPhone | `Info.plist` | The iPad key keeps all four, for later |
 | Appearance | Light | `UIUserInterfaceStyle`, `SystemBars.style` | Keeps the status bar legible in Dark Mode; the app has no dark theme |
+| Pinch-zoom | On | `ios.zoomEnabled` in `capacitor.config.ts`; the viewport in `index.html` | Capacitor disables web-view zoom by default; both settings are needed (NFCT-33) |
 | Bluetooth | Optional | `NSBluetoothAlwaysUsageDescription` | Not a required capability: EEG is optional |
 | Camera | On request | `NSCameraUsageDescription` | The profile picture's Take Photo |
 | Web inspection | Debug only | `ios/debug.xcconfig` sets `CAPACITOR_DEBUG` | Release builds are not inspectable and do not log |
@@ -83,7 +87,7 @@ iPad:
    orientations;
 3. update the device-support test in `scripts/__tests__/ios-project.test.mjs`
    and `scripts/ios/check-built-app.mjs`;
-4. run NFCT-33's iPad checks and add an iPad Simulator to the smoke test.
+4. run NFCT-33's iPad checks and add an iPad Simulator to the Simulator scenarios.
 
 ## Build and run
 
@@ -147,26 +151,30 @@ a higher one.
 
 | # | Layer | Proves | Runs | Needs |
 | --- | --- | --- | --- | --- |
-| 1 | Desktop Chromium Playwright | Normal browser regressions | `ci.yml`, every PR | Linux |
-| 2 | Playwright WebKit, iPhone SE (3rd gen) and iPhone 17 profiles | WebKit engine differences; small-screen, touch and mobile layout | `ios.yml` `webkit`, every PR; `npm run test:e2e:webkit` | Linux |
-| 3 | Native build and iOS Simulator | The project compiles; Release is safe; the app launches, signs up and restores its session in WKWebView at `capacitor://localhost` | `ios.yml` `native`, GitHub-hosted macOS | Nothing local |
-| 4 | Physical iPhone | Suspension, interruptions, the keyboard, IndexedDB durability, real performance | NFCT-32 checklist | The owner's iPhone and signing |
-| 5 | Real Muse headset | Bluetooth, acquisition, signal quality | NFCT-15 | Hardware |
+| 1 | Desktop Chromium Playwright | Normal browser regressions | Locally; Backend (`backend.yml`) in [Pre-merge validation](ci.md) | Linux |
+| 2 | Interactive Chromium at iPhone sizes (iPhone SE (3rd gen) and iPhone 17 profiles) | Layout, overflow, clipping and touch targets at phone sizes, operated by an agent in real Chrome. Chromium mobile emulation: not iOS or Safari evidence | [Exploratory QA](../../.agents/skills/nfct-exploratory-qa/SKILL.md) of every user-facing change | Linux |
+| 3 | Playwright WebKit, iPhone SE (3rd gen) and iPhone 17 profiles | WebKit engine differences; small-screen, touch and mobile layout | `npm run test:e2e:webkit`; `ios.yml` `webkit` in [Pre-merge validation](ci.md) | Linux |
+| 4 | Native build and iOS Simulator | The project compiles; Release is safe; in WKWebView at `capacitor://localhost`, the [Simulator scenarios](#simulator-scenarios) pass through the real UI: sign-up and relaunch, a whole Mental Math run saved, backgrounding pauses a run, a kill mid-run saves nothing; weekly on the [oldest supported iOS](#the-minimum-ios-runtime) | `ios.yml` `native`, GitHub-hosted macOS, by hand or in [Pre-merge validation](ci.md); Release build only on promotions to `main` | Nothing local |
+| 5 | Physical iPhone | Interruptions that never hide the page, the software keyboard, IndexedDB durability, real performance | NFCT-32 checklist | The owner's iPhone and signing |
+| 6 | Physical iPhone with a Muse headset | Bluetooth, acquisition and signal quality on the device | NFCT-15 | The iPhone and a headset |
 
-Alongside these, `ios.yml` `release-bundle` runs on every PR. It builds and
-syncs the production bundle, runs `verify:ios-release`, and shows that the
-check fails on the emulator bundle.
+Alongside these, `ios.yml` `release-bundle` runs in Pre-merge validation and
+on every promotion to `main`. It builds and syncs the production bundle, runs
+`verify:ios-release`, and shows that the check fails on the emulator bundle.
 
-Known intermittent failure until NFCT-44 is fixed: the inherited role
-lookup gives up after 1.8 s and sends a signed-in user to role selection. A
-slow first Firestore connection in WebKit occasionally hits it, in the WebKit
-job and in the Simulator smoke relaunch. That is a product bug, not test
-flakiness, so it is not retried away.
+A signed-in account whose role has not been read yet stays on the loading
+screen; a failed read, or none within 15 s, shows a retryable error, never role
+selection (NFCT-44). After a transient failure (offline, or only the device
+cache answered) the app also retries by itself, after 2 s and then backing off
+to every 10 s, so a brief outage after sign-up recovers without a tap. The
+relaunch checks give that screen 25 s to move on and report how long it
+showed; one still showing it then has found a product bug, and no scenario
+taps Try again.
 
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView. It does not
 prove older iOS versions, the `capacitor://` origin, suspension, the software
-keyboard, safe areas or Bluetooth. Layer 3 adds the real WKWebView and origin.
-Layer 4 adds what only a device shows.
+keyboard, safe areas or Bluetooth. Layer 4 adds the real WKWebView, the
+origin and iOS's own app lifecycle. Layer 5 adds what only a device shows.
 
 ### The macOS job (`ios.yml` `native`)
 
@@ -182,35 +190,196 @@ Xcode version and Simulator runtimes. In order:
    inspectable), a production web bundle and a safe synced config;
 4. a negative test: a Release build with the emulator bundle must fail in the
    guard build phase;
-5. the Simulator smoke test (`scripts/ios/simulator-smoke.mjs`): an emulator
-   Debug build on an iPhone Simulator, with a probe added to that build only.
-   Against the Auth and Firestore emulators it checks that:
-   - Capacitor loads `capacitor://localhost` and `location.origin` is
-     `capacitor://localhost`;
-   - the origin is a secure context and `crypto.randomUUID` exists;
-   - sign-up and the first Firestore write work through the real UI;
-   - a cold relaunch restores the session;
-   - no uncaught JavaScript errors occur.
+5. the [Simulator scenarios](#simulator-scenarios): an emulator Debug build,
+   with the page agent added to that build only, on an iPhone Simulator
+   against the Auth and Firestore emulators. Every scenario, on every launch,
+   also checks that Capacitor loads `capacitor://localhost`, that
+   `location.origin` is `capacitor://localhost`, that the origin is a secure
+   context with `crypto.randomUUID`, and that no uncaught JavaScript error
+   occurs.
 
-   It saves logs and light and Dark Mode screenshots as the
-   `ios-simulator-smoke` artifact, and a summary on the run page.
+   The `ios-simulator-scenarios` artifact holds, per scenario, the
+   checkpoint screenshots, each launch's console log, `steps.json` (every
+   tap, fill and wait, with timings, and what the page showed at each
+   checkpoint), and overall `summary.md` and `results.json`. The summary is
+   also on the run page.
 
-Pull requests run it only when they change native-relevant paths:
+`ios.yml` runs by hand, from [Pre-merge validation](ci.md), from Release on
+development → main promotions (stopping after step 4), and weekly; nothing
+runs it on a push. Pre-merge validation skips the release-bundle, WebKit and
+native jobs for a branch that changes only documentation or agent
+instructions.
 
-- `ios/`, `capacitor.config.*`, `package-lock.json`, `vite.config.ts`;
-- the iOS scripts and the workflow;
-- the Firebase setup and the onboarding screens, which the smoke test uses.
+Simulator CI is optional for ordinary feature work. Pre-merge validation runs
+the native job only for a native or iOS-sensitive change, or when change
+detection fails (`scripts/ci/classify-changes.sh`). That means:
 
-Pushes to `main` and manual runs always run it. A skipped job reports success,
-so the job can be a required check.
+- the native build's own inputs: `ios/`, `ci_scripts/`, `capacitor.config.*`,
+  `package.json`, `package-lock.json` (the Swift packages come from
+  `node_modules`), `.nvmrc`, `vite.config.ts` (the bundle's base path under
+  `capacitor://`), `scripts/verify-ios-release.mjs`, the iOS scripts and
+  `ios.yml`;
+- app code that calls native APIs through Capacitor (`@capacitor/…`,
+  `Capacitor.…`), detected in the changed files themselves: today
+  `MentalMathGame.tsx`, `eegEngine.ts` and `pdfReportGenerator.ts`.
+
+Documentation and tests never count. Web code the scenarios merely drive does
+not count either: the app shell, sign-in, onboarding, the Train tab and the
+game screens. The WebKit and emulator suites cover it.
+
+Pre-merge validation runs every scenario when the branch changes the iOS
+scripts or `ios.yml`, and only `smoke` otherwise. A manual run of `ios.yml`
+runs every scenario unless told otherwise. The weekly run runs `smoke` on the
+oldest supported iOS, against `development`.
+
+When a web change could still matter on iOS, run the scenarios for it by
+hand, for example `-f webkit=false -f scenarios=mental-math`
+([below](#running-scenarios-from-an-agent-or-a-terminal)).
 
 To move to a newer Xcode, change `XCODE_APP` and the Swift package cache key
 in `ios.yml` to a version that has a Simulator runtime on the image
 ([runner images](https://github.com/actions/runner-images/tree/main/images/macos)).
 
-The smoke test exercises the inherited onboarding (sign-up, then the role
-choice). When onboarding changes, update `scripts/ios/simulator-probe.js` with
-it, as for `e2e/helpers/auth.ts`.
+### Simulator scenarios
+
+The scenarios drive the real app in the real Simulator, through its visible
+UI, with no dependency beyond Node and Xcode:
+
+- the **page agent** (`scripts/ios/simulator-probe.js`), added only to the
+  emulator Debug build, finds elements as a user would: by role and
+  accessible name, visible text or placeholder. Before each tap it checks
+  that the target's centre is inside the visual viewport and that the
+  topmost element there is the target, so an overlay, a sticky bar or a
+  clipped control fails the step instead of being clicked through. It then
+  sends the DOM events a finger tap produces (pointer, touch, mouse, click);
+- the **host driver** (`scripts/ios/simulator-driver.mjs`) sends one command
+  at a time over HTTP on the Simulator's loopback, port 8735, the same way
+  the app reaches the emulators. It drives the lifecycle with `simctl`
+  (background: launch Settings; foreground: launch the app again, which
+  resumes it; kill: `simctl terminate`), takes the screenshots with `simctl
+  io`, and reads the Auth and Firestore emulators over REST, loopback and
+  `demo-` projects only;
+- the **scenarios** (`scripts/ios/simulator-scenarios.mjs`) are short async
+  functions. Each starts from a fresh install and a new account.
+
+| Scenario | Proves in the Simulator | Does not prove |
+| --- | --- | --- |
+| `smoke` | Sign-up and the role choice (a Firestore write) through the real UI; a cold relaunch restores the session and role, or names the screen it landed on (role selection, "Your account couldn't be loaded", signed out); light and Dark Mode screenshots | Real touches or typing through the software keyboard |
+| `mental-math` | Train tab, Mental Math, level 1; a whole 90-second run answered on the on-screen keypad by reading and solving each question (one answer deliberately wrong); the end-of-run screen (`#mm-handoff-title`); exactly one session in the Firestore emulator: completed, 90 s active, `client.platform` `ios`, its answered trials exactly the responses typed, each marked correct or wrong as answered | Trusted scoring (the Functions emulator does not run here; `test:functions` covers it), the post-run summary's content (NFCT-22), real performance |
+| `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the time the page is hidden counts, the run stays paused until the player resumes, and Resume shows a different question from the one the pause discarded. It records when iOS's events arrive (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`, on the wall clock the host shares) and checks that the page is hidden within a second of iOS's native signal. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
+
+On an app switch in the Simulator, iOS sends the page Capacitor's `pause`,
+the window's `blur` and `visibilitychange` (hidden) together, so NFCT-21's
+visibility-based pause holds there. `lifecycle` checks they stay within a
+second of each other. The interruptions that make the app inactive without
+hiding the page stay on NFCT-32's device checklist.
+
+The scenarios use what a user sees plus a few stable hooks: the Mental Math
+HUD's `data-hud` attributes, `.mm-question`, `.mm-feedback`, `.mm-paused` and
+the end-of-run heading's id. When onboarding, the Train tab or Mental Math
+change, update the scenarios with them, as for `e2e/helpers/auth.ts`.
+
+Simulator evidence is not device evidence, and Playwright WebKit is not
+Simulator evidence.
+
+#### Running scenarios from an agent or a terminal
+
+Any branch, any scenarios, no Mac. A manual run runs the native job (unless
+`-f native=false`), on GitHub-hosted macOS, whose minutes cost ten times Linux
+minutes: run only the scenarios you need. `-f webkit=false` leaves out the
+WebKit suite when you run it locally instead.
+
+```bash
+branch=$(git branch --show-current)
+gh workflow run ios.yml --ref "$branch" -f webkit=false -f scenarios='mental-math'   # or: smoke lifecycle; empty runs all
+sleep 10
+run=$(gh run list --workflow ios.yml --branch "$branch" --event workflow_dispatch --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$run" --exit-status > /dev/null                         # about 10 minutes for all three
+gh run download "$run" -n ios-simulator-scenarios -D "ios-sim-$run"   # outside the repository
+cat "ios-sim-$run/summary.md"
+```
+
+Then look at the screenshots (`<scenario>/NN-<checkpoint>.png`; a failed
+scenario adds `NN-failure.png`) and, for a failure, the `Stopped at` step in
+the summary, the screen outline the page itself saw when the step gave up,
+`steps.json` and the launch logs. The agent also measures how long the page's
+main thread stalls during a wait: a stall over two seconds is reported in the
+summary, and a page frozen past a step's deadline gets a two-second grace to
+render before the step fails. `node scripts/ios/simulator-smoke.mjs list` describes the scenarios.
+
+Two steps wait on the backend: Create Account → role selection, and Skip to
+Dashboard → the dashboard. Each gets 30 s. On GitHub's macOS runner the
+Simulator's connection to the Firestore emulator sometimes stops answering
+for 30 to 45 s (NFCT-50). Meanwhile the app shows its own waiting screen: the
+role lookup's loading screen, its error screen while it retries by itself, or
+"Preparing your patient profile…". It carries on as soon as Firestore
+answers.
+
+- **Runs out of time on that waiting screen:** the step gets up to 60 s more,
+  as long as the waiting screen stays up.
+- **Arrives within those 60 s:** the step passes with a `Simulator backend
+  stall (NFCT-50)` warning on the run and a note in the summary.
+- **An error, any other screen, or no arrival:** the step still fails.
+
+The Linux journeys give the same steps 15 s, so they catch a slowdown in the
+app itself.
+
+A new scenario is an entry in `SCENARIOS`: an async `run(ctx)` using
+`ctx.launch()`, `ctx.relaunch()`, `ctx.app.tap/fill/wait/read`,
+`ctx.device.background()`/`foreground()`/`appearance()`, `ctx.checkpoint(name)`,
+`ctx.check(name, ok, detail)` and `ctx.emulators`. The agent and host logic
+have Linux tests (`scripts/__tests__/simulator-*.test.mjs`): the launch-log
+judgement, the HTTP protocol, the question solver against the shared game,
+and the Firestore decoding.
+
+### The minimum iOS runtime
+
+The image has only its newest runtimes, and Playwright WebKit is always the
+latest WebKit, so neither shows that the bundle still runs on the oldest iOS
+the app supports (16.4). The native job therefore runs weekly (Mondays)
+against `development` with the `smoke` scenario on iOS 16.4 (GitHub runs
+schedules from the default branch, so the weekly run starts once this
+workflow is on `main`): `scripts/ios/simulator-runtime.mjs`
+downloads the runtime (`xcodebuild -downloadPlatform iOS -buildVersion`),
+creates an iPhone SE (3rd generation), the smallest supported screen, and
+boots it. If a runtime cannot be installed or booted, it tries the next one
+listed (17.5, then 18.6), and the run summary and a warning say which runtime
+was used instead. The runtime is several gigabytes, so only this run and an
+explicit `ios_runtimes` use it. On demand, for any branch:
+
+```bash
+gh workflow run ios.yml --ref "$branch" -f webkit=false -f ios_runtimes='16.4 17.5 18.6' -f scenarios=smoke
+```
+
+The first run (1 October 2026, run 36837500419) installed iOS 16.4 (20E247)
+with Xcode 26.5 on `macos-26` in about three and a half minutes, and all
+three scenarios passed on an iPhone SE (3rd generation) in iOS 16.4's
+WKWebView. The weekly run uses `smoke` only, to stay short; run all three on
+demand after an upgrade of Vite, Capacitor or the build target.
+
+### Real touch, the keyboard and system UI
+
+The page agent's taps are DOM events in the page, not touches through iOS.
+They prove the flow, the layout's hit-testing and the app's behavior, but not
+gesture recognizers, `isTrusted` events, the software keyboard, permission
+prompts or system UI. Options for those, considered for NFCT-39:
+
+| Option | Would add | Cost and robustness |
+| --- | --- | --- |
+| XCUITest (a UI-test target, possibly generated in CI so the committed project and its contract test stay unchanged) | Real touches through iOS, typing on the software keyboard, permission alerts (Bluetooth, camera) through interruption monitors, Home and app switching | Apple's own tooling, no new dependency, no signing in the Simulator. A target must be committed or generated with the `xcodeproj` gem in CI; web content is reached through the accessibility tree, which is coarser than the DOM; a test build adds minutes per run |
+| Maestro | YAML flows with real taps, typing and permission handling, quick to write | A third-party CLI and Java runtime downloaded in CI (pin and verify it); its own driver app; web views through accessibility only |
+| idb (`fb-idb`) | Coordinate taps, text input and an accessibility dump from the command line | A Homebrew companion and a Python client with little recent maintenance; compatibility with Xcode 26 is unproven |
+| Appium | | Excluded |
+
+Decision: keep the DOM driver for flows. No spike was run for NFCT-39: the
+DOM driver covers the flows that matter now, and Mental Math's input is an
+on-screen keypad, which never opens the keyboard. When a flow needs a real
+touch or system UI, which is first likely for the Bluetooth permission prompt
+(NFCT-15) or typing through the keyboard on sign-up (NFCT-33), add a minimal
+XCUITest target generated in CI for that check only, and keep the DOM
+scenarios for everything else. Control Center, calls and Siri stay on
+NFCT-32's device checklist: neither tool drives them reliably in the
+Simulator.
 
 ### Running the native checks on a Mac
 
@@ -223,9 +392,13 @@ npm run sync:ios:emulators && node scripts/ios/simulator-smoke.mjs inject
 udid=$(node scripts/ios/simulator-smoke.mjs pick)
 npm run ios:build -- Debug "platform=iOS Simulator,id=$udid"
 npx firebase emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e \
-  "node scripts/ios/simulator-smoke.mjs run ios/App/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app $udid /tmp/ios-smoke"
+  "node scripts/ios/simulator-smoke.mjs run ios/App/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app $udid /tmp/ios-sim mental-math"
 npm run sync:ios   # leave a production bundle behind
 ```
+
+Omit the scenario names to run them all. The emulator Debug build with the
+page agent opens and works normally by hand too: without a driver listening,
+the agent stays idle.
 
 ## Xcode Cloud
 
@@ -250,8 +423,8 @@ What the repository provides, and CI proves on every native run:
   refuses to start Firebase at launch (`firebaseConfig.ts` fails closed), and
   the hook prints a warning. They are not secret. Until NFCT-24 deploys the
   consumer rules, `nfct-dev` denies all reads and writes, so a TestFlight
-  build can launch but cannot sign in or sync. CI's
-  [nfct-dev canary](nfct-dev-canary.md) builds every runtime PR with the same
+  build can launch but cannot sign in or sync. The
+  [nfct-dev canary](nfct-dev-canary.md) builds a runtime PR with the same
   values from repository variables (`NFCT_DEV_FIREBASE_*`), and runs the
   consumer journey against `nfct-dev`; keep the two sets identical.
 - Optional `NFCT_DEVELOPMENT_TEAM` workflow variable: the hook writes it to
@@ -263,7 +436,8 @@ What the repository provides, and CI proves on every native run:
 
 The release model has no long-lived release or beta branch:
 
-- feature PRs merge to `main`;
+- pull requests merge to `development`, which is promoted to `main` through a
+  pull request that runs the [release checks](ci.md#promotion-development--main);
 - a TestFlight build is started deliberately from a specific `main` commit or
   release tag: an Xcode Cloud workflow with a manual or tag start condition
   (for example tags `ios/v*`), so nothing is merged or squashed only for a

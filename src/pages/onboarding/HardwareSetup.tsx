@@ -6,6 +6,7 @@ import { audioEngine } from '../../services/audioEngine';
 import { storageEngine } from '../../services/storageEngine';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
+import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 import { LiveBrainwaveCanvas } from '../../components/onboarding/LiveBrainwaveCanvas';
 import { NeuralImprintCard } from '../../components/onboarding/NeuralImprintCard';
 import { MuseChannelQuality, BandPowers } from '../../types';
@@ -407,7 +408,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
                 fontFamily: 'var(--font-mono, monospace)',
               }}
             >
-              Waveable Live Telemetry
+              {APP_DISPLAY_NAME} Live Telemetry
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-tertiary, #8C8578)' }}>
               {step === 'pair' ? 'Physical Pairing' : `${deviceName} • Live Hardware Stream`}

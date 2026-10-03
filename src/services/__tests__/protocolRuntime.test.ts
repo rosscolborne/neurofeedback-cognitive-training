@@ -22,7 +22,7 @@ import { DEFAULT_BETA_AMPLITUDE_REWARD_BAND, DEFAULT_PROTOCOL, DEFAULT_RATIO_REW
 const client = (assignedProtocol: ProtocolType = 'alpha-enhancement', override: Partial<ClientProfile> = {}): ClientProfile => ({
   id: 'patient-1', name: 'Patient', email: 'patient@example.com', avatarUrl: '',
   condition: 'Peak Performance', status: 'active', assignedProtocol,
-  brainMaps: [], allowedExperiences: ['tidal-garden'], prescribedSessionsPerWeek: 3,
+  brainMaps: [], allowedExperiences: ['neuro-gambit'], prescribedSessionsPerWeek: 3,
   completedSessionsCount: 0, currentStreak: 0, streakFreezeRemaining: 0,
   brainCapacityScore: 0, lastSessionDate: '', nextSessionDate: '',
   tidalGardenState: { stage: 0, plantsUnlocked: [], growthPoints: 0, lastWatered: '' },

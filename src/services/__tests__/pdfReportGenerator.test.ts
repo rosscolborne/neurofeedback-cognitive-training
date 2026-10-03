@@ -114,10 +114,10 @@ describe('deterministic PDF report text', () => {
   });
 
   it('makes the selected session the report hero, including its reflection', () => {
-    const selected = session({ experience: 'skyline-drift', protocol: 'beta-downtraining', isDemo: true, device: undefined, patientNotes: 'Felt calmer.' });
+    const selected = session({ experience: 'neuro-gambit', protocol: 'beta-downtraining', isDemo: true, device: undefined, patientNotes: 'Felt calmer.' });
     const analytics = buildPatientSelectionReportAnalytics(client, [selected], generatedAt, 'UTC');
     const hero = buildPatientReportText(client, analytics, brand, generatedAt, 'selected-session').sessionHero;
-    expect(hero).toMatchObject({ when: 'Sep 19, 2026, 10:00 AM', experience: 'Skyline Drift', protocol: 'Beta De-arousal Downtraining', reflection: 'Felt calmer.' });
+    expect(hero).toMatchObject({ when: 'Sep 19, 2026, 10:00 AM', experience: 'NeuroGambit', protocol: 'Beta De-arousal Downtraining', reflection: 'Felt calmer.' });
     expect(hero?.facts.map((fact) => `${fact.label}: ${fact.value}`)).toEqual(['Duration: 10 min', 'In zone: 0%', 'Source: Training Demo (simulated)', 'Device: Unavailable']);
   });
 });

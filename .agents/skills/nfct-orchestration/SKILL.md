@@ -37,9 +37,13 @@ its procedure rather than restating it.
   same surface; sequence them, or land the shared contract first.
 - Give each writable stream its own worktree, created from the right base per
   [nfct-worktrees](../nfct-worktrees/SKILL.md#create).
-- The emulator and Vite ports are fixed per machine. Schedule emulator-backed
-  runs (the rules, Functions and Playwright suites, and browser QA) one at a
-  time across streams.
+- The emulator and Vite ports are fixed, so each environment needs its own
+  network. On Linux, give each stream and each QA agent its own
+  [QA lane](../../../AGENTS.md#parallel-agents-qa-lanes), named after it, and
+  tell it to `down` the lane when it finishes. Emulator-backed runs (the
+  rules, repository, Functions and Playwright suites, and browser QA) then run
+  in parallel across lanes, one at a time within a lane. Without lanes,
+  schedule them one at a time across streams.
 - Keep each implementation stream scoped to its card. A stream that finds
   unrelated work hands it back as
   [out-of-scope work](../../../AGENTS.md#out-of-scope-work) instead of
@@ -132,7 +136,7 @@ changes only where dependencies require it.
 | 4. Run the combined deterministic suite | Integrator, per the [testing skill](../neurasticity-development-testing/SKILL.md) |
 | 5. Exploratory QA, where the work is user-facing | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
 | 6. Independent review, and security review at the [routed tier](#security-tier) | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
-| 7. CI green on the integration PR's final head: a merge gate, started and reported rather than waited for | Integrator starts it; whoever merges confirms it |
+| 7. Pre-merge validation green on the integration PR's final head: a merge gate, run by hand ([CI](../../../docs/nfct/ci.md)) and reported rather than waited for | Integrator reports whether it has run; whoever merges confirms it |
 | 8. Targeted human visual and hardware checks | Owner, from the QA report's HUMAN CHECK items |
 | 9. Merge | Owner |
 
@@ -189,7 +193,7 @@ phase and what blocks it.
 
 Merging to `main` is the owner's decision. The orchestrator merges only when
 explicitly delegated, never a PR it implemented or integrated, and only after
-confirming required CI is green on the head being merged.
+confirming Pre-merge validation is green on the head being merged.
 
 ## Reshape when contracts change
 

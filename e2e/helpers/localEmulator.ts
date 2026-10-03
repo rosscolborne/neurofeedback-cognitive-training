@@ -40,7 +40,7 @@ export async function seedLinkedPatient(extra: Record<string, unknown> = {}): Pr
     adminDb.doc(`clients/${patientUid}`).set({
       id: patientUid, name, email: patient.email, status: 'active',
       clinicianId: clinicianUid, clinicId: clinicianUid,
-      condition: 'ADHD (Inattentive)', allowedExperiences: ['skyline-drift'],
+      condition: 'ADHD (Inattentive)', allowedExperiences: ['neuro-gambit'],
       prescribedSessionsPerWeek: 3, completedSessionsCount: 0, currentStreak: 0,
       brainMaps: [], badges: [], isDemo: false, ...extra,
     }),
@@ -66,7 +66,7 @@ export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture):
     adminDb.doc(`clients/${patient.uid}`).set({
       id: patient.uid, name, email: patient.email, status: 'active',
       clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
-      condition: 'ADHD (Inattentive)', allowedExperiences: ['skyline-drift'],
+      condition: 'ADHD (Inattentive)', allowedExperiences: ['neuro-gambit'],
       prescribedSessionsPerWeek: 3, completedSessionsCount: 0, currentStreak: 0,
       brainMaps: [], badges: [], isDemo: false,
     }),
@@ -74,7 +74,7 @@ export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture):
   return { clinician: fixture.clinician, patient, name };
 }
 
-export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'skyline-drift', timestamp = Date.now()) {
+export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'neuro-gambit', timestamp = Date.now()) {
   const id = `review-${randomUUID().replaceAll('-', '')}`;
   await adminDb.doc(`sessions/${id}`).set({
     id, patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
@@ -235,7 +235,7 @@ export async function seedSelfDirectedHistory(patientUid: string) {
     adminDb.doc(`sessions/${sessionId}`).set({
       id: sessionId, patientId: patientUid, clinicId: 'self-guided', schemaVersion: 2,
       timestamp, date: new Date(timestamp).toLocaleDateString(),
-      experience: 'breath-weave', protocol: 'alpha-enhancement', durationSeconds: 600,
+      experience: 'neuro-gambit', protocol: 'alpha-enhancement', durationSeconds: 600,
       isDemo: false, patientNotes: 'Self-directed reflection', moodRating: 4,
       timeSeries: [{ t: 5, alpha: 8, inZone: true }],
     }),
@@ -289,4 +289,16 @@ export async function readGameSessions(uid: string): Promise<Array<{ id: string;
 export async function readEegRecordings(uid: string): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
   const snapshot = await adminDb.collection(`users/${uid}/eegRecordings`).get();
   return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+}
+
+/** NFCT-13: the server-maintained stats summary and achievements of a user (observation only). */
+export async function readPlayerStats(uid: string): Promise<{
+  summary: Record<string, unknown> | undefined;
+  achievements: Array<{ id: string; data: Record<string, unknown> }>;
+}> {
+  const [summary, achievements] = await Promise.all([
+    adminDb.doc(`users/${uid}/stats/summary`).get(),
+    adminDb.collection(`users/${uid}/achievements`).get(),
+  ]);
+  return { summary: summary.data(), achievements: achievements.docs.map((doc) => ({ id: doc.id, data: doc.data() })) };
 }

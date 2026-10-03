@@ -17,7 +17,7 @@ import { getClinicalProtocolTemplate } from '../../services/clinicalProtocolTemp
 const base: ClientProfile = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com',
   condition: 'ADHD (Inattentive)', status: 'active',
-  allowedExperiences: ['skyline-drift'], brainMaps: [], badges: [],
+  allowedExperiences: ['neuro-gambit'], brainMaps: [], badges: [],
   completedSessionsCount: 0, currentStreak: 0,
 };
 
@@ -29,7 +29,7 @@ async function renderViews(client: ClientProfile) {
   await act(async () => {
     roster = create(<ClientRosterView clients={[client]} invitations={[]} onSelectClient={vi.fn()} onAddClient={vi.fn()} onCancelInvitation={vi.fn()} />);
     detail = create(<ClientDetailView client={client} brand={{ name: 'Clinic' } as ClinicBrandConfig} onBack={vi.fn()} onUpdateClient={vi.fn()} onSendMessage={vi.fn()} />);
-    patient = create(<HomeScreen client={client} onStartSession={vi.fn()} onNavigateTab={vi.fn()} />);
+    patient = create(<HomeScreen client={client} onStartSession={vi.fn()} />);
   });
   const result = {
     roster: JSON.stringify(roster.toJSON()),

@@ -22,9 +22,11 @@ import {
   sessionSeedSchema,
   gameSessionCreateSchemaFor,
   readGameSession,
+  readSessionProgressFields,
   type GameDefinition,
   type GameSession,
   type GameSessionCreateOf,
+  type SessionProgressFields,
 } from '@nfct/shared';
 import {
   assertGameId,
@@ -103,6 +105,34 @@ export interface GameSessionPage {
   /** Documents on this page that could not be read. They are skipped, never thrown. */
   readonly unreadable: UnreadableDocument[];
   /** Null when there are no more sessions. */
+  readonly nextCursor: GameSessionCursor | null;
+  readonly fromCache: boolean;
+}
+
+/**
+ * One row of a history list (NFCT-22): what the session was (game, mode, start
+ * level, status, when it ended and how long it ran) and what trusted scoring
+ * made of it (`result`, or `processing` while it has none). It is read with the
+ * tolerant `readSessionProgressFields`, never with trials or the client's
+ * display summary, so a session the full reader refuses only for its summary
+ * (a NaN or infinite number the rules accept, which trusted scoring records as
+ * the diagnostic 'summary-mismatch') still shows with its trusted result.
+ */
+export interface GameSessionHistoryEntry {
+  readonly id: string;
+  readonly session: SessionProgressFields;
+  /** Trusted scoring has neither written `result` nor recorded `processing` yet. */
+  readonly awaitingResult: boolean;
+  /** Written on this device and not yet acknowledged by the server, for example while offline. */
+  readonly hasPendingWrites: boolean;
+}
+
+export interface GameSessionHistoryPage {
+  /** Newest first (`endedAt` descending, then document ID descending). */
+  readonly entries: GameSessionHistoryEntry[];
+  /** Documents on this page that could not be read. They are skipped, never thrown. */
+  readonly unreadable: UnreadableDocument[];
+  /** Null when there are no more sessions. The same cursor `listGameSessions` uses. */
   readonly nextCursor: GameSessionCursor | null;
   readonly fromCache: boolean;
 }
@@ -209,6 +239,22 @@ export interface GameSessionRepository {
     onNext: (recent: RecentGameSessions) => void,
     onError: (error: Error) => void,
   ): Unsubscribe;
+  /**
+   * Cursor-paged history rows, newest first (`GameSessionHistoryEntry`).
+   * Same query, page size bounds and cursor as `listGameSessions`. Works
+   * offline from the persistent cache.
+   */
+  listGameSessionHistory(options?: ListGameSessionsOptions): Promise<GameSessionHistoryPage>;
+  /**
+   * The first page of history rows, live: it follows new sessions, sessions
+   * written on this device, and trusted results as they arrive. Its
+   * `nextCursor` continues with `listGameSessionHistory`.
+   */
+  subscribeToGameSessionHistory(
+    options: { readonly gameId?: string; readonly pageSize?: number },
+    onNext: (page: GameSessionHistoryPage) => void,
+    onError: (error: Error) => void,
+  ): Unsubscribe;
 }
 
 export const DEFAULT_HISTORY_PAGE_SIZE = 20;
@@ -244,6 +290,41 @@ export function sessionRecord(raw: Record<string, unknown>, id: string, hasPendi
 
 function queryRecord(raw: Record<string, unknown>, snapshot: QueryDocumentSnapshot): GameSessionRecord {
   return sessionRecord(raw, snapshot.id, snapshot.metadata.hasPendingWrites);
+}
+
+export function historyEntry(raw: Record<string, unknown>, id: string, hasPendingWrites: boolean): GameSessionHistoryEntry {
+  return {
+    id,
+    session: readSessionProgressFields(raw),
+    awaitingResult: !hasOwn(raw, 'result') && !hasOwn(raw, 'processing'),
+    hasPendingWrites,
+  };
+}
+
+function queryHistoryEntry(raw: Record<string, unknown>, snapshot: QueryDocumentSnapshot): GameSessionHistoryEntry {
+  return historyEntry(raw, snapshot.id, snapshot.metadata.hasPendingWrites);
+}
+
+/**
+ * One page from a query that asked for one document more than the page size:
+ * the extra document only says whether another page exists. The cursor comes
+ * from the last raw document, readable or not, so an unreadable document never
+ * stalls or repeats a page.
+ */
+function pageOf<T>(
+  docs: readonly QueryDocumentSnapshot[],
+  pageSize: number,
+  list: { readonly uid: string; readonly gameId: string | null },
+  map: (raw: Record<string, unknown>, snapshot: QueryDocumentSnapshot) => T,
+): { readonly items: T[]; readonly unreadable: UnreadableDocument[]; readonly nextCursor: GameSessionCursor | null } {
+  const pageDocs = docs.slice(0, pageSize);
+  const { readable, unreadable } = readDocuments('gameSessions', pageDocs, map);
+  const last = pageDocs.at(-1);
+  return {
+    items: readable,
+    unreadable,
+    nextCursor: docs.length > pageSize && last ? { ...list, endedAt: last.get('endedAt'), id: last.id } : null,
+  };
 }
 
 /**
@@ -353,6 +434,23 @@ export function createGameSessionRepository(
     return { sessionId, seed, userId, save };
   }
 
+  /** One page of a history list, with one document more than the page size. */
+  async function historyPage(options: ListGameSessionsOptions) {
+    const uid = signedInUid(context);
+    const gameId = options.gameId ?? null;
+    const pageSize = boundedPageSize(options.pageSize);
+    const { cursor } = options;
+    if (cursor && (cursor.uid !== uid || cursor.gameId !== gameId)) {
+      throw new Error('This history page belongs to a different list.');
+    }
+    const snapshot = await getDocs(historyQuery(
+      context, uid, gameId,
+      ...(cursor ? [startAfter(cursor.endedAt, cursor.id)] : []),
+      limit(pageSize + 1),
+    ));
+    return { pageSize, list: { uid, gameId }, snapshot };
+  }
+
   return {
     startGameSession,
 
@@ -369,32 +467,9 @@ export function createGameSessionRepository(
     },
 
     async listGameSessions(options = {}) {
-      const uid = signedInUid(context);
-      const gameId = options.gameId ?? null;
-      const pageSize = boundedPageSize(options.pageSize);
-      const { cursor } = options;
-      if (cursor && (cursor.uid !== uid || cursor.gameId !== gameId)) {
-        throw new Error('This history page belongs to a different list.');
-      }
-      // One extra document says whether another page exists.
-      const snapshot = await getDocs(historyQuery(
-        context, uid, gameId,
-        ...(cursor ? [startAfter(cursor.endedAt, cursor.id)] : []),
-        limit(pageSize + 1),
-      ));
-      const pageDocs = snapshot.docs.slice(0, pageSize);
-      const { readable, unreadable } = readDocuments('gameSessions', pageDocs, queryRecord);
-      // The cursor comes from the last raw document, readable or not, so an
-      // unreadable document never stalls or repeats a page.
-      const last = pageDocs.at(-1);
-      return {
-        sessions: readable,
-        unreadable,
-        nextCursor: snapshot.docs.length > pageSize && last
-          ? { uid, gameId, endedAt: last.get('endedAt'), id: last.id }
-          : null,
-        fromCache: snapshot.metadata.fromCache,
-      };
+      const { pageSize, list, snapshot } = await historyPage(options);
+      const { items, unreadable, nextCursor } = pageOf(snapshot.docs, pageSize, list, queryRecord);
+      return { sessions: items, unreadable, nextCursor, fromCache: snapshot.metadata.fromCache };
     },
 
     subscribeToRecentGameSessions(options, onNext, onError) {
@@ -403,6 +478,22 @@ export function createGameSessionRepository(
       return onSnapshot(recent, { includeMetadataChanges: true }, (snapshot) => {
         const { readable, unreadable } = readDocuments('gameSessions', snapshot.docs, queryRecord);
         onNext({ sessions: readable, unreadable, fromCache: snapshot.metadata.fromCache });
+      }, (error) => onError(asError(error)));
+    },
+
+    async listGameSessionHistory(options = {}) {
+      const { pageSize, list, snapshot } = await historyPage(options);
+      const { items, unreadable, nextCursor } = pageOf(snapshot.docs, pageSize, list, queryHistoryEntry);
+      return { entries: items, unreadable, nextCursor, fromCache: snapshot.metadata.fromCache };
+    },
+
+    subscribeToGameSessionHistory(options, onNext, onError) {
+      const list = { uid: signedInUid(context), gameId: options.gameId ?? null };
+      const pageSize = boundedPageSize(options.pageSize);
+      const first = historyQuery(context, list.uid, list.gameId, limit(pageSize + 1));
+      return onSnapshot(first, { includeMetadataChanges: true }, (snapshot) => {
+        const { items, unreadable, nextCursor } = pageOf(snapshot.docs, pageSize, list, queryHistoryEntry);
+        onNext({ entries: items, unreadable, nextCursor, fromCache: snapshot.metadata.fromCache });
       }, (error) => onError(asError(error)));
     },
   };

@@ -18,6 +18,16 @@ export const DOMAIN_CATALOG = {
 
 export type DomainId = (typeof DOMAIN_CATALOG.domains)[number];
 
+/** Display names, for filing and filtering games by domain. Adding a domain adds its label. */
+export const DOMAIN_LABELS: Readonly<Record<DomainId, string>> = {
+  math: 'Math',
+  reasoning: 'Reasoning',
+  memory: 'Memory',
+  verbal: 'Verbal',
+  spatial: 'Spatial',
+  'processing-speed': 'Processing speed',
+};
+
 /** How prominently a game is filed under each domain. Weights sum to 1. */
 export type DomainWeights = Partial<Record<DomainId, number>>;
 

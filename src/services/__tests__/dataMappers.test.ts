@@ -27,7 +27,7 @@ const clientFixture = (): ClientProfile => ({
   status: 'active',
   assignedProtocol: 'theta-beta-ratio',
   brainMaps: [],
-  allowedExperiences: ['skyline-drift'],
+  allowedExperiences: ['neuro-gambit'],
   prescribedSessionsPerWeek: 4,
   completedSessionsCount: 0,
   currentStreak: 0,
@@ -49,7 +49,7 @@ const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord =
   date: 'Sep 15, 2026',
   timestamp: 1_789_493_400_000,
   protocol: 'theta-beta-ratio',
-  experience: 'skyline-drift',
+  experience: 'neuro-gambit',
   durationSeconds: 1_500,
   timeInZonePercent: 82,
   averageCoherence: null,
@@ -121,12 +121,13 @@ describe('production data migration readers', () => {
     expect(timestampToMillis('not-a-date')).toBeNull();
   });
 
-  it('reads legacy client experience names without mutating the document', () => {
+  it('reads retired legacy experience IDs as stored without mutating the document', () => {
     const legacy = { ...clientFixture(), id: undefined, allowedExperiences: ['spatial-audio'] };
     const migrated = readClientProfile(legacy, 'document-patient');
 
     expect(migrated.id).toBe('document-patient');
-    expect(migrated.allowedExperiences).toEqual(['generative-music']);
+    expect(migrated.allowedExperiences).toEqual(['spatial-audio']);
+    expect(migrated.allowedExperiences).not.toBe(legacy.allowedExperiences);
     expect(legacy.allowedExperiences).toEqual(['spatial-audio']);
     expect(migrated.schemaVersion).toBe(1);
   });
@@ -240,7 +241,7 @@ describe('session aggregate migration behavior', () => {
   });
 
   it('awards normalized XP from new session evidence, including Demo, while retaining legacy records', () => {
-    const current = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement',
+    const current = sessionFixture({ experience: 'neuro-gambit', protocol: 'alpha-enhancement',
       durationSeconds: 300, configuredDurationSeconds: 600, inZoneSeconds: 240, timeInZonePercent: 100 });
     expect(applySessionCompletionToClient(clientFixture(), current).tidalGardenState?.growthPoints).toBe(60);
     expect(applySessionCompletionToClient(clientFixture(), { ...current, isDemo: true }).tidalGardenState?.growthPoints).toBe(60);
@@ -259,7 +260,7 @@ describe('session aggregate migration behavior', () => {
   });
 
   it('keeps strict Garden stage thresholds with at most 150 XP per perfect session', () => {
-    const perfect = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement',
+    const perfect = sessionFixture({ experience: 'neuro-gambit', protocol: 'alpha-enhancement',
       durationSeconds: 600, configuredDurationSeconds: 600, inZoneSeconds: 600 });
     let profile = clientFixture();
     for (const [sessionCount, points, stage] of [
@@ -271,7 +272,7 @@ describe('session aggregate migration behavior', () => {
   });
 
   it('grows only from finite completed measurements and crosses the existing strict stage thresholds', () => {
-    const gardenSession = sessionFixture({ experience: 'tidal-garden', protocol: 'alpha-enhancement', timeInZonePercent: 1 });
+    const gardenSession = sessionFixture({ experience: 'neuro-gambit', protocol: 'alpha-enhancement', timeInZonePercent: 1 });
     for (const [points, expectedStage, expectedBadge] of [
       [300, 1, false], [301, 2, false], [500, 2, false], [501, 3, true], [800, 3, true], [801, 4, true],
     ] as const) {
@@ -308,7 +309,7 @@ describe('session aggregate migration behavior', () => {
       tidalGardenState: undefined,
       skylineBiomesUnlocked: undefined,
     };
-    const updated = applySessionCompletionToClient(blank, sessionFixture({ experience: 'tidal-garden' }));
+    const updated = applySessionCompletionToClient(blank, sessionFixture({ experience: 'neuro-gambit' }));
 
     expect(updated.brainCapacityScore).toBeUndefined();
     expect(updated.currentStreak).toBe(0);

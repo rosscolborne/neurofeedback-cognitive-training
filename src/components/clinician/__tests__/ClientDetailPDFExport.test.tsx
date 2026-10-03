@@ -13,7 +13,7 @@ vi.mock('../PatientAvatar', () => ({ PatientAvatar: 'patient-avatar' }));
 import { ClientDetailView } from '../ClientDetailView';
 
 const client = (id: string): ClientProfile => ({ id, name: `Patient ${id}`, email: `${id}@example.test`, status: 'active', assignedProtocol: 'theta-beta-ratio', allowedExperiences: [], brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0 });
-const session = (id: string, patientId = 'a'): SessionRecord => ({ id, patientId, patientName: `Patient ${patientId}`, clinicId: 'clinic', date: 'Sep 27', timestamp: 100, protocol: 'alpha-enhancement', experience: 'tidal-garden', durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0 });
+const session = (id: string, patientId = 'a'): SessionRecord => ({ id, patientId, patientName: `Patient ${patientId}`, clinicId: 'clinic', date: 'Sep 27', timestamp: 100, protocol: 'alpha-enhancement', experience: 'neuro-gambit', durationSeconds: 60, timeInZonePercent: 50, averageCoherence: null, timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0 });
 const brand = { name: 'Clinic' } as ClinicBrandConfig;
 const props = { brand, onBack: vi.fn(), onUpdateClient: vi.fn(), onSendMessage: vi.fn() };
 const deferred = <T,>() => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fails if any tracked file references the Waveable clinical product's Firebase
 // project, credentials, auto-deploy workflow or app bundle IDs, or if Apple
-// signing material is tracked. Run in CI on every PR. The Apple team is not
+// signing material is tracked. Runs in web.yml (Pre-merge validation). The Apple team is not
 // listed: it is the Apple account, which also holds the NFCT app.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, lstatSync, readlinkSync } from 'node:fs';
