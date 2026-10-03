@@ -271,10 +271,11 @@ export async function planStatsForProcessing(
  * Plans the stats writes of a post-commit upgrade batch (reads only): the
  * valid-only effects of each upgraded session.
  *
- * - 'skip': there are no current stats to update (an older
- *   aggregateVersion). Nothing is lost: the next processing transaction, or
- *   the admin rebuild, rebuilds them from the stored results, which then
- *   include these upgrades.
+ * - 'skip': there are no current stats to update: an older
+ *   aggregateVersion, or none (not expected, since the upgraded session
+ *   already counts and counted sessions write stats). Nothing is lost: the
+ *   next processing transaction (for older stats) or the admin rebuild
+ *   rebuilds them from the stored results, which then include these upgrades.
  * - 'not-current': newer or unreadable stats, which this build must not
  *   write; the batch then upgrades nothing, just as it does for progress
  *   that is not current.
