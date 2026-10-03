@@ -90,40 +90,89 @@ higher-value work.
   integrated.
 - Finish with a report giving, where applicable: branch and worktree, commit
   SHA, PR URL, remote validation state, files and scope changed, checks and tests run
-  with results, and unresolved risks, blockers or follow-ups.
+  with results, review and QA results, and unresolved risks, blockers or follow-ups.
 
 ## Completion and merge readiness
 
 Finishing an agent task and a PR being ready to merge are separate states:
 
-- **Agent task complete**: the implementation or integration work is
-  finished, the required local checks have passed, the PR is pushed and
-  marked ready for review, and known findings are reported.
-- **Merge-ready**: every required merge gate is satisfied on the PR's current
-  head, including a green `Pre-merge validation` status and any required
-  review and QA.
+- **Agent task complete**: for a task that ends in a PR, every
+  [ready checkpoint](#ready-checkpoint) item that applies holds and the
+  report says what has and has not run. The review and QA gates routed for
+  the PR are part of the task, not later work. Under a separate orchestrator,
+  your task is your brief: routing, reviews, QA by other agents,
+  native-sensitive validation, follow-up cards and marking the PR ready are
+  the orchestrator's items, unless it or your role's skill
+  ([nfct-integration](.agents/skills/nfct-integration/SKILL.md) for an
+  integrator) gives them to you.
+- **Merge-ready**: the task is complete and every merge gate is satisfied on
+  the PR's current head, including a green `Pre-merge validation` status.
+
+Stopping earlier because the user said to, or at a [checkpoint](#checkpoints),
+is not completion: keep the PR draft and report the items still open.
+
+### Ready checkpoint
+
+Before marking a PR ready for review or reporting its task complete, confirm
+each item that applies:
+
+1. **Local checks** pass on the final head ([checks](#checks),
+   [revalidation](#revalidation)), and the diff holds only intended files.
+2. **Exploratory QA** has passed for a user-facing, auth, onboarding,
+   navigation, persistence or training-flow change
+   ([user-facing and stateful changes](#user-facing-and-stateful-changes)).
+3. **Review routing** is recorded in the PR body: the security tier and its
+   reason, or why review was skipped
+   ([which PRs get review](#which-prs-get-review)).
+4. **Independent review**, and a separate **security review** when the tier
+   is STANDARD or DEEP, have finished within the [review budget](#review-budget):
+   fixes verified, no BLOCKER open.
+5. **Native-sensitive validation** has passed where
+   [step 3 below](#lifecycle-and-remote-validation) requires it, or is listed
+   as an owner action (item 6).
+6. **Owner actions** are listed: what only the owner can do, such as a deploy
+   to `nfct-dev`, human visual or hardware checks, or a required validation
+   you could not run.
+7. **Follow-up cards** are filed for FOLLOW-UP and still-open SHOULD-FIX
+   findings ([out-of-scope work](#out-of-scope-work)).
+8. **PR state** matches: draft while any item above is open, ready for review
+   once all hold.
+
+### Lifecycle and remote validation
 
 No push or pull request update starts CI ([docs/nfct/ci.md](docs/nfct/ci.md)).
 Remote validation is started by hand: the full suite once on a PR's final
 head before it merges, and single workflows where they add something a local
 run cannot (macOS, the Simulator, the real-backend canary).
 
-1. Run every required local check before pushing.
-2. Push, or open or update the PR, and mark it ready for review
-   (`gh pr ready <n>`) if it is still a draft.
+1. Run every required local check, then push and open the PR as a draft
+   (`gh pr create --draft`), or update it.
+2. Have the PR's routed exploratory QA and reviews run
+   ([bounded review](#bounded-review) says who starts them), fix and
+   revalidate within the [review budget](#review-budget), and push the fixes
+   as one batch.
 3. Do not start remote validation yourself unless the user asks for it, or
-   the task needs what only a remote run gives (for example Simulator
-   evidence). Then run only the workflow that gives it, on a pushed head that
-   has passed the local checks.
-4. Report the PR URL and the remote validation state of the head, and finish.
-   Usually that is "Pre-merge validation not run", with the command to run
-   it: `gh workflow run ci.yml --ref <branch>`. If you started a run, report
-   it as *pending*; do not poll or `--watch` it.
+   the task needs what only a remote run gives. A native-sensitive change
+   does: one to native code or build configuration (`ios/`, including
+   `Package.swift`), to Capacitor plugin dependencies, or to how app code
+   calls a native API. Run the `ios.yml` scenarios it can affect, `smoke` at
+   minimum, on its pushed head
+   ([how](docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal)),
+   or, when `smoke` is all it can affect, Pre-merge validation on its final
+   head, which runs `smoke` for it; wait for
+   that run, or, if you cannot run it, name it as an owner action. Otherwise
+   run only the workflow that gives what you need, on a pushed head that has
+   passed the local checks. Other remote validation, Pre-merge validation
+   included, stays manual and risk-based.
+4. Pass the [ready checkpoint](#ready-checkpoint), then mark the PR ready for
+   review (`gh pr ready <n>`).
+5. Report the PR URL, the review and QA results, and the remote validation
+   state of the head, and finish. Usually that is "Pre-merge validation not
+   run", with the command to run it: `gh workflow run ci.yml --ref <branch>`.
+   Report a run you started but did not need to wait for as *pending*; do
+   not poll or `--watch` it.
 
-Open a PR targeting `development` as a draft (`gh pr create --draft`) once a
-remote PR is useful, and keep it draft while implementation, review and local
-testing continue. Mark it ready for review once the branch is ready for its
-final validation. Before substantial rework of a ready PR, such as merging its
+Before substantial rework of a ready PR, such as merging its
 base with conflicts or a review fix pass, convert it back to draft
 (`gh pr ready --undo <n>`), cancel any validation run of the head being
 replaced (`gh run cancel <id>`), and mark it ready again once the reworked
@@ -135,6 +184,8 @@ and batch the next push where practical.
 The report says plainly what has and has not run, for example:
 
 - Agent work: complete
+- Review and QA: independent review passed; security review (STANDARD)
+  passed; exploratory QA passed
 - Remote validation: Pre-merge validation not run on `<sha>`
   (`gh workflow run ci.yml --ref <branch>`)
 - Merge readiness: NOT YET — needs a green Pre-merge validation on this head
@@ -147,10 +198,11 @@ before it merges. A development → main promotion instead needs its Release
 checks and `Require development source`
 ([promotion](docs/nfct/ci.md#promotion-development--main)).
 
-Wait for CI only when the user explicitly asks you to wait, or when the task
-is to diagnose a CI failure or to change CI itself and only a run can verify
-it. Asking for a PR to be merge-ready or safe to merge, or for its CI status,
-is not a request to wait: report what has run and finish. While you do wait,
+Wait for CI only when the user explicitly asks you to wait, when your PR
+needs native-sensitive validation (step 3 above), or when the task is to
+diagnose a CI failure or to change CI itself and only a run can verify it.
+Asking for a PR to be merge-ready or safe to merge, or for its CI status, is
+not a request to wait: report what has run and finish. While you do wait,
 stop as soon as a required job fails and act on that job's log; do not wait
 for the other jobs first.
 
@@ -163,7 +215,14 @@ the user explicitly asks for a [deep audit](#deep-audit-mode).
 The orchestrator owns agent topology and review routing: which agents run,
 which review gates apply, and at which security tier
 ([nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md#review-routing)).
-Without an orchestrator, the agent the user is talking to has that role.
+If a separate orchestrator started you, it routes and starts the reviews; do
+not start duplicates. Otherwise the agent handling the user's task is the
+orchestrator, even when it also implemented the change: before reporting the
+task complete, it routes the PR and starts the routed reviewers as separate
+agents, never reviewing its own work. It may run exploratory QA itself under
+[nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) and says
+so in the report. If its tooling cannot start agents, it asks the user to
+start the reviewers and keeps the PR draft.
 
 ### Finding severity
 
@@ -178,9 +237,27 @@ Reviewers, security reviewers and exploratory QA label every finding:
 Severity reflects the impact on this change, not effort or interest. Budget
 limits never downgrade a BLOCKER. A gate passes once no BLOCKER is open.
 
+### Which PRs get review
+
+Route by the boundaries a diff affects, not by whether it adds, changes or
+removes code. Removing authorization logic, auth or account behavior,
+Firestore rules, a Function or a native dependency is routed like adding one;
+"only cleanup" is not a reason to skip review or lower the tier.
+
+- A PR that changes product code, Firestore rules or indexes, Functions or
+  other backend behavior, auth or account behavior, native or iOS code or
+  configuration, or CI and infrastructure gets one independent review and a
+  security review at its
+  [routed tier](.agents/skills/nfct-orchestration/SKILL.md#security-tier).
+- A docs-only or genuinely test-only PR may skip review. A test change that
+  weakens a guard (such as the e2e permission guard or the isolation check)
+  or changes what CI runs is not test-only, and a change to the hard rules or
+  to review, security or CI policy, here or in a skill, is not docs-only.
+- Record the decision in the PR body either way.
+
 ### Review budget
 
-By default, each PR that gets review gates has:
+By default, each PR routed for review has:
 
 1. One independent review
    ([nfct-pr-review](.agents/skills/nfct-pr-review/SKILL.md)) and one
@@ -222,8 +299,9 @@ starting agents themselves:
 - Reviewers do not start more reviewers, and security reviewers do not start
   deeper security reviews. A reviewer that thinks a gate or a higher tier is
   missing says so in its findings.
-- Implementers check their own work (targeted tests, UI self-QA) but do not
-  start reviews that duplicate the orchestrator's gates.
+- Implementers under an orchestrator check their own work (targeted tests,
+  UI self-QA) but do not start reviews; the orchestrator does. A solo agent
+  is the orchestrator ([above](#bounded-review)) and starts them.
 - More reviewers is not more safety. Add an agent only for a distinct risk
   that no planned gate covers.
 

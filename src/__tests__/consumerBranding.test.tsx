@@ -14,11 +14,9 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { uid: 'player-1', displayName: 'Player One' },
     role: null,
-    isDemoWorkspace: false,
     login: vi.fn(),
     signup: vi.fn(),
     selectRole: vi.fn(),
-    loginAsDemoClinician: vi.fn(),
     requestPasswordReset: vi.fn(),
   }),
 }));

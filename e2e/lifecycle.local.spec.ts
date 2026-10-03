@@ -1,8 +1,11 @@
 import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
-import { arriveAtClinicianDashboard, arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import { findPendingLifecycleInvitation, readLifecycleHistoryState, readLifecycleRecords, readPendingInvitationState, seedFutureLifecycleAppointment, seedLifecycleHistory, seedLinkedPatient, seedPendingLifecycleInvitation } from './helpers/localEmulator';
+import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
+import {
+  readLifecycleHistoryState, readLifecycleRecords, readPatientRelationship, seedFutureLifecycleAppointment,
+  seedLifecycleHistory, seedLinkedPatient, seedPendingInvitation, seedPendingLifecycleInvitation,
+} from './helpers/localEmulator';
 
 // Every protocol template now recommends the one remaining experience, NeuroGambit.
 const allExperienceNames = ['NeuroGambit'];
@@ -40,22 +43,15 @@ async function readCurrentPatientAssignment(page: Page) {
 }
 
 for (const invitationMode of ['existing', 'fresh'] as const) {
-test(`delete linked patient, re-register same email, and accept ${invitationMode} invitation with one active roster entry`, async ({ browser, permissionErrorGuard }) => {
+test(`delete linked patient, re-register same email, and accept ${invitationMode} invitation as the new account`, async ({ browser, permissionErrorGuard }) => {
   const fixture = await seedLinkedPatient();
   let code = invitationMode === 'existing' ? await seedPendingLifecycleInvitation(fixture) : '';
   if (invitationMode === 'fresh') await seedFutureLifecycleAppointment(fixture);
   await seedLifecycleHistory(fixture);
-  const clinicianContext = await browser.newContext();
   const oldContext = await browser.newContext();
   const newContext = await browser.newContext();
   try {
-    const clinician = await clinicianContext.newPage();
     const oldPatient = await oldContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
-    await expect(rosterRow).toHaveCount(1);
-
     await loginThroughUi(oldPatient, fixture.patient);
     await arriveAtPatientDashboard(oldPatient);
     await oldPatient.getByRole('button', { name: 'Profile', exact: true }).click();
@@ -63,7 +59,7 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     await oldPatient.getByLabel('Enter your password to confirm account deletion').fill(fixture.patient.password);
     await oldPatient.getByRole('button', { name: 'Confirm account deletion' }).click();
     await expect(oldPatient).toHaveURL(/welcome/, { timeout: 20_000 });
-    await expect(rosterRow).toHaveCount(0);
+    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: null, clinicId: null });
 
     const patient = await newContext.newPage();
     await patient.goto('/#/signup');
@@ -76,22 +72,13 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     const newUid = await authenticatedUserId(patient);
     expect(newUid).not.toBe(fixture.patient.uid);
     if (invitationMode === 'fresh') {
-      await clinician.getByRole('button', { name: 'Invite Patient' }).click();
-      await clinician.getByPlaceholder('e.g. Alex Morgan').fill(fixture.name);
-      await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
-      await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
-      await clinician.locator('form select').nth(1).selectOption('alpha-enhancement');
-      await clinician.getByPlaceholder('e.g. 3').fill('3');
-      await clinician.getByRole('button', { name: 'Create Invitation' }).click();
-      await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-      code = await findPendingLifecycleInvitation(fixture.clinician.uid, fixture.patient.email);
+      code = await seedPendingInvitation(fixture.clinician.uid, fixture.patient.email, fixture.name, { assignedProtocol: 'alpha-enhancement' });
     }
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
     await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
     await patient.getByLabel('Invitation code').fill(code);
     await patient.getByRole('button', { name: 'Accept Invitation' }).click();
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
-    await expect(rosterRow).toHaveCount(1);
     const expectedIds = invitationMode === 'existing' ? thetaIds : alphaIds;
     const expectedNames = invitationMode === 'existing' ? thetaNames : alphaNames;
     const assigned = await readCurrentPatientAssignment(patient);
@@ -119,23 +106,17 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     }, { oldUid: fixture.patient.uid, clinicianUid: fixture.clinician.uid });
     expect(oldReads).toEqual(['permission-denied', 'permission-denied', 'permission-denied']);
   } finally {
-    await Promise.allSettled([clinicianContext.close(), oldContext.close(), newContext.close()]);
+    await Promise.allSettled([oldContext.close(), newContext.close()]);
   }
 });
 }
 
-test('wrong deletion password keeps the account, profile, and clinician roster intact', async ({ browser }) => {
+test('wrong deletion password keeps the account, profile, and clinician relationship intact', async ({ browser }) => {
   const fixture = await seedLinkedPatient();
-  const clinicianContext = await browser.newContext();
+  const linked = { clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid };
   const patientContext = await browser.newContext();
   try {
-    const clinician = await clinicianContext.newPage();
     const patient = await patientContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
-    await expect(rosterRow).toHaveCount(1);
-
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
@@ -155,41 +136,39 @@ test('wrong deletion password keeps the account, profile, and clinician roster i
     await deletionPassword.fill('AnotherAttempt!123');
     await expect(confirmDeletion).toBeEnabled();
     expect(await authenticatedUserId(patient)).toBe(fixture.patient.uid);
-    await expect(rosterRow).toHaveCount(1);
+    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject(linked);
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
-    await expect(rosterRow).toHaveCount(1);
+    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject(linked);
   } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+    await patientContext.close();
   }
 });
 
-test('unlink preserves the training list and Garden; a new invitation replaces the protocol and list together', async ({ browser }) => {
+test('disconnecting preserves the training list and Garden; a new invitation replaces the protocol and list together', async ({ browser }) => {
   const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
   const staleCustomProtocol = { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Old custom reward' };
   const fixture = await seedLinkedPatient({
-    // An explicit empty list, so keeping it on unlink and replacing it on relink are both visible.
+    // An explicit empty list, so keeping it on disconnect and replacing it on relink are both visible.
     assignedProtocol: 'theta-beta-ratio', allowedExperiences: [],
     customProtocolConfig: staleCustomProtocol, tidalGardenState: garden, completedSessionsCount: 4,
   });
   await seedLifecycleHistory(fixture);
-  const clinicianContext = await browser.newContext();
   const patientContext = await browser.newContext();
   try {
-    const clinician = await clinicianContext.newPage();
     const patient = await patientContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
     await expectPatientCatalogue(patient, []);
 
-    const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
-    clinician.once('dialog', (dialog) => { void dialog.accept(); });
-    await rosterRow.getByTitle('Remove Patient').click();
-    await expect(rosterRow).toHaveCount(0);
+    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
+    await patient.getByRole('button', { name: 'Disconnect from Clinician' }).click();
+    const confirm = patient.getByRole('alertdialog', { name: 'Disconnect from your clinician?' });
+    await confirm.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect.poll(async () => (await readPatientRelationship(fixture.patient.uid)).clinicianId).toBeNull();
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await expectPatientCatalogue(patient, []);
@@ -201,15 +180,9 @@ test('unlink preserves the training list and Garden; a new invitation replaces t
       sessionPatientId: fixture.patient.uid, threadPatientId: fixture.patient.uid,
     });
 
-    await clinician.getByRole('button', { name: 'Invite Patient' }).click();
-    await clinician.getByPlaceholder('e.g. Alex Morgan').fill(fixture.name);
-    await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
-    await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
-    await clinician.locator('form select').nth(1).selectOption('alpha-enhancement');
-    await clinician.getByPlaceholder('e.g. 3').fill('3');
-    await clinician.getByRole('button', { name: 'Create Invitation' }).click();
-    await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-    const code = await findPendingLifecycleInvitation(fixture.clinician.uid, fixture.patient.email);
+    const code = await seedPendingInvitation(fixture.clinician.uid, fixture.patient.email, fixture.name, { assignedProtocol: 'alpha-enhancement' });
+    await patient.reload();
+    await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
     await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
     await patient.getByLabel('Invitation code').fill(code);
@@ -227,50 +200,8 @@ test('unlink preserves the training list and Garden; a new invitation replaces t
     expect(await readLifecycleHistoryState(fixture.patient.uid, fixture.clinician.uid)).toEqual({
       sessionPatientId: fixture.patient.uid, threadPatientId: fixture.patient.uid,
     });
-    await expect(rosterRow).toHaveCount(1);
+    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: fixture.clinician.uid, acceptedInvitationId: code });
   } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
-  }
-});
-
-test('active linked patient cannot be reinvited until removed from the clinician roster', async ({ browser }) => {
-  const fixture = await seedLinkedPatient();
-  const context = await browser.newContext();
-  try {
-    const clinician = await context.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    const rosterRow = clinician.getByRole('row').filter({ hasText: fixture.name });
-    await expect(rosterRow).toHaveCount(1);
-    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
-      .toEqual({ pendingCount: 0, claimExists: false });
-
-    const submitInvitation = async () => {
-      await clinician.getByRole('button', { name: 'Invite Patient' }).click();
-      await clinician.getByPlaceholder('e.g. Alex Morgan').fill(fixture.name);
-      await clinician.getByPlaceholder('patient@example.com').fill(fixture.patient.email);
-      await clinician.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
-      await clinician.locator('form select').nth(1).selectOption('theta-beta-ratio');
-      await clinician.getByPlaceholder('e.g. 3').fill('3');
-      await clinician.getByRole('button', { name: 'Create Invitation' }).click();
-    };
-
-    await submitInvitation();
-    await expect(clinician.getByRole('alert').filter({ hasText: 'This patient is already connected to your clinic.' })).toBeVisible();
-    await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toHaveCount(0);
-    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
-      .toEqual({ pendingCount: 0, claimExists: false });
-
-    await clinician.getByRole('button', { name: 'Cancel', exact: true }).click();
-    clinician.once('dialog', (dialog) => { void dialog.accept(); });
-    await rosterRow.getByTitle('Remove Patient').click();
-    await expect(rosterRow).toHaveCount(0);
-
-    await submitInvitation();
-    await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
-      .toEqual({ pendingCount: 1, claimExists: true });
-  } finally {
-    await context.close();
+    await patientContext.close();
   }
 });

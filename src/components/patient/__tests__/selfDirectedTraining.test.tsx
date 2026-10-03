@@ -60,7 +60,7 @@ const sessionRunners = (renderer: ReactTestRenderer) => renderer.root.findAll((n
 describe('self-directed patient shell', () => {
   let onClientPersistedElsewhere: ReturnType<typeof vi.fn<(updated: ClientProfile) => void>>;
   const shell = (client: ClientProfile) => (
-    <PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />
+    <PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} />
   );
 
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -165,7 +165,7 @@ describe('patient shell header name (NFCT-38)', () => {
     ['a clinician-linked patient', linked, brand.name],
   ] as const)('names the app or clinic, never Waveable, for %s', async (_who, client, name) => {
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
     expect(hasText(renderer.root.findByType('header'), name)).toBe(true);
     expect(text(renderer)).not.toMatch(/waveable/i);
     await act(async () => { renderer.unmount(); });
@@ -178,7 +178,7 @@ describe('clinician relationship lifecycle', () => {
   let onInvitationDismissed: ReturnType<typeof vi.fn<() => void>>;
   const shell = (client: ClientProfile, initialInvitationCode?: string) => (
     <PatientShell
-      brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()}
+      brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere}
       initialInvitationCode={initialInvitationCode} onInvitationAccepted={onInvitationAccepted} onInvitationDismissed={onInvitationDismissed}
     />
   );
@@ -238,7 +238,7 @@ describe('clinician relationship lifecycle', () => {
     expect(invitationCards(renderer)).toHaveLength(0);
     await act(async () => { renderer.update(
       <PatientShell
-        brand={brand} client={unlinked()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()}
+        brand={brand} client={unlinked()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere}
         initialInvitationCode="ABCD-EFGH-JKLM" invitationRouteCode="ABCD-EFGH-JKLM" onInvitationAccepted={onInvitationAccepted} onInvitationDismissed={onInvitationDismissed}
       />); });
     expect(invitationCards(renderer)).toHaveLength(1);

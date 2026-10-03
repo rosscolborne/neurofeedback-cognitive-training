@@ -1,32 +1,15 @@
 import { expect, test } from './fixtures';
-import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { readReviewSessionFeedback, seedLinkedPatient, seedReviewSession } from './helpers/localEmulator';
+import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
+import { seedLinkedPatient, seedReviewSession } from './helpers/localEmulator';
 
-test('clinician opens the selected stored session and its feedback reaches the patient after reload', async ({ browser }) => {
+test('clinician feedback on one stored session reaches the patient and survives reload', async ({ browser }) => {
   const fixture = await seedLinkedPatient();
-  const selectedId = await seedReviewSession(fixture, 'Selected session reflection', 'neuro-gambit', Date.now() - 60_000);
-  const otherId = await seedReviewSession(fixture, 'Other session reflection', 'neuro-gambit');
-  const clinicianContext = await browser.newContext();
+  const feedback = 'Try the slower rhythm next session.';
+  // Feedback written on the older session, as the retired clinician workspace saved it.
+  await seedReviewSession(fixture, 'Selected session reflection', 'neuro-gambit', Date.now() - 60_000, { clinicianNotes: feedback });
+  await seedReviewSession(fixture, 'Other session reflection', 'neuro-gambit');
   const patientContext = await browser.newContext();
   try {
-    const clinician = await clinicianContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    await clinician.getByRole('row').filter({ hasText: fixture.name }).click();
-    await clinician.getByRole('button', { name: 'Session Logs (2)' }).click();
-    await clinician.getByRole('button', { name: `Open ${selectedId}` }).click();
-    const detail = clinician.getByRole('region', { name: `Session ${selectedId} details` });
-    await expect(detail).toContainText('Selected session reflection');
-    await expect(detail).not.toContainText('Other session reflection');
-    await expect(clinician.getByRole('button', { name: `Open ${otherId}` })).toBeVisible();
-    const feedback = 'Try the slower rhythm next session.';
-    await detail.getByLabel('Clinician feedback').fill(feedback);
-    await detail.getByRole('button', { name: 'Save feedback' }).click();
-    await expect.poll(() => readReviewSessionFeedback(selectedId)).toBe(feedback);
-    await expect.poll(() => readReviewSessionFeedback(otherId)).toBeUndefined();
-    await clinician.getByRole('button', { name: `Open ${otherId}` }).click();
-    await expect(clinician.getByRole('region', { name: `Session ${otherId} details` })).not.toContainText(feedback);
-
     const patient = await patientContext.newPage();
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
@@ -36,15 +19,19 @@ test('clinician opens the selected stored session and its feedback reaches the p
     await expect(selectedCard).toBeVisible();
     await selectedCard.click();
     await expect(selectedCard).toContainText('From your clinician');
-    await expect(selectedCard).toContainText('Try the slower rhythm next session.');
+    await expect(selectedCard).toContainText(feedback);
+    const otherCard = patient.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).first();
+    await otherCard.click();
+    await expect(otherCard).toContainText('Other session reflection');
+    await expect(otherCard).not.toContainText(feedback);
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
     const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).nth(1);
     await reloadedCard.click();
-    await expect(reloadedCard).toContainText('Try the slower rhythm next session.');
+    await expect(reloadedCard).toContainText(feedback);
   } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+    await patientContext.close();
   }
 });
 

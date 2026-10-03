@@ -2,19 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { ClientProfile, SessionRecord } from '../../types';
 import {
   applySessionCompletionToClient,
-  getCalibrationDisplayState,
   getPatientClinicianId,
   isPatientInvitationExpired,
   readClientProfile,
   readPatientInvitation,
   readSessionRecord,
   removeUndefined,
-  timestampToIso,
   timestampToMillis,
 } from '../dataMappers';
 import { CLINICAL_PROTOCOL_TEMPLATES, getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
-import { resolveProtocolRuntime } from '../adaptiveEngine';
-import { DEFAULT_RATIO_REWARDS } from '../protocols';
 
 const clientFixture = (): ClientProfile => ({
   id: 'patient-1',
@@ -60,37 +56,14 @@ const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord =
 });
 
 describe('production data migration readers', () => {
-  it('reads legacy saved calibrations for display across timestamp shapes', () => {
-    const now = Date.parse('2026-09-27T12:00:00Z');
-    const model = { alphaPeakHz: 10.2, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z', thetaMean: 2, betaMean: 4 };
-    expect(getCalibrationDisplayState(model, now).status).toBe('valid');
-    for (const expiresAt of [now + 1, new Date(now + 1).toISOString(), { seconds: (now + 1000) / 1000 }, { toDate: () => new Date(now + 1) }]) {
-      expect(getCalibrationDisplayState({ ...model, status: 'valid', expiresAt }, now).status).toBe('valid');
-    }
-    for (const expiresAt of [now, now - 1]) {
-      expect(getCalibrationDisplayState({ ...model, status: 'valid', expiresAt }, now).status).toBe('expired');
-    }
-    expect(getCalibrationDisplayState({ ...model, expiresAt: 'bad-date' }, now).status).toBe('invalid');
-    for (const status of ['invalid', 'collecting', 'unknown']) {
-      expect(getCalibrationDisplayState({ ...model, status }, now).status).toBe('invalid');
-    }
-    expect(getCalibrationDisplayState({ ...model, alphaPeakHz: Infinity }, now).status).toBe('invalid');
-    expect(getCalibrationDisplayState({ ...model, lastCalibratedAt: 'bad-date' }, now).status).toBe('invalid');
-    const gambit = { algorithmVersion: 'neurogambit-15s-v1', lastCalibratedAt: model.lastCalibratedAt, thetaMean: 0, betaMean: 4, alphaMean: 6 };
-    expect(getCalibrationDisplayState(gambit, now).status).toBe('valid');
-    expect(getCalibrationDisplayState({ ...gambit, thetaMean: NaN }, now).status).toBe('invalid');
-    expect(getCalibrationDisplayState(undefined, now)).toMatchObject({ status: 'not-calibrated', calibratedAt: null });
-    expect(getCalibrationDisplayState({ ...model, expiresAt: now }, now)).toMatchObject({ status: 'expired', calibratedAt: Date.parse(model.lastCalibratedAt) });
-  });
   it('removes ratio residue from merged default and single-band assignments on read', () => {
-    const ratioReward = DEFAULT_RATIO_REWARDS['theta-beta-ratio']!;
+    const ratioReward = { numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 }, targetCondition: 'below' as const, targetThreshold: 1.85 };
     for (const protocol of ['smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
       const template = getClinicalProtocolTemplate(protocol)!;
       const persisted = { ...clientFixture(), assignedProtocol: protocol,
         customProtocolConfig: { ...template, customRewardEnabled: false, ratioReward } };
       const loaded = readClientProfile(persisted);
       expect(loaded.customProtocolConfig?.ratioReward).toBeUndefined();
-      expect(resolveProtocolRuntime(loaded)).toMatchObject({ ok: true, config: { protocol, rewardBand: undefined } });
       expect(persisted.customProtocolConfig.ratioReward).toBe(ratioReward);
     }
     const beta = getClinicalProtocolTemplate('beta-downtraining')!;
@@ -98,22 +71,19 @@ describe('production data migration readers', () => {
       customProtocolConfig: { ...beta, customRewardEnabled: true, ratioReward,
         rewardBand: { ...beta.rewardBand, freqMin: 13, freqMax: 30, targetCondition: 'below', targetThreshold: 2 } } });
     expect(customized.customProtocolConfig?.ratioReward).toBeUndefined();
-    expect(resolveProtocolRuntime(customized)).toMatchObject({ ok: true,
-      config: { protocol: 'beta-downtraining', initialThreshold: 2, rewardBand: { freqMin: 13, freqMax: 30 } } });
+    expect(customized.customProtocolConfig?.rewardBand).toMatchObject({ freqMin: 13, freqMax: 30, targetThreshold: 2 });
   });
 
-  it('keeps unsupported unmarked ratio configurations visible to the runtime guard', () => {
+  it('keeps unmarked ratio configurations as stored', () => {
     const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
     const loaded = readClientProfile({ ...clientFixture(), assignedProtocol: 'alpha-enhancement',
-      customProtocolConfig: { ...alpha, ratioReward: DEFAULT_RATIO_REWARDS['theta-beta-ratio'] } });
+      customProtocolConfig: { ...alpha, ratioReward: { numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 }, targetCondition: 'below' as const, targetThreshold: 1.85 } } });
     expect(loaded.customProtocolConfig?.ratioReward).toBeDefined();
-    expect(resolveProtocolRuntime(loaded)).toMatchObject({ ok: false });
   });
   it('normalizes every supported persisted timestamp representation', () => {
     expect(timestampToMillis('2026-09-15T12:00:00.000Z')).toBe(1_789_473_600_000);
     expect(timestampToMillis(new Date('2026-09-15T12:00:00.000Z'))).toBe(1_789_473_600_000);
     expect(timestampToMillis({ seconds: 1_789_473_600, nanoseconds: 500_000_000 })).toBe(1_789_473_600_500);
-    expect(timestampToIso({ seconds: 1_789_473_600 })).toBe('2026-09-15T12:00:00.000Z');
     expect(timestampToMillis('not-a-date')).toBeNull();
   });
 

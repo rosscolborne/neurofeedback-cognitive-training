@@ -31,8 +31,6 @@ const messageReadReceipt = (patientId: string, clinicianId: string, readerId: st
 const sessions = (patientId: string) => getDocs(query(collection(db, 'sessions'), where('patientId', '==', patientId)));
 const canonicalAppointmentsForPatient = (patientId: string) => getDocs(query(collection(db, 'appointments'), where('patientId', '==', patientId)));
 const legacyAppointmentsForPatient = (patientId: string) => getDocs(query(collection(db, 'appointments'), where('clientId', '==', patientId), where('patientId', '==', null)));
-const canonicalAppointmentsForClinician = (clinicianId: string, patientId: string) => getDocs(query(collection(db, 'appointments'), where('clinicianId', '==', clinicianId), where('patientId', '==', patientId)));
-const legacyAppointmentsForClinician = (clinicianId: string, patientId: string) => getDocs(query(collection(db, 'appointments'), where('clinicianId', '==', clinicianId), where('clientId', '==', patientId), where('patientId', '==', null)));
 
 /** Direct, read-only probe used by the isolated messaging browser scenario. */
 export async function probeMessageThreadRead(patientId: string, clinicianId: string): Promise<string> {
@@ -50,19 +48,7 @@ export async function probeDeletedPatientHistory(oldUid: string, clinicianId: st
     ].map(outcome));
 }
 
-export async function probeUnrelatedClinicianReads(patientId: string, ownerClinicianId: string): Promise<string[]> {
-    await auth.authStateReady();
-    return Promise.all([
-        () => getDoc(doc(db, 'clients', patientId)),
-        () => sessions(patientId),
-        () => canonicalAppointmentsForPatient(patientId),
-        () => getDocs(collection(db, 'clients', patientId, 'brainMaps')),
-        () => getDoc(doc(db, 'messageThreads', patientId, 'relationships', ownerClinicianId)),
-        () => getDocs(collection(db, 'messageThreads', patientId, 'relationships', ownerClinicianId, 'messages')),
-    ].map(outcome));
-}
-
-export type DeployedReadProbe = { reads: Record<string, string>; hasReadableLegacyMessageHistory: boolean; hasExistingInvitation: boolean };
+export type DeployedReadProbe = { reads: Record<string, string>; hasReadableLegacyMessageHistory: boolean };
 
 /** Current patient dashboard, progress, messaging, and calendar reads. */
 export async function probePatientBranchRuleReads(clinicianId: string): Promise<DeployedReadProbe> {
@@ -97,66 +83,5 @@ export async function probePatientBranchRuleReads(clinicianId: string): Promise<
     });
     reads.ownAppointments = await outcome(() => canonicalAppointmentsForPatient(patientId));
     reads.ownLegacyAppointments = await outcome(() => legacyAppointmentsForPatient(patientId));
-    return { reads, hasReadableLegacyMessageHistory, hasExistingInvitation: false };
-}
-
-/** Current clinician roster, settings, patient detail, reports, messaging, and calendar reads. */
-export async function probeClinicianBranchRuleReads(patientId: string, hasReadableLegacyMessageHistory: boolean): Promise<DeployedReadProbe> {
-    await auth.authStateReady();
-    const clinicianId = signedInId();
-    const reads: Record<string, string> = {};
-    reads.ownUserRole = await outcome(async () => {
-        const user = await getDoc(doc(db, 'users', clinicianId));
-        if (user.data()?.role !== 'clinician') throw Object.assign(new Error('role'), { code: 'no-clinician-role' });
-    });
-    let clinicId = clinicianId;
-    reads.ownPractitionerRecord = await outcome(async () => {
-        const practitioner = await getDoc(doc(db, 'practitioners', clinicianId));
-        if (!practitioner.exists()) throw Object.assign(new Error('practitioner'), { code: 'missing-practitioner-fixture' });
-        if (typeof practitioner.data().clinicId === 'string') clinicId = practitioner.data().clinicId;
-    });
-    reads.ownClinicSettings = await outcome(() => getDoc(doc(db, 'clinics', clinicId)));
-
-    const rosterIds = new Set<string>();
-    reads.canonicalRoster = await outcome(async () => {
-        const roster = await getDocs(query(collection(db, 'clients'), where('clinicianId', '==', clinicianId)));
-        roster.docs.forEach((entry) => rosterIds.add(entry.id));
-    });
-    reads.legacyRoster = await outcome(async () => {
-        const roster = await getDocs(query(collection(db, 'clients'), where('linkedClinicianCode', '==', clinicianId), where('clinicianId', '==', null)));
-        roster.docs.forEach((entry) => rosterIds.add(entry.id));
-    });
-    let existingInvitationId: string | undefined;
-    reads.patientInvitations = await outcome(async () => {
-        const invitations = await getDocs(query(collection(db, 'patientInvitations'), where('clinicianId', '==', clinicianId)));
-        existingInvitationId = invitations.docs[0]?.id;
-    });
-    if (existingInvitationId) {
-        const invitationId = existingInvitationId;
-        reads.existingInvitation = await outcome(() => getDoc(doc(db, 'patientInvitations', invitationId)));
-    }
-    reads.linkedPatientProfileAndAssignment = await outcome(async () => {
-        const profile = await getDoc(doc(db, 'clients', patientId));
-        if (!profile.exists() || currentClinicianId(profile.data()) !== clinicianId || !rosterIds.has(patientId)) {
-            throw Object.assign(new Error('relationship'), { code: 'unlinked-patient-fixture' });
-        }
-    });
-    if (reads.linkedPatientProfileAndAssignment !== 'allowed') {
-        throw new Error(`The read-only clinician fixture must include the linked patient in its roster; profile probe: ${reads.linkedPatientProfileAndAssignment}.`);
-    }
-
-    // Reports and the calendar enumerate every current roster member.
-    const ids = [...rosterIds];
-    reads.rosterPatientProfiles = await outcome(() => Promise.all(ids.map((id) => getDoc(doc(db, 'clients', id)))));
-    reads.rosterSessionsAndReports = await outcome(() => Promise.all(ids.map(sessions)));
-    reads.rosterAppointments = await outcome(() => Promise.all(ids.map((id) => canonicalAppointmentsForClinician(clinicianId, id))));
-    reads.rosterLegacyAppointments = await outcome(() => Promise.all(ids.map((id) => legacyAppointmentsForClinician(clinicianId, id))));
-    reads.rosterMessageThreads = await outcome(() => Promise.all(ids.map((id) => messageThread(id, clinicianId))));
-    reads.rosterMessageReadReceipts = await outcome(() => Promise.all(ids.map((id) => messageReadReceipt(id, clinicianId, clinicianId))));
-    reads.linkedPatientBrainMaps = await outcome(() => getDocs(collection(db, 'clients', patientId, 'brainMaps')));
-    reads.linkedPatientMessageThread = await outcome(() => messageThread(patientId, clinicianId));
-    reads.ownMessageReadReceipt = await outcome(() => messageReadReceipt(patientId, clinicianId, clinicianId));
-    reads.linkedPatientMessageHistory = await outcome(() => messageHistory(patientId, clinicianId));
-    if (hasReadableLegacyMessageHistory) reads.linkedPatientLegacyMessageHistory = await outcome(() => getDoc(doc(db, 'messages', patientId)));
-    return { reads, hasReadableLegacyMessageHistory, hasExistingInvitation: Boolean(existingInvitationId) };
+    return { reads, hasReadableLegacyMessageHistory };
 }

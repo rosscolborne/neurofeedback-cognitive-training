@@ -29,7 +29,7 @@ function ageMs(index: number): number {
 
 /**
  * A long, realistic training history written with admin rights, as completed sessions are stored.
- * Returns session IDs newest first, which is the order both history surfaces render.
+ * Returns session IDs newest first, which is the order Progress renders.
  */
 export async function seedSessionHistory(fixture: LocalPatientFixture, now = Date.now()): Promise<string[]> {
   const batch = adminDb.batch();
@@ -69,6 +69,5 @@ export async function readSessionNotes(sessionId: string) {
   return {
     patientNotes: snapshot.get('patientNotes') as string | undefined,
     moodRating: snapshot.get('moodRating') as number | undefined,
-    clinicianNotes: snapshot.get('clinicianNotes') as string | undefined,
   };
 }

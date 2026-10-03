@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
-import { ArrowLeft, Stethoscope } from 'lucide-react';
-import { shouldOfferClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
+import { ArrowLeft } from 'lucide-react';
 import { useKeepActionAboveKeyboard } from '../../components/ui/useKeepActionAboveKeyboard';
 
 // Client-side pause between reset emails to the same address so repeated clicks
@@ -14,7 +13,7 @@ const normalizeResetAddress = (value: string) => value.trim().toLowerCase();
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, loginAsDemoClinician, requestPasswordReset } = useAuth();
+  const { login, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -153,19 +152,6 @@ export const Login: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       console.error(err);
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoClinician = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      await loginAsDemoClinician();
-      navigate('/');
-    } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -327,34 +313,6 @@ export const Login: React.FC = () => {
         }}>
           Return to login
         </button>
-      )}
-
-      {!resetView && shouldOfferClinicianDemoWorkspace() && (
-        <section aria-label="Sample clinician workspace" style={{ marginTop: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '12px' }}>
-            <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Demo environment</span>
-            <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleDemoClinician()}
-            disabled={loading}
-            style={{
-              width: '100%', padding: '14px 16px', borderRadius: 'var(--radius-md)',
-              background: 'rgba(232, 150, 122, 0.12)', border: '1.5px dashed var(--brand-primary)',
-              color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600, display: 'flex',
-              alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <Stethoscope size={18} color="var(--brand-primary)" />
-            <span>Open Sample Clinician Workspace</span>
-          </button>
-          <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '6px', marginBottom: 0 }}>
-            Fictional sample records for demonstration only. This workspace is isolated from production accounts.
-          </p>
-        </section>
       )}
 
       </div>

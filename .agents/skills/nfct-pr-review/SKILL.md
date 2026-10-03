@@ -1,6 +1,6 @@
 ---
 name: nfct-pr-review
-description: Independently review an NFCT pull request, including an integration PR, for correctness against its Jira cards and the Stage 1 design, with labelled findings and a bounded verification pass. Read-only by default; use when asked to review a PR or branch you did not write or integrate, or to verify fixes to your earlier findings.
+description: Independently review an NFCT pull request, including an integration PR, for correctness against its Jira cards and the Stage 1 design, with labelled findings and a bounded verification pass. Read-only by default; use when asked to review a PR or branch you did not write or integrate, or to verify fixes to your earlier findings. The orchestrator, or a solo agent acting as one, arranges this review for every PR routed for review.
 ---
 
 # NFCT PR review
@@ -9,7 +9,9 @@ You are the reviewer, not the implementer or integrator. Stay read-only: do not
 edit, commit, push, merge, comment on the PR or change Jira unless you are
 explicitly asked to switch roles. Start no other agents, reviewers included,
 and return your findings to whoever asked for the review
-([agent topology](../../../AGENTS.md#agent-topology)).
+([agent topology](../../../AGENTS.md#agent-topology)). Whoever routed the PR
+([which PRs get review](../../../AGENTS.md#which-prs-get-review)) starts you;
+you never review your own change.
 
 ## Before reading the diff
 

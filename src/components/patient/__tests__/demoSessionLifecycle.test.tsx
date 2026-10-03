@@ -98,7 +98,7 @@ describe('mounted patient Demo session lifecycle', () => {
 
   it('gives NeuroGambit only the EEG frame and pause state: no patient, baseline or calibration', async () => {
     let runner!: ReactTestRenderer;
-    await act(async () => { runner = create(<SessionRunner client={{ ...client, individualBaselineModel: { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-26T12:00:00Z' } }} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />); });
+    await act(async () => { runner = create(<SessionRunner client={{ ...client, individualBaselineModel: { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-26T12:00:00Z' } } as ClientProfile} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />); });
     await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
     const experience = runner.root.find((node) => (node.type as unknown) === 'experience-view');
     expect(Object.keys(experience.props).sort()).toEqual(['eegData', 'isPaused']);

@@ -25,48 +25,6 @@ export function timestampToMillis(value: PersistedTimestamp | null | undefined):
   return Number.isFinite(value.seconds) ? value.seconds * 1000 + (value.nanoseconds ?? 0) / 1e6 : null;
 }
 
-export function timestampToIso(value: PersistedTimestamp | null | undefined): string | null {
-  const millis = timestampToMillis(value);
-  return millis == null ? null : new Date(millis).toISOString();
-}
-
-export type CalibrationDisplayState = {
-  status: 'valid' | 'expired' | 'invalid' | 'not-calibrated';
-  calibratedAt: number | null;
-  expiresAt: number | null;
-};
-
-/** Inspect a legacy saved calibration (shown only by the clinician view) without changing it. */
-export function getCalibrationDisplayState(model: unknown, now = Date.now()): CalibrationDisplayState {
-  if (model == null) return { status: 'not-calibrated', calibratedAt: null, expiresAt: null };
-  if (typeof model !== 'object' || Array.isArray(model)) return { status: 'invalid', calibratedAt: null, expiresAt: null };
-  const value = model as Record<string, unknown>;
-  const calibratedAt = typeof value.lastCalibratedAt === 'string'
-    ? timestampToMillis(value.lastCalibratedAt) : null;
-  let expiresAt: number | null = null;
-  if (value.expiresAt != null) {
-    try { expiresAt = timestampToMillis(value.expiresAt as PersistedTimestamp); } catch { /* Malformed legacy timestamp. */ }
-  }
-  const isNeuroGambitCalibration = value.algorithmVersion === 'neurogambit-15s-v1';
-  const numericValuesAreValid = isNeuroGambitCalibration
-    ? Number.isFinite(value.thetaMean) && Number.isFinite(value.betaMean) && Number.isFinite(value.alphaMean)
-      && (value.thetaStd == null || Number.isFinite(value.thetaStd))
-      && (value.betaStd == null || Number.isFinite(value.betaStd))
-      && (value.alphaStd == null || Number.isFinite(value.alphaStd))
-    : Number.isFinite(value.alphaPeakHz)
-      && Number.isFinite(value.oneOverFSlope)
-      && (value.alphaPeakHz as number) > 0
-      && (value.oneOverFSlope as number) > 0;
-  const validStatus = value.status == null || value.status === 'valid';
-  if (value.status === 'expired' || (expiresAt != null && expiresAt <= now)) {
-    return { status: 'expired', calibratedAt, expiresAt };
-  }
-  if (!validStatus || !numericValuesAreValid || calibratedAt == null || (value.expiresAt != null && expiresAt == null)) {
-    return { status: 'invalid', calibratedAt, expiresAt };
-  }
-  return { status: 'valid', calibratedAt, expiresAt };
-}
-
 /** Read both current and legacy client documents without mutating Firestore data. */
 export function readClientProfile(data: unknown, documentId?: string): ClientProfile {
   const raw = { ...(data as Record<string, unknown>) } as unknown as ClientProfile;

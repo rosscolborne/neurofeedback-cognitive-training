@@ -18,7 +18,7 @@ const PROFILE_ERROR = view({ buttons: ['Retry'], alerts: ['Your patient profile 
 const ROLE_LOADING = view({ hash: '#/role-selection' });
 /** Run 37075924837 (0f3c4bf), smoke, when "Create Account" gave up. */
 const ROLE_RETRY = view({ hash: '#/role-selection', buttons: ['Try again', 'Sign out'], alerts: ['Your account couldn’t be loaded.Check your internet connection, then try again.'] });
-const ROLE_SELECTION = view({ hash: '#/role-selection', headings: ['How will you use NFCT?', 'Train my brain'], buttons: ['Train my brain', 'I am a practitioner'] });
+const ROLE_SELECTION = view({ hash: '#/role-selection', headings: ['How will you use NFCT?', 'Train my brain'], buttons: ['Train my brain'] });
 const SIGN_UP_FORM = view({ hash: '#/signup', headings: ['Create Account'], buttons: ['Back', 'Create Account'], fields: ['How should we call you?'] });
 
 const TRAIN = { target: { role: 'button', name: 'Train', exact: true } };

@@ -221,7 +221,7 @@ detection fails (`scripts/ci/classify-changes.sh`). That means:
   `ios.yml`;
 - app code that calls native APIs through Capacitor (`@capacitor/…`,
   `Capacitor.…`), detected in the changed files themselves: today
-  `MentalMathGame.tsx`, `eegEngine.ts` and `pdfReportGenerator.ts`.
+  `MentalMathGame.tsx` and `eegEngine.ts`.
 
 Documentation and tests never count. Web code the scenarios merely drive does
 not count either: the app shell, sign-in, onboarding, the Train tab and the

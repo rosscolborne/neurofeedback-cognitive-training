@@ -3,10 +3,10 @@ import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import {
-  arriveAtClinicianDashboard, arriveAtPatientDashboard, authenticatedUserId, loginThroughUi, startPatientTrainingInDemoMode,
+  arriveAtPatientDashboard, authenticatedUserId, loginThroughUi, startPatientTrainingInDemoMode,
 } from './helpers/auth';
 import {
-  findPendingLifecycleInvitation, readInvitationNoticeClinicians, readPatientRelationship, readPatientTrainingRecord,
+  cancelPendingInvitation, readInvitationNoticeClinicians, readPatientRelationship, readPatientTrainingRecord,
   removePatientFields, seedFutureLifecycleAppointment, seedLinkedPatient, seedPendingInvitation, seedSelfDirectedHistory,
 } from './helpers/localEmulator';
 
@@ -74,25 +74,21 @@ async function reloadPatient(page: Page) {
   await arriveAtPatientDashboard(page);
 }
 
-async function inviteFromClinician(page: Page, email: string, name: string, protocol: string) {
-  await page.getByRole('button', { name: 'Invite Patient' }).click();
-  await page.getByPlaceholder('e.g. Alex Morgan').fill(name);
-  await page.getByPlaceholder('patient@example.com').fill(email);
-  await page.locator('form select').nth(0).selectOption('Peak Performance');
-  await page.locator('form select').nth(1).selectOption(protocol);
-  await page.getByPlaceholder('e.g. 3').fill('3');
-  await page.getByRole('button', { name: 'Create Invitation' }).click();
-  await expect(page.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-  await page.getByRole('button', { name: 'Done' }).click();
+/** The patient ends the clinician relationship from Profile, confirming the dialog. */
+async function disconnectFromClinician(page: Page) {
+  await page.getByRole('button', { name: 'Profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Disconnect from Clinician' }).click();
+  const confirm = page.getByRole('alertdialog', { name: 'Disconnect from your clinician?' });
+  await confirm.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(confirm).toHaveCount(0);
 }
 
-test('a self-directed patient has no protocol setup, yields to a clinician invitation, and returns after unlink', async ({ browser }) => {
+test('a self-directed patient has no protocol setup, yields to a clinician invitation, and returns after disconnecting', async ({ browser }) => {
   test.setTimeout(240_000);
   const { clinician: clinicianAccount } = await seedLinkedPatient();
   const email = `self-directed-${randomUUID().slice(0, 12)}@example.test`;
   const name = 'Self Directed Patient';
   const smr = defaults('smr-enhancement');
-  const clinicianContext = await browser.newContext();
   const patientContext = await browser.newContext();
   try {
     // 1. A new unlinked patient: the default experience list, no protocol, no clinician destinations.
@@ -127,11 +123,7 @@ test('a self-directed patient has no protocol setup, yields to a clinician invit
     await reloadPatient(patient);
 
     // 3. Accepting a clinician invitation replaces the self-directed setup completely.
-    const clinician = await clinicianContext.newPage();
-    await loginThroughUi(clinician, clinicianAccount);
-    await arriveAtClinicianDashboard(clinician);
-    await inviteFromClinician(clinician, email, name, 'smr-enhancement');
-    const code = await findPendingLifecycleInvitation(clinicianAccount.uid, email);
+    const code = await seedPendingInvitation(clinicianAccount.uid, email, name, { assignedProtocol: 'smr-enhancement', condition: 'Peak Performance' });
     // The pending invitation (not a link) makes Connect available; the patient types the code.
     expect(await readInvitationNoticeClinicians(email)).toEqual([clinicianAccount.uid]);
     await reloadPatient(patient);
@@ -159,14 +151,8 @@ test('a self-directed patient has no protocol setup, yields to a clinician invit
       hasCustomProtocolConfig: false, tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'],
     });
 
-    // 4. Unlinking removes clinician destinations and restores self-directed setup without losing history.
-    await clinician.reload();
-    await arriveAtClinicianDashboard(clinician);
-    const rosterRow = clinician.getByRole('row').filter({ hasText: name });
-    await expect(rosterRow).toHaveCount(1);
-    clinician.once('dialog', (dialog) => { void dialog.accept(); });
-    await rosterRow.getByTitle('Remove Patient').click();
-    await expect(rosterRow).toHaveCount(0);
+    // 4. Disconnecting removes clinician destinations and restores self-directed setup without losing history.
+    await disconnectFromClinician(patient);
     await reloadPatient(patient);
     await expectNavigation(patient, false);
     // Existing unlink contract: the last clinician assignment stays as the self-directed starting point.
@@ -177,7 +163,7 @@ test('a self-directed patient has no protocol setup, yields to a clinician invit
     await expectTrainCatalogue(patient, smr);
     await expectHistory(patient, uid, sessionId);
   } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+    await patientContext.close();
   }
 });
 
@@ -187,7 +173,6 @@ test('Connect appears only for a pending invitation, survives another clinician 
   const { clinician: otherClinician } = await seedLinkedPatient({ clinicianId: null, clinicId: null });
   const email = fixture.patient.email;
   const patientContext = await browser.newContext();
-  const clinicianContext = await browser.newContext();
   try {
     // A. No pending invitation: nothing to connect with.
     const patient = await patientContext.newPage();
@@ -219,12 +204,7 @@ test('Connect appears only for a pending invitation, survives another clinician 
     expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: null });
 
     // Cancelling one clinician's invitation keeps the other's Connect path.
-    const clinician = await clinicianContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    const pending = clinician.locator('.card-clinician').filter({ hasText: 'Pending invitations' });
-    await pending.getByRole('button', { name: 'Cancel' }).click();
-    await expect(pending.getByText(codeA, { exact: true })).toHaveCount(0);
+    await cancelPendingInvitation(codeA);
     expect(await readInvitationNoticeClinicians(email)).toEqual([otherClinician.uid]);
     await reloadPatient(patient);
     await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
@@ -235,7 +215,7 @@ test('Connect appears only for a pending invitation, survives another clinician 
     expect(await readInvitationNoticeClinicians(email)).toEqual([]);
     expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: otherClinician.uid, acceptedInvitationId: codeB });
   } finally {
-    await Promise.allSettled([patientContext.close(), clinicianContext.close()]);
+    await patientContext.close();
   }
 });
 
@@ -273,7 +253,6 @@ test('a linked patient disconnects after confirming, keeps history and the last 
   const { sessionId, garden } = await seedSelfDirectedHistory(uid);
   await seedFutureLifecycleAppointment(fixture);
   const patientContext = await browser.newContext();
-  const clinicianContext = await browser.newContext();
   try {
     const patient = await patientContext.newPage();
     await loginThroughUi(patient, fixture.patient);
@@ -303,7 +282,7 @@ test('a linked patient disconnects after confirming, keeps history and the last 
     await expectTrainCatalogue(patient, smr);
     await expectHistory(patient, uid, sessionId);
 
-    // Nothing recreates the relationship on reload, and the clinician's access has ended.
+    // Nothing recreates the relationship on reload.
     await reloadPatient(patient);
     await expectNavigation(patient, false);
     await expectAuthority(patient, 'Self-directed');
@@ -313,36 +292,8 @@ test('a linked patient disconnects after confirming, keeps history and the last 
     expect(await readPatientTrainingRecord(uid)).toMatchObject({
       assignedProtocol: 'smr-enhancement', allowedExperiences: smr, tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'],
     });
-    const clinician = await clinicianContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    await expect(clinician.getByRole('row').filter({ hasText: fixture.name })).toHaveCount(0);
   } finally {
-    await Promise.allSettled([patientContext.close(), clinicianContext.close()]);
-  }
-});
-
-test('a clinician can end the relationship from the phone roster without deleting the patient', async ({ browser }) => {
-  const fixture = await seedLinkedPatient({ assignedProtocol: 'smr-enhancement', allowedExperiences: defaults('smr-enhancement') });
-  await seedSelfDirectedHistory(fixture.patient.uid);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  try {
-    const clinician = await context.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    const remove = clinician.getByRole('button', { name: `Remove ${fixture.name}`, exact: true });
-    await expect(remove).toBeVisible();
-    clinician.once('dialog', (dialog) => { void dialog.accept(); });
-    await remove.click();
-    await expect(remove).toHaveCount(0);
-    // The roster listener drops the card on the local write; the server commit can land a moment later.
-    await expect.poll(async () => readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: null, clinicId: null });
-    // Only the relationship ends: the patient's profile and history remain.
-    expect(await readPatientTrainingRecord(fixture.patient.uid)).toMatchObject({
-      assignedProtocol: 'smr-enhancement', completedSessionsCount: 1, badges: ['garden-keeper'],
-    });
-  } finally {
-    await context.close();
+    await patientContext.close();
   }
 });
 

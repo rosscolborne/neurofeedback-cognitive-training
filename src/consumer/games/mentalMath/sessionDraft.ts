@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import { mentalMath } from '@nfct/shared';
+import { localDateIn, mentalMath } from '@nfct/shared';
 import type { GameSessionDraft } from '../../repositories/gameSessionRepository';
 import type { RunOutcome } from './runController';
 
@@ -27,17 +27,12 @@ export function deviceTimezone(): string {
   }
 }
 
-/** The calendar date (YYYY-MM-DD) of `ms` in `timezone`. */
-export function localDateIn(ms: number, timezone: string): string {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    .formatToParts(new Date(ms));
-  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? '';
-  return `${part('year')}-${part('month')}-${part('day')}`;
-}
-
 export function buildSessionDraft(outcome: RunOutcome, environment: SessionEnvironment): MentalMathSessionDraft {
   const { run } = outcome;
   const scored = mentalMath.score(run.trials, { modeId: mentalMath.MODE_ID, startLevel: run.startLevel });
+  // The same calendar date the server derives for the session.
+  const localDate = localDateIn(environment.timezone, outcome.endedAtMs);
+  if (localDate === null) throw new RangeError(`Unknown time zone: ${environment.timezone}`);
   return {
     gameId: mentalMath.GAME_ID,
     gameVersion: mentalMath.GAME_VERSION,
@@ -48,7 +43,7 @@ export function buildSessionDraft(outcome: RunOutcome, environment: SessionEnvir
     startedAt: Timestamp.fromMillis(outcome.startedAtMs),
     endedAt: Timestamp.fromMillis(outcome.endedAtMs),
     activeDurationMs: outcome.activeDurationMs,
-    localDate: localDateIn(outcome.endedAtMs, environment.timezone),
+    localDate,
     timezone: environment.timezone,
     client: { appVersion: environment.appVersion, platform: environment.platform },
     trials: [...run.trials],

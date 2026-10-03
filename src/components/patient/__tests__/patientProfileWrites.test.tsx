@@ -58,7 +58,7 @@ const stubWindow = (overrides: Record<string, unknown>) => {
 /** Mirrors App: a profile persisted elsewhere replaces the mounted client. */
 const StatefulShell: React.FC<{ initial: ClientProfile; onPersisted: (updated: ClientProfile) => void }> = ({ initial, onPersisted }) => {
   const [current, setCurrent] = React.useState(initial);
-  return <PatientShell brand={brand} client={current} onUpdateClient={vi.fn()} onClientPersistedElsewhere={(updated) => { onPersisted(updated); setCurrent(updated); }} onOpenRebrand={vi.fn()} />;
+  return <PatientShell brand={brand} client={current} onUpdateClient={vi.fn()} onClientPersistedElsewhere={(updated) => { onPersisted(updated); setCurrent(updated); }} />;
 };
 
 const rendered = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
@@ -95,7 +95,7 @@ describe('PatientShell persisted profile writes', () => {
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((resolve) => { finishReauth = resolve; }));
     let renderer!: ReactTestRenderer;
     try {
-      await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+      await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'secret');
       await act(async () => {
@@ -122,7 +122,7 @@ describe('PatientShell persisted profile writes', () => {
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { rejectReauth = reject; }));
     const onClientPersistedElsewhere = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />); });
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} />); });
     try {
       openProfileDeletion(renderer);
       // The in-app step is the only confirmation: no browser dialog first.
@@ -174,7 +174,7 @@ describe('PatientShell persisted profile writes', () => {
     state.auth.currentUser = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
     state.reauthenticate.mockRejectedValueOnce(firebaseError('auth/wrong-password'));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
     try {
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'Wrong-Horse-7731');
@@ -288,7 +288,7 @@ describe('PatientShell persisted profile writes', () => {
     const marked = { ...client, accountDeletionStartedAt: new Date(), clinicianId: undefined, clinicId: undefined };
     let renderer!: ReactTestRenderer;
     try {
-      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
       const submit = async () => {
         act(() => renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Finish account deletion')!.props.onClick());
         // Resuming is already confirmed: no browser dialog (the stub has none) and no repeated warning.
@@ -300,7 +300,7 @@ describe('PatientShell persisted profile writes', () => {
       expect(user.delete).toHaveBeenCalledTimes(1);
       expect(deletionError(renderer)).toBe('Unable to connect. Check your internet connection and try again.');
       await act(async () => { renderer.unmount(); });
-      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />); });
+      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
       expect(JSON.stringify(renderer.toJSON())).toContain('Finish deleting your account');
       await submit();
       expect(user.delete).toHaveBeenCalledTimes(2);
@@ -331,7 +331,7 @@ describe('PatientShell persisted profile writes', () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
     });
     const profileTab = renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -346,7 +346,7 @@ describe('PatientShell persisted profile writes', () => {
     expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('avatar save offline');
     const refreshedClient = { ...client, completedSessionsCount: 3, badges: ['first-light'] };
     await act(async () => {
-      renderer.update(<PatientShell brand={brand} client={refreshedClient} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+      renderer.update(<PatientShell brand={brand} client={refreshedClient} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
     });
     const retry = renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Retry')!;
     await act(async () => { await retry.props.onClick(); });
@@ -371,7 +371,7 @@ describe('PatientShell persisted profile writes', () => {
     const onClientPersistedElsewhere = vi.fn();
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={assigned} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />);
+      renderer = create(<PatientShell brand={brand} client={assigned} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} />);
     });
     act(() => renderer.root.find((node) => (node.type as unknown) === 'home-screen').props.onStartSession('neuro-gambit'));
     const session = { id: 'session-1', patientId: client.id };
@@ -394,7 +394,7 @@ describe('PatientShell persisted profile writes', () => {
     state.getSessions.mockResolvedValueOnce(allRows);
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
     });
     act(() => renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -416,7 +416,7 @@ describe('PatientShell persisted profile writes', () => {
     let renderer!: ReactTestRenderer;
     try {
       await act(async () => {
-        renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />);
+        renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
       });
       act(() => renderer.root.findAllByType('button').find((button) =>
         button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -441,7 +441,7 @@ describe('PatientShell persisted profile writes', () => {
     const legacyBaseline = { alphaPeakHz: 9.8, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z' };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={{ ...client, assignedProtocol: 'theta-beta-ratio', individualBaselineModel: legacyBaseline }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} onSetUpHeadset={onSetUpHeadset} />);
+      renderer = create(<PatientShell brand={brand} client={{ ...client, assignedProtocol: 'theta-beta-ratio', individualBaselineModel: legacyBaseline } as ClientProfile} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onSetUpHeadset={onSetUpHeadset} />);
     });
     act(() => renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')

@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient } from './helpers/localEmulator';
+import { readPendingInvitationState, seedLinkedPatient, seedPendingLifecycleInvitation } from './helpers/localEmulator';
 
 test('wrong current password does not change patient sign-in credentials', async ({ browser }) => {
   const fixture = await seedLinkedPatient();
@@ -30,5 +31,53 @@ test('wrong current password does not change patient sign-in credentials', async
     await arriveAtPatientDashboard(verifier);
   } finally {
     await Promise.allSettled([patientContext.close(), verificationContext.close()]);
+  }
+});
+
+const unsupportedAccount = (page: Page) => page.getByRole('heading', { name: 'Practitioner accounts aren’t supported', level: 1 });
+
+async function expectUnsupportedAccountScreen(page: Page) {
+  await expect(unsupportedAccount(page)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/ is for personal brain training\. Sign out, then create a new account to train\.$/)).toBeVisible();
+  // Nothing of the retired clinician workspace, and no patient home.
+  await expect(page.getByRole('button', { name: 'Patients', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Training Session', { exact: true })).toHaveCount(0);
+}
+
+test('a practitioner account is told it is unsupported, even from a patient invitation, and Sign out returns to Welcome', async ({ browser }) => {
+  // users/{uid}.role is 'clinician' for the seeded practitioner account.
+  const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
+  const code = await seedPendingLifecycleInvitation(fixture);
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await loginThroughUi(page, fixture.clinician);
+    await expectUnsupportedAccountScreen(page);
+    await page.reload();
+    await expectUnsupportedAccountScreen(page);
+
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /^Welcome to your\s*brain training journey$/, level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Begin Journey' })).toBeVisible();
+    await expect(unsupportedAccount(page)).toHaveCount(0);
+    expect(await page.evaluate(async () => {
+      const { auth } = await import('/src/services/firebase.ts');
+      await auth.authStateReady();
+      return auth.currentUser?.uid ?? null;
+    })).toBeNull();
+
+    // Signing in from a patient's invitation link shows the same screen, and accepts nothing.
+    await page.goto(`/#/connect/${code}`);
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByPlaceholder('name@example.com', { exact: true }).fill(fixture.clinician.email);
+    await page.getByPlaceholder('Your password', { exact: true }).fill(fixture.clinician.password);
+    await page.getByRole('button', { name: 'Log In', exact: true }).click();
+    await expectUnsupportedAccountScreen(page);
+    await expect(page.getByRole('button', { name: 'Accept Invitation' })).toHaveCount(0);
+    await expect(page.getByLabel('Invitation code')).toHaveCount(0);
+    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
+      .toEqual({ pendingCount: 1, claimExists: true });
+  } finally {
+    await context.close();
   }
 });

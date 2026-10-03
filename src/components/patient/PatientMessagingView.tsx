@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { MessageBubble } from '../clinician/MessagingView';
+import { MessageBubble } from '../messaging/MessageBubble';
 import { messageRepository, type MessageRepository } from '../../services/messageRepository';
 import { getMessageSendViewState } from '../messaging/messageUiState';
 import { useMessageConversation } from '../messaging/useMessageConversation';

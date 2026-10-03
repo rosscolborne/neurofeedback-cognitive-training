@@ -29,7 +29,7 @@ const profile = (allowedExperiences: ExperienceType[]): ClientProfile => ({
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', status: 'active',
   clinicianId: 'clinician-1', allowedExperiences, brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
 });
-const shell = (client: ClientProfile) => <PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />;
+const shell = (client: ClientProfile) => <PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />;
 const text = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
 const train = (renderer: ReactTestRenderer) => {
   const button = renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Train');

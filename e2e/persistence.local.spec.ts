@@ -1,54 +1,50 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
-import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
+import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
 import { seedLinkedPatient, seedPersistenceRecords } from './helpers/localEmulator';
-import type { E2EPairRun } from './helpers/e2eRunTypes';
 import type { AuthorizedRead } from './helpers/authorizedFirestore';
 import {
   expectAppointmentPersisted,
   expectClinicBrandPersisted,
   expectDemoSessionPersisted,
-  expectDisposableRolePersisted,
   expectInvitationAcceptedPersisted,
   expectMessagesPersisted,
+  expectRolePersisted,
+  type PersistenceRun,
 } from './helpers/persistenceAssertions';
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
-test('persistence assertions read as patient and clinician; outsider reads are denied', async ({ browser, permissionErrorGuard }) => {
+test('persistence assertions read as the patient; outsider reads are denied', async ({ browser, permissionErrorGuard }) => {
   const linked = await seedLinkedPatient();
   const unrelated = await seedLinkedPatient();
   const marker = randomUUID();
   const runStartMs = Date.now() - 1_000;
   const invitationCode = await seedPersistenceRecords(linked, marker);
   // This local run has no privileged cleanup; the emulators discard all data.
-  const run = {
+  const run: PersistenceRun = {
     runStartMs,
     runMarker: marker,
     clinicId: linked.clinician.uid,
-    scope: { patientId: linked.patient.uid, clinicianId: linked.clinician.uid, patientEmail: linked.patient.email },
-  } as E2EPairRun;
+    scope: { patientId: linked.patient.uid, clinicianId: linked.clinician.uid },
+  };
   const patientContext = await browser.newContext();
-  const clinicianContext = await browser.newContext();
   const outsiderContext = await browser.newContext();
   permissionErrorGuard.expectDenialsIn(outsiderContext);
   try {
     const patient = await patientContext.newPage();
-    const clinician = await clinicianContext.newPage();
     const outsider = await outsiderContext.newPage();
     await loginThroughUi(patient, linked.patient);
     await arriveAtPatientDashboard(patient);
-    await loginThroughUi(clinician, linked.clinician);
-    await arriveAtClinicianDashboard(clinician);
     await loginThroughUi(outsider, unrelated.patient);
     await arriveAtPatientDashboard(outsider);
 
     expect(await expectDemoSessionPersisted(run, patient)).toBe(`session-${marker}`);
-    await expectAppointmentPersisted(run, patient, clinician, { notes: marker, status: 'scheduled', durationMinutes: 45, type: 'remote-training' });
-    await expectMessagesPersisted(run, patient, clinician, [{ text: marker, senderRole: 'patient' }]);
-    await expectInvitationAcceptedPersisted(run, patient, clinician, invitationCode);
-    await expectClinicBrandPersisted(run, patient, clinician, `Brand ${marker}`);
-    await expectDisposableRolePersisted({ runId: 'local', projectId: 'demo-neurasticity-protocol-e2e', emails: [linked.patient.email] }, linked.patient, 'patient', patient);
+    await expectAppointmentPersisted(run, patient, { notes: marker, status: 'scheduled', durationMinutes: 45, type: 'remote-training' });
+    await expectMessagesPersisted(run, patient, [{ text: marker, senderRole: 'patient' }]);
+    await expectInvitationAcceptedPersisted(run, patient, invitationCode);
+    await expectClinicBrandPersisted(run, patient, `Brand ${marker}`);
+    await expectRolePersisted(linked.patient, 'patient', patient);
 
     const identityGuards = await patient.evaluate(async ({ patientId }) => {
       const { authorizedFirestoreRead } = await import('/e2e/helpers/authorizedFirestore.ts');
@@ -93,6 +89,6 @@ test('persistence assertions read as patient and clinician; outsider reads are d
       expect(outcome, `Outsider read of ${read.path}`).toContain('permission-denied');
     }
   } finally {
-    await Promise.allSettled([patientContext.close(), clinicianContext.close(), outsiderContext.close()]);
+    await Promise.allSettled([patientContext.close(), outsiderContext.close()]);
   }
 });

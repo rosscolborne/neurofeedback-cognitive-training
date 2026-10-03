@@ -94,12 +94,6 @@ function usable<T>(state: StatsDocumentState<T>, path: string): StatsDocumentSta
   return state;
 }
 
-/** Whether any session of the user already counts: their stats must then be rebuilt, not started afresh. */
-async function hasCountedSessions(transaction: Transaction, db: Firestore, uid: string): Promise<boolean> {
-  const query = sessionsOf(db, uid).where('result.validity', 'in', ['valid', 'flagged']).select().limit(1);
-  return !(await transaction.get(query)).empty;
-}
-
 type Rebuilt = {
   readonly summary: StatsSummary | null;
   readonly days: Map<string, DailyStats>;
@@ -119,8 +113,7 @@ type Rebuilt = {
  * concurrently with it. Stats documents written by newer code are refused.
  *
  * Limit: like the progress rebuild, the read grows with the user's history.
- * It runs only for an aggregateVersion change, for stats that predate them
- * (sessions processed before NFCT-13), or from the admin rebuild.
+ * It runs only for an aggregateVersion change, or from the admin rebuild.
  */
 async function rebuildInTransaction(
   context: ProcessingContext,
@@ -232,10 +225,11 @@ async function absentAchievements(transaction: Transaction, db: Firestore, uid: 
  * after every other read and before any write). `events` start with the
  * processed session ('counted'), then the sessions its commit upgrades.
  *
- * - Current stats (or none, for a new player): apply the events.
- * - Stats from an older aggregateVersion, or none although earlier sessions
- *   count (they were processed before NFCT-13): rebuild from the stored
- *   results, then apply the events.
+ * - Current stats (or none, for a new player): apply the events. Every
+ *   counted session writes stats in its own processing transaction, so no
+ *   stats means no session counts yet.
+ * - Stats from an older aggregateVersion: rebuild from the stored results,
+ *   then apply the events.
  * - Newer or unreadable stats: a ProcessingError, so nothing is written and
  *   the session is retried, then marked failed.
  */
@@ -252,8 +246,7 @@ export async function planStatsForProcessing(
   const snapshots = dates.length === 0 ? [] : await transaction.getAll(...dates.map((date) => dailyStatsCollection(db, uid).doc(date)));
   const dayStates = snapshots.map((snapshot, index) => usable(classifyDailyStats(snapshot.data(), dates[index]!), `dailyStats/${dates[index]}`));
 
-  const rebuild = summaryState.kind === 'older' || dayStates.some(({ kind }) => kind === 'older')
-    || (summaryState.kind === 'missing' && (dayStates.some(({ kind }) => kind !== 'missing') || await hasCountedSessions(transaction, db, uid)));
+  const rebuild = summaryState.kind === 'older' || dayStates.some(({ kind }) => kind === 'older');
   if (rebuild) {
     const rebuilt = await rebuildInTransaction(context, transaction, uid, appliedAt);
     return rebuiltWrite(rebuilt, applyEvents(rebuilt.summary, rebuilt.days, events, appliedAt));
@@ -278,10 +271,11 @@ export async function planStatsForProcessing(
  * Plans the stats writes of a post-commit upgrade batch (reads only): the
  * valid-only effects of each upgraded session.
  *
- * - 'skip': there are no current stats to update (none yet, because the
- *   user's sessions predate NFCT-13, or an older aggregateVersion). Nothing
- *   is lost: the next processing transaction, or the admin rebuild, rebuilds
- *   them from the stored results, which then include these upgrades.
+ * - 'skip': there are no current stats to update: an older
+ *   aggregateVersion, or none (not expected, since the upgraded session
+ *   already counts and counted sessions write stats). Nothing is lost: the
+ *   next processing transaction (for older stats) or the admin rebuild
+ *   rebuilds them from the stored results, which then include these upgrades.
  * - 'not-current': newer or unreadable stats, which this build must not
  *   write; the batch then upgrades nothing, just as it does for progress
  *   that is not current.

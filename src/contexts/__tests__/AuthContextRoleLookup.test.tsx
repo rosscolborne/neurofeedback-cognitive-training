@@ -24,7 +24,6 @@ const cache = vi.hoisted(() => ({
 vi.mock('../../services/firebase', () => ({ auth: { currentUser: null }, db: {}, firestoreCache: cache }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
-  signOut: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
   createUserWithEmailAndPassword: vi.fn(),
   updateProfile: vi.fn(),
@@ -43,7 +42,6 @@ import {
   ROLE_LOOKUP_RETRY_AFTER_MS,
   useAuth,
 } from '../AuthContext';
-import { deactivateClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
 
 type Snapshot = { exists: () => boolean; data: () => Record<string, unknown> | undefined; metadata: { fromCache: boolean } };
 const snapshot = (data: Record<string, unknown> | undefined, { fromCache = false } = {}): Snapshot => ({
@@ -60,11 +58,6 @@ function deferred<T>() {
   const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
   return { promise, resolve, reject };
 }
-
-const memoryStorage = () => {
-  const values = new Map<string, string>();
-  return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) };
-};
 
 let observed: ReturnType<typeof useAuth>;
 const Probe = () => {
@@ -93,8 +86,6 @@ describe('AuthContext role lookup (NFCT-44)', () => {
     // Unconsumed one-off answers must not leak into the next test.
     firestore.getDoc.mockReset();
     vi.useFakeTimers();
-    deactivateClinicianDemoWorkspace();
-    vi.stubGlobal('localStorage', memoryStorage());
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     cache.prepareForUser.mockResolvedValue({ status: 'ready' });
     cache.isEnding.mockReturnValue(false);
@@ -104,8 +95,6 @@ describe('AuthContext role lookup (NFCT-44)', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-    deactivateClinicianDemoWorkspace();
   });
 
   it('keeps loading while the read is slow, offers a retry after the bound, and still opens on a late answer', async () => {

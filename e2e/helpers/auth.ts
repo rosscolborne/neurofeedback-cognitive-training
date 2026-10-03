@@ -1,9 +1,4 @@
-import { expect, type Browser, type Page } from '@playwright/test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-export type E2ERole = 'patient' | 'clinician';
+import { expect, type Page } from '@playwright/test';
 
 export type AuthenticatedE2EIdentity = {
     uid: string;
@@ -11,40 +6,10 @@ export type AuthenticatedE2EIdentity = {
     projectId: string;
 };
 
-const suppliedAuthStateDirectory = process.env.E2E_AUTH_STATE_DIR;
-const authStateDirectory = suppliedAuthStateDirectory ?? mkdtempSync(join(tmpdir(), 'neurasticity-e2e-auth-'));
-if (!suppliedAuthStateDirectory) {
-    // Playwright's config process passes this path to workers and removes it
-    // after the run. Standalone auth setup no longer leaves reusable tokens.
-    process.env.E2E_AUTH_STATE_DIR = authStateDirectory;
-    process.once('exit', () => rmSync(authStateDirectory, { recursive: true, force: true }));
-}
-export const storageStatePath: Record<E2ERole, string> = {
-    patient: join(authStateDirectory, 'patient.json'),
-    clinician: join(authStateDirectory, 'clinician.json'),
-};
-
 type Credentials = {
     email: string;
     password: string;
 };
-
-const requiredEnvironment: Record<E2ERole, readonly [string, string]> = {
-    patient: ['E2E_PATIENT_EMAIL', 'E2E_PATIENT_PASSWORD'],
-    clinician: ['E2E_CLINICIAN_EMAIL', 'E2E_CLINICIAN_PASSWORD'],
-};
-
-export function credentialsFor(role: E2ERole): Credentials | undefined {
-    const [emailVariable, passwordVariable] = requiredEnvironment[role];
-    const email = process.env[emailVariable];
-    const password = process.env[passwordVariable];
-
-    return email && password ? { email, password } : undefined;
-}
-
-export function missingCredentialVariables(role: E2ERole): readonly string[] {
-    return requiredEnvironment[role].filter((name) => !process.env[name]);
-}
 
 /** Signs in through the production login form; credentials are never logged. */
 export async function loginThroughUi(page: Page, credentials: Credentials): Promise<void> {
@@ -100,10 +65,6 @@ export async function startPatientTrainingInDemoMode(page: Page, experienceName?
     await expect(page.getByRole('region', { name: 'Demo state controls' })).toBeVisible();
 }
 
-export async function arriveAtClinicianDashboard(page: Page): Promise<void> {
-    await expect(page.getByRole('button', { name: 'Patients', exact: true })).toBeVisible({ timeout: 15_000 });
-}
-
 /** Reads only the current Firebase UID from the authenticated app runtime. */
 export async function authenticatedUserId(page: Page): Promise<string> {
     return (await authenticatedFirebaseIdentity(page)).uid;
@@ -120,18 +81,4 @@ export async function authenticatedFirebaseIdentity(page: Page): Promise<Authent
     });
     if (!identity) throw new Error('Expected an authenticated Firebase user and project.');
     return identity;
-}
-
-/** Opens a saved role session only long enough to read its Firebase identity. */
-export async function identityFromStorageState(browser: Browser, role: E2ERole): Promise<AuthenticatedE2EIdentity> {
-    const context = await browser.newContext({ storageState: storageStatePath[role] });
-    try {
-        const page = await context.newPage();
-        await page.goto('/');
-        if (role === 'patient') await arriveAtPatientDashboard(page);
-        else await arriveAtClinicianDashboard(page);
-        return await authenticatedFirebaseIdentity(page);
-    } finally {
-        await context.close();
-    }
 }

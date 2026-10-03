@@ -160,35 +160,3 @@ export const CLINICAL_PROTOCOL_TEMPLATES: ProtocolTemplate[] = [
 export function getClinicalProtocolTemplate(protocolType: ProtocolType): ProtocolTemplate | undefined {
   return CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.protocolType === protocolType);
 }
-
-export function hasCanonicalRewardDefinition(
-  rewardBand: ProtocolTemplate['rewardBand'] | undefined,
-  canonical: ProtocolTemplate['rewardBand'],
-  protocolType: ProtocolType,
-): boolean {
-  const sameReference = rewardBand?.freqMin === canonical.freqMin
-    && rewardBand?.freqMax === canonical.freqMax
-    && rewardBand?.targetCondition === canonical.targetCondition
-    && rewardBand?.targetThreshold === canonical.targetThreshold;
-  if (sameReference) return true;
-  // Assignments saved before the alpha default changed to 8–13 Hz carried
-  // 8–12 Hz template metadata even when the clinician had not customized it.
-  return protocolType === 'alpha-enhancement'
-    && canonical.freqMin === 8 && canonical.freqMax === 13
-    && rewardBand?.freqMin === 8 && rewardBand?.freqMax === 12
-    && rewardBand?.targetCondition === canonical.targetCondition
-    && rewardBand?.targetThreshold === canonical.targetThreshold;
-}
-
-/** Read aliases saved before `alias` was introduced without changing Firestore data. */
-export function getProtocolAssignmentAlias(
-  protocol: ProtocolTemplate,
-  protocolType: ProtocolType
-): string | undefined {
-  const explicitAlias = protocol.alias?.trim();
-  if (explicitAlias) return explicitAlias;
-
-  const canonical = getClinicalProtocolTemplate(protocolType);
-  const legacyName = protocol.name?.trim();
-  return canonical && legacyName && legacyName !== canonical.name ? legacyName : undefined;
-}

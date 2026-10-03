@@ -195,7 +195,7 @@ export function useRecentRuns(
  * - 'stats': a readable summary;
  * - 'new': the server has no summary and the player has no runs;
  * - 'checking': no summary yet, and a run trusted scoring has not confirmed (on this device, uploading or delayed);
- * - 'catching-up': no summary, but runs (scored before the aggregates existed: the next run rebuilds them);
+ * - 'catching-up': no summary, though every run is confirmed: none counted (only invalid runs), so the next counted run starts them;
  * - 'offline': no summary in this device's cache and no connection, so nothing can be said yet;
  * - 'unavailable': the summary or the runs could not be read.
  * A summary missing from the cache while the device reports a connection is still loading: the
