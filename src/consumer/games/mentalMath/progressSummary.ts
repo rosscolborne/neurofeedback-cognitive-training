@@ -1,4 +1,4 @@
-import { maxLevelOf, mentalMath, unlockedStartLevel, type GameProgress } from '@nfct/shared';
+import { GAME_MODULE_REGISTRY, maxLevelOf, mentalMath, unlockedStartLevel, upgradeBlocker, type GameProgress } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../repositories/gameSessionRepository';
 import { bestsFor, nextUnlock, type UnlockLine } from './runSummaryModel';
 import { timed90, type CurrentProgress } from './startLevel';
@@ -102,6 +102,19 @@ export interface HistoryRow {
   readonly score: number | null;
   /** Set a personal best when it was processed (point-in-time: a later run may have beaten it since). */
   readonly personalBest: boolean;
+  /**
+   * Flagged only because its start level was not unlocked yet when it was scored
+   * (`start-level-locked`, with at most diagnostic reasons beside it). Trusted
+   * scoring upgrades it to valid once that level unlocks (ADR-001 decision 12),
+   * so it reads as waiting, not flagged.
+   */
+  readonly awaitingUnlock: boolean;
+}
+
+/** The server's own upgrade test, against no progress: only the start level stands between the run and valid. */
+function upgradableOnceUnlocked(session: GameSessionHistoryEntry['session']): boolean {
+  const blocker = upgradeBlocker(session, null, GAME_MODULE_REGISTRY);
+  return blocker === null || blocker === 'still-locked';
 }
 
 export function historyRow(entry: GameSessionHistoryEntry): HistoryRow {
@@ -119,6 +132,7 @@ export function historyRow(entry: GameSessionHistoryEntry): HistoryRow {
     state,
     score: result && result.validity !== 'invalid' ? result.score : null,
     personalBest: result?.validity === 'valid' && result.personalBest,
+    awaitingUnlock: upgradableOnceUnlocked(session),
   };
 }
 
@@ -128,7 +142,8 @@ export function historyRow(entry: GameSessionHistoryEntry): HistoryRow {
  * there is one, or a dash for a run that does not count (its tag says so).
  * One tag at most, by priority: a run that does not count, then a run ended
  * early (finished runs are the norm, so only the exception is labelled), a
- * flagged run, one not uploaded yet, and a new best.
+ * flagged run (or one waiting on its start level to unlock), one not uploaded
+ * yet, and a new best.
  */
 export type HistoryRowScore =
   /** The trusted score; `muted` for a run ended early, whose score counts toward totals but never sets a record. */
@@ -138,7 +153,7 @@ export type HistoryRowScore =
   /** The run does not count, so it has no score. */
   | { readonly kind: 'none' };
 
-export type HistoryRowTag = 'not-counted' | 'ended-early' | 'flagged' | 'not-uploaded' | 'new-best';
+export type HistoryRowTag = 'not-counted' | 'ended-early' | 'flagged' | 'awaiting-unlock' | 'not-uploaded' | 'new-best';
 
 export interface HistoryRowView {
   readonly score: HistoryRowScore;
@@ -152,7 +167,7 @@ export function historyRowView(row: HistoryRow): HistoryRowView {
       : { kind: 'score', value: row.score, muted: !row.completed };
   const tag: HistoryRowTag | null = row.state === 'invalid' ? 'not-counted'
     : !row.completed ? 'ended-early'
-      : row.state === 'flagged' ? 'flagged'
+      : row.state === 'flagged' ? (row.awaitingUnlock ? 'awaiting-unlock' : 'flagged')
         : row.state === 'on-device' ? 'not-uploaded'
           // Point in time: the run set a best when it was scored; a later run may have beaten it since (ADR-001 decision 12).
           : row.state === 'verified' && row.personalBest ? 'new-best'

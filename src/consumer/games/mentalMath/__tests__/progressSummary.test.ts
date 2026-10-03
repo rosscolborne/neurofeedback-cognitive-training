@@ -87,7 +87,17 @@ describe('per-game progress', () => {
     });
     const valid = decision.result;
     expect(historyRow(entry({}, valid))).toMatchObject({ state: 'verified', personalBest: true, startLevel: 1, completed: true, activeMs: document.activeDurationMs, score: valid.validity === 'valid' ? valid.score : -1 });
-    expect(historyRow(entry({}, { ...valid, validity: 'flagged', reasons: ['run-overrun'] } as ServerResult))).toMatchObject({ state: 'flagged', personalBest: false });
+    expect(historyRow(entry({}, valid))).toMatchObject({ awaitingUnlock: false });
+    expect(historyRow(entry({}, { ...valid, validity: 'flagged', reasons: ['run-overrun'] } as ServerResult))).toMatchObject({ state: 'flagged', personalBest: false, awaitingUnlock: false });
+    // Waiting on its start level only when the server would upgrade it once that level unlocks:
+    // start-level-locked, beside diagnostics at most, scored by the registered module's scoringVersion.
+    const flaggedFor = (reasons: string[], extra: object = {}) => historyRow(entry({}, { ...valid, validity: 'flagged', reasons, ...extra } as ServerResult));
+    expect(flaggedFor(['start-level-locked'])).toMatchObject({ state: 'flagged', awaitingUnlock: true });
+    expect(flaggedFor(['start-level-locked', 'late-upload'])).toMatchObject({ state: 'flagged', awaitingUnlock: true });
+    expect(flaggedFor(['start-level-locked'], { scoringVersion: valid.scoringVersion + 1 })).toMatchObject({ state: 'flagged', awaitingUnlock: false });
+    for (const reasons of [['rt-below-floor', 'start-level-locked'], ['start-level-locked', 'reasons-truncated'], ['start-level-locked', 'some-future-code']]) {
+      expect(flaggedFor(reasons)).toMatchObject({ state: 'flagged', awaitingUnlock: false });
+    }
     expect(historyRow(entry({}, { processedAt: at(1), scoringVersion: 1, validity: 'invalid', reasons: ['schema-invalid'] }))).toMatchObject({ state: 'invalid', score: null });
     expect(historyRow(entry({ hasPendingWrites: true }))).toMatchObject({ state: 'on-device', score: null });
     expect(historyRow(entry({}))).toMatchObject({ state: 'checking', score: null });
@@ -105,17 +115,19 @@ describe('per-game progress', () => {
   it('reads each row at a glance: score, pending or none, and at most one tag (NFCT-64)', () => {
     const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
       id: 'sessionAAAAAAAAAAAA1', endedAtMs: 0, startLevel: 1, completed: true, activeMs: 90_000,
-      state: 'verified', score: 500, personalBest: false, ...overrides,
+      state: 'verified', score: 500, personalBest: false, awaitingUnlock: false, ...overrides,
     });
     expect(historyRowView(row({}))).toEqual({ score: { kind: 'score', value: 500, muted: false }, tag: null });
     expect(historyRowView(row({ personalBest: true }))).toEqual({ score: { kind: 'score', value: 500, muted: false }, tag: 'new-best' });
     expect(historyRowView(row({ state: 'flagged' })).tag).toBe('flagged');
+    expect(historyRowView(row({ state: 'flagged', awaitingUnlock: true }))).toEqual({ score: { kind: 'score', value: 500, muted: false }, tag: 'awaiting-unlock' });
     expect(historyRowView(row({ state: 'invalid', score: null }))).toEqual({ score: { kind: 'none' }, tag: 'not-counted' });
     for (const state of ['checking', 'delayed'] as const) expect(historyRowView(row({ state, score: null }))).toEqual({ score: { kind: 'pending' }, tag: null });
     expect(historyRowView(row({ state: 'on-device', score: null }))).toEqual({ score: { kind: 'pending' }, tag: 'not-uploaded' });
     // Ended early: one tag, its score kept (quieter), and pending stays pending.
     expect(historyRowView(row({ completed: false, score: 120 }))).toEqual({ score: { kind: 'score', value: 120, muted: true }, tag: 'ended-early' });
     expect(historyRowView(row({ completed: false, state: 'flagged', score: 120 })).tag).toBe('ended-early');
+    expect(historyRowView(row({ completed: false, state: 'flagged', awaitingUnlock: true, score: 120 })).tag).toBe('ended-early');
     expect(historyRowView(row({ completed: false, state: 'checking', score: null }))).toEqual({ score: { kind: 'pending' }, tag: 'ended-early' });
     expect(historyRowView(row({ completed: false, state: 'invalid', score: null }))).toEqual({ score: { kind: 'none' }, tag: 'not-counted' });
   });

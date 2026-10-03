@@ -19,6 +19,7 @@ const BASE: HistoryRow = {
   state: 'verified',
   score: 1234,
   personalBest: false,
+  awaitingUnlock: false,
 };
 
 function render(row: Partial<HistoryRow>) {
@@ -65,6 +66,12 @@ describe('HistoryItem', () => {
     expect(render({ completed: false, state: 'checking', score: null })).toMatchObject({ tag: 'Ended early', score: 'Pending' });
     expect(render({ completed: false, state: 'on-device', score: null })).toMatchObject({ tag: 'Ended early', score: 'Pending' });
     expect(render({ state: 'checking', score: null }).tag).toBeNull();
+  });
+
+  it('says a run flagged only for its locked start level is waiting on that level, not flagged', () => {
+    expect(render({ state: 'flagged', startLevel: 2, awaitingUnlock: true })).toMatchObject({ tag: 'Waiting on level unlock', score: '1,234' });
+    expect(render({ state: 'flagged', startLevel: 2, awaitingUnlock: true }).text).not.toMatch(/Flagged/);
+    expect(render({ state: 'flagged' })).toMatchObject({ tag: 'Flagged', score: '1,234' });
   });
 
   it('says a finished run not uploaded yet is still on this device', () => {
