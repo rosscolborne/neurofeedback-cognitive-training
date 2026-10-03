@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { readReviewSessionFeedback, seedLinkedPatient } from './helpers/localEmulator';
+import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
+import { seedLinkedPatient } from './helpers/localEmulator';
 import { trackingCopy } from './helpers/patientProgress';
 import { readSessionNotes, seedSessionHistory, SESSION_HISTORY_COUNTS, UNMEASURED_SESSION_INDEXES } from './helpers/sessionHistorySeed';
 
@@ -38,11 +38,6 @@ async function expectShowMoreFits(page: Page, width: number) {
   expect(countBox!.height, `one-line count at ${width}px`).toBeLessThanOrEqual(24);
   expect(countBox!.x + countBox!.width, `count inside the viewport at ${width}px`).toBeLessThanOrEqual(width);
   expect(await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth), `no horizontal overflow at ${width}px`).toBe(true);
-}
-
-async function openSessionLogs(page: Page, patientName: string) {
-  await page.getByRole('row').filter({ hasText: patientName }).click();
-  await page.getByRole('button', { name: `Session Logs (${SESSION_HISTORY_COUNTS.all})`, exact: true }).click();
 }
 
 test('patient Progress bounds a long history, reveals it a page at a time, and saves a journal on a revealed session', async ({ browser }) => {
@@ -121,62 +116,6 @@ test('patient Progress bounds a long history, reveals it a page at a time, and s
     await expect(reloaded).not.toContainText(journal);
     await reloaded.click();
     await expect(reloaded).toContainText(journal);
-  } finally {
-    await context.close();
-  }
-});
-
-test('clinician Session Logs are bounded and a feedback draft on a revealed session survives switching, then saves', async ({ browser }) => {
-  const fixture = await seedLinkedPatient();
-  const ids = await seedSessionHistory(fixture);
-  const context = await browser.newContext();
-  try {
-    const page = await context.newPage();
-    await loginThroughUi(page, fixture.clinician);
-    await arriveAtClinicianDashboard(page);
-    await openSessionLogs(page, fixture.name);
-
-    const rows = page.getByRole('list', { name: 'Session logs' }).getByRole('listitem');
-    await expect(rows).toHaveCount(10);
-    await expect(countText(page, `Showing 10 of ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
-    await expect(page.getByRole('button', { name: `Open ${ids[9]}`, exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: `Open ${ids[10]}`, exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Show 10 more sessions', exact: true }).click();
-    await expect(rows).toHaveCount(20);
-    await expect(countText(page, `Showing 20 of ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
-    // The tab keeps counting every session, not the visible page.
-    await expect(page.getByRole('button', { name: `Session Logs (${SESSION_HISTORY_COUNTS.all})`, exact: true })).toBeVisible();
-
-    await page.getByRole('button', { name: `Open ${ids[unmeasured]}`, exact: true }).click();
-    const detail = page.getByRole('region', { name: `Session ${ids[unmeasured]} details` });
-    await expect(detail).toContainText('Not recorded:');
-    await expect(rows.filter({ has: page.getByRole('button', { name: `Close ${ids[unmeasured]}` }) })).toContainText('Unavailable');
-    const draft = `Revealed feedback ${randomUUID().slice(0, 8)}`;
-    await detail.getByLabel('Clinician feedback').fill(draft);
-
-    await page.getByRole('button', { name: `Open ${ids[15]}`, exact: true }).click();
-    await expect(page.getByRole('region', { name: `Session ${ids[15]} details` })).toBeVisible();
-    await expect(detail).toBeHidden();
-    await page.getByRole('button', { name: 'Protocol Settings', exact: true }).click();
-    await page.getByRole('button', { name: `Session Logs (${SESSION_HISTORY_COUNTS.all})`, exact: true }).click();
-    await page.getByRole('button', { name: 'Show 8 more sessions', exact: true }).click();
-    await expect(rows).toHaveCount(SESSION_HISTORY_COUNTS.all);
-    await expect(countText(page, `Showing all ${SESSION_HISTORY_COUNTS.all} sessions`)).toBeVisible();
-    await page.getByRole('button', { name: `Open ${ids[unmeasured]}`, exact: true }).click();
-    await expect(detail.getByLabel('Clinician feedback')).toHaveValue(draft);
-
-    await detail.getByRole('button', { name: 'Save feedback' }).click();
-    await expect.poll(() => readReviewSessionFeedback(ids[unmeasured])).toBe(draft);
-    await expect.poll(async () => (await readSessionNotes(ids[15])).clinicianNotes).toBeUndefined();
-    await expect(rows.filter({ hasText: `Clinician: ${draft}` })).toHaveCount(1);
-
-    await page.reload();
-    await arriveAtClinicianDashboard(page);
-    await openSessionLogs(page, fixture.name);
-    await expect(rows).toHaveCount(10);
-    await page.getByRole('button', { name: 'Show 10 more sessions', exact: true }).click();
-    await page.getByRole('button', { name: `Open ${ids[unmeasured]}`, exact: true }).click();
-    await expect(detail.getByLabel('Clinician feedback')).toHaveValue(draft);
   } finally {
     await context.close();
   }

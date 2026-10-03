@@ -74,21 +74,17 @@ export async function seedAdditionalLinkedPatient(fixture: LocalPatientFixture):
   return { clinician: fixture.clinician, patient, name };
 }
 
-export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'neuro-gambit', timestamp = Date.now()) {
+export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'neuro-gambit', timestamp = Date.now(),
+  extra: Record<string, unknown> = {}) {
   const id = `review-${randomUUID().replaceAll('-', '')}`;
   await adminDb.doc(`sessions/${id}`).set({
     id, patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
     timestamp, date: new Date(timestamp).toLocaleDateString(), schemaVersion: 2,
     experience, protocol: 'theta-beta-ratio', durationSeconds: 600,
     isDemo: false, patientNotes, moodRating: 3,
-    timeSeries: [{ t: 5, alpha: 8, inZone: true }],
+    timeSeries: [{ t: 5, alpha: 8, inZone: true }], ...extra,
   });
   return id;
-}
-
-export async function readReviewSessionFeedback(sessionId: string): Promise<string | undefined> {
-  const snapshot = await adminDb.doc(`sessions/${sessionId}`).get();
-  return snapshot.get('clinicianNotes');
 }
 
 /** Provision records only in the isolated emulator for rules-bound persistence tests. */
@@ -117,9 +113,9 @@ export async function seedPendingLifecycleInvitation(fixture: LocalPatientFixtur
   return code;
 }
 
-/** A pending invitation as storageEngine.createPatientInvitation writes it: invitation, claim and code-free notice. */
+/** A pending invitation as the retired clinician workspace wrote it: invitation, claim and code-free notice. */
 export async function seedPendingInvitation(clinicianUid: string, email: string, patientName: string,
-  options: { assignedProtocol?: string; expiresInMs?: number } = {}): Promise<string> {
+  options: { assignedProtocol?: string; condition?: string; expiresInMs?: number } = {}): Promise<string> {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const code = 'LIFE-' + Array.from(randomBytes(4), (byte) => alphabet[byte % alphabet.length]).join('') + '-REEN';
   const now = Timestamp.now();
@@ -128,7 +124,7 @@ export async function seedPendingInvitation(clinicianUid: string, email: string,
     adminDb.doc(`patientInvitations/${code}`).set({
       id: code, clinicianId: clinicianUid, clinicId: clinicianUid,
       clinicianName: 'Local Clinician', patientEmail: email, patientName,
-      condition: 'ADHD (Inattentive)', assignedProtocol: options.assignedProtocol ?? 'theta-beta-ratio',
+      condition: options.condition ?? 'ADHD (Inattentive)', assignedProtocol: options.assignedProtocol ?? 'theta-beta-ratio',
       prescribedSessionsPerWeek: 3, status: 'pending', uniquenessClaimId: email,
       schemaVersion: 1, createdAt: now, updatedAt: now, expiresAt,
     }),
@@ -158,12 +154,39 @@ export async function seedFutureLifecycleAppointment(fixture: LocalPatientFixtur
     });
 }
 
-export async function findPendingLifecycleInvitation(clinicianUid: string, email: string): Promise<string> {
-  const invitations = await adminDb.collection('patientInvitations')
-    .where('clinicianId', '==', clinicianUid).where('patientEmail', '==', email).get();
-  const pending = invitations.docs.filter((entry) => entry.data().status === 'pending');
-  if (pending.length !== 1) throw new Error(`Expected one pending invitation, found ${pending.length}`);
-  return pending[0].id;
+/** Cancels a pending invitation as its clinician did: the invitation is kept as cancelled; its claim and notice go. */
+export async function cancelPendingInvitation(code: string): Promise<void> {
+  const invitation = (await adminDb.doc(`patientInvitations/${code}`).get()).data();
+  if (invitation?.status !== 'pending') throw new Error(`Expected a pending invitation ${code}`);
+  const { clinicianId, uniquenessClaimId } = invitation as { clinicianId: string; uniquenessClaimId: string };
+  const batch = adminDb.batch();
+  batch.update(adminDb.doc(`patientInvitations/${code}`), { status: 'cancelled', updatedAt: Timestamp.now() });
+  batch.delete(adminDb.doc(`patientInvitationClaims/${clinicianId}/emails/${uniquenessClaimId}`));
+  batch.delete(adminDb.doc(`patientInvitationNotices/${uniquenessClaimId}/clinicians/${clinicianId}`));
+  await batch.commit();
+}
+
+/**
+ * A message from the linked clinician, written as messageRepository.sendPreparedMessage
+ * writes one: the message and the thread summary, in one commit.
+ */
+export async function seedClinicianMessage(fixture: LocalPatientFixture, text: string): Promise<string> {
+  const { patient, clinician } = fixture;
+  const thread = adminDb.doc(`messageThreads/${patient.uid}/relationships/${clinician.uid}`);
+  const message = thread.collection('messages').doc();
+  const timestamp = FieldValue.serverTimestamp();
+  const batch = adminDb.batch();
+  batch.set(thread, {
+    patientId: patient.uid, clinicianId: clinician.uid, participantIds: [patient.uid, clinician.uid],
+    lastMessageText: text, lastMessageId: message.id, lastSenderId: clinician.uid,
+    lastMessageAt: timestamp, updatedAt: timestamp, schemaVersion: 1,
+  }, { merge: true });
+  batch.set(message, {
+    id: message.id, patientId: patient.uid, clinicianId: clinician.uid,
+    senderId: clinician.uid, senderRole: 'clinician', text, createdAt: timestamp, schemaVersion: 1,
+  });
+  await batch.commit();
+  return message.id;
 }
 
 export async function readPendingInvitationState(clinicianUid: string, email: string) {
@@ -256,6 +279,11 @@ export async function readPatientTrainingRecord(patientUid: string) {
     completedSessionsCount: data.completedSessionsCount as number | undefined,
     badges: data.badges as string[] | undefined,
   };
+}
+
+/** Change a patient's profile fields directly, as an assignment by their clinician did. */
+export async function setPatientFields(patientUid: string, fields: Record<string, unknown>) {
+  await adminDb.doc(`clients/${patientUid}`).update(fields);
 }
 
 /** Recreate a legacy profile written before these fields existed. */
