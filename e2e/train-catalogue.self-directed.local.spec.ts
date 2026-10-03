@@ -39,7 +39,7 @@ test('Train lists the games, with what each trains, and nothing else', async ({ 
   await signUpAndOpenTrain(page);
   const games = gamesSection(page);
 
-  await expect(games.getByRole('listitem')).toHaveCount(1);
+  await expect(games.getByRole('listitem')).toHaveCount(2);
   const mentalMath = games.getByRole('button', { name: 'Mental Math', exact: true });
   await expect(mentalMath).toBeVisible();
   await expect(mentalMath).toHaveAccessibleDescription(
@@ -47,7 +47,7 @@ test('Train lists the games, with what each trains, and nothing else', async ({ 
   );
   // Mental Math's real mix, as text (each item but the last also holds a
   // visually hidden comma for screen readers), beside a bar split the same way.
-  const mix = games.locator('.train-card-mix');
+  const mix = mentalMath.locator('xpath=ancestor::li[1]').locator('.train-card-mix');
   // The title also holds a visually hidden colon.
   await expect(mix.locator('.train-card-mix-title')).toBeVisible();
   await expect(mix.locator('.train-card-mix-title')).toHaveText(/^Trains:?\s*$/);
@@ -63,12 +63,24 @@ test('Train lists the games, with what each trains, and nothing else', async ({ 
   await expect(mentalMathCard.getByText(/^10 levels,?$/)).toBeVisible();
   // Mental Math never needs a headset, so its card says nothing about one.
   await expect(mentalMathCard.getByText(/headset/i)).toHaveCount(0);
+  // Sequence Memory (NFCT-93): memory and spatial, a fixed number of sequences, so only an upper bound on its length.
+  const sequenceMemory = games.getByRole('button', { name: 'Sequence Memory', exact: true });
+  await expect(sequenceMemory).toBeVisible();
+  await expect(sequenceMemory).toHaveAccessibleDescription(
+    /^Watch tiles light up, then tap them back in the same order\.\s+Trains\s*:\s*Memory 60%\s*,\s*Spatial 40%\s+Up to 6 minutes\s*,\s*10 levels$/,
+  );
+  const sequenceMemoryCard = sequenceMemory.locator('xpath=ancestor::li[1]');
+  await expect(sequenceMemoryCard.locator('.train-card-mix-item')).toHaveText([/^Memory 60%,?$/, /^Spatial 40%$/]);
+  await expect(sequenceMemoryCard.getByText(/headset/i)).toHaveCount(0);
+  // The cards keep catalogue order.
+  await expect(games.locator('.train-card-name')).toHaveText(['Mental Math', 'Sequence Memory']);
   // The Games section is the whole catalogue: no headset training section or experience.
   await expect(page.getByRole('main').getByRole('region')).toHaveCount(1);
   await expect(page.getByRole('main')).not.toContainText(/NeuroGambit|Headset training/);
 
   // One row layout at every width (NFCT-33: the Mental Math card used to stack below 420 px).
   await expectRowCard(mentalMath);
+  await expectRowCard(sequenceMemory);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
@@ -80,5 +92,17 @@ test('Train opens Mental Math, and Back returns to Train', async ({ page }) => {
   await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(gamesSection(page).getByRole('button', { name: 'Mental Math', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Train', exact: true })).toBeVisible();
+});
+
+test('Train opens Sequence Memory at its first start level, and Back returns to Train', async ({ page }) => {
+  await signUpAndOpenTrain(page);
+
+  await gamesSection(page).getByRole('button', { name: 'Sequence Memory', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sequence Memory', exact: true })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Start at level 1', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(gamesSection(page).getByRole('button', { name: 'Sequence Memory', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Train', exact: true })).toBeVisible();
 });

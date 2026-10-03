@@ -65,6 +65,10 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
   await expect(overview(page, 'progress-empty')).toContainText('No runs yet');
+  // The invitation names no one game (NFCT-93); each game has its own card.
+  await expect(overview(page, 'progress-empty')).toContainText('Play any game to start your streak');
+  await expect(page.getByRole('region', { name: 'Sequence Memory', exact: true }).locator('[data-progress-card="summary"]'))
+    .toHaveText('0 runs completed · 1 of 10 start levels unlocked');
   await expect(overview(page, 'achievement-count')).toHaveText('0 of 9 earned');
   // Progress is the games: no neurofeedback session history.
   await expect(page.locator('main')).not.toContainText(/Neurofeedback|Session History|target zone/);
@@ -107,6 +111,8 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(achievementRow(page, 'first-run')).toContainText('Earned');
   await expect(overview(page, 'recent-runs').locator('li[data-history-row]')).toHaveCount(1);
   await expect(overview(page, 'recent-runs')).toContainText('New best');
+  // Home's recent runs are Mental Math's (NFCT-93).
+  await expect(page.locator('#ov-recent-title')).toHaveText('Recent Mental Math runs');
 
   // Progress lists it as earned, with the run on this week's calendar.
   await page.getByRole('button', { name: 'See all achievements', exact: true }).click();
@@ -219,7 +225,7 @@ test('a run that never gets its result leaves Home and Progress on "not ready", 
     const noBackendCopy = /server|being checked|confirm|verif|provisional|processing/i;
     await expect(overview(page, 'progress')).not.toContainText(noBackendCopy);
     // The game's own figures come from the saved run and need no result.
-    await expect(page.locator('[data-progress-card="summary"]')).toContainText('1 run completed');
+    await expect(page.getByRole('region', { name: 'Mental Math', exact: true }).locator('[data-progress-card="summary"]')).toContainText('1 run completed');
 
     // A refresh does not start the wait again: the run has been pending past the grace.
     await page.reload();

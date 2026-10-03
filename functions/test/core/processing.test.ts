@@ -418,7 +418,9 @@ describe('trusted session processing', () => {
 
       expect(await reconcileUpgrades(context, uid, { gameId: 'mental-math', modeId: 'timed-90' })).toEqual({ upgraded: [], stopped: 'account-deleted' });
       expect((await runSessionPipeline(context, uid, unlocking.id)).reconciled).toMatchObject([{ report: { stopped: 'account-deleted' } }]);
-      expect((await reconcileUser(context, uid)).map(({ report }) => report.stopped)).toEqual(['account-deleted']);
+      // A game with no progress has nothing to reconcile either way (NFCT-93 added Sequence Memory to the registry).
+      expect((await reconcileUser(context, uid)).map(({ gameId, report }) => [gameId, report.stopped]))
+        .toEqual([['mental-math', 'account-deleted'], ['sequence-memory', 'no-progress']]);
       expect(await rebuildUserProgress(context, uid, 'mental-math')).toMatchObject({ written: 'account-deleted' });
 
       expect(await readDoc(db, sessionPath(uid, locked.id))).toEqual(before.locked);
