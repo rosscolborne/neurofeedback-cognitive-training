@@ -769,6 +769,7 @@ describe('MentalMathScreen', () => {
       const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
       const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
       h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
+      expect(h.byData('data-summary', 'verification')).toBe('Waiting on level unlock');
       expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when this run was scored. It counts toward your totals now, and toward your records and unlocks once that level is unlocked.');
       expect(h.byData('data-summary', 'record')).toBe('Not a record yetThis run can still set a record once level 1 is unlocked.');
     });
@@ -784,6 +785,7 @@ describe('MentalMathScreen', () => {
       const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
       const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
       h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
+      expect(h.byData('data-summary', 'verification')).toBe('Flagged');
       expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when this run was scored. It counts toward your totals, but not your records or unlocks.');
       expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set recordsNo record yet from level 1.');
     });

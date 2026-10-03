@@ -48,7 +48,10 @@ function verificationTag(verification: Verification): { readonly text: string; r
     case 'verified':
       return { text: 'Final', tone: 'status-tag-active' };
     case 'flagged':
-      return { text: 'Flagged', tone: 'status-tag-paused' };
+      // The same words as the run's history row: trusted scoring upgrades it once its start level unlocks.
+      return verification.upgradable
+        ? { text: 'Waiting on level unlock', tone: 'status-tag-neutral' }
+        : { text: 'Flagged', tone: 'status-tag-paused' };
     case 'invalid':
       return { text: 'Not counted', tone: 'status-tag-alert' };
     case 'not-saved':
