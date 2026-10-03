@@ -151,6 +151,14 @@ Before opening, updating or handing off a PR:
   never pushed. Each is eligible for cleanup as soon as its pass ends and its
   findings are handed back, once `git status` is clean. An integration branch
   is a task branch and follows the rule above.
+- **Stale worktrees are every agent's housekeeping.** When you start or finish
+  a task, run [Diagnose](#diagnose). Remove any worktree another task left
+  behind that now passes the cleanup checks below: typically one whose PR merged
+  (or was closed as superseded) with its commits on `origin/development`, or a
+  review or QA worktree from a finished pass. Remove only what the checks prove
+  safe. Leave anything that fails a check, may have an active agent, or that you
+  are otherwise unsure about, and list it in your report with the reason
+  instead of guessing.
 
 ## Diagnose
 

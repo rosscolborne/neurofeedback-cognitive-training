@@ -370,10 +370,11 @@ the owner's step; for a PR that changes them, follow
 
 ## Stage 1 test coverage
 
-Every user-facing Stage 1 card adds or updates deterministic Playwright
-coverage of the behavior users see, or its PR explains why browser E2E does not
-apply. Domain, security and backend cards use the lower layer that observes the
-behavior instead of browser tests.
+Every user-facing card, in Stage 1 and after it, adds or updates deterministic
+Playwright coverage of the behavior users see, or its PR explains why browser
+E2E does not apply. Domain, security and backend cards use the lower layer that
+observes the behavior instead of browser tests. The table lists Stage 1's
+cards.
 
 | Card | Coverage |
 | --- | --- |
@@ -424,7 +425,8 @@ persistence, training-flow or other stateful behavior:
   confirms the training experience is reached.
 - Assert the outcome of each interaction (navigation, persisted state,
   enabled or disabled controls, visible roles or options, successful
-  completion), not only that something rendered.
+  completion), not only that something rendered. When the change saves data,
+  reload and confirm it persisted.
 - Check whether existing tests actually exercise the changed journey and
   assertions. Where the behavior suits deterministic automation, add or update
   Playwright coverage instead of relying only on exploratory QA.
