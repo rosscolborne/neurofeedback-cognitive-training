@@ -31,7 +31,7 @@ describe('classify-changes', () => {
     ['README.md', NEITHER], ['AGENTS.md', NEITHER], ['docs/nfct/ios.md', NEITHER],
     ['.agents/skills/nfct-pr-review/SKILL.md', NEITHER], ['.claude/settings.json', NEITHER], ['ios/App/README.md', NEITHER],
     // Runtime code and backend configuration run both.
-    ['src/pages/onboarding/RoleSelection.tsx', RUNS_BOTH], ['src/contexts/AuthContext.tsx', RUNS_BOTH],
+    ['src/pages/onboarding/SignUp.tsx', RUNS_BOTH], ['src/contexts/AuthContext.tsx', RUNS_BOTH],
     ['src/services/firebase.ts', RUNS_BOTH], ['src/consumer/repositories/gameSessionRepository.ts', RUNS_BOTH],
     ['src/index.css', RUNS_BOTH], ['shared/games/mental-math/v1/params.ts', RUNS_BOTH], ['index.html', RUNS_BOTH],
     ['package.json', RUNS_BOTH], ['package-lock.json', RUNS_BOTH], ['vite.config.ts', RUNS_BOTH],
@@ -44,7 +44,7 @@ describe('classify-changes', () => {
     ['playwright.canary.config.ts', RUNS_BOTH], ['scripts/canary/canary.mjs', RUNS_BOTH],
     // Tests, native-only, BrainFlow, undeployed Functions and media skip the canary only.
     ['e2e/mental-math.lifecycle.local.spec.ts', CODE_ONLY], ['e2e/helpers/localEmulator.ts', CODE_ONLY],
-    ['tests/firestore-rules/users.test.ts', CODE_ONLY], ['src/pages/onboarding/__tests__/RoleSelection.test.tsx', CODE_ONLY],
+    ['tests/firestore-rules/users.test.ts', CODE_ONLY], ['src/pages/onboarding/__tests__/SignUp.test.tsx', CODE_ONLY],
     ['scripts/__tests__/canary.test.mjs', CODE_ONLY], ['src/services/firebaseConfig.test.ts', CODE_ONLY],
     ['playwright.protocol.config.ts', CODE_ONLY], ['vitest.rules.config.ts', CODE_ONLY], ['tsconfig.e2e.json', CODE_ONLY],
     ['ios/App/App.xcodeproj/project.pbxproj', CODE_ONLY], ['ios/App/ci_scripts/ci_post_clone.sh', CODE_ONLY], ['ci_scripts/ci_post_clone.sh', CODE_ONLY],
@@ -82,7 +82,7 @@ describe('classify-changes', () => {
     ['scripts/ios/simulator-smoke.mjs', ALL_SCENARIOS], ['scripts/ios/simulator-scenarios.mjs', ALL_SCENARIOS], ['.github/workflows/ios.yml', ALL_SCENARIOS],
     // Ordinary feature work does not, even on screens the scenarios drive.
     ['src/App.tsx', NO_MAC], ['src/main.tsx', NO_MAC], ['src/contexts/AuthContext.tsx', NO_MAC], ['src/services/firebase.ts', NO_MAC],
-    ['src/services/firebaseConfig.ts', NO_MAC], ['src/pages/onboarding/RoleSelection.tsx', NO_MAC],
+    ['src/services/firebaseConfig.ts', NO_MAC], ['src/pages/onboarding/SignUp.tsx', NO_MAC],
     ['src/consumer/games/mentalMath/MentalMathScreen.tsx', NO_MAC], ['src/consumer/catalogue/GameCatalogue.tsx', NO_MAC], ['src/index.css', NO_MAC],
     ['shared/games/mental-math/v1/params.ts', NO_MAC], ['firestore.rules', NO_MAC], ['e2e/mental-math.lifecycle.local.spec.ts', NO_MAC],
     // Nor do tests, documentation (even under ios/) or the other workflows.

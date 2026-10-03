@@ -8,7 +8,7 @@ import { environment, past, seedDocuments } from '../fixture';
  *
  *   player-a: consumer profile with EEG consent, one game session
  *   player-b: consumer profile without EEG consent, one game session
- *   legacy-user: inherited profile without schemaVersion
+ *   unversioned-user: a users/{uid} document without schemaVersion, so not a consumer profile
  *
  * The document builders follow the Stage 1 design (section C). Trial and
  * metric payloads are opaque to the rules, so their contents here are only
@@ -18,7 +18,7 @@ export const players = {
     a: 'player-a',
     b: 'player-b',
     noProfile: 'player-without-profile',
-    legacy: 'legacy-user',
+    unversioned: 'unversioned-user',
 } as const;
 
 export const acceptedConsentVersion = 'placeholder-1';
@@ -175,7 +175,7 @@ export async function resetConsumerWorld(): Promise<void> {
     const seeded: Record<string, Record<string, unknown>> = {
         [`users/${players.a}`]: storedProfile(storedConsent),
         [`users/${players.b}`]: storedProfile(null),
-        [`users/${players.legacy}`]: { email: 'legacy-user@example.test', displayName: 'Legacy', createdAt: '2026-01-15T12:00:00.000Z', role: 'patient' },
+        [`users/${players.unversioned}`]: { displayName: 'Unversioned' },
         [`users/${players.a}/gameSessions/${seededSessionId}`]: storedSession(players.a),
         [`users/${players.b}/gameSessions/${seededSessionId}`]: storedSession(players.b),
         [`users/${players.a}/gameSessions/${recordedSessionId}`]: storedSession(players.a),

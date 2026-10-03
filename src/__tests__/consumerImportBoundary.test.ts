@@ -5,25 +5,21 @@ import { describe, expect, it } from 'vitest';
 //
 // "Consumer code" is every non-test module under src/consumer/ (the consumer
 // repositories and Firestore helpers, and the consumer game and progress UI
-// that builds on them) plus the shared domain package, shared/. It must not
-// reach the transitional clinical model, directly or through anything it
-// imports:
-// - no storageEngine and no clinical types (src/types: ClientProfile,
-//   PersistedTimestamp, ...);
-// - no Firestore path naming the clinical `clients` or `sessions` collections,
-//   in consumer code or anything it loads;
-// - no collection-group query: every consumer query stays inside users/{uid}.
+// that builds on them) plus the shared domain package, shared/. It makes no
+// collection-group query: every consumer query stays inside users/{uid}.
+//
+// "App code" is every non-test module under src/ plus shared/: the code that
+// ships to the browser and the iOS app.
+// - Its Firestore code never addresses the retired clinical `clients` or
+//   `sessions` collections, which the rules deny.
+// - It must not import server-only modules (the Admin SDK, Cloud Functions,
+//   the functions/ codebase, the Firebase CLI or the rules-testing harness).
 //
 // The path check sees literals passed to collection(), doc() or
 // collectionGroup(), string and template literals with a clients/sessions path
 // segment, and same-file `const X = 'clients'` constants passed to those
 // calls. It does not follow constants imported from another module, computed
 // strings or aliased path helpers.
-//
-// "App code" is every non-test module under src/ plus shared/: the code that
-// ships to the browser and the iOS app. It must not import server-only modules
-// (the Admin SDK, Cloud Functions, the future functions/ codebase, the Firebase
-// CLI or the rules-testing harness).
 
 // Every TypeScript source in src/ and shared/, keyed by repository path ('src/...').
 const SOURCES: Record<string, string> = Object.fromEntries(Object.entries(import.meta.glob<string>(
@@ -34,8 +30,6 @@ const SOURCES: Record<string, string> = Object.fromEntries(Object.entries(import
 const CONSUMER_ROOTS = ['src/consumer', 'shared'];
 const APP_ROOTS = ['src', 'shared'];
 
-/** Repository-relative modules (a directory means everything in it) consumer code must never load. */
-const CLINICAL_MODULES = ['src/services/storageEngine.ts', 'src/types'];
 const CLINICAL_COLLECTIONS = new Set(['clients', 'sessions']);
 const PATH_CALLS = new Set(['collection', 'doc', 'collectionGroup']);
 const SERVER_ONLY_PACKAGES = [/^firebase-admin(\/|$)/, /^firebase-functions(\/|$)/, /^@google-cloud\//, /^firebase-tools(\/|$)/, /^@firebase\/rules-unit-testing(\/|$)/];
@@ -162,30 +156,6 @@ function inModule(file: string, module: string): boolean {
   return file === module || file.startsWith(`${module}/`);
 }
 
-/** Every repository module a file loads, directly or indirectly, with the chain that reaches it. */
-function importClosure(entry: string): Map<string, string[]> {
-  const reached = new Map<string, string[]>([[entry, [entry]]]);
-  const queue = [entry];
-  while (queue.length > 0) {
-    const file = queue.shift()!;
-    if (!(file in SOURCES)) continue;
-    for (const specifier of factsOf(file).specifiers) {
-      const target = resolveModule(file, specifier);
-      if (target === null || reached.has(target)) continue;
-      reached.set(target, [...reached.get(file)!, target]);
-      queue.push(target);
-    }
-  }
-  return reached;
-}
-
-/** Clinical collection paths in a file or in any repository module it loads, with the chain that reaches each. */
-function clinicalPathsReachedFrom(entry: string): string[] {
-  return [...importClosure(entry).entries()]
-    .filter(([file]) => file in SOURCES)
-    .flatMap(([file, chain]) => factsOf(file).clinicalPaths.map((path) => `${chain.join(' -> ')}: ${path}`));
-}
-
 const consumerFiles = CONSUMER_ROOTS.flatMap(sourceFiles);
 const appFiles = APP_ROOTS.flatMap(sourceFiles);
 
@@ -196,19 +166,16 @@ describe('consumer import boundary', () => {
       'src/consumer/repositories/index.ts',
       'shared/index.ts',
     ]));
-    for (const module of CLINICAL_MODULES) expect(Object.keys(SOURCES).some((file) => inModule(file, module))).toBe(true);
+    expect(appFiles).toEqual(expect.arrayContaining(['src/App.tsx', 'src/contexts/AuthContext.tsx']));
   });
 
-  it('never loads storageEngine or the clinical types, directly or transitively', () => {
-    const violations = consumerFiles.flatMap((file) => [...importClosure(file).entries()]
-      .filter(([target]) => CLINICAL_MODULES.some((module) => inModule(target, module)))
-      .map(([, chain]) => chain.join(' -> ')));
+  it('never addresses the retired clients or sessions collections anywhere in app code', () => {
+    // Only a module that uses the Firestore SDK can address a Firestore path;
+    // others, such as the BrainFlow client, may have HTTP routes named "sessions".
+    const firestoreFiles = appFiles.filter((file) => factsOf(file).specifiers.includes('firebase/firestore'));
+    const violations = firestoreFiles.flatMap((file) => factsOf(file).clinicalPaths.map((path) => `${file}: ${path}`));
 
-    expect(violations).toEqual([]);
-  });
-
-  it('never addresses the clinical clients or sessions collections, directly or through what it loads', () => {
-    const violations = consumerFiles.flatMap((file) => clinicalPathsReachedFrom(file));
+    expect(firestoreFiles).toEqual(expect.arrayContaining(['src/consumer/firestore/context.ts']));
 
     expect(violations).toEqual([]);
   });
@@ -237,8 +204,8 @@ describe('import boundary checker', () => {
   // Proves the checks above are not vacuous.
   it('sees every kind of import', () => {
     const facts = analyze('probe.ts', [
-      "import { a } from '../services/storageEngine';",
-      "import type { ClientProfile } from '../../types';",
+      "import { a } from '../services/eegEngine';",
+      "import type { EEGDataPoint } from '../../types';",
       "export { b } from './reexported';",
       "const lazy = await import('firebase-admin/firestore');",
       "type T = import('firebase-functions/v2').CloudEvent<unknown>;",
@@ -246,7 +213,7 @@ describe('import boundary checker', () => {
     ].join('\n'));
 
     expect(facts.specifiers).toEqual([
-      '../services/storageEngine', '../../types', './reexported', 'firebase-admin/firestore', 'firebase-functions/v2', 'firebase/firestore',
+      '../services/eegEngine', '../../types', './reexported', 'firebase-admin/firestore', 'firebase-functions/v2', 'firebase/firestore',
     ]);
     expect(facts.firestoreImports).toEqual(['collectionGroup', 'doc']);
   });
@@ -280,18 +247,5 @@ describe('import boundary checker', () => {
     expect(resolveModule('src/components/x.ts', '../types')).toBe('src/types/index.ts');
     expect(resolveModule('src/x.ts', 'firebase/firestore')).toBeNull();
     expect(resolveModule('src/components/x.ts', '../../functions/src/scoring')).toBe('functions/src/scoring');
-    const closure = importClosure('src/services/storageEngine.ts');
-    expect([...closure.keys()].some((file) => inModule(file, 'src/types'))).toBe(true);
-  });
-
-  it('finds clinical paths in the modules a file loads, not only in the file itself', () => {
-    // storageEngine reads clients/{uid}; anything that imports it reaches that path.
-    expect(clinicalPathsReachedFrom('src/services/storageEngine.ts'))
-      .toContainEqual(expect.stringMatching(/^src\/services\/storageEngine\.ts: doc\(\.\.\. 'clients' \.\.\.\)$/));
-    const importer = Object.keys(SOURCES).find((file) => !isTestFile(file) && file !== 'src/services/storageEngine.ts'
-      && factsOf(file).clinicalPaths.length === 0
-      && factsOf(file).specifiers.some((specifier) => resolveModule(file, specifier) === 'src/services/storageEngine.ts'));
-    expect(importer).toBeDefined();
-    expect(clinicalPathsReachedFrom(importer!)).toContainEqual(expect.stringContaining(' -> src/services/storageEngine.ts: '));
   });
 });

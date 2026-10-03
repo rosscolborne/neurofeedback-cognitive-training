@@ -462,7 +462,7 @@ Timestamps are typed structurally (`FirestoreTimestamp`), so the same schemas re
 - Adding a game means a `shared/games/<gameId>/` definition, plus its `gameId` in the rules allowlist and a rules deploy. A `gameId` with no scoring code cannot be processed.
 - Adding or retiring a game version means registering its frozen module in `shared/processing/modules.ts` before widening the rules' `supportedGameVersions()` window, and keeping it registered while any of its sessions may still need processing (decision 12). A session whose version has no module waits in `processing.state = 'unsupported'` until a deploy adds one.
 - Trusted scoring is a Cloud Functions codebase (`functions/`), built by bundling `shared/` into `functions/lib/`. Deploying it needs the Blaze plan and is a manual owner step; Stage 1 deploys nothing.
-- Clinical types, `storageEngine`, and the `clients`/`sessions` paths are not used by the consumer model and must not be extended to represent games (see AGENTS.md).
+- Clinical types, `storageEngine`, and the `clients`/`sessions` paths are not used by the consumer model and must not be extended to represent games (see AGENTS.md). They have since been removed: NeuroGambit and `sessions` with NFCT-47, and roles, `clients/{uid}` and the legacy `users/{uid}` rule branch with Phase 2. The consumer profile is now the only profile.
 - Stage 1 sequence after this ADR:
   - NFCT-17: Mental Math definition;
   - NFCT-18: rules and indexes;

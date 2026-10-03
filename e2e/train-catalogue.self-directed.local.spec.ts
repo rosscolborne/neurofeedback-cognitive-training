@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard } from './helpers/auth';
+import { arriveAtHome } from './helpers/auth';
 
 // NFCT-12: the Train tab is a game catalogue built from the code-owned shared
 // catalogue, each game filed under its domains. Also runs in WebKit as an
@@ -14,8 +14,7 @@ async function signUpAndOpenTrain(page: Page): Promise<void> {
   await page.getByPlaceholder('you@example.com').fill(`train-catalogue-${randomUUID().slice(0, 12)}@example.test`);
   await page.getByPlaceholder('At least 6 characters').fill('LocalEmulator!123');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await page.getByRole('button', { name: /Train my brain/ }).click();
-  await arriveAtPatientDashboard(page);
+  await arriveAtHome(page);
   await page.getByRole('button', { name: 'Train', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Train', exact: true })).toBeVisible();
 }

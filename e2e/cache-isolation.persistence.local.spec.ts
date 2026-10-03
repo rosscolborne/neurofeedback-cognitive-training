@@ -1,8 +1,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
+import { arriveAtHome, loginThroughUi } from './helpers/auth';
 import type { CachedAccountData } from './helpers/cacheIsolation';
-import { seedConsumerAccount, seedPatient } from './helpers/localEmulator';
+import { seedConsumerAccount, seedPlayer } from './helpers/localEmulator';
 import { FIRESTORE_CACHE_STATE_KEY, type CacheState } from '../src/services/firestoreCacheLifecycle';
 
 // NFCT-20: the persistent Firestore cache belongs to one account at a time.
@@ -68,15 +68,15 @@ async function expectNothingReadable(page: Page, data: CachedAccountData): Promi
     for (const [name, read] of Object.entries(offline)) expect(read, `offline getDoc ${name}`).toEqual({ kind: 'error', code: 'unavailable' });
 }
 
-async function saveSessionAndReadClinicalDocument(page: Page): Promise<CachedAccountData> {
+async function saveSessionAndReadProfileName(page: Page): Promise<{ data: CachedAccountData; profileName: string | null }> {
     return page.evaluate(async () => {
         const helper = await import('/e2e/helpers/cacheIsolation.ts');
-        const saved = await helper.saveGameSession({ withEeg: false });
-        return { ...saved, clinicalName: await helper.readOwnClinicalDocument() };
+        const data = await helper.saveGameSession({ withEeg: false });
+        return { data, profileName: await helper.readOwnProfileName() };
     });
 }
 
-async function logOutOfPatientApp(page: Page): Promise<void> {
+async function logOutOfApp(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Profile', exact: true }).click();
     await page.getByRole('button', { name: 'Log Out' }).click();
 }
@@ -84,15 +84,15 @@ async function logOutOfPatientApp(page: Page): Promise<void> {
 test('after sign-out, the next account on this browser cannot read the previous account\'s cached data', async ({ page, context, permissionErrorGuard }) => {
     // The second account's probes of the first account's paths are refused by the rules, as they must be.
     permissionErrorGuard.expectDenialsIn(context);
-    const a = await seedPatient();
-    const b = await seedPatient();
+    const a = await seedPlayer();
+    const b = await seedPlayer();
 
-    await loginThroughUi(page, a.patient);
-    await arriveAtPatientDashboard(page);
-    const aData = await saveSessionAndReadClinicalDocument(page);
-    expect(aData.clinicalName).toBe(a.name);
+    await loginThroughUi(page, a.player);
+    await arriveAtHome(page);
+    const { data: aData, profileName } = await saveSessionAndReadProfileName(page);
+    expect(profileName).toBe(a.name);
     await expectCachedForOwner(page, aData);
-    expect(await cacheState(page)).toEqual({ v: 1, owner: a.patient.uid });
+    expect(await cacheState(page)).toEqual({ v: 1, owner: a.player.uid });
 
     // A game saved while Firestore is offline stays queued on this device.
     const queued = await page.evaluate(async () => {
@@ -103,7 +103,7 @@ test('after sign-out, the next account on this browser cannot read the previous 
     });
 
     // Sign-out says so before deleting it. Staying signed in is the default and keeps it.
-    await logOutOfPatientApp(page);
+    await logOutOfApp(page);
     const dialog = page.getByRole('alertdialog', { name: 'Some activity hasn’t uploaded yet' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('Signing out now will delete it from this device');
@@ -127,35 +127,35 @@ test('after sign-out, the next account on this browser cannot read the previous 
     expect(await wasReloaded(page)).toBe(true);
     expect(await currentUid(page)).toBeNull();
     expect(await cacheState(page)).toEqual({ v: 1, owner: null });
-    await expectNoTrace(page, [a.patient.uid, a.name, a.patient.email, queued]);
+    await expectNoTrace(page, [a.player.uid, a.name, a.player.email, queued]);
 
     // The next account signs in on the same browser profile.
-    await loginThroughUi(page, b.patient);
-    await arriveAtPatientDashboard(page);
-    expect(await cacheState(page)).toEqual({ v: 1, owner: b.patient.uid });
-    await expectNoTrace(page, [a.patient.uid, a.name, a.patient.email]);
+    await loginThroughUi(page, b.player);
+    await arriveAtHome(page);
+    expect(await cacheState(page)).toEqual({ v: 1, owner: b.player.uid });
+    await expectNoTrace(page, [a.player.uid, a.name, a.player.email]);
     await expectNothingReadable(page, aData);
 
     // The discarded game was deleted with the cache: it never reaches the server, even when its account returns.
-    await logOutOfPatientApp(page);
+    await logOutOfApp(page);
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
-    await loginThroughUi(page, a.patient);
-    await arriveAtPatientDashboard(page);
+    await loginThroughUi(page, a.player);
+    await arriveAtHome(page);
     expect(await page.evaluate(async (path) => (await import('/e2e/helpers/cacheIsolation.ts')).existsOnServer(path), queued)).toBe(false);
 });
 
 test('switching accounts without signing out removes the previous player\'s profile, games and EEG', async ({ page, context, permissionErrorGuard }) => {
     permissionErrorGuard.expectDenialsIn(context);
     const player = await seedConsumerAccount();
-    const next = (await seedPatient()).patient;
+    const next = (await seedPlayer()).player;
 
     // A consumer player with EEG consent saves a game with a measured EEG recording.
     await loginThroughUi(page, player);
-    await expect(page).toHaveURL(/role-selection/);
+    await arriveAtHome(page);
     const playerData: CachedAccountData = await page.evaluate(async () => {
         const helper = await import('/e2e/helpers/cacheIsolation.ts');
-        await helper.createConsentedProfile();
-        return { ...(await helper.saveGameSession({ withEeg: true })), clinicalName: null };
+        await helper.grantEegConsent();
+        return helper.saveGameSession({ withEeg: true });
     });
     expect(playerData.recordingId).not.toBeNull();
     await expectCachedForOwner(page, playerData);
@@ -164,7 +164,7 @@ test('switching accounts without signing out removes the previous player\'s prof
     await markDocument(page);
     await page.evaluate(async ({ email, password }) => (await import('/e2e/helpers/cacheIsolation.ts')).signInDirectly(email, password), next)
         .catch((error: Error) => { if (!/Execution context was destroyed|navigat/i.test(error.message)) throw error; });
-    await arriveAtPatientDashboard(page);
+    await arriveAtHome(page);
     expect(await wasReloaded(page)).toBe(true);
     expect(await currentUid(page)).toBe(next.uid);
     expect(await cacheState(page)).toEqual({ v: 1, owner: next.uid });
@@ -173,10 +173,10 @@ test('switching accounts without signing out removes the previous player\'s prof
 });
 
 test('a session that ends outside the app (another tab, a revoked sign-in) also deletes the cache', async ({ page }) => {
-    const a = await seedPatient();
-    await loginThroughUi(page, a.patient);
-    await arriveAtPatientDashboard(page);
-    const aData = await saveSessionAndReadClinicalDocument(page);
+    const a = await seedPlayer();
+    await loginThroughUi(page, a.player);
+    await arriveAtHome(page);
+    const { data: aData } = await saveSessionAndReadProfileName(page);
     await expectCachedForOwner(page, aData);
 
     await markDocument(page);
@@ -185,22 +185,22 @@ test('a session that ends outside the app (another tab, a revoked sign-in) also 
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
     await expect.poll(() => wasReloaded(page)).toBe(true);
     await expect.poll(() => cacheState(page)).toEqual({ v: 1, owner: null });
-    await expectNoTrace(page, [a.patient.uid, a.name]);
+    await expectNoTrace(page, [a.player.uid, a.name]);
 });
 
 test('signing out in one tab reloads the other tabs, which do not hold the deletion up', async ({ page, context }) => {
-    const a = await seedPatient();
-    await loginThroughUi(page, a.patient);
-    await arriveAtPatientDashboard(page);
-    const aData = await saveSessionAndReadClinicalDocument(page);
+    const a = await seedPlayer();
+    await loginThroughUi(page, a.player);
+    await arriveAtHome(page);
+    const { data: aData } = await saveSessionAndReadProfileName(page);
 
     const second = await context.newPage();
     await second.goto('/');
-    await arriveAtPatientDashboard(second);
+    await arriveAtHome(second);
     await expectCachedForOwner(second, aData);
     await markDocument(second);
 
-    await logOutOfPatientApp(page);
+    await logOutOfApp(page);
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
     await expect.poll(() => wasReloaded(second)).toBe(true);
     await expect(second.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
@@ -208,16 +208,16 @@ test('signing out in one tab reloads the other tabs, which do not hold the delet
     // The deletion completed although the second tab had the database open.
     // (Its SDK, shutting down, may create an empty database again right
     // afterwards: no documents and no queued writes.)
-    await expectNoTrace(second, [a.patient.uid, a.name, a.patient.email, aData.sessionId]);
+    await expectNoTrace(second, [a.player.uid, a.name, a.player.email, aData.sessionId]);
 });
 
 test('if the cache cannot be deleted, sign-out still completes, and the next account waits until it is or signs out', async ({ page, context, permissionErrorGuard }) => {
     permissionErrorGuard.expectDenialsIn(context);
-    const a = await seedPatient();
-    const b = await seedPatient();
-    await loginThroughUi(page, a.patient);
-    await arriveAtPatientDashboard(page);
-    const aData = await saveSessionAndReadClinicalDocument(page);
+    const a = await seedPlayer();
+    const b = await seedPlayer();
+    await loginThroughUi(page, a.player);
+    await arriveAtHome(page);
+    const { data: aData } = await saveSessionAndReadProfileName(page);
 
     // Another page of this origin, not running the app, holds the cache
     // database open and ignores requests to close it, as a frozen tab or
@@ -236,43 +236,43 @@ test('if the cache cannot be deleted, sign-out still completes, and the next acc
     });
 
     // Sign-out still finishes: signed out, with the unfinished cleanup recorded.
-    await logOutOfPatientApp(page);
+    await logOutOfApp(page);
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
     expect(await currentUid(page)).toBeNull();
-    expect((await cacheState(page))?.cleanup).toMatchObject({ reason: 'sign-out', signOut: true, previousOwner: a.patient.uid });
+    expect((await cacheState(page))?.cleanup).toMatchObject({ reason: 'sign-out', signOut: true, previousOwner: a.player.uid });
 
     // The next account to sign in waits, and nothing reads Firestore for it meanwhile.
     const firestoreRequests: string[] = [];
     page.on('request', (request) => { if (request.url().startsWith(FIRESTORE)) firestoreRequests.push(request.url()); });
-    await loginThroughUi(page, b.patient);
+    await loginThroughUi(page, b.player);
     await expect(page.getByText('Finishing sign-out on this device…')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Close any other tabs or windows with this app open to continue.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Play Mental Math', exact: true })).toBeHidden();
     const waitingScreen = await page.locator('body').innerText();
     expect(waitingScreen).not.toContain(a.name);
-    expect(waitingScreen).not.toContain(a.patient.email);
+    expect(waitingScreen).not.toContain(a.player.email);
     expect(firestoreRequests).toEqual([]);
 
     // The waiting account can sign out of this device without Firestore; the cleanup stays recorded.
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
     expect(await currentUid(page)).toBeNull();
-    expect((await cacheState(page))?.cleanup).toMatchObject({ reason: 'sign-out', previousOwner: a.patient.uid });
+    expect((await cacheState(page))?.cleanup).toMatchObject({ reason: 'sign-out', previousOwner: a.player.uid });
     expect(firestoreRequests).toEqual([]);
 
     // Once the database is released, the deletion completes and the account opens on an empty cache.
     await holder.evaluate(() => (window as unknown as { held: IDBDatabase }).held.close());
-    await loginThroughUi(page, b.patient);
-    await arriveAtPatientDashboard(page);
-    expect(await cacheState(page)).toEqual({ v: 1, owner: b.patient.uid });
-    await expectNoTrace(page, [a.patient.uid, a.name, a.patient.email]);
+    await loginThroughUi(page, b.player);
+    await arriveAtHome(page);
+    expect(await cacheState(page)).toEqual({ v: 1, owner: b.player.uid });
+    await expectNoTrace(page, [a.player.uid, a.name, a.player.email]);
     await expectNothingReadable(page, aData);
 });
 
 test('the same account keeps its offline data across a reload, and it uploads later', async ({ page, context }) => {
-    const a = await seedPatient();
-    await loginThroughUi(page, a.patient);
-    await arriveAtPatientDashboard(page);
+    const a = await seedPlayer();
+    await loginThroughUi(page, a.player);
+    await arriveAtHome(page);
 
     // Firestore unreachable (the app itself still loads): a game is saved and stays queued.
     // With the SDK's queue busy, as on a slow device, the write reaches the
@@ -289,9 +289,9 @@ test('the same account keeps its offline data across a reload, and it uploads la
     await markDocument(page);
     await page.reload();
     expect(await wasReloaded(page)).toBe(true);
-    await expect.poll(() => currentUid(page)).toBe(a.patient.uid);
+    await expect.poll(() => currentUid(page)).toBe(a.player.uid);
     // Same account: the cache was kept, with the queued game in it.
-    expect(await cacheState(page)).toEqual({ v: 1, owner: a.patient.uid });
+    expect(await cacheState(page)).toEqual({ v: 1, owner: a.player.uid });
     expect(await page.evaluate(async (path) => (await import('/e2e/helpers/cacheIsolation.ts')).pendingInCache(path), queued)).toBe(true);
 
     // Back online, the queued game reaches the server. Restarting the

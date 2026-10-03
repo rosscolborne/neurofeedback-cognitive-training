@@ -1,4 +1,4 @@
-import { getDoc, serverTimestamp, setDoc, updateDoc, type FieldValue } from 'firebase/firestore';
+import { deleteDoc, getDoc, serverTimestamp, setDoc, updateDoc, type FieldValue } from 'firebase/firestore';
 import { z } from 'zod';
 import {
   readUserProfile,
@@ -17,12 +17,13 @@ import {
   type PendingWrite,
 } from '../firestore/writes';
 
-// users/{uid}: the consumer profile. Created once at sign-up with server-clock
-// timestamps, then changed only by field-level updates: each update names the
-// exact field paths it changes plus a server-clock `updatedAt`, never a
-// read-modify-write of the whole document. That matches the rules, which allow
-// updates to displayName, avatar, preferences, onboarding, eeg and updatedAt
-// only, and keep createdAt immutable.
+// users/{uid}: the consumer profile. Created once, with server-clock
+// timestamps, when the signed-in player has none, then changed only by
+// field-level updates: each update names the exact field paths it changes plus
+// a server-clock `updatedAt`, never a read-modify-write of the whole document.
+// That matches the rules, which allow updates to displayName, avatar,
+// preferences, onboarding, eeg and updatedAt only, and keep createdAt
+// immutable. Account deletion deletes the document.
 
 const profileShape = userProfileWriteSchema.shape;
 
@@ -53,7 +54,7 @@ const onboardingVersionSchema = profileShape.onboarding.shape.version;
 export interface ProfileRepository {
   /** The signed-in user's profile: missing, readable, or unreadable (a legacy or newer-schema document). */
   getProfile(): Promise<DocumentRead<UserProfile>>;
-  /** Creates the profile at sign-up. Awaiting `acknowledged` surfaces a refusal, such as a profile that already exists. */
+  /** Creates the profile. Awaiting `acknowledged` surfaces a refusal, such as a profile that already exists. */
   createProfile(draft: UserProfileDraft): PendingWrite;
   updateProfile(patch: UserProfilePatch): PendingWrite;
   completeOnboarding(version: number): PendingWrite;
@@ -61,6 +62,12 @@ export interface ProfileRepository {
   grantEegConsent(version: string): PendingWrite;
   /** Stops new EEG recordings. Deleting existing recordings is a separate, explicit step (eegRecordingRepository). */
   withdrawEegConsent(): PendingWrite;
+  /**
+   * Deletes the profile document, account deletion's step before the Auth
+   * account goes. Game sessions, EEG recordings and the server-owned
+   * aggregates under it stay until server-driven deletion (NFCT-23) removes them.
+   */
+  deleteProfile(): PendingWrite;
 }
 
 function flattenPatch(patch: z.output<typeof profilePatchSchema>): Record<string, unknown> {
@@ -140,6 +147,11 @@ export function createProfileRepository(context: ConsumerFirestoreContext): Prof
 
     withdrawEegConsent() {
       return update({ 'eeg.consent': null });
+    },
+
+    deleteProfile() {
+      const ref = profileRef(firestore, signedInUid(context));
+      return pendingWrite(withSdkValidation('profile deletion', () => deleteDoc(ref)));
     },
   };
 }

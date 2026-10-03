@@ -19,10 +19,6 @@ service cloud.firestore {
     // written by trusted server code (Admin SDK), which bypasses these rules.
     // There are no roles, custom claims or cross-user reads.
     //
-    // Firestore rules OR together, so users/{uid} has exactly one match. It has
-    // two branches: consumer profiles (with schemaVersion) and, until NFCT-4
-    // removes the inherited clinical app, legacy profiles (without).
-    //
     // Writers always write a supported schemaVersion. Readers upcast every
     // stored version in shared/, so reads never depend on it. When a version is
     // bumped, rules accept N - 1 and N for a transition window, each validated
@@ -126,6 +122,22 @@ service cloud.firestore {
         );
       }
 
+      // A preset, or a profile photo the app has downscaled on the device and
+      // stored inline as an image data URL (there is no file storage). The
+      // bound and pattern match shared/schemas/profile.ts.
+      function validAvatar(avatar) {
+        return avatar == null || (
+          avatar is map && (
+            (exactKeys(avatar, ['kind', 'presetId'], []) &&
+              avatar.kind == 'preset' && boundedText(avatar.presetId, 40)) ||
+            (exactKeys(avatar, ['kind', 'dataUrl'], []) &&
+              avatar.kind == 'photo' && avatar.dataUrl is string &&
+              avatar.dataUrl.size() <= 100000 &&
+              avatar.dataUrl.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$'))
+          )
+        );
+      }
+
       function validConsumerProfile(profile) {
         return exactKeys(profile,
             ['schemaVersion', 'createdAt', 'updatedAt', 'displayName', 'avatar', 'preferences', 'onboarding', 'eeg'], []) &&
@@ -133,10 +145,7 @@ service cloud.firestore {
           profile.createdAt is timestamp &&
           profile.updatedAt == request.time &&
           boundedTextOrNull(profile.displayName, 40) &&
-          (profile.avatar == null || (
-            profile.avatar is map && exactKeys(profile.avatar, ['kind', 'presetId'], []) &&
-            profile.avatar.kind == 'preset' && boundedText(profile.avatar.presetId, 40)
-          )) &&
+          validAvatar(profile.avatar) &&
           profile.preferences is map &&
           exactKeys(profile.preferences, ['timezone', 'soundEnabled', 'hapticsEnabled', 'weeklyGoal'], []) &&
           boundedText(profile.preferences.timezone, 64) &&
@@ -173,46 +182,16 @@ service cloud.firestore {
             eegConsentGrantedNow(next.eeg.consent));
       }
 
-      // ---- Legacy profile (transitional; removed with `role` by NFCT-4) ----
-      // Only what the inherited sign-up, role selection and account deletion
-      // write. A legacy profile can never gain schemaVersion, so it can never
-      // become a consumer profile.
-
-      function legacyTextOrNull(value, max) {
-        return value == null || (value is string && value.size() <= max);
-      }
-
-      function validLegacyProfileCreate(profile) {
-        return profile.keys().hasAll(['role']) &&
-          profile.keys().hasOnly(['email', 'displayName', 'createdAt', 'role']) &&
-          profile.role == null &&
-          legacyTextOrNull(profile.get('email', null), 320) &&
-          legacyTextOrNull(profile.get('displayName', null), 200) &&
-          legacyTextOrNull(profile.get('createdAt', null), 40);
-      }
-
-      function validLegacyProfileUpdate(next, previous) {
-        return next.diff(previous).affectedKeys().hasOnly(
-            ['role', 'updatedAt', 'email', 'displayName', 'accountDeletionStartedAt']) &&
-          next.get('role', null) in [null, 'patient', 'clinician'] &&
-          legacyTextOrNull(next.get('email', null), 320) &&
-          legacyTextOrNull(next.get('displayName', null), 200) &&
-          legacyTextOrNull(next.get('updatedAt', null), 40) &&
-          (next.get('accountDeletionStartedAt', null) == previous.get('accountDeletionStartedAt', null) ||
-            next.get('accountDeletionStartedAt', null) == request.time);
-      }
-
       allow read: if isOwner(uid);
-      allow create: if isOwner(uid) && (
-        ('schemaVersion' in request.resource.data && validConsumerProfileCreate(request.resource.data)) ||
-        (!('schemaVersion' in request.resource.data) && validLegacyProfileCreate(request.resource.data))
-      );
-      allow update: if isOwner(uid) && (
-        ('schemaVersion' in resource.data && validConsumerProfileUpdate(request.resource.data, resource.data)) ||
-        (!('schemaVersion' in resource.data) && validLegacyProfileUpdate(request.resource.data, resource.data))
-      );
-      // Only server-driven account deletion removes a profile.
-      allow delete: if false;
+      allow create: if isOwner(uid) && validConsumerProfileCreate(request.resource.data);
+      allow update: if isOwner(uid) && validConsumerProfileUpdate(request.resource.data, resource.data);
+      // Account deletion deletes the profile document before the Auth account.
+      // Deleting a document never deletes its subcollections: game sessions,
+      // EEG recordings and the server-owned aggregates stay until server-driven
+      // deletion (NFCT-23) removes them. A deleted profile can be created again
+      // only as a new consumer profile, with its own server-clock createdAt and
+      // no EEG consent unless granted anew.
+      allow delete: if isOwner(uid);
 
       // ---- Game sessions: client-created once, never updated ----
       // The client generates the ID at game start and writes the document once
@@ -449,62 +428,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Legacy patient profiles (clients/{clientId}): the app's profile until the
-    // consumer profile replaces it (Phase 2). Only the owner has access.
-    // Profiles linked under the retired clinician product keep their
-    // relationship fields frozen; only starting account deletion clears them.
-    match /clients/{clientId} {
-      function relationshipUnchanged() {
-        return request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null) &&
-          request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null) &&
-          request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null);
-      }
-
-      function startsAccountDeletion() {
-        return request.auth.uid == clientId &&
-          resource.data.get('accountDeletionStartedAt', null) == null &&
-          request.resource.data.get('accountDeletionStartedAt', null) == request.time &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'accountDeletionStartedAt', 'clinicianId', 'linkedClinicianCode',
-            'clinicId', 'acceptedInvitationId', 'updatedAt'
-          ]) &&
-          request.resource.data.get('clinicianId', null) == null &&
-          request.resource.data.get('linkedClinicianCode', null) == null &&
-          request.resource.data.get('clinicId', null) == null &&
-          request.resource.data.get('acceptedInvitationId', null) == null &&
-          request.resource.data.get('updatedAt', null) == request.time;
-      }
-
-      allow read: if isAuthenticated() && request.auth.uid == clientId;
-      allow create: if isAuthenticated() &&
-        request.auth.uid == clientId &&
-        request.resource.data.id == clientId &&
-        request.resource.data.get('accountDeletionStartedAt', null) == null &&
-        request.resource.data.get('clinicId', null) == null &&
-        request.resource.data.get('clinicianId', null) == null &&
-        request.resource.data.get('linkedClinicianCode', null) == null &&
-        request.resource.data.get('acceptedInvitationId', null) == null;
-      allow update: if isAuthenticated() &&
-        request.auth.uid == clientId &&
-        (startsAccountDeletion() || (
-          resource.data.get('accountDeletionStartedAt', null) == null &&
-          request.resource.data.get('accountDeletionStartedAt', null) == null &&
-          request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&
-          relationshipUnchanged()
-        ));
-      allow delete: if isAuthenticated() && (
-        request.auth.uid == clientId &&
-        resource.data.get('accountDeletionStartedAt', null) == null &&
-        resource.data.get('clinicianId', null) == null &&
-        resource.data.get('linkedClinicianCode', null) == null &&
-        resource.data.get('acceptedInvitationId', null) == null
-      );
-    }
-
-    // Everything not matched above is denied, including the retired clinician
-    // collections (invitations, messages, appointments, clinics, practitioners
-    // and brain maps) and the retired neurofeedback session records
-    // (sessions). Rules OR together, so this grants nothing; it makes the
+    // Everything not matched above is denied, including every collection of
+    // the retired clinical product (clients, sessions and the clinician
+    // collections). Rules OR together, so this grants nothing; it makes the
     // default explicit.
     match /{document=**} {
       allow read, write: if false;

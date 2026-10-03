@@ -1,7 +1,6 @@
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ClientProfile } from '../../../types';
 import { HomeScreen } from '../HomeScreen';
 import { ProgressHistory } from '../ProgressHistory';
 
@@ -9,8 +8,6 @@ import { ProgressHistory } from '../ProgressHistory';
 // training and its session history are gone.
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-const client: ClientProfile = { id: 'p', name: 'Sam Player', email: 'p@example.test', status: 'active', brainMaps: [] };
 
 const nodeText = (node: ReactTestInstance | string): string => (typeof node === 'string' ? node : node.children.map(nodeText).join(' '));
 const games = <section data-testid="games"><h2>Games come first</h2></section>;
@@ -23,12 +20,17 @@ afterEach(() => {
 
 describe('Home', () => {
   it('greets the player and shows the games, with no neurofeedback training', () => {
-    act(() => { renderer = create(<HomeScreen client={client} gamesSection={games} />); });
+    act(() => { renderer = create(<HomeScreen displayName="Sam Player" gamesSection={games} />); });
     const text = nodeText(renderer!.root);
     expect(text).toMatch(/Good (morning|afternoon|evening) ,? ?Sam\./);
     expect(text).toContain('Games come first');
     expect(text).not.toMatch(/Neurofeedback|NeuroGambit|Begin Session|Training Session/);
     expect(renderer!.root.findAllByType('button')).toHaveLength(0);
+  });
+
+  it('greets a player who gave no name without one', () => {
+    act(() => { renderer = create(<HomeScreen displayName={null} gamesSection={games} />); });
+    expect(nodeText(renderer!.root.findByType('h1'))).toMatch(/^Good (morning|afternoon|evening) \.$/);
   });
 });
 

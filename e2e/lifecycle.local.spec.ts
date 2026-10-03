@@ -1,65 +1,58 @@
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import { readDeletionRecords, seedPatient } from './helpers/localEmulator';
+import { arriveAtHome, authenticatedUserId, loginThroughUi } from './helpers/auth';
+import { completeConsumerOnboarding, signUpFreshAccountThroughUi } from './helpers/journeys';
+import { readAccountRecords, seedPlayer } from './helpers/localEmulator';
 
-test('delete a patient linked under the retired clinician product, re-register the same email, and the new account cannot read the old one', async ({ browser, permissionErrorGuard }) => {
-  // A profile linked under the retired clinician product still stores relationship fields; deletion clears them.
-  const fixture = await seedPatient({ clinicianId: 'retired-clinician', clinicId: 'retired-clinic' });
+test('delete a player, re-register the same email, and the new account cannot read the old one', async ({ browser, permissionErrorGuard }) => {
+  const fixture = await seedPlayer();
   const oldContext = await browser.newContext();
   const newContext = await browser.newContext();
   try {
-    const oldPatient = await oldContext.newPage();
-    await loginThroughUi(oldPatient, fixture.patient);
-    await arriveAtPatientDashboard(oldPatient);
-    await oldPatient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await oldPatient.getByRole('button', { name: 'Delete Account' }).click();
-    await oldPatient.getByLabel('Enter your password to confirm account deletion').fill(fixture.patient.password);
-    await oldPatient.getByRole('button', { name: 'Confirm account deletion' }).click();
-    await expect(oldPatient).toHaveURL(/welcome/, { timeout: 20_000 });
+    const oldPlayer = await oldContext.newPage();
+    await loginThroughUi(oldPlayer, fixture.player);
+    await arriveAtHome(oldPlayer);
+    await oldPlayer.getByRole('button', { name: 'Profile', exact: true }).click();
+    await oldPlayer.getByRole('button', { name: 'Delete Account' }).click();
+    await oldPlayer.getByLabel('Enter your password to confirm account deletion').fill(fixture.player.password);
+    await oldPlayer.getByRole('button', { name: 'Confirm account deletion' }).click();
+    await expect(oldPlayer).toHaveURL(/welcome/, { timeout: 20_000 });
+    expect(await readAccountRecords(fixture.player.uid)).toEqual({ profile: undefined, authExists: false });
 
-    const patient = await newContext.newPage();
-    await patient.goto('/#/signup');
-    await patient.getByPlaceholder('How should we call you?').fill(fixture.name);
-    await patient.getByPlaceholder('you@example.com').fill(fixture.patient.email);
-    await patient.getByPlaceholder('At least 6 characters').fill(fixture.patient.password);
-    await patient.getByRole('button', { name: 'Create Account' }).click();
-    await patient.getByRole('button', { name: /Train my brain/ }).click();
-    await arriveAtPatientDashboard(patient);
-    const newUid = await authenticatedUserId(patient);
-    expect(newUid).not.toBe(fixture.patient.uid);
+    const player = await newContext.newPage();
+    await signUpFreshAccountThroughUi(player, { displayName: fixture.name, ...fixture.player });
+    await completeConsumerOnboarding(player);
+    const newUid = await authenticatedUserId(player);
+    expect(newUid).not.toBe(fixture.player.uid);
 
-    const stored = await readDeletionRecords(fixture.patient.uid, newUid);
-    expect(stored.oldAuthExists).toBe(false);
-    expect(stored.oldClient?.accountDeletionStartedAt).toBeDefined();
-    expect(stored.oldClient?.clinicianId).toBeNull();
-    expect(stored.oldClient?.clinicId).toBeNull();
-    expect(stored.newClient?.clinicianId).toBeUndefined();
-    expect(stored.newClient?.clinicId).toBeUndefined();
+    // The new account gets a fresh consumer profile of its own.
+    const created = await readAccountRecords(newUid);
+    expect(created.authExists).toBe(true);
+    expect(created.profile).toMatchObject({ schemaVersion: 1, displayName: fixture.name, eeg: { consent: null } });
     permissionErrorGuard.expectDenialsIn(newContext);
-    const oldRead = await patient.evaluate(async ({ oldUid }) => {
-      const { probeDeletedPatientProfile } = await import('/e2e/helpers/firestoreProbe.ts');
-      return probeDeletedPatientProfile(oldUid);
-    }, { oldUid: fixture.patient.uid });
-    expect(oldRead).toBe('permission-denied');
+    const oldRead = await player.evaluate(async ({ oldUid }) => {
+      const { probeDeletedPlayerData } = await import('/e2e/helpers/firestoreProbe.ts');
+      return probeDeletedPlayerData(oldUid);
+    }, { oldUid: fixture.player.uid });
+    expect(oldRead).toEqual({ profile: 'permission-denied', gameSessions: 'permission-denied' });
   } finally {
     await Promise.allSettled([oldContext.close(), newContext.close()]);
   }
 });
 
 test('wrong deletion password keeps the account and profile intact', async ({ browser }) => {
-  const fixture = await seedPatient();
-  const patientContext = await browser.newContext();
+  const fixture = await seedPlayer();
+  const playerContext = await browser.newContext();
   try {
-    const patient = await patientContext.newPage();
-    await loginThroughUi(patient, fixture.patient);
-    await arriveAtPatientDashboard(patient);
-    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await patient.getByRole('button', { name: 'Delete Account' }).click();
-    const deletionPassword = patient.getByLabel('Enter your password to confirm account deletion');
-    const confirmDeletion = patient.getByRole('button', { name: 'Confirm account deletion' });
+    const player = await playerContext.newPage();
+    await loginThroughUi(player, fixture.player);
+    await arriveAtHome(player);
+    await player.getByRole('button', { name: 'Profile', exact: true }).click();
+    await player.getByRole('button', { name: 'Delete Account' }).click();
+    const deletionPassword = player.getByLabel('Enter your password to confirm account deletion');
+    const confirmDeletion = player.getByRole('button', { name: 'Confirm account deletion' });
     await deletionPassword.fill('WrongLocalPassword!123');
     await confirmDeletion.click();
-    const deletionError = patient.locator('form').filter({ has: deletionPassword }).getByRole('alert');
+    const deletionError = player.locator('form').filter({ has: deletionPassword }).getByRole('alert');
     await expect(deletionError).toHaveText('Incorrect password. Please try again.');
     await expect(deletionError).not.toContainText('auth/');
     await expect(deletionError).not.toContainText('Firebase');
@@ -69,15 +62,15 @@ test('wrong deletion password keeps the account and profile intact', async ({ br
     await expect(confirmDeletion).toBeDisabled();
     await deletionPassword.fill('AnotherAttempt!123');
     await expect(confirmDeletion).toBeEnabled();
-    expect(await authenticatedUserId(patient)).toBe(fixture.patient.uid);
-    await patient.reload();
-    await arriveAtPatientDashboard(patient);
-    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await expect(patient.getByText(fixture.patient.email)).toBeVisible();
-    const stored = await readDeletionRecords(fixture.patient.uid, fixture.patient.uid);
-    expect(stored.oldAuthExists).toBe(true);
-    expect(stored.oldClient?.accountDeletionStartedAt).toBeUndefined();
+    expect(await authenticatedUserId(player)).toBe(fixture.player.uid);
+    await player.reload();
+    await arriveAtHome(player);
+    await player.getByRole('button', { name: 'Profile', exact: true }).click();
+    await expect(player.getByText(fixture.player.email)).toBeVisible();
+    const stored = await readAccountRecords(fixture.player.uid);
+    expect(stored.authExists).toBe(true);
+    expect(stored.profile).toMatchObject({ schemaVersion: 1, displayName: fixture.name });
   } finally {
-    await patientContext.close();
+    await playerContext.close();
   }
 });

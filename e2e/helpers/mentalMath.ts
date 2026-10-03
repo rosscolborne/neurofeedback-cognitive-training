@@ -2,8 +2,8 @@ import type { Page } from '@playwright/test';
 import { evaluate } from '../../shared/games/mental-math/v1/questions';
 import type { Operator } from '../../shared/games/mental-math/v1/params';
 import { expect } from '../fixtures';
-import { arriveAtPatientDashboard, loginThroughUi } from './auth';
-import { seedPatient } from './localEmulator';
+import { arriveAtHome, loginThroughUi } from './auth';
+import { seedPlayer } from './localEmulator';
 
 // Mental Math driven through the signed-in UI (NFCT-21, NFCT-22). Time is
 // Playwright's page.clock: the game reads time only through performance.now()
@@ -37,15 +37,15 @@ export const questionText = async (page: Page) => (await page.locator('.mm-quest
 export async function openMentalMath(page: Page): Promise<string> {
   // Installed before navigation; page time flows normally until a run pauses it.
   await page.clock.install();
-  const fixture = await seedPatient();
-  await loginThroughUi(page, fixture.patient);
-  await arriveAtPatientDashboard(page);
+  const fixture = await seedPlayer();
+  await loginThroughUi(page, fixture.player);
+  await arriveAtHome(page);
   await page.getByRole('button', { name: 'Train', exact: true }).click();
   await page.getByRole('button', { name: 'Mental Math', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Mental Math', exact: true })).toBeVisible();
   // The levels load from the player's cached progress and sessions.
   await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
-  return fixture.patient.uid;
+  return fixture.player.uid;
 }
 
 /** Starts the run with page time frozen, so only runFor moves the game clock. */

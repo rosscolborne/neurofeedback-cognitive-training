@@ -31,7 +31,7 @@ Read [the E2E reference](references/e2e.md) before adding or running authenticat
 
 Local emulator and offline tests are routine coverage. The nfct-dev canary is the only deployed-project test: never add other tests, helpers or scripts that sign in to, read from or write to a real Firebase project, never widen the canary into a second suite, and never add service-account credentials. `npm run check:isolation` must stay green. A change to a critical consumer journey updates the shared helpers in `e2e/helpers/journeys.ts`, which both the emulator suites and the canary use.
 
-For non-hardware patient flows, use the normal UI: choose **Skip to Dashboard** if the initial headset screen appears, and **Try Demo Mode** if an experience later asks for a headset. Demo Mode deliberately supplies synthetic Muse-like EEG for application-flow testing; do not remove it or report it as production mock-data leakage. State its limitation accurately: it tests the UI/workflow, not physical hardware, Bluetooth, acquisition, or signal quality.
+For non-hardware player flows, use the normal UI: choose **Skip to Dashboard** if the initial headset screen appears, and **Try Demo Mode** if an experience later asks for a headset. Demo Mode deliberately supplies synthetic Muse-like EEG for application-flow testing; do not remove it or report it as production mock-data leakage. State its limitation accurately: it tests the UI/workflow, not physical hardware, Bluetooth, acquisition, or signal quality.
 
 Test observable behavior, including meaningful empty, error, and negative states when their regression risk warrants it. Reuse the repository's auth and navigation helpers. Never alter production behavior or bypass real authentication to make an E2E test pass.
 

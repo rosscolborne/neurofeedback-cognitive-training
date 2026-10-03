@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard } from './helpers/auth';
+import { arriveAtHome } from './helpers/auth';
 import { readGameSessions } from './helpers/localEmulator';
 import { answer, openMentalMath, runOut, startRun } from './helpers/mentalMath';
 
@@ -246,7 +246,7 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
 
   // The history and totals survive a reload.
   await page.reload();
-  await arriveAtPatientDashboard(page);
+  await arriveAtHome(page);
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   await page.getByRole('button', { name: 'Mental Math records and history', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
@@ -301,15 +301,14 @@ test.describe('leaving Mental Math on a phone', () => {
   const { viewport, deviceScaleFactor, isMobile, hasTouch } = devices['iPhone 17'];
   test.use({ viewport, deviceScaleFactor, isMobile, hasTouch });
 
-  /** Signs up a new self-directed player through the UI and opens the Train tab. */
+  /** Signs up a new player through the UI and opens the Train tab. */
   async function signUpAndOpenTrain(page: Page): Promise<void> {
     await page.goto('/#/signup');
     await page.getByPlaceholder('How should we call you?').fill('Leaving Mental Math');
     await page.getByPlaceholder('you@example.com').fill(`leave-mm-${randomUUID().slice(0, 12)}@example.test`);
     await page.getByPlaceholder('At least 6 characters').fill('LocalEmulator!123');
     await page.getByRole('button', { name: 'Create Account' }).click();
-    await page.getByRole('button', { name: /Train my brain/ }).click();
-    await arriveAtPatientDashboard(page);
+    await arriveAtHome(page);
     await page.getByRole('button', { name: 'Train', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Train', exact: true })).toBeVisible();
   }

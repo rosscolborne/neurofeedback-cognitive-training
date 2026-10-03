@@ -3,22 +3,17 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authState = vi.hoisted(() => ({
-  value: { user: null, role: null, loading: false, logout: vi.fn() } as Record<string, unknown>,
+  value: { user: null, profile: null, loading: false, logout: vi.fn() } as Record<string, unknown>,
 }));
-const storage = vi.hoisted(() => ({
-  getCurrentClient: vi.fn(), saveClient: vi.fn(),
-}));
-const routeState = vi.hoisted(() => ({ pathname: '/' }));
+const routes = vi.hoisted(() => ({ paths: [] as string[] }));
 
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState.value }));
-vi.mock('../services/storageEngine', () => ({ storageEngine: storage }));
 vi.mock('../components/patient/PatientShell', () => ({ PatientShell: 'patient-shell' }));
 vi.mock('../components/brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../components/account/UnsyncedSignOutDialog', () => ({ UnsyncedSignOutDialog: 'unsynced-dialog' }));
 vi.mock('../pages/onboarding/Welcome', () => ({ Welcome: 'welcome-page' }));
 vi.mock('../pages/onboarding/SignUp', () => ({ SignUp: 'signup-page' }));
 vi.mock('../pages/onboarding/Login', () => ({ Login: 'login-page' }));
-vi.mock('../pages/onboarding/RoleSelection', () => ({ RoleSelection: 'role-page' }));
 vi.mock('../pages/onboarding/HardwareSetup', () => ({ HardwareSetup: 'hardware-page' }));
 vi.mock('../pages/legal/PrivacyPolicy', () => ({ PrivacyPolicy: 'privacy-page' }));
 vi.mock('../pages/legal/TermsOfService', () => ({ TermsOfService: 'terms-page' }));
@@ -27,130 +22,88 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return {
     ...actual,
     Routes: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    Route: ({ path, element }: { path: string; element: React.ReactNode }) => path === '/' ? element : null,
+    Route: ({ path, element }: { path: string; element: React.ReactNode }) => { routes.paths.push(path); return path === '/' ? element : null; },
     Navigate: () => null,
-    useLocation: () => ({ pathname: routeState.pathname }), useNavigate: () => vi.fn(), useParams: () => ({}),
+    useNavigate: () => vi.fn(), useParams: () => ({}),
   };
 });
 
 import { App } from '../App';
 
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
-const patientShell = (renderer: ReactTestRenderer): ReactTestInstance => renderer.root.find((node) => (node.type as unknown) === 'patient-shell');
+const patientShells = (renderer: ReactTestRenderer): ReactTestInstance[] => renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell');
+const patientShell = (renderer: ReactTestRenderer): ReactTestInstance => patientShells(renderer)[0];
+const profileOf = (displayName: string) => ({ schemaVersion: 1, displayName });
 
 describe('mounted App account lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-    authState.value = { user: null, role: null, loading: false, logout: vi.fn() };
-    storage.saveClient.mockResolvedValue(undefined);
-    routeState.pathname = '/';
+    authState.value = { user: null, profile: null, loading: false, logout: vi.fn() };
+    routes.paths = [];
   });
 
-  it('initializes a signed-in patient profile on a direct hardware setup route', async () => {
-    authState.value = { user: { uid: 'new-patient' }, role: 'patient', loading: false, logout: vi.fn() };
-    routeState.pathname = '/hardware-setup';
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'new-patient' });
+  it('opens the shell with the signed-in player and their profile, and follows sign-out and account changes', async () => {
+    const playerA = { uid: 'player-a', email: 'a@example.com' };
+    authState.value = { user: playerA, profile: profileOf('Player A'), loading: false, logout: vi.fn() };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(storage.getCurrentClient).toHaveBeenCalledWith(authState.value.user);
-    renderer.unmount();
-  });
-
-  it('hydrates the current patient before shell mount and clears across sign-out and account changes', async () => {
-    authState.value = { user: { uid: 'patient-a' }, role: 'patient', loading: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a' });
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<App />); await flush(); });
-    expect(patientShell(renderer).props.client.id).toBe('patient-a');
+    expect(patientShell(renderer).props.user).toBe(playerA);
+    expect(patientShell(renderer).props.profile).toEqual(profileOf('Player A'));
     // Headset setup is the only EEG action the shell is given; there is no calibration to persist.
     expect(patientShell(renderer).props.onSetUpHeadset).toEqual(expect.any(Function));
     expect(patientShell(renderer).props).not.toHaveProperty('onBaselinePersisted');
 
-    authState.value = { user: null, role: null, loading: false, logout: vi.fn() };
+    authState.value = { user: null, profile: null, loading: false, logout: vi.fn() };
     act(() => { renderer.update(<App />); });
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
+    expect(patientShells(renderer)).toHaveLength(0);
 
-    authState.value = { user: { uid: 'patient-b' }, role: 'patient', loading: false, logout: vi.fn() };
-    let resolveB!: (value: unknown) => void;
-    storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveB = resolve; }));
+    const playerB = { uid: 'player-b', email: 'b@example.com' };
+    authState.value = { user: playerB, profile: profileOf('Player B'), loading: false, logout: vi.fn() };
     act(() => { renderer.update(<App />); });
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
-    await act(async () => { resolveB({ id: 'patient-b' }); await flush(); });
-    expect(patientShell(renderer).props.client.id).toBe('patient-b');
+    expect(patientShell(renderer).props.user).toBe(playerB);
+    expect(patientShell(renderer).props.profile).toEqual(profileOf('Player B'));
     renderer.unmount();
   });
 
-  it('rejects a late patient load after an account switch', async () => {
-    let resolveFirst!: (value: unknown) => void;
-    authState.value = { user: { uid: 'patient-a' }, role: 'patient', loading: false, logout: vi.fn() };
-    storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }));
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<App />); });
-    authState.value = { user: { uid: 'patient-b' }, role: 'patient', loading: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-b' });
-    await act(async () => { renderer.update(<App />); await flush(); });
-    expect(patientShell(renderer).props.client.id).toBe('patient-b');
-    await act(async () => { resolveFirst({ id: 'patient-a' }); await flush(); });
-    expect(patientShell(renderer).props.client.id).toBe('patient-b');
-    renderer.unmount();
-  });
-
-  it('shows a practitioner account a sign-out screen without loading any patient data', async () => {
-    const logout = vi.fn().mockResolvedValueOnce('unsynced');
-    authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, logout };
+  it('shows a signed-in player nothing but the loading screen until their profile is loaded', async () => {
+    authState.value = { user: { uid: 'player-a' }, profile: null, loading: false, profileLookupFailed: false, logout: vi.fn(), cacheStatus: 'idle' };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(JSON.stringify(renderer.toJSON())).toContain('Practitioner accounts aren’t supported');
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
-    expect(storage.getCurrentClient).not.toHaveBeenCalled();
-
-    // Sign-out asks before discarding writes that have not uploaded.
-    await act(async () => { renderer.root.findByType('button').props.onClick(); await flush(); });
-    expect(logout).toHaveBeenCalledOnce();
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog')).toHaveLength(1);
+    expect(patientShells(renderer)).toHaveLength(0);
+    expect(renderer.root.findAllByType('button')).toHaveLength(0);
     renderer.unmount();
   });
 
-  it('shows a retryable patient-profile error instead of fabricated patient data', async () => {
-    authState.value = { user: { uid: 'patient-one', email: 'patient@example.com' }, role: 'patient', loading: false, logout: vi.fn() };
-    storage.getCurrentClient.mockRejectedValueOnce(new Error('profile offline'));
+  it('has no role-selection route', async () => {
+    authState.value = { user: { uid: 'player-a' }, profile: profileOf('Player A'), loading: false, logout: vi.fn() };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(JSON.stringify(renderer.toJSON())).toContain('profile offline');
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
-
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-one', name: 'Patient One' });
-    await act(async () => {
-      renderer.root.findByType('button').props.onClick();
-      await flush();
-    });
-    expect(patientShell(renderer).props.client).toMatchObject({ id: 'patient-one', name: 'Patient One' });
+    expect(routes.paths).toContain('/hardware-setup');
+    expect(routes.paths).not.toContain('/role-selection');
     renderer.unmount();
   });
 
-  it('keeps a signed-in account whose role is unknown on the loading screen with a retry, never role selection (NFCT-44)', async () => {
-    const retryRoleLookup = vi.fn();
+  it('keeps a signed-in account whose profile is unknown on the loading screen with a retry (NFCT-44)', async () => {
+    const retryProfileLookup = vi.fn();
     const logout = vi.fn().mockResolvedValueOnce('unsynced');
     const labels = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button').map((button) => button.children.join(''));
-    const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
-    // Still reading the role: the plain loading screen, nothing to act on.
-    authState.value = { user: { uid: 'patient-a' }, role: null, loading: true, roleLookupFailed: false, retryRoleLookup, logout, cacheStatus: 'idle' };
+    // Still loading the profile: the plain loading screen, nothing to act on.
+    authState.value = { user: { uid: 'player-a' }, profile: null, loading: true, profileLookupFailed: false, retryProfileLookup, logout, cacheStatus: 'idle' };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(rolePages(renderer)).toHaveLength(0);
+    expect(patientShells(renderer)).toHaveLength(0);
     expect(labels(renderer)).toEqual([]);
 
-    authState.value = { ...authState.value, roleLookupFailed: true };
+    authState.value = { ...authState.value, profileLookupFailed: true };
     await act(async () => { renderer.update(<App />); await flush(); });
-    expect(rolePages(renderer)).toHaveLength(0);
+    expect(patientShells(renderer)).toHaveLength(0);
     expect(renderer.root.findByProps({ role: 'alert' }).findByType('strong').children.join('')).toBe('Your account couldn’t be loaded.');
     expect(labels(renderer)).toEqual(['Try again', 'Sign out']);
-    expect(storage.getCurrentClient).not.toHaveBeenCalled();
 
     const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
     await act(async () => { button('Try again').props.onClick(); });
-    expect(retryRoleLookup).toHaveBeenCalledOnce();
+    expect(retryProfileLookup).toHaveBeenCalledOnce();
 
     // Sign-out found unsynced writes and asks: a retry must not close that question.
     const unsyncedDialog = () => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
@@ -170,32 +123,31 @@ describe('mounted App account lifecycle', () => {
     expect(button('Sign out').props.disabled).toBe(true);
     await act(async () => { finish('signed-out'); await flush(); });
     expect(logout).toHaveBeenCalledTimes(2);
-    expect(retryRoleLookup).toHaveBeenCalledOnce();
+    expect(retryProfileLookup).toHaveBeenCalledOnce();
     renderer.unmount();
   });
 
-  it('keeps the unsynced-writes question when the role arrives while it is open (NFCT-44 automatic retry)', async () => {
+  it('keeps the unsynced-writes question when the profile arrives while it is open (NFCT-44 automatic retry)', async () => {
     const logout = vi.fn().mockResolvedValueOnce('unsynced');
-    const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
     const unsyncedDialog = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
-    authState.value = { user: { uid: 'patient-a' }, role: null, loading: true, roleLookupFailed: true, retryRoleLookup: vi.fn(), logout, cacheStatus: 'idle' };
+    authState.value = { user: { uid: 'player-a' }, profile: null, loading: true, profileLookupFailed: true, retryProfileLookup: vi.fn(), logout, cacheStatus: 'idle' };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
     const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
     await act(async () => { button('Sign out').props.onClick(); await flush(); });
     expect(unsyncedDialog(renderer)).toHaveLength(1);
 
-    // The lookup retried by itself and the server confirmed a new account: no role.
-    authState.value = { ...authState.value, loading: false, roleLookupFailed: false };
+    // The lookup retried by itself and loaded the profile.
+    authState.value = { ...authState.value, profile: profileOf('Player A'), loading: false, profileLookupFailed: false };
     await act(async () => { renderer.update(<App />); await flush(); });
     expect(unsyncedDialog(renderer)).toHaveLength(1);
-    expect(rolePages(renderer)).toHaveLength(0);
+    expect(patientShells(renderer)).toHaveLength(0);
     expect(button('Try again').props.disabled).toBe(true);
 
-    // Staying signed in lets the app continue with the role it now has.
+    // Staying signed in lets the app continue with the profile it now has.
     await act(async () => { unsyncedDialog(renderer)[0].props.onStaySignedIn(); await flush(); });
     expect(unsyncedDialog(renderer)).toHaveLength(0);
-    expect(renderer.root.findAllByType('button').map((node) => node.children.join(''))).not.toContain('Try again');
+    expect(patientShells(renderer)).toHaveLength(1);
     renderer.unmount();
   });
 });

@@ -6,7 +6,7 @@
 // attributes, its question and feedback text, and the end-of-run heading id
 // #mm-handoff-title). Update them with the screens, as for e2e/helpers/auth.ts.
 //
-//   smoke        sign up, relaunch: the session and role come back (plus light and Dark Mode screenshots)
+//   smoke        sign up, relaunch: the session and profile come back (plus light and Dark Mode screenshots)
 //   mental-math  sign up, play a whole 90-second run on the keypad, the session is written
 //   lifecycle    background mid-run pauses it, timed against iOS's own events; a kill mid-run writes nothing; a quit run is saved
 
@@ -71,21 +71,20 @@ export const clockSeconds = (text) => {
 
 /**
  * The screens a launch can land on, named so a failure explains itself. The
- * first that matches wins, so the account-load error comes before the hash it
- * can show at (#/role-selection).
+ * first that matches wins, so the account-load error comes before the
+ * screens that need the account.
  */
 const LANDINGS = [
   ['account-load-error', { target: { role: 'alert', hasText: 'Your account couldn' } }],
   ['signed-in', { target: button('Skip to Dashboard') }],
   ['signed-in', { target: button('Train') }],
-  ['role-selection', { hash: '#/role-selection' }],
   ['signed-out', { target: button('Begin Journey') }],
   ['signed-out', { target: heading('Log In') }],
   ['signed-out', { target: heading('Create Account') }],
 ];
 
 /**
- * After a transient failure the role lookup retries by itself (2 s, then
+ * After a transient failure the profile lookup retries by itself (2 s, then
  * backing off to every 10 s; NFCT-44), so the account-load error counts only
  * if it is still there after this long.
  */
@@ -129,16 +128,16 @@ const alerts = (screen) => screen?.alerts ?? [];
 const nothingElse = (screen) => Boolean(screen) && screen.ok !== false
   && (screen.headings ?? []).length === 0 && (screen.fields ?? []).length === 0;
 
-/** The account's role is still being read: the plain loading screen, or its error screen while it retries by itself (NFCT-44). */
-export const READING_ROLE = (screen) => nothingElse(screen) && (
+/**
+ * The player's profile is still being read, or created and confirmed by the
+ * server after sign-up: the plain loading screen, or its error screen while
+ * it retries by itself (NFCT-44).
+ */
+export const LOADING_PROFILE = (screen) => nothingElse(screen) && (
   (alerts(screen).length === 0 && (screen?.buttons ?? []).length === 0)
   || (alerts(screen).length === 1 && alerts(screen)[0].startsWith('Your account couldn’t be loaded.')
     && (screen?.buttons ?? []).every((name) => name === 'Try again' || name === 'Sign out'))
 );
-
-/** App's "Preparing your patient profile…" while it reads or creates clients/{uid}. */
-export const PREPARING_PROFILE = (screen) => nothingElse(screen) && (screen?.buttons ?? []).length === 0
-  && alerts(screen).length === 1 && alerts(screen)[0].startsWith('Preparing your patient profile');
 
 /**
  * Taps, then waits up to 30 s for `then`, plus the backend-stall grace while
@@ -172,7 +171,7 @@ export async function tapThroughBackendWait(ctx, target, { then, waiting, step, 
   }
 }
 
-/** Signs up a new account through the real onboarding UI and chooses the training role. */
+/** Signs up a new account through the real onboarding UI, arriving at the optional headset setup. */
 async function signUp(ctx) {
   const { app, account } = ctx;
   // The first launch can take a while to paint.
@@ -182,13 +181,13 @@ async function signUp(ctx) {
   await app.fill({ placeholder: 'you@example.com' }, account.email);
   await app.fill({ placeholder: 'At least 6 characters' }, account.password);
   await ctx.checkpoint('sign-up-form');
-  await tapThroughBackendWait(ctx, button('Create Account'), { then: { target: button('Train my brain', false) }, waiting: READING_ROLE, step: 'Create Account → role selection' });
-  await ctx.checkpoint('role-selection');
-  await app.tap(button('Train my brain', false), { then: { hash: '#/hardware-setup' }, thenTimeout: 30_000 });
+  // The app leaves its loading screen once the server has accepted the new profile.
+  await tapThroughBackendWait(ctx, button('Create Account'), { then: { target: button('Skip to Dashboard') }, waiting: LOADING_PROFILE, step: 'Create Account → headset setup' });
+  await app.wait({ hash: '#/hardware-setup' });
 }
 
 async function toDashboard(ctx) {
-  await tapThroughBackendWait(ctx, button('Skip to Dashboard'), { then: { target: button('Train') }, waiting: PREPARING_PROFILE, step: 'Skip to Dashboard → dashboard' });
+  await ctx.app.tap(button('Skip to Dashboard'), { then: { target: button('Train') }, thenTimeout: 30_000 });
 }
 
 /** Opens Mental Math from the Train tab and starts a run at level 1. */
@@ -238,17 +237,17 @@ const trialsAnswered = (session) => (session.data.trials ?? []).filter((trial) =
 
 export const SCENARIOS = {
   smoke: {
-    summary: 'Sign up through the real UI, then a cold relaunch restores the session and role; light and Dark Mode screenshots.',
+    summary: 'Sign up through the real UI, then a cold relaunch restores the session and profile; light and Dark Mode screenshots.',
     async run(ctx) {
       await ctx.launch();
       await ctx.checkpoint('welcome');
       await signUp(ctx);
-      ctx.check('Sign-up and role choice work against the emulators', true);
+      ctx.check('Sign-up and profile creation work against the emulators', true);
       await ctx.checkpoint('hardware-setup');
 
       await ctx.relaunch();
       const landed = await landing(ctx);
-      ctx.check('A cold relaunch restores the session and role', landed.screen === 'signed-in', landedOn(landed));
+      ctx.check('A cold relaunch restores the session and profile', landed.screen === 'signed-in', landedOn(landed));
       await sleep(2_000);
       await ctx.checkpoint('relaunch-light');
       await ctx.device.appearance('dark');

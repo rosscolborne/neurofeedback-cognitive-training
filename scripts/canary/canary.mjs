@@ -146,12 +146,12 @@ async function deleteOwnDocument(target, idToken, path, fetchImpl) {
 const ABSENT = new Set(['EMAIL_NOT_FOUND', 'INVALID_LOGIN_CREDENTIALS', 'INVALID_PASSWORD']);
 
 /**
- * Removes what the canary user may remove as itself: `clients/{uid}` (the
- * legacy patient profile the dashboard creates) and then its Auth account.
- * The rules keep `users/{uid}` and its game sessions (account deletion is
- * server-side, NFCT-23); they stay as residue, marked by the profile's
- * nfct-smoke email, for the owner-run cleanup. Idempotent: an account that is
- * already gone is a success.
+ * Removes what the canary user may remove as itself, as account deletion in
+ * the app does: its profile document (users/{uid}) and then its Auth account.
+ * The rules keep the profile's subcollections, such as game sessions (only
+ * server-side deletion removes them, NFCT-23); they stay as residue. A profile
+ * deletion the deployed rules refuse is residue too, not a failure.
+ * Idempotent: an account that is already gone is a success.
  */
 export async function cleanUpIdentity(target, identity, { fetchImpl = fetch } = {}) {
   const report = { email: identity.email, uid: null, account: 'absent', deleted: [], residue: [], problems: [] };
@@ -175,12 +175,12 @@ export async function cleanUpIdentity(target, identity, { fetchImpl = fetch } = 
     return report;
   }
   try {
-    await deleteOwnDocument(target, session.idToken, `clients/${session.localId}`, fetchImpl);
-    report.deleted.push(`clients/${session.localId}`);
+    await deleteOwnDocument(target, session.idToken, `users/${session.localId}`, fetchImpl);
+    report.deleted.push(`users/${session.localId}`);
   } catch (error) {
-    report.residue.push(`clients/${session.localId} (${error.message})`);
+    report.residue.push(`users/${session.localId} (${error.message})`);
   }
-  report.residue.push(`users/${session.localId} and its subcollections, if created (only server-side deletion removes them)`);
+  report.residue.push(`users/${session.localId}'s subcollections, if created (only server-side deletion removes them)`);
   try {
     await identityToolkit(target, 'delete', { idToken: session.idToken }, fetchImpl);
     report.account = 'deleted';
@@ -201,13 +201,18 @@ function tokenAudience(idToken) {
 }
 
 /**
- * The rehearsal's bar: the account and its clients/{uid} profile are both
- * gone. The dashboard creates clients/{uid} during the journey, and the rules
- * refuse to delete one that does not exist; when the consumer model stops
- * creating it (NFCT-4, NFCT-20), drop it from this bar.
+ * The rehearsal's bar: the account and its profile (users/{uid}) are both
+ * gone. The emulators run the branch's rules, which let a player delete their
+ * own profile; nfct-dev's deployed rules may not yet, so there it is residue.
  */
 export function cleanedCompletely(report) {
-  return report.problems.length === 0 && report.account === 'deleted' && report.deleted.includes(`clients/${report.uid}`);
+  return report.problems.length === 0 && report.account === 'deleted' && report.deleted.includes(`users/${report.uid}`);
+}
+
+/** The owner-run cleanup (functions/scripts/canaryCleanup.ts) for one canary account's residue. */
+export function ownerCleanupCommand(target, uid) {
+  const project = target.name === 'nfct-dev' ? `${target.projectId} --live` : target.projectId;
+  return `npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-accounts.ts --project ${project} --uid ${uid}`;
 }
 
 export function formatCleanupReport(target, report) {
@@ -216,6 +221,11 @@ export function formatCleanupReport(target, report) {
   lines.push(`- Auth account: ${report.account === 'absent' ? 'not found (never created or already deleted)' : report.account}`);
   for (const item of report.deleted) lines.push(`- deleted: ${item}`);
   for (const item of report.residue) lines.push(`- left for the owner-run cleanup: ${item}`);
+  // Nothing left under users/{uid} names the canary once its Auth account is
+  // gone, so the owner-run cleanup finds that residue only by this UID.
+  if (report.uid && report.residue.length > 0) {
+    lines.push(`- owner-run cleanup (dry run; add --delete): ${ownerCleanupCommand(target, report.uid)}`);
+  }
   for (const item of report.problems) lines.push(`- PROBLEM: ${item}`);
   return lines;
 }
@@ -303,7 +313,7 @@ async function run(env, out) {
     rmSync(directory, { recursive: true, force: true });
     if (report && !cleanedCompletely(report)) {
       if (target.name === 'emulators' && status === 0) {
-        out('The rehearsal passed, but cleanup did not remove the account and its clients profile: cleanup is broken.');
+        out('The rehearsal passed, but cleanup did not remove the account and its profile: cleanup is broken.');
         status = 1;
       } else if (report.problems.length > 0) {
         out('Cleanup did not finish; see above.');

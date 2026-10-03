@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import { seedPatient, type LocalPatientFixture } from './helpers/localEmulator';
+import { arriveAtHome, authenticatedUserId, loginThroughUi } from './helpers/auth';
+import { readAccountRecords, seedPlayer, type LocalPlayerFixture } from './helpers/localEmulator';
 import { FIRESTORE_CACHE_STATE_KEY } from '../src/services/firestoreCacheLifecycle';
 
 // Role, label and text locators only: Profile layout and classes differ between UI revisions.
@@ -24,8 +24,8 @@ function recordBrowserDialogs(page: Page): string[] {
 }
 
 /**
- * Records whether the password field or the resume screen renders at any point
- * after the deletion form is submitted, however briefly, until the page unloads.
+ * Records whether the password field renders at any point after the deletion
+ * form is submitted, however briefly, until the page unloads.
  */
 async function recordTeardownRenders(page: Page): Promise<string[]> {
   const renders: string[] = [];
@@ -38,7 +38,6 @@ async function recordTeardownRenders(page: Page): Promise<string[]> {
     const check = () => {
       if (!submitted) return;
       if (document.getElementById('account-deletion-password')) console.log('account-deletion-teardown: password field rendered');
-      if (document.body.innerText.includes('Finish deleting your account')) console.log('account-deletion-teardown: resume screen rendered');
     };
     document.addEventListener('submit', () => { submitted = true; requestAnimationFrame(check); }, true);
     new MutationObserver(check).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
@@ -60,7 +59,7 @@ async function holdAuthAccountDeletion(page: Page) {
   return { held, release };
 }
 
-async function expectSignInRejected(page: Page, credentials: LocalPatientFixture['patient']) {
+async function expectSignInRejected(page: Page, credentials: LocalPlayerFixture['player']) {
   await page.goto('/#/login');
   await expect(page.getByRole('heading', { name: 'Log In', exact: true })).toBeVisible();
   await page.getByPlaceholder('name@example.com', { exact: true }).fill(credentials.email);
@@ -70,15 +69,15 @@ async function expectSignInRejected(page: Page, credentials: LocalPatientFixture
   await expect(page.getByRole('heading', { name: 'Log In', exact: true })).toBeVisible();
 }
 
-async function openProfileDeletion(page: Page, fixture: LocalPatientFixture) {
-  await loginThroughUi(page, fixture.patient);
-  await arriveAtPatientDashboard(page);
+async function openProfileDeletion(page: Page, fixture: LocalPlayerFixture) {
+  await loginThroughUi(page, fixture.player);
+  await arriveAtHome(page);
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
   await page.getByRole('button', { name: 'Delete Account' }).click();
 }
 
 test('Delete Account opens an in-app step with no browser dialog, and Cancel closes it and clears the password', async ({ page }) => {
-  const fixture = await seedPatient();
+  const fixture = await seedPlayer();
   const dialogs = recordBrowserDialogs(page);
   await openProfileDeletion(page, fixture);
 
@@ -107,27 +106,28 @@ test('Delete Account opens an in-app step with no browser dialog, and Cancel clo
   await expect(deletionForm(page).getByRole('alert')).toHaveCount(0);
 
   expect(dialogs).toEqual([]);
-  expect(await authenticatedUserId(page)).toBe(fixture.patient.uid);
+  expect(await authenticatedUserId(page)).toBe(fixture.player.uid);
 });
 
 test('successful deletion holds a pending status instead of the password form, lands on /welcome, and ends the old sign-in', async ({ page }) => {
-  const fixture = await seedPatient();
+  const fixture = await seedPlayer();
   const dialogs = recordBrowserDialogs(page);
   await openProfileDeletion(page, fixture);
-  await passwordField(page).fill(fixture.patient.password);
+  await passwordField(page).fill(fixture.player.password);
 
   const authDeletion = await holdAuthAccountDeletion(page);
   const teardownRenders = await recordTeardownRenders(page);
   await confirmButton(page).click();
   await expect(deletingStatus(page)).toBeVisible();
 
-  // Profile cleanup has finished and only the Auth deletion is outstanding: the
-  // point where the resume screen and masked field used to flash.
+  // The server has accepted the profile deletion before the Auth account is
+  // deleted: only the Auth deletion is outstanding, and the masked field
+  // never flashes back.
   await authDeletion.held;
+  expect(await readAccountRecords(fixture.player.uid)).toEqual({ profile: undefined, authExists: true });
   await expect(deletingStatus(page)).toBeVisible();
   await expect(passwordField(page)).toHaveCount(0);
   await expect(confirmButton(page)).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Finish deleting your account' })).toHaveCount(0);
 
   authDeletion.release();
   await expect(page).toHaveURL(/\/welcome/, { timeout: 20_000 });
@@ -136,36 +136,36 @@ test('successful deletion holds a pending status instead of the password form, l
 
   // The deleted account's cached documents left this device with it (NFCT-20).
   expect(JSON.parse(await page.evaluate((key) => localStorage.getItem(key) ?? 'null', FIRESTORE_CACHE_STATE_KEY))).toEqual({ v: 1, owner: null });
-  const scan = await page.evaluate(async (needles) => (await import('/e2e/helpers/cacheIsolation.ts')).scanFirestoreIndexedDb(needles), [fixture.patient.uid, fixture.name]);
-  expect(scan.hits).toEqual({ [fixture.patient.uid]: {}, [fixture.name]: {} });
+  const scan = await page.evaluate(async (needles) => (await import('/e2e/helpers/cacheIsolation.ts')).scanFirestoreIndexedDb(needles), [fixture.player.uid, fixture.name]);
+  expect(scan.hits).toEqual({ [fixture.player.uid]: {}, [fixture.name]: {} });
 
-  await expectSignInRejected(page, fixture.patient);
+  expect(await readAccountRecords(fixture.player.uid)).toEqual({ profile: undefined, authExists: false });
+  await expectSignInRejected(page, fixture.player);
 });
 
-test('the Finish account deletion screen retries a wrong password and resumes an interrupted deletion to /welcome', async ({ page }) => {
-  // State left behind when profile cleanup finished but Auth deletion did not.
-  const fixture = await seedPatient({ accountDeletionStartedAt: new Date() });
+test('a failed Auth deletion keeps the player signed in with a readable error, and trying again finishes it', async ({ page }) => {
+  const fixture = await seedPlayer();
   const dialogs = recordBrowserDialogs(page);
-  await loginThroughUi(page, fixture.patient);
-  await expect(page.getByRole('heading', { name: 'Finish deleting your account' })).toBeVisible({ timeout: 15_000 });
+  await openProfileDeletion(page, fixture);
 
-  await page.getByRole('button', { name: 'Finish account deletion' }).click();
-  await expect(passwordField(page)).toBeVisible();
-  // Deletion was already confirmed when it started, so the warning is not repeated.
-  await expect(deletionForm(page)).not.toContainText('This action cannot be undone.');
-
-  await passwordField(page).fill(WRONG_PASSWORD);
+  // The profile is deleted, then the Auth deletion cannot reach the server.
+  await page.route(/\/accounts:delete\b/, (route) => route.abort('internetdisconnected'));
+  await passwordField(page).fill(fixture.player.password);
   await confirmButton(page).click();
   const error = deletionForm(page).getByRole('alert');
-  await expect(error).toHaveText('Incorrect password. Please try again.');
+  await expect(error).toHaveText('Unable to connect. Check your internet connection and try again.');
   await expect(error).not.toContainText('auth/');
-  await expect(error).not.toContainText('Firebase');
   await expect(passwordField(page)).toHaveValue('');
+  expect(await authenticatedUserId(page)).toBe(fixture.player.uid);
+  expect(await readAccountRecords(fixture.player.uid)).toEqual({ profile: undefined, authExists: true });
 
-  await passwordField(page).fill(fixture.patient.password);
+  // Trying again repeats both steps; deleting the already-deleted profile is harmless.
+  await page.unroute(/\/accounts:delete\b/);
+  await passwordField(page).fill(fixture.player.password);
   await confirmButton(page).click();
   await expect(page).toHaveURL(/\/welcome/, { timeout: 20_000 });
   expect(dialogs).toEqual([]);
 
-  await expectSignInRejected(page, fixture.patient);
+  expect(await readAccountRecords(fixture.player.uid)).toEqual({ profile: undefined, authExists: false });
+  await expectSignInRejected(page, fixture.player);
 });

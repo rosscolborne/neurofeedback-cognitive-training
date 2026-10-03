@@ -10,7 +10,8 @@ The other test layers ([checks](ios.md#checks-and-where-they-run),
 [testing skill](../../.agents/skills/neurasticity-development-testing/SKILL.md))
 run against local emulators that load the repository's `firestore.rules`. On
 2026-10-02 a TestFlight build let a new account sign up but then returned it
-to role selection when "Train my brain" was pressed. nfct-dev still served
+to the (since retired) role selection when its first Firestore write was
+refused. nfct-dev still served
 deny-all rules, so every Firestore write failed, and every CI layer had passed
 because none of them used the deployed backend. The canary is the layer that
 catches backend, configuration and rules mismatches while the original pull
@@ -43,8 +44,12 @@ serves the bundle with `vite preview` and drives it as an ordinary user:
 
 1. Start at `/` signed out: the Welcome screen.
 2. **Begin Journey** creates a fresh disposable account through the real form.
-3. **Train my brain** saves the role and arrives home, skipping the optional
-   headset setup. This is where the TestFlight incident failed.
+   The app leaves its loading screen for the optional headset setup only once
+   the server has accepted the new player's profile (`users/{uid}`), the
+   account's first Firestore write. This is where the TestFlight incident
+   failed.
+3. **Skip to Dashboard** skips the optional headset setup and arrives home.
+   Nothing asks what kind of account it is.
 4. **Train > Mental Math** loads the new player's progress and recent sessions
    from the server. The check needs the "Reach higher levels…" help text,
    because a failed read still offers level 1. This read is the real
@@ -54,8 +59,7 @@ serves the bundle with `vite preview` and drives it as an ordinary user:
    only after the server acknowledges the session write. No 90-second run is
    needed.
 6. Sign in again in a new browser context with no cache: the account comes back
-   home and is not sent to role selection, so the profile and role persisted on
-   the server.
+   home, so its profile persisted on the server.
 
 The permission-denied guard in `e2e/fixtures.ts` also fails the run on any
 denied Firestore request. If the browser passes a generous ceiling of Auth or
@@ -67,8 +71,6 @@ Not checked yet:
 
 - Trusted scoring (a session `result`, progress). nfct-dev has no Functions
   deployed (Spark). Extend the journey when they are.
-- The absence of the practitioner option. Add that assertion to
-  `completeConsumerOnboarding` once NFCT-4 removes the option.
 
 ## When it runs
 
@@ -113,7 +115,7 @@ emulators ("Rehearse the nfct-dev canary on the emulators"). How the two
 results combine:
 
 The rehearsal also fails if cleanup did not remove the account and its
-`clients/{uid}` profile. A cleanup regression therefore shows up there, not as
+profile (`users/{uid}`). A cleanup regression therefore shows up there, not as
 residue on nfct-dev.
 
 | Rehearsal | Canary | Meaning |
@@ -123,13 +125,14 @@ residue on nfct-dev.
 
 Common messages:
 
-- **"Firestore permission-denied errors surfaced"** or **"Choosing 'Train my
-  brain' should save the role…":** nfct-dev's deployed rules deny what the
-  branch writes.
+- **"Firestore permission-denied errors surfaced"** or **"Creating the
+  account should save its profile and reach headset setup"** with "Your
+  account couldn't be loaded": nfct-dev's deployed rules deny what the branch
+  writes.
 - **"Mental Math should load the player's progress…"** with "Your progress
   couldn't be loaded": a denied read or a missing composite index.
-- **Sign-up never reaches role selection:** check the failure screenshot for
-  the form's error, such as Auth configuration or a quota.
+- **Sign-up stays on the Create Account form:** check the failure screenshot
+  for the form's error, such as Auth configuration or a quota.
 
 Do not bypass a red canary or work around it in the app. Report it as a
 blocker with the failing step. If the deployed backend needs to change, that
@@ -167,8 +170,8 @@ Measured on the emulators (2026-10-02). Real-backend timings are larger.
 | --- | --- |
 | Auth | 1 account creation; about 7 operations, including the second sign-in and cleanup's sign-in and delete |
 | Firestore reads | about 30 client requests; about 15 to 30 billed document reads |
-| Firestore writes | 4: the `users` create, the role update, `clients` create, one `gameSessions` create |
-| Firestore deletes | 1 user-level delete (`clients/{uid}`) |
+| Firestore writes | 2: the profile (`users/{uid}`) create, one `gameSessions` create |
+| Firestore deletes | 1 user-level delete (the profile, `users/{uid}`) |
 | Time | about 1 minute to install and build, and under a minute for the journey |
 
 Spark's daily free quotas (50,000 reads, 20,000 writes, 20,000 deletes) allow
@@ -179,14 +182,27 @@ batch pushes, not to retry.
 ## Cleanup
 
 The job's last step runs `node scripts/canary/canary.mjs cleanup` even after a
-failure or cancellation. As the user, it deletes `clients/{uid}` and then the
-Auth account. It is idempotent: an account that does not exist counts as
-clean. A cleanup problem shows as a warning without changing the journey's
-result.
+failure or cancellation. As the user, and as account deletion in the app
+does, it deletes its profile (`users/{uid}`) and then the Auth account. It is
+idempotent: an account that does not exist counts as clean. A cleanup problem
+shows as a warning without changing the journey's result. Rules that refuse
+the profile delete (nfct-dev's deployed rules before this was allowed; see
+[below](#rules-and-index-changes)) leave it as residue, not a failure.
 
-The rules keep `users/{uid}` and its game sessions (`allow delete: if false`;
-server-side account deletion is NFCT-23), so they remain. An account whose
-cleanup never ran also remains. The profile's email marks this residue.
+Deleting a document never deletes its subcollections, and the rules let no
+client delete game sessions (server-side account deletion is NFCT-23), so the
+profile's game sessions remain. Once the Auth account is gone nothing under
+`users/{uid}` names the canary (consumer profiles hold no email), so cleanup
+reads the account's UID before deleting anything and prints it, with the
+owner-run command for that UID, in the job log and step summary:
+
+```text
+- uid: <uid>
+- owner-run cleanup (dry run; add --delete): npx tsx … cleanup-canary-accounts.ts --project nfct-dev --live --uid <uid>
+```
+
+An account whose cleanup never ran also remains; the owner-run cleanup finds
+it by its Auth account's canary email, without a UID.
 
 The owner removes it from their own machine with Application Default
 Credentials (`gcloud auth application-default login`), never from CI:
@@ -194,21 +210,23 @@ Credentials (`gcloud auth application-default login`), never from CI:
 ```bash
 # Dry run: lists canary residue older than 2 hours
 npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-accounts.ts --project nfct-dev --live
-# Removes it: users/{uid} (recursively), clients/{uid} and any Auth account
-npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-accounts.ts --project nfct-dev --live --delete
+# Also the leftover users/{uid} data of accounts the canary deleted, by the UIDs its reports printed
+npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-accounts.ts --project nfct-dev --live --uid <uid> [--uid <uid> …]
+# Removes it: users/{uid} (recursively) and any Auth account
+npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-accounts.ts --project nfct-dev --live [--uid <uid> …] --delete
 ```
 
 The cleanup's safety rules (`functions/scripts/canaryCleanup.ts`):
 
 - There is no default project. The only real project it accepts is
   `nfct-dev`, and only with `--live`. It is a dry run without `--delete`.
-- It touches only accounts whose email matches the exact canary pattern: the
-  Auth account's email when the account exists (that email decides), otherwise
-  the profile's. An Auth account with any other email is refused, even if its
-  profile claims a canary email, and is never printed.
+- It touches an Auth account only if its email matches the exact canary
+  pattern. An Auth account with any other email is refused, even when named
+  with `--uid`, and is never printed.
+- It touches data with no Auth account only under a UID named with `--uid`.
 - `--older-than-minutes` defaults to 120 and is at least 30. It compares the
-  server's creation time (the Auth account's, or the profile's) with the local
-  clock.
+  server's creation time (the Auth account's, or else the earliest document
+  left under `users/{uid}`) with the local clock.
 - A plan larger than `--max` (default 25) aborts before anything is deleted.
 
 Scheduled cleanup can come later if the residue grows. It would run as a
@@ -236,7 +254,7 @@ credentials, never from a pull request.
    variables.
 2. **Deploy the repository's rules and indexes to nfct-dev** (NFCT-24),
    following [rules and indexes](#rules-and-index-changes). Until then the
-   canary fails at "Train my brain", exactly as the TestFlight build does.
+   canary fails at sign-up's profile write, exactly as the TestFlight build did.
 3. **Require the result.** As of 2026-10-02, the `development` ruleset has no
    required status checks at all, only deletion, non-fast-forward and
    pull-request rules. The canary is part of Pre-merge validation, whose
@@ -293,6 +311,22 @@ checks:
    - Merge promptly. If the pull request is not merging, redeploy
      `development`'s rules.
 
+### Phase 2: the consumer profile only
+
+The rules that retire the account role and the legacy `clients/{uid}` profile
+(Phase 2) intentionally stop accepting pre-Phase-2 clients, which write a
+legacy `users/{uid}` document (with `role`) and `clients/{uid}`. For that pull
+request, step 3's run on `development` against the candidate rules is
+expected to fail. The owner deploys those rules together with wiping
+nfct-dev's existing accounts and shipping a new TestFlight build.
+
+As verified on 2026-10-03, nfct-dev serves `firestore.rules` from commit
+`60cfabb` (NFCT-20). Its consumer-profile create and update rules match
+Phase 2's, so the Phase 2 app's sign-up works there, but they refuse to
+delete a profile: until Phase 2's rules are deployed, account deletion in the
+app fails there before deleting the Auth account, and the canary's cleanup
+leaves the profile as residue.
+
 Introduce a separate `nfct-staging` project when this stops being safe:
 external TestFlight testers, deployed Functions or scoring, or frequent
 backend changes. That is an owner decision.
@@ -319,10 +353,11 @@ Until then, the owner can compare deployed rules in the Firebase console.
   `backend.yml`, `ci.yml` and classifier, so a pull request could weaken this
   job. Review workflow changes as security-sensitive. `main` is protected
   separately by `main-source-guard.yml`.
-- **Slow sign-in:** a slow real-backend role lookup keeps the loading screen
-  and, after 15 seconds or a failed read, shows a retryable "Your account
-  couldn't be loaded" screen; it never treats the account as having no role
-  (NFCT-44, landed through PR #26). After a transient failure it also
+- **Slow sign-in:** a slow real-backend profile lookup keeps the loading
+  screen and, after 15 seconds or a failed read, shows a retryable "Your
+  account couldn't be loaded" screen; it never treats the account as new, and
+  creates a profile only when the server confirms there is none (NFCT-44,
+  landed through PR #26). After a transient failure it also
   retries by itself, backing off to every 10 s. If step 6 times out there, read it as a
   slow or failing backend, not a flaky test.
   `e2e/returning-user.auth-handoffs.local.spec.ts` covers the slow-lookup

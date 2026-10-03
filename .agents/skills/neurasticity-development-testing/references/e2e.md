@@ -62,9 +62,12 @@ additional browser contexts. Specs that probe a deliberate denial call
 
 ## Reusable helpers
 
-- `e2e/helpers/auth.ts`: `loginThroughUi`, `arriveAtPatientDashboard` (skips
-  headset setup when shown), `startPatientTrainingInDemoMode`,
-  `arriveAtClinicianDashboard`.
+- `e2e/helpers/auth.ts`: `loginThroughUi`, `arriveAtHome` (skips headset
+  setup when shown, via `skipHeadsetSetupIfPresent`), and the signed-in
+  page's Firebase identity.
+- `e2e/helpers/journeys.ts`: the fresh consumer journey
+  (`signUpFreshAccountThroughUi`, `completeConsumerOnboarding`,
+  `openGameFromTrain`).
 - `e2e/helpers/localEmulator.ts`: emulator environment guard, Admin app and
   seeders for the local suite.
 - `e2e/helpers/persistenceAssertions.ts` and `authorizedFirestore.ts`: confirm
@@ -101,8 +104,8 @@ JAVA_HOME=~/.local/share/temurin-jre-21 PATH=$JAVA_HOME/bin:$PATH npm run test:r
 npm run test:rules:typecheck
 ```
 
-`client-transactions.test.ts` replays the app's real transactions, including
-reads of documents that do not exist yet; keep it in step with client write
-paths. `policy/` pins behavior that is a product decision so a change to it is
-deliberate. Set `RULES_FILE=<path>` to run the same suite against another
+`consumer/` covers what clients may read and write under `users/{uid}`; keep
+it in step with the consumer repositories' write paths.
+`retired-clinical.test.ts` pins the default deny on every retired clinical
+collection. Set `RULES_FILE=<path>` to run the same suite against another
 ruleset.

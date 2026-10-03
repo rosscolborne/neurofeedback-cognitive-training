@@ -20,18 +20,10 @@ function field(document: AuthorizedDocument | null, name: string): unknown {
         value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined, document?.fields);
 }
 
-/** An account reads its own user profile through its own rules grant. */
-export async function expectRolePersisted(account: { uid: string }, role: 'patient', accountPage: Page): Promise<void> {
+/** A player reads their own consumer profile (users/{uid}) through their own rules grant. */
+export async function expectProfileReadable(account: { uid: string }, displayName: string, accountPage: Page): Promise<void> {
     await expect.poll(async () => {
-        const user = await documentAs(accountPage, account.uid, `users/${account.uid}`);
-        return field(user, 'role');
-    }, persistenceTimeout).toBe(role);
-}
-
-/** A patient reads their own clients/{uid} profile through its own rules grant. */
-export async function expectProfileReadable(account: { uid: string }, accountPage: Page): Promise<void> {
-    await expect.poll(async () => {
-        const profile = await documentAs(accountPage, account.uid, `clients/${account.uid}`);
-        return field(profile, 'id');
-    }, persistenceTimeout).toBe(account.uid);
+        const profile = await documentAs(accountPage, account.uid, `users/${account.uid}`);
+        return { schemaVersion: field(profile, 'schemaVersion'), displayName: field(profile, 'displayName') };
+    }, persistenceTimeout).toEqual({ schemaVersion: 1, displayName });
 }

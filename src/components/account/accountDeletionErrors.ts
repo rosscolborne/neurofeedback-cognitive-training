@@ -17,12 +17,12 @@ const logUnexpected = (error: unknown) => {
 };
 
 /**
- * Turns an account-deletion failure into text a patient can act on.
+ * Turns an account-deletion failure into text a player can act on.
  *
  * Firebase Auth and Firestore errors carry a string `code`; their messages are
  * raw diagnostics ("Firebase: Error (auth/...)"), so only known codes get a
  * specific message and the rest are logged and shown generically. Plain
- * app-authored `Error`s (no code) are written for the patient and kept.
+ * app-authored `Error`s (no code) are written for the player and kept.
  */
 export const getAccountDeletionErrorMessage = (error: unknown): string => {
   const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
@@ -36,7 +36,7 @@ export const getAccountDeletionErrorMessage = (error: unknown): string => {
     return ACCOUNT_DELETION_FALLBACK;
   }
 
-  // Built-in subclasses (TypeError, RangeError, ...) are runtime faults, not patient-facing text.
+  // Built-in subclasses (TypeError, RangeError, ...) are runtime faults, not player-facing text.
   if (error instanceof Error && error.name === 'Error' && error.message) return error.message;
 
   logUnexpected(error);

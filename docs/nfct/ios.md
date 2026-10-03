@@ -162,9 +162,10 @@ Alongside these, `ios.yml` `release-bundle` runs in Pre-merge validation and
 on every promotion to `main`. It builds and syncs the production bundle, runs
 `verify:ios-release`, and shows that the check fails on the emulator bundle.
 
-A signed-in account whose role has not been read yet stays on the loading
-screen; a failed read, or none within 15 s, shows a retryable error, never role
-selection (NFCT-44). After a transient failure (offline, or only the device
+A signed-in account whose profile has not been read yet stays on the loading
+screen; a failed read, or none within 15 s, shows a retryable error, and the
+app never treats the account as new (NFCT-44): it creates a profile only when
+the server confirms there is none. After a transient failure (offline, or only the device
 cache answered) the app also retries by itself, after 2 s and then backing off
 to every 10 s, so a brief outage after sign-up recovers without a tap. The
 relaunch checks give that screen 25 s to move on and report how long it
@@ -264,7 +265,7 @@ UI, with no dependency beyond Node and Xcode:
 
 | Scenario | Proves in the Simulator | Does not prove |
 | --- | --- | --- |
-| `smoke` | Sign-up and the role choice (a Firestore write) through the real UI; a cold relaunch restores the session and role, or names the screen it landed on (role selection, "Your account couldn't be loaded", signed out); light and Dark Mode screenshots | Real touches or typing through the software keyboard |
+| `smoke` | Sign-up and its profile write (a Firestore write) through the real UI; a cold relaunch restores the session and profile, or names the screen it landed on ("Your account couldn't be loaded", signed out); light and Dark Mode screenshots | Real touches or typing through the software keyboard |
 | `mental-math` | Train tab, Mental Math, level 1; a whole 90-second run answered on the on-screen keypad by reading and solving each question (one answer deliberately wrong); the end-of-run screen (`#mm-handoff-title`); exactly one session in the Firestore emulator: completed, 90 s active, `client.platform` `ios`, its answered trials exactly the responses typed, each marked correct or wrong as answered | Trusted scoring (the Functions emulator does not run here; `test:functions` covers it), the post-run summary's content (NFCT-22), real performance |
 | `lifecycle` | With a question on screen, sending the app to the background (iOS really backgrounds it): iOS hides the page (`visibilitychange`), the run pauses as a background pause, none of the time the page is hidden counts, the run stays paused until the player resumes, and Resume shows a different question from the one the pause discarded. It records when iOS's events arrive (`visibilitychange`, Capacitor's `pause` and `resume`, `blur`, on the wall clock the host shares) and checks that the page is hidden within a second of iOS's native signal. A kill mid-run then a relaunch lands signed in, not in a run, with no session written; a quit run is still saved once, as abandoned | Interruptions that never hide the page (Control Center, calls, Siri: NFCT-32), long suspensions, a kill while a write is queued offline |
 
@@ -307,13 +308,12 @@ main thread stalls during a wait: a stall over two seconds is reported in the
 summary, and a page frozen past a step's deadline gets a two-second grace to
 render before the step fails. `node scripts/ios/simulator-smoke.mjs list` describes the scenarios.
 
-Two steps wait on the backend: Create Account → role selection, and Skip to
-Dashboard → the dashboard. Each gets 30 s. On GitHub's macOS runner the
-Simulator's connection to the Firestore emulator sometimes stops answering
-for 30 to 45 s (NFCT-50). Meanwhile the app shows its own waiting screen: the
-role lookup's loading screen, its error screen while it retries by itself, or
-"Preparing your patient profile…". It carries on as soon as Firestore
-answers.
+One step waits on the backend: Create Account → headset setup, which waits
+for the server to accept the new profile. It gets 30 s. On GitHub's macOS
+runner the Simulator's connection to the Firestore emulator sometimes stops
+answering for 30 to 45 s (NFCT-50). Meanwhile the app shows its own waiting
+screen: the profile lookup's loading screen, or its error screen while it
+retries by itself. It carries on as soon as Firestore answers.
 
 - **Runs out of time on that waiting screen:** the step gets up to 60 s more,
   as long as the waiting screen stays up.

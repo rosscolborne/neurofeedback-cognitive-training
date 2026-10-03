@@ -19,12 +19,12 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
 - **`brainflow_service/` is not owned here.** It is an inherited copy of the
   shared `brainflow-service` repository. Do not modify, refactor or extend it;
   backend changes go to `brainflow-service`.
-- **The clinical data model is transitional.** Do not add fields to
-  `clients/{uid}` / `ClientProfile`, and do not bring back the retired
-  `sessions/{id}` records, protocols or experiences to represent games. The
-  consumer model (user profile, game session, separate EEG recording) is built
-  new in `shared/` (`@nfct/shared`); see
-  [ADR-001](docs/nfct/adr-001-consumer-domain-model.md). `shared/` imports
+- **The clinical data model is retired.** Do not bring back account roles,
+  the `clients/{uid}` profile, clinician relationship fields, the
+  `sessions/{id}` records, protocols or experiences. A player has one profile,
+  the consumer profile at `users/{uid}`. The consumer model (user profile,
+  game session, separate EEG recording) lives in `shared/` (`@nfct/shared`);
+  see [ADR-001](docs/nfct/adr-001-consumer-domain-model.md). `shared/` imports
   only `zod` and its own modules.
 - **EEG is optional.** It must never be required to play and must never drive
   game scores, progression, unlocks or achievements.
@@ -531,8 +531,8 @@ persistence, training-flow or other stateful behavior:
   review. Drive the fresh consumer journey with the shared helpers in
   `e2e/helpers/journeys.ts` (`signUpFreshAccountThroughUi`,
   `completeConsumerOnboarding`, `openGameFromTrain`). The nfct-dev canary and
-  its emulator rehearsal already use them. A spec that seeds a
-  clinician-linked patient does not cover consumer sign-up and onboarding.
+  its emulator rehearsal already use them. A spec that seeds an account and
+  its profile directly does not cover consumer sign-up and onboarding.
 - If missing test infrastructure blocks a realistic journey (for example, no
   deterministic way to create a fresh test account), do not bypass that part
   silently or claim it was verified. Report the gap as a blocker and create or

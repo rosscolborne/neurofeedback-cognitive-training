@@ -62,12 +62,12 @@ describe('getAccountDeletionErrorMessage', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('keeps app-authored messages, which are written for the patient', () => {
+  it('keeps app-authored messages, which are written for the player', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(getAccountDeletionErrorMessage(new Error('Your signed-in account changed. Restart account deletion.')))
       .toBe('Your signed-in account changed. Restart account deletion.');
-    const appointment = 'A future appointment could not be cancelled automatically. Your clinic connection is removed; contact support to finish account deletion.';
-    expect(getAccountDeletionErrorMessage(new Error(appointment))).toBe(appointment);
+    const unavailable = 'Your profile is unavailable. Try again later.';
+    expect(getAccountDeletionErrorMessage(new Error(unavailable))).toBe(unavailable);
     expect(consoleError).not.toHaveBeenCalled();
   });
 

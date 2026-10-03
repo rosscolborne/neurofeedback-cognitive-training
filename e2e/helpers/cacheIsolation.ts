@@ -30,7 +30,6 @@ export type CachedAccountData = {
     uid: string;
     sessionId: string;
     recordingId: string | null;
-    clinicalName: string | null;
 };
 
 export type CachedRead =
@@ -106,17 +105,11 @@ function measuredEegDraft(): EegRecordingDraft {
 
 
 /**
- * Creates the signed-in player's consumer profile with EEG consent (the
- * accepted placeholder version in firestore.rules), as the consumer app does.
+ * Records EEG consent (the accepted placeholder version in firestore.rules) on
+ * the signed-in player's profile, which the app created when they signed in.
  */
-export async function createConsentedProfile(): Promise<void> {
-    await profileRepository.createProfile({
-        displayName: 'Cache Isolation Player',
-        avatar: { kind: 'preset', presetId: 'fox' },
-        preferences: { timezone: 'America/Toronto', soundEnabled: true, hapticsEnabled: false, weeklyGoal: null },
-        onboarding: { version: 1 },
-        eeg: { enabled: true, preferredDevice: null },
-    }).acknowledged;
+export async function grantEegConsent(): Promise<void> {
+    await profileRepository.updateProfile({ eeg: { enabled: true } }).acknowledged;
     await profileRepository.grantEegConsent('placeholder-1').acknowledged;
 }
 
@@ -144,10 +137,11 @@ export async function saveGameSession({ withEeg, waitForServer = true }: { withE
     return { uid: saved.userId, sessionId: saved.sessionId, recordingId };
 }
 
-/** Reads the signed-in user's inherited clinical document (clients/{uid}) as the patient app does. */
-export async function readOwnClinicalDocument(): Promise<string | null> {
-    const snapshot = await getDoc(doc(db, 'clients', signedInUid()));
-    return (snapshot.data()?.name as string | undefined) ?? null;
+/** The signed-in player's profile name, read through the app's profile repository. */
+export async function readOwnProfileName(): Promise<string | null> {
+    const read = await profileRepository.getProfile();
+    if (read.status !== 'readable') throw new Error(`The signed-in player's profile is ${read.status}.`);
+    return read.data.displayName;
 }
 
 function targets(data: CachedAccountData): { documents: Record<string, DocumentReference>; queries: Record<string, Query> } {
@@ -162,7 +156,6 @@ function targets(data: CachedAccountData): { documents: Record<string, DocumentR
         documents.eegRecording = doc(recordings, data.recordingId);
         queries.eegRecordingsForSession = query(recordings, where('gameSessionId', '==', data.sessionId));
     }
-    if (data.clinicalName) documents.clinical = doc(db, 'clients', data.uid);
     return { documents, queries };
 }
 

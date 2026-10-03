@@ -1,17 +1,3 @@
-/**
- * Firestore timestamps are intentionally represented structurally here so the
- * domain layer can read persisted documents without depending on the Firebase
- * SDK. New writes should use a server timestamp; legacy ISO strings and epoch
- * milliseconds remain readable during migration.
- */
-export interface FirestoreTimestampLike {
-  seconds: number;
-  nanoseconds?: number;
-  toDate?: () => Date;
-}
-
-export type PersistedTimestamp = string | number | Date | FirestoreTimestampLike;
-
 export interface MuseChannelQuality {
   tp9: 'good' | 'fair' | 'poor';
   af7: 'good' | 'fair' | 'poor';
@@ -59,51 +45,4 @@ export interface EEGDataPoint {
   channelQuality: MuseChannelQuality;
   batteryLevel?: number;
   brainflowScores?: BrainFlowScores;
-}
-
-export interface QEEGBrainMap {
-  id: string;
-  uploadDate: string;
-  fileName: string;
-  recordingDate: string;
-  deviceSource: string; // e.g. 'Deymed 19-Ch TruScan' or 'BrainMaster Discovery'
-  technicianNotes: string;
-  zScores: {
-    frontalTheta: number; // Z-score
-    centralBeta: number;
-    occipitalAlpha: number;
-    temporalDelta: number;
-    sensorimotorSMR: number;
-  };
-  dominantAlphaPeakHz: number;
-  /** Authenticated clinician who persisted this record. */
-  createdBy?: string;
-  /** Server-owned creation time for canonical records. */
-  createdAt?: PersistedTimestamp;
-  updatedAt?: PersistedTimestamp;
-  schemaVersion?: number;
-  topographyColorMap?: string;
-  rawTelemetrySnippet?: string;
-}
-
-export interface ClientProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl?: string;
-  condition?: 'ADHD (Inattentive)' | 'ADHD (Combined)' | 'Generalized Anxiety' | 'Stress / Insomnia' | 'Peak Performance';
-  status: 'active' | 'paused' | 'completed';
-  brainMaps: QEEGBrainMap[];
-  linkedClinicianCode?: string;
-  clinicianId?: string;
-  acceptedInvitationId?: string;
-  /** Set once account deletion starts. Retained profiles can never be linked again. */
-  accountDeletionStartedAt?: PersistedTimestamp;
-  patientId?: string;
-  isDemo?: boolean;
-  notes?: string;
-  clinicId?: string;
-  createdAt?: PersistedTimestamp;
-  updatedAt?: PersistedTimestamp;
-  schemaVersion?: number;
 }
