@@ -36,6 +36,8 @@ const IOS_WEBKIT_SPECS = [
   // NFCT-13: Home's Play, streak and achievements, and Progress, after a run
   // scored by trusted scoring.
   'home-progress.lifecycle.local.spec.ts',
+  // NFCT-93: Sequence Memory's touch-first board, tapped with touch events.
+  'sequence-memory.lifecycle.local.spec.ts',
 ];
 
 export default defineConfig({

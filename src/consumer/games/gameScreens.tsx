@@ -2,6 +2,7 @@ import type React from 'react';
 import type { EegCaptureProvider } from '../eeg/eegCapture';
 import type { GameScreenView } from './gameScreenView';
 import { MentalMathGame } from './mentalMath/MentalMathGame';
+import { SequenceMemoryGame } from './sequenceMemory/SequenceMemoryGame';
 
 export type { GameScreenView } from './gameScreenView';
 
@@ -18,4 +19,5 @@ export interface GameScreenProps {
 
 export const GAME_SCREENS: Readonly<Record<string, React.ComponentType<GameScreenProps>>> = {
   'mental-math': MentalMathGame,
+  'sequence-memory': SequenceMemoryGame,
 };

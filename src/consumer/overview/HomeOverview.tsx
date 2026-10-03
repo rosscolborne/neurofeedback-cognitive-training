@@ -145,7 +145,9 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
   const overview = usePlayerOverview(playerId, sources, 'week', clock);
   const recent = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, HOME_RECENT_RUNS);
   const rows = useMemo(() => runRows(recent), [recent]);
-  const phase = useStatsPhase(overview, recent, clock);
+  // Whether the player has played at all: runs of every game, not only Mental Math's (NFCT-93).
+  const played = useRecentRuns(playerId, sources.gameSessions, null, HOME_RECENT_RUNS);
+  const phase = useStatsPhase(overview, played, clock);
   const summary = overview.summary.status === 'ready' && overview.summary.value.status === 'readable' ? overview.summary.value.data : null;
   const view = summary ? streakView(summary.streak, overview.today) : null;
   const nudge = view ? streakNudge(view) : null;
@@ -201,7 +203,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
       {rows !== null && rows.length > 0 && (
         <section className="ov-card" aria-labelledby="ov-recent-title" data-overview="recent-runs">
           <div className="ov-card-head">
-            <h2 id="ov-recent-title" className="ov-card-title">Recent runs</h2>
+            <h2 id="ov-recent-title" className="ov-card-title">Recent Mental Math runs</h2>
             <button id={HOME_ALL_RUNS_BUTTON_ID} type="button" className="btn btn-ghost mm-link" onClick={onOpenGameProgress} aria-label="All Mental Math runs and records">
               All runs <ChevronRight size={16} aria-hidden="true" />
             </button>

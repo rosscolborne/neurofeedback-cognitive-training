@@ -115,6 +115,32 @@ describe('users/{uid}/gameSessions: create', () => {
         await assertSucceeds(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 1 })));
     });
 
+    it("accepts Sequence Memory sessions at gameVersion 1 only (sequence-memory: 1 to 1, NFCT-93)", async () => {
+        const database = await as(players.a);
+        const sequenceMemory = (gameVersion: unknown) => sessionData(players.a, {
+            gameId: 'sequence-memory',
+            gameVersion,
+            modeId: 'standard',
+            activeDurationMs: 150_000,
+            summary: {
+                score: 60,
+                accuracy: 0.5,
+                trialsTotal: 2,
+                trialsCorrect: 1,
+                responseTime: { medianMs: 1_500, meanMs: 1_500, p90Ms: 2_000 },
+                metrics: { correct: 1, attempted: 2, timedOut: 0, finalLevel: 2, longestSpan: 3 },
+            },
+            trials: [
+                { level: 2, gridSize: 3, sequence: [0, 4, 8], response: [0, 4, 8], tapAtMs: [500, 900, 1_300], correct: true, timedOut: false, shownAtMs: 0, presentationMs: 3_600, responseLimitMs: 5_000, rtMs: 1_300 },
+                { level: 2, gridSize: 3, sequence: [1, 5, 7], response: [1, 2], tapAtMs: [600, 1_100], correct: false, timedOut: false, shownAtMs: 4_900, presentationMs: 3_600, responseLimitMs: 5_000, rtMs: 1_100 },
+            ],
+        });
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a, 'session-sequence-memory-1')), sequenceMemory(1)));
+        for (const gameVersion of [0, 2, 1.5, '1', null]) {
+            await assertFails(setDoc(doc(database, sessionPath(players.a)), sequenceMemory(gameVersion)));
+        }
+    });
+
     it('requires the session seed to be an unsigned 32-bit integer', async () => {
         const database = await as(players.a);
         for (const [index, seed] of [0, 1, 4_294_967_295].entries()) {

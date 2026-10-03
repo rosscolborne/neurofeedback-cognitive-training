@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../overview/HomeOverview', () => ({ HomeOverview: 'home-overview', HOME_PLAY_BUTTON_ID: 'home-play', HOME_ALL_RUNS_BUTTON_ID: 'home-all-runs' }));
 vi.mock('../../overview/ProgressOverview', () => ({ ProgressOverview: 'progress-overview', PROGRESS_PLAY_BUTTON_ID: 'progress-play' }));
 vi.mock('../../games/mentalMath/MentalMathProgressCard', () => ({ MentalMathProgressCard: 'mm-progress-card', MENTAL_MATH_PROGRESS_CARD_BUTTON_ID: 'mm-card' }));
+vi.mock('../../games/sequenceMemory/SequenceMemoryProgressCard', () => ({ SequenceMemoryProgressCard: 'sm-progress-card', SEQUENCE_MEMORY_PROGRESS_CARD_BUTTON_ID: 'sm-card' }));
 
 import { HomeScreen } from '../HomeScreen';
 import { ProgressScreen } from '../ProgressScreen';
@@ -69,8 +70,8 @@ describe('Train', () => {
     const titles = renderer!.root.findAllByType('section').map((section) => textOf(renderer!.root.findByProps({ id: section.props['aria-labelledby'] })));
     expect(titles).toEqual(['Games']);
     const cards = renderer!.root.findAllByType('li');
-    expect(cards.map((item) => textOf(item.findByType('button')))).toEqual(['Mental Math']);
-    expect(cards[0]!.props.className).toBe('train-card train-game-card');
+    expect(cards.map((item) => textOf(item.findByType('button')))).toEqual(['Mental Math', 'Sequence Memory']);
+    for (const card of cards) expect(card.props.className).toBe('train-card train-game-card');
     expect(textOf(renderer!.root)).not.toMatch(/NeuroGambit|Headset training/);
   });
 
@@ -94,13 +95,17 @@ describe('Progress', () => {
     expect(textOf(renderer!.root)).not.toMatch(/Neurofeedback|Session History|target zone|Milestones|Export Data/);
   });
 
-  it('opens Mental Math, or its records from the game card', () => {
+  it('opens Mental Math, its records from its game card, or Sequence Memory\'s start screen from its card', () => {
     const overview = element(renderer!, 'progress-overview');
     act(() => overview.props.onPlay());
-    act(() => overview.props.games.props.onOpen());
+    const [mentalMathCard, sequenceMemoryCard] = overview.props.games.props.children;
+    expect([mentalMathCard.type, sequenceMemoryCard.type]).toEqual(['mm-progress-card', 'sm-progress-card']);
+    act(() => mentalMathCard.props.onOpen());
+    act(() => sequenceMemoryCard.props.onOpen());
     expect(onOpenGame.mock.calls).toEqual([
       [{ gameId: 'mental-math', returnFocusTo: 'progress-play' }],
       [{ gameId: 'mental-math', initialView: 'progress', returnFocusTo: 'mm-card' }],
+      [{ gameId: 'sequence-memory', returnFocusTo: 'sm-card' }],
     ]);
   });
 });

@@ -1,31 +1,17 @@
 import { Timestamp } from 'firebase/firestore';
 import { localDateIn, mentalMath } from '@nfct/shared';
 import type { GameSessionDraft } from '../../repositories/gameSessionRepository';
+import type { SessionEnvironment } from '../common/sessionEnvironment';
 import type { RunOutcome } from './runController';
+
+// SessionEnvironment, APP_VERSION and deviceTimezone moved to the games' common helpers (NFCT-93).
+export { APP_VERSION, deviceTimezone, type SessionEnvironment } from '../common/sessionEnvironment';
 
 // The finished run as the session the repository writes once. The summary is
 // the shared scoring's client-side view for immediate display; trusted scoring
 // recomputes everything from the trials.
 
 export type MentalMathSessionDraft = GameSessionDraft<mentalMath.MentalMathTrial, mentalMath.MentalMathMetrics>;
-
-export interface SessionEnvironment {
-  /** IANA time zone of the device. */
-  readonly timezone: string;
-  readonly appVersion: string;
-  readonly platform: 'ios' | 'android' | 'web';
-}
-
-/** The web app has no release versioning yet; this is package.json's version. */
-export const APP_VERSION = '0.0.0';
-
-export function deviceTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-}
 
 export function buildSessionDraft(outcome: RunOutcome, environment: SessionEnvironment): MentalMathSessionDraft {
   const { run } = outcome;

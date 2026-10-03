@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Calculator, ChartNoAxesColumnIncreasing, Timer, type LucideIcon } from 'lucide-react';
+import { Calculator, ChartNoAxesColumnIncreasing, Grid3x3, Timer, type LucideIcon } from 'lucide-react';
 import type { GameIconKey } from '@nfct/shared';
 import { gameCardId } from './cardIds';
 import { CatalogueCard, type CatalogueCardFact } from './CatalogueCard';
@@ -11,6 +11,7 @@ import { catalogueGames, maxRunLengthLabel, runLengthLabel, type CatalogueGame }
 
 const GAME_ICONS: Readonly<Record<GameIconKey, LucideIcon>> = {
   calculator: Calculator,
+  grid: Grid3x3,
 };
 
 function factsOf(game: CatalogueGame): CatalogueCardFact[] {

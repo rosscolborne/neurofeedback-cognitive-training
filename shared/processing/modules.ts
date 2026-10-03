@@ -1,4 +1,5 @@
 import { mentalMathV1, mentalMathV2 } from '../games/mental-math';
+import { sequenceMemoryV1 } from '../games/sequence-memory';
 import { createGameModuleRegistry, defineGameVersionModule, type GameVersionModule } from './registry';
 
 // The registered game-version modules: what this build can process. Each
@@ -45,5 +46,22 @@ export const mentalMathV2Module: GameVersionModule = defineGameVersionModule({
   },
 });
 
+/**
+ * Sequence Memory gameVersion 1 (NFCT-93): the same adapter as Mental Math's,
+ * over the Sequence Memory v1 checks.
+ */
+export const sequenceMemoryV1Module: GameVersionModule = defineGameVersionModule({
+  definition: sequenceMemoryV1.definition,
+  reasonOutcomes: sequenceMemoryV1.REASON_OUTCOMES,
+  check(session, { summary }) {
+    const report = sequenceMemoryV1.checkSession({ ...session, summary: summary ?? undefined });
+    if (summary !== null) return report;
+    return sequenceMemoryV1.reportOf([
+      ...report.issues,
+      { code: 'summary-mismatch', outcome: sequenceMemoryV1.REASON_OUTCOMES['summary-mismatch'], trialIndex: null },
+    ]);
+  },
+});
+
 /** Every module this build registers. */
-export const GAME_MODULE_REGISTRY = createGameModuleRegistry([mentalMathV1Module, mentalMathV2Module]);
+export const GAME_MODULE_REGISTRY = createGameModuleRegistry([mentalMathV1Module, mentalMathV2Module, sequenceMemoryV1Module]);

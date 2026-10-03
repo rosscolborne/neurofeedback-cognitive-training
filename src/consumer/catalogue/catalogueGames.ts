@@ -89,9 +89,13 @@ function durationLabel(ms: number): string {
   return seconds === 1 ? '1 second' : `${seconds} seconds`;
 }
 
-/** "Up to 3 minutes": a run with no fixed length but a longest possible one. */
+/**
+ * "Up to 3 minutes": a run with no fixed length but a longest possible one.
+ * A bound of two minutes or more is rounded up to whole minutes, so it never
+ * reads shorter than it is (Sequence Memory's 358 s is "Up to 6 minutes").
+ */
 export function maxRunLengthLabel(ms: number): string {
-  return `Up to ${durationLabel(ms)}`;
+  return `Up to ${durationLabel(ms >= 120_000 ? Math.ceil(ms / 60_000) * 60_000 : ms)}`;
 }
 
 /** "90 seconds", "2 minutes", or a range when a game's timed modes differ. */

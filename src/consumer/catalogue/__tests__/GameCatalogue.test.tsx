@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GAME_CATALOGUE } from '@nfct/shared';
 
 vi.mock('../../games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));
+vi.mock('../../games/sequenceMemory/SequenceMemoryGame', () => ({ SequenceMemoryGame: 'sequence-memory-game' }));
 
 import { Calculator } from 'lucide-react';
 import { CatalogueCard } from '../CatalogueCard';
@@ -55,17 +56,28 @@ describe('GameCatalogue', () => {
     expect(visibleTextOf(card!.findByProps({ className: 'train-card-facts' }))).toBe('Up to 3 minutes10 levels');
   });
 
-  it('describes the button with the card text, by ids that exist', () => {
-    const button = renderer.root.findByType('li').findByType('button');
-    const ids = String(button.props['aria-describedby']).split(' ');
-    expect(ids).toEqual(['game-mental-math-desc', 'game-mental-math-emphasis', 'game-mental-math-facts']);
-    for (const id of ids) expect(renderer.root.findAll((node) => typeof node.type === 'string' && node.props.id === id)).toHaveLength(1);
-    expect(button.props.type).toBe('button');
+  it('describes each button with its card text, by ids that exist', () => {
+    const cards = renderer.root.findAllByType('li');
+    expect(cards).toHaveLength(2);
+    for (const [index, gameId] of ['mental-math', 'sequence-memory'].entries()) {
+      const button = cards[index]!.findByType('button');
+      const ids = String(button.props['aria-describedby']).split(' ');
+      expect(ids).toEqual([`game-${gameId}-desc`, `game-${gameId}-emphasis`, `game-${gameId}-facts`]);
+      for (const id of ids) expect(renderer.root.findAll((node) => typeof node.type === 'string' && node.props.id === id)).toHaveLength(1);
+      expect(button.props.type).toBe('button');
+    }
   });
 
-  it('opens the game by its ID from the card button', () => {
-    act(() => renderer.root.findByType('li').findByType('button').props.onClick());
-    expect(onOpenGame).toHaveBeenCalledExactlyOnceWith('mental-math');
+  it('shows Sequence Memory as Memory 60% and Spatial 40% (NFCT-93)', () => {
+    const card = renderer.root.findAllByType('li')[1]!;
+    expect(card.findAllByProps({ className: 'train-card-mix-item' }).map(visibleTextOf)).toEqual(['Memory 60%', 'Spatial 40%']);
+  });
+
+  it('opens each game by its ID from its card button', () => {
+    const [first, second] = renderer.root.findAllByType('li');
+    act(() => first!.findByType('button').props.onClick());
+    act(() => second!.findByType('button').props.onClick());
+    expect(onOpenGame.mock.calls).toEqual([['mental-math'], ['sequence-memory']]);
   });
 });
 

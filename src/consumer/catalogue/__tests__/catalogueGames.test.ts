@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_CATALOGUE, mentalMath, type GameListing, type GameModeDefinition } from '@nfct/shared';
+import { GAME_CATALOGUE, mentalMath, sequenceMemory, type GameListing, type GameModeDefinition } from '@nfct/shared';
 import { catalogueGames, maxRunLengthLabel, runLengthLabel, toCatalogueGame } from '../catalogueGames';
 
 const mode = (id: string, levels: number, runDurationMs?: number | null): GameModeDefinition => ({
@@ -19,7 +19,7 @@ const listing = (definition: Partial<GameListing['definition']>): GameListing =>
 });
 
 describe('catalogue games', () => {
-  it('derives the Mental Math card from its listing and current definition', () => {
+  it('derives the Mental Math and Sequence Memory cards from their listings and current definitions', () => {
     expect(catalogueGames()).toEqual([{
       id: 'mental-math',
       name: 'Mental Math',
@@ -34,8 +34,24 @@ describe('catalogue games', () => {
       runLengthMs: null,
       maxRunLengthMs: mentalMath.MAX_RUN_MS,
       levels: 10,
+    }, {
+      id: 'sequence-memory',
+      name: 'Sequence Memory',
+      summary: GAME_CATALOGUE[1]!.summary,
+      icon: 'grid',
+      // NFCT-93: the owner's weights, shown as whole percentages.
+      domains: [
+        { id: 'memory', label: 'Memory', weight: 0.6, percent: 60 },
+        { id: 'spatial', label: 'Spatial', weight: 0.4, percent: 40 },
+      ],
+      // A fixed number of trials: no fixed length, at most every trial at its longest.
+      runLengthMs: null,
+      maxRunLengthMs: sequenceMemory.MAX_RUN_MS,
+      levels: 10,
     }]);
     expect(maxRunLengthLabel(mentalMath.MAX_RUN_MS)).toBe('Up to 3 minutes');
+    expect(maxRunLengthLabel(sequenceMemory.MAX_RUN_MS)).toBe('Up to 6 minutes');
+    expect(maxRunLengthLabel(90_000)).toBe('Up to 90 seconds');
   });
 
   it('keeps catalogue order', () => {

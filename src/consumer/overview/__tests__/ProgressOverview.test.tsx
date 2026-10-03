@@ -24,6 +24,7 @@ import {
   utcClock,
   visibleText,
   type FakeState,
+  sequenceMemoryRunEntry,
 } from './overviewFixtures';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -61,6 +62,19 @@ describe('Progress', () => {
     act(() => buttonNamed(r, 'Play Mental Math').props.onClick());
     expect(onPlay).toHaveBeenCalledTimes(1);
     expect(visibleText(r)).toContain('Mental Math card');
+  });
+
+  it('never shows "No runs yet" to a player whose only runs are Sequence Memory (NFCT-93)', async () => {
+    const { r, sources } = await renderProgress({ summary: missing(), runs: [sequenceMemoryRunEntry('sessionSMSMSMSMSMSM1')] });
+    expect(sources.gameSessions.subscribeToGameSessionHistory).toHaveBeenCalledWith({ pageSize: 3 }, expect.any(Function), expect.any(Function));
+    expect(byData(r, 'progress-empty')).toHaveLength(0);
+    expect(visibleText(r)).not.toContain('No runs yet');
+    expect(byData(r, 'all-time')).toHaveLength(1);
+  });
+
+  it('words its first-run invitation for any game', async () => {
+    const { r } = await renderProgress({ summary: missing() });
+    expect(visibleText(r)).toContain('Play any game to start your streak, fill in your activity and earn achievements.');
   });
 
   it('shows all-time figures with the streak’s liveness from streakStatus', async () => {

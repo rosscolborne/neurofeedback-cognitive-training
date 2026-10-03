@@ -78,7 +78,8 @@ service cloud.firestore {
       // in their own archived record set once a player has a version 2 run.
       function supportedGameVersions() {
         return {
-          'mental-math': { 'min': 1, 'max': 2 }
+          'mental-math': { 'min': 1, 'max': 2 },
+          'sequence-memory': { 'min': 1, 'max': 1 }
         };
       }
 

@@ -202,7 +202,11 @@ describe('mutually locked sessions', () => {
 
     // Redeliveries and admin reconciles find nothing left to do.
     for (const id of run.ids) expect((await runSessionPipeline(context, run.uid, id)).outcome.status).toBe('already-processed');
-    expect((await reconcileUser(context, run.uid)).map(({ report }) => report)).toEqual([{ upgraded: [], stopped: 'fixpoint' }]);
+    // Every registered game's modes are reconciled; this player has only Mental Math progress (NFCT-93 added Sequence Memory).
+    expect(await reconcileUser(context, run.uid)).toEqual([
+      { gameId: 'mental-math', modeId: 'timed-90', report: { upgraded: [], stopped: 'fixpoint' } },
+      { gameId: 'sequence-memory', modeId: 'standard', report: { upgraded: [], stopped: 'no-progress' } },
+    ]);
 
     const after = [];
     for (const id of run.ids) after.push(await readDoc(db, sessionPath(run.uid, id)));

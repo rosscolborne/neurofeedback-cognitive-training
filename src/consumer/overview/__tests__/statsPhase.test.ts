@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameSessionHistoryEntry, GameSessionHistoryPage } from '../../repositories/gameSessionRepository';
 import { PENDING_RESULT_GRACE_MS, pendingDeadline, runRows, statsPhase, type Loaded, type PlayerOverview } from '../usePlayerOverview';
-import { missing, NOW_MS, readable, runEntry, summaryWith } from './overviewFixtures';
+import { missing, NOW_MS, readable, runEntry, sequenceMemoryRunEntry, summaryWith } from './overviewFixtures';
 
 // NFCT-83: how long the stats show as loading for a run waiting for its result.
 
@@ -44,5 +44,12 @@ describe('statsPhase', () => {
   it('shows the stats as soon as a summary lands, however long the run waited', () => {
     const withSummary: Pick<PlayerOverview, 'summary' | 'todayState'> = { summary: { status: 'ready', value: readable(summaryWith(['2026-10-01'])) }, todayState: 'known' };
     expect(statsPhase(withSummary, page(fresh), true, endedAt + 10 * PENDING_RESULT_GRACE_MS, endedAt)).toBe('stats');
+  });
+
+  it('counts runs of every game: a player with only Sequence Memory runs is not new (NFCT-93)', () => {
+    expect(statsPhase(noSummary, page(), true, NOW_MS, NOW_MS)).toBe('new');
+    expect(statsPhase(noSummary, page(sequenceMemoryRunEntry('sessionSMSMSMSMSMSM1')), true, NOW_MS, NOW_MS)).toBe('catching-up');
+    const waiting = uploaded(sequenceMemoryRunEntry('sessionSMSMSMSMSMSM2', { verified: false, wallStartMs: NOW_MS - 600_000 }));
+    expect(statsPhase(noSummary, page(waiting), true, waiting.session.endedAt.toMillis() + 1, NOW_MS)).toBe('checking');
   });
 });

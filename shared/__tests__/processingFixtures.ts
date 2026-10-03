@@ -1,4 +1,4 @@
-import { localDateIn, mentalMathV1 as mm, mentalMathV2, type FirestoreTimestamp } from '@nfct/shared';
+import { localDateIn, mentalMathV1 as mm, mentalMathV2, sequenceMemoryV1 as sm, type FirestoreTimestamp } from '@nfct/shared';
 
 // Realistic Mental Math v1 sessions for trusted-scoring tests (NFCT-19), played
 // through NFCT-17's pure run reducer exactly as the game screen drives it:
@@ -173,5 +173,149 @@ export function forgedEverything(timestamp: (ms: number) => FirestoreTimestamp, 
     startedAt: timestamp(endedAtMs - 10_000), // wall-clock-short
     createdAt: timestamp(endedAtMs - 2 * 60_000), // device-clock-ahead
     localDate: '2020-01-01', // local-date-mismatch
+  };
+}
+
+// ---- Sequence Memory v1 (NFCT-93) ----
+
+export type SequenceMemoryPlan = {
+  readonly uid: string;
+  readonly seed: number;
+  readonly startLevel: number;
+  /** The highest level to reach: correct below it, a wrong tile at it, so the trusted peak is max(startLevel, targetPeak). */
+  readonly targetPeak: number;
+  /** Time between taps. Under 100 ms flags the session. Default 450. */
+  readonly tapMs?: number;
+  /** Device clock: when the run ended. */
+  readonly endedAtMs: number;
+  /** 'abandoned' stops after half the trials. Default 'completed'. */
+  readonly status?: 'completed' | 'abandoned';
+  readonly timezone?: string;
+  /** The value stored as createdAt; default: a timestamp one second after endedAt. */
+  readonly createdAt?: unknown;
+};
+
+/** Plays a Sequence Memory v1 run through the reducer, as the run controller drives it. */
+export function playSequenceMemoryRun({ seed, startLevel, targetPeak, tapMs = 450, status = 'completed' }: Omit<SequenceMemoryPlan, 'uid' | 'endedAtMs'>): sm.SequenceMemoryRun {
+  const peak = Math.max(startLevel, targetPeak);
+  const trials = status === 'completed' ? sm.TRIALS_PER_RUN : Math.floor(sm.TRIALS_PER_RUN / 2);
+  let run = sm.startRun({ seed, startLevel });
+  while (run.trials.length < trials) {
+    run = sm.presentTrial(run, sm.recordedActiveMs(run));
+    const current = run.current!;
+    const recalls = current.level < peak;
+    for (let index = 0; run.current !== null; index += 1) {
+      const right = current.sequence[index]!;
+      const tile = recalls || index < current.sequence.length - 1 ? right : (right + 1) % sm.tileCount(current.gridSize);
+      const tapped = sm.tapTile(run, { trialId: current.id, tile, atMs: (index + 1) * (tapMs + (run.trials.length % 3) * 11) });
+      if (!tapped.accepted) throw new Error(`tap refused: ${tapped.reason}`);
+      run = tapped.run;
+    }
+  }
+  return run;
+}
+
+/** A Sequence Memory v1 session document as a conforming client writes it. */
+export function sequenceMemorySession(
+  plan: SequenceMemoryPlan,
+  timestamp: (ms: number) => FirestoreTimestamp,
+): Record<string, unknown> {
+  const status = plan.status ?? 'completed';
+  const run = playSequenceMemoryRun({ ...plan, status });
+  const activeDurationMs = sm.recordedActiveMs(run);
+  const timezone = plan.timezone ?? 'America/Toronto';
+  const scored = sm.score(run.trials, { modeId: sm.MODE_ID, startLevel: plan.startLevel });
+  return {
+    schemaVersion: 1,
+    userId: plan.uid,
+    gameId: sm.GAME_ID,
+    gameVersion: sm.GAME_VERSION,
+    modeId: sm.MODE_ID,
+    startLevel: plan.startLevel,
+    seed: plan.seed,
+    peakLevel: sm.runPeakLevel(run),
+    status,
+    // Feedback between trials takes wall-clock time, so the span exceeds the active time.
+    startedAt: timestamp(plan.endedAtMs - activeDurationMs - 15_000),
+    endedAt: timestamp(plan.endedAtMs),
+    activeDurationMs,
+    localDate: localDateOf(timezone, plan.endedAtMs),
+    timezone,
+    createdAt: plan.createdAt ?? timestamp(plan.endedAtMs + 1_000),
+    client: { appVersion: '0.1.0', platform: 'web' },
+    trials: run.trials,
+    summary: {
+      score: scored.score,
+      accuracy: scored.accuracy,
+      trialsTotal: run.trials.length,
+      trialsCorrect: scored.metrics.correct,
+      responseTime: scored.responseTime,
+      metrics: scored.metrics,
+    },
+  };
+}
+
+export type SequenceMemoryForgery = 'sequence' | 'level-sequence' | 'response' | 'fast-taps' | 'trial-gap';
+
+/**
+ * An honest Sequence Memory session with one forgery: a sequence the seed
+ * cannot produce (an easier one), a level the staircase cannot reach, a
+ * response that does not match the trial's verdict, every tap too fast to
+ * be plausible, or trials spread apart to claim active time no trial used.
+ */
+export function forgedSequenceMemory(session: Record<string, unknown>, forgery: SequenceMemoryForgery): Record<string, unknown> {
+  const trials = (session.trials as sm.SequenceMemoryTrial[]).map((trial) => ({ ...trial }));
+  const first = trials[0]!;
+  switch (forgery) {
+    case 'sequence': {
+      // The same tiles, shortened by one: easier to recall, and not from the seed.
+      const sequence = first.sequence.slice(0, -1);
+      Object.assign(first, { sequence, response: sequence, tapAtMs: first.tapAtMs.slice(0, sequence.length), rtMs: first.tapAtMs[sequence.length - 1] });
+      break;
+    }
+    case 'level-sequence':
+      for (const trial of trials) trial.level = Math.min(sm.MAX_LEVEL, trial.level + 1);
+      break;
+    case 'response': {
+      const wrong = trials.find((trial) => !trial.correct && !trial.timedOut);
+      if (!wrong) throw new Error('fixture needs a wrong trial');
+      // The full sequence as the response, while the trial still says it was wrong.
+      wrong.response = [...wrong.sequence];
+      break;
+    }
+    case 'fast-taps':
+      return sequenceMemorySessionWithTaps(session, 40);
+    case 'trial-gap': {
+      trials.forEach((trial, index) => { trial.shownAtMs += index * 150_000; });
+      const last = trials[trials.length - 1]!;
+      return { ...session, trials, activeDurationMs: last.shownAtMs + last.presentationMs + last.rtMs };
+    }
+  }
+  return { ...session, trials };
+}
+
+function sequenceMemorySessionWithTaps(session: Record<string, unknown>, tapMs: number): Record<string, unknown> {
+  const plan = {
+    seed: session.seed as number,
+    startLevel: session.startLevel as number,
+    targetPeak: session.peakLevel as number,
+    status: session.status as 'completed' | 'abandoned',
+    tapMs,
+  };
+  const run = playSequenceMemoryRun(plan);
+  const scored = sm.score(run.trials, { modeId: sm.MODE_ID, startLevel: plan.startLevel });
+  return {
+    ...session,
+    trials: run.trials,
+    peakLevel: sm.runPeakLevel(run),
+    activeDurationMs: sm.recordedActiveMs(run),
+    summary: {
+      score: scored.score,
+      accuracy: scored.accuracy,
+      trialsTotal: run.trials.length,
+      trialsCorrect: scored.metrics.correct,
+      responseTime: scored.responseTime,
+      metrics: scored.metrics,
+    },
   };
 }
