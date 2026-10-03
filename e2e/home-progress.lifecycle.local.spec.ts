@@ -100,7 +100,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(page.locator(`.ov-week-day[data-date="${today}"]`)).toHaveAttribute('data-trained', 'true');
   // A time-bank run (NFCT-60) lasts as long as its answers earned.
   await expect(overview(page, 'week-summary')).toHaveText(`This week: 1 finished run · ${formatPlayTime(session!.data.activeDurationMs as number)} played`);
-  // The inherited sign-up has no consumer profile, so no weekly goal is set: none is shown.
+  // The seeded consumer profile sets no weekly goal (weeklyGoal: null), so none is shown.
   await expect(overview(page, 'weekly-goal')).toHaveCount(0);
   await expect(overview(page, 'achievement-count')).toHaveText('1 of 9 earned');
   await expect(achievementRow(page, 'first-run')).toHaveAttribute('data-earned', 'true');

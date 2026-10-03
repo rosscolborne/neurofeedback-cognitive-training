@@ -9,6 +9,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
     "types": ["node", "vite/client"],
     "ignoreDeprecations": "6.0",
     "paths": {

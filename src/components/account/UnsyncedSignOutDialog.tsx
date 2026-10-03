@@ -37,9 +37,9 @@ export const UnsyncedSignOutDialog: React.FC<UnsyncedSignOutDialogProps> = ({ si
       if (event.key !== 'Tab') return;
       // Keep focus on the dialog's two actions while it is open.
       const buttons = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
-      if (buttons.length === 0) return;
       const first = buttons[0];
       const last = buttons[buttons.length - 1];
+      if (!first || !last) return;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
