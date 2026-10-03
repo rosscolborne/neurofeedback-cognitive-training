@@ -47,7 +47,7 @@ designing the topology here. One stream is the default.
 
 ## Output
 
-Reply with exactly these three sections and nothing else.
+Reply with exactly these four sections and nothing else.
 
 ### `## Plan`
 
@@ -73,11 +73,16 @@ Concise, but enough to implement from:
   ([out-of-scope work](../../../AGENTS.md#out-of-scope-work)), each with a
   one-line summary. List them; do not file them.
 
-### `## Implementation handoff`
+### `## Implementation prompt`
 
-One prompt in a single fenced block, written for a fresh agent with no access
-to this conversation. Use a longer fence if the prompt contains backticks.
-It carries the decisions, not the analysis:
+Exactly one complete prompt for a fresh implementation agent, in a single
+fenced block. It is the only fenced block in the response, and the section
+contains nothing outside that block, so the owner can copy it alone. Use a
+longer fence if the prompt contains backticks.
+
+The prompt is self-contained: the implementation agent has no access to this
+conversation or to the sections above. It carries the decisions, constraints,
+acceptance criteria and execution instructions, not the analysis:
 
 - the goal, the Jira card if any, and the expected behavior;
 - the architectural decisions from the plan, stated as decisions, and the
@@ -92,3 +97,18 @@ It carries the decisions, not the analysis:
   changing code;
 - an instruction to follow the plan unless new evidence contradicts it, and
   then to stop and report rather than redesign silently.
+
+### `## Execution recommendation`
+
+Exactly three lines, after the implementation prompt, not fenced (the
+implementation prompt stays the response's only fenced block):
+
+- `Model:` the model, in the intended implementation tool.
+- `Effort:` the effort level, in that tool.
+- `Reason:` one concise sentence.
+
+Recommend the lightest model and effort level available in the intended
+implementation tool that can reliably execute this specific plan. Base it on
+how much judgment remains after planning, architectural uncertainty, the
+risk and trust boundaries touched, and whether execution is mostly mechanical
+or still needs substantial reasoning.
