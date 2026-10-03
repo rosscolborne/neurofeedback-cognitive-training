@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient } from './helpers/localEmulator';
+import { seedPatient } from './helpers/localEmulator';
 import { trackingCopy } from './helpers/patientProgress';
 import { readSessionNotes, seedSessionHistory, SESSION_HISTORY_COUNTS, UNMEASURED_SESSION_INDEXES } from './helpers/sessionHistorySeed';
 
@@ -41,7 +41,7 @@ async function expectShowMoreFits(page: Page, width: number) {
 }
 
 test('patient Progress bounds a long history, reveals it a page at a time, and saves a journal on a revealed session', async ({ browser }) => {
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   const ids = await seedSessionHistory(fixture);
   // Patient Progress is a phone surface: run it at a phone viewport.
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });

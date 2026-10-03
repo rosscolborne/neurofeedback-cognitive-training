@@ -3,7 +3,6 @@ import { Compass, RotateCcw, X } from 'lucide-react';
 import type { ClientProfile, ExperienceType, ProtocolType } from '../../types';
 import { resolvePatientProtocol } from '../../services/protocols';
 import {
-  ClinicianManagedTrainingError,
   getSelfDirectedProtocolChoice,
   normalizeExperienceSelection,
   SELF_DIRECTED_PROTOCOL_CHOICES,
@@ -27,8 +26,6 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
   const [showExperiences, setShowExperiences] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // Set once a save finds a clinician now manages this plan; further saves would be refused too.
-  const [clinicianManaged, setClinicianManaged] = useState(false);
   const choice = getSelfDirectedProtocolChoice(protocol ?? undefined);
   const usesDefaults = protocol ? usesProtocolDefaultExperiences(protocol, experiences) : false;
 
@@ -56,13 +53,12 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
   };
 
   const save = async () => {
-    if (!protocol || experiences.length === 0 || isSaving || clinicianManaged) return;
+    if (!protocol || experiences.length === 0 || isSaving) return;
     setIsSaving(true);
     setSaveError(null);
     try {
       await onSave({ assignedProtocol: protocol, allowedExperiences: experiences });
     } catch (error) {
-      if (error instanceof ClinicianManagedTrainingError) setClinicianManaged(true);
       setSaveError(error instanceof Error ? error.message : 'Your training setup could not be saved.');
     } finally {
       setIsSaving(false);
@@ -209,18 +205,18 @@ export const SelfDirectedSetupModal: React.FC<SelfDirectedSetupModalProps> = ({ 
           )}
 
           <p style={{ margin: 0, fontSize: '11px', lineHeight: 1.5, color: 'var(--text-tertiary)' }}>
-            Self-directed training is for general practice. It is not a diagnosis or a treatment plan. If you connect with a clinician, their training plan replaces this setup.
+            Self-directed training is for general practice. It is not a diagnosis or a treatment plan.
           </p>
 
           {saveError && <div role="alert" style={{ fontSize: '13px', color: 'var(--status-alert)' }}>{saveError}</div>}
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={isSaving}>{clinicianManaged ? 'Close' : 'Cancel'}</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={isSaving}>Cancel</button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => void save()}
-              disabled={!protocol || experiences.length === 0 || isSaving || clinicianManaged}
+              disabled={!protocol || experiences.length === 0 || isSaving}
             >
               {isSaving ? 'Saving…' : 'Save setup'}
             </button>

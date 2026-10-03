@@ -1,157 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import rules from '../../../firestore.rules?raw';
 
+const block = (start: string, end: string) => {
+  const from = rules.indexOf(start);
+  const to = rules.indexOf(end, from);
+  expect(from).toBeGreaterThanOrEqual(0);
+  expect(to).toBeGreaterThan(from);
+  return rules.slice(from, to);
+};
+
+// Behavior is covered by the emulator tests in tests/firestore-rules/; this
+// pins the shape that keeps the retired clinician product out of the rules.
 describe('Firestore authorization rule contract', () => {
-  it('supports legacy clinician session access through the patient ownership helper', () => {
-    expect(rules).toContain('function isSessionProvider(session)');
-    expect(rules).toContain('isPatientClinician(session.patientId)');
-    expect(rules).toContain('isSessionProvider(resource.data)');
+  it('has no clinician roles, helpers or collections', () => {
+    for (const retired of [
+      'isClinician()', 'isClinicMember', 'isPatientClinician', 'isSessionProvider', 'isCanonicalPatientClinician',
+      'match /patientInvitations', 'match /patientInvitationNotices', 'match /patientInvitationClaims',
+      'match /messageThreads', 'match /messages', 'match /appointments', 'match /clinics', 'match /practitioners',
+      'match /brainMaps',
+    ]) {
+      expect(rules).not.toContain(retired);
+    }
   });
 
-  it('allows note-only session updates and denies deletion', () => {
-    expect(rules).toContain(".hasOnly(['patientNotes', 'moodRating', 'updatedAt'])");
-    expect(rules).toContain(".hasOnly(['clinicianNotes', 'updatedAt'])");
-    const sessionBlock = rules.slice(rules.indexOf('match /sessions/{sessionId}'), rules.indexOf('// A device assignment'));
-    expect(sessionBlock).toContain('allow delete: if false;');
+  it('gives only the owner access to a patient profile and freezes its legacy relationship fields', () => {
+    const clients = block('match /clients/{clientId}', 'match /sessions/{sessionId}');
+    expect(clients).toContain('allow read: if isAuthenticated() && request.auth.uid == clientId;');
+    expect(clients).toContain('function relationshipUnchanged()');
+    expect(clients).toContain("request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&\n          relationshipUnchanged()");
+    // A new profile cannot name a clinician, clinic or invitation.
+    expect(clients).toContain("request.resource.data.get('clinicianId', null) == null &&");
+    expect(clients).toContain("request.resource.data.get('acceptedInvitationId', null) == null;");
+    // Only the owner deletes, and only a profile that is not being deleted.
+    expect(clients).toContain('allow delete: if isAuthenticated() && (\n        request.auth.uid == clientId');
   });
 
-  it('keeps canonical QEEG records patient-readable and clinician-owned append-only', () => {
-    expect(rules).toContain('match /brainMaps/{brainMapId}');
-    expect(rules).toContain('request.auth.uid == clientId || isPatientClinician(clientId)');
-    expect(rules).toContain('request.resource.data.id == brainMapId');
-    expect(rules).toContain('request.resource.data.createdBy == request.auth.uid');
-    expect(rules).toContain('request.resource.data.createdAt == request.time');
-    expect(rules).toContain("request.resource.data.keys().hasOnly([");
-    expect(rules).toContain('request.resource.data.zScores.keys().hasOnly([');
-    expect(rules).toContain('request.resource.data.recordingDate is timestamp');
-    expect(rules).toContain("request.resource.data.deviceSource.matches('.*\\\\S.*')");
-    expect(rules).toContain('request.resource.data.dominantAlphaPeakHz <= 30');
-    const brainMapBlock = rules.slice(rules.indexOf('match /brainMaps/{brainMapId}'), rules.indexOf('// Neurofeedback Session Records'));
-    expect(brainMapBlock).toContain('allow update, delete: if false;');
-  });
-
-  it('keeps practitioner identity, clinic membership, and clinic membership lists immutable', () => {
-    expect(rules).toContain('practitionerId == request.auth.uid');
-    expect(rules).toContain('request.resource.data.userId == resource.data.userId');
-    expect(rules).toContain('request.resource.data.practitionerIds == resource.data.practitionerIds');
-  });
-
-  it('supports role-gated atomic onboarding through post-write clinic membership', () => {
-    expect(rules).toContain('function isClinicMemberAfter(clinicId)');
-    expect(rules).toContain('existsAfter(/databases/$(database)/documents/clinics/$(clinicId))');
-    expect(rules).toContain('getAfter(/databases/$(database)/documents/clinics/$(clinicId))');
-    const clinics = rules.slice(rules.indexOf('match /clinics/{clinicId}'), rules.indexOf('// Everything not matched above is denied.'));
-    expect(clinics).toContain('allow get: if (isClinician()');
-    expect(clinics).toContain('clinicId == request.auth.uid');
-    expect(clinics).toContain('allow create: if isClinician()');
-    expect(clinics).toContain('isClinicMemberAfter(request.resource.data.clinicId)');
-  });
-
-  it('allows clinic members to read clients but freezes client ownership fields on that path', () => {
-    expect(rules).toContain("isClinicMember(resource.data.get('clinicId', null))");
-    expect(rules).toContain("request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null)");
-    expect(rules).toContain("request.resource.data.get('clinicianId', null) == resource.data.get('clinicianId', null)");
-    expect(rules).toContain("request.resource.data.get('linkedClinicianCode', null) == resource.data.get('linkedClinicianCode', null)");
-  });
-
-  it('links patients through atomic, email-targeted invitations', () => {
-    expect(rules).toContain('match /patientInvitations/{invitationId}');
-    expect(rules).toContain("request.resource.data.status == 'pending'");
-    expect(rules).toContain('resource.data.patientEmail == request.auth.token.email.lower()');
-    expect(rules).toContain('request.resource.data.patientEmail == request.resource.data.patientEmail.lower()');
-    expect(rules).toContain("request.resource.data.status == 'accepted'");
-    expect(rules).toContain(".data.get('acceptedInvitationId', null) == invitationId");
-    expect(rules).toContain('getAfter(/databases/$(database)/documents/clients/$(request.auth.uid))');
-    expect(rules).toContain("resource.data.get('expiresAt', null) is timestamp");
-    expect(rules).toContain('resource.data.expiresAt > request.time');
-    expect(rules).toContain("request.resource.data.expiresAt <= request.time + duration.value(30, 'd')");
-  });
-
-  it('binds new invitations and uniqueness claims to the clinicians authenticated clinic membership', () => {
-    expect(rules).toContain('function isAuthenticatedPractitionerForClinic(clinicId)');
-    expect(rules).toContain('exists(/databases/$(database)/documents/practitioners/$(request.auth.uid))');
-    expect(rules).toContain(".data.get('clinicId', null) == clinicId");
-    expect(rules).toContain('isClinicMember(clinicId)');
-
-    const invitationsBlock = rules.slice(
-      rules.indexOf('match /patientInvitations/{invitationId}'),
-      rules.indexOf('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}'),
-    );
-    expect(invitationsBlock).toContain('request.resource.data.clinicId is string');
-    expect(invitationsBlock).toContain('isAuthenticatedPractitionerForClinic(request.resource.data.clinicId)');
-
-    const claimsBlock = rules.slice(
-      rules.indexOf('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}'),
-      rules.indexOf('match /clients/{clientId}'),
-    );
-    expect(claimsBlock).toContain("invitation.get('clinicId', null) == request.resource.data.get('clinicId', null)");
-    expect(claimsBlock).toContain("resource.data.get('clinicId', null) == request.resource.data.get('clinicId', null) ||\n          resource.data.get('clinicId', null) == null");
-    expect(claimsBlock).toContain('isAuthenticatedPractitionerForClinic(request.resource.data.clinicId)');
-    expect(claimsBlock).toContain('resource.data.expiresAt <= request.time');
-    expect(claimsBlock).toContain('request.resource.data.patientEmail == resource.data.patientEmail');
-    expect(claimsBlock).toContain('matchesPendingInvitation()');
-  });
-
-  it('copies exactly the invitation clinic on acceptance while preserving ordinary clinic immutability', () => {
-    const invitationsBlock = rules.slice(
-      rules.indexOf('match /patientInvitations/{invitationId}'),
-      rules.indexOf('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}'),
-    );
-    expect(invitationsBlock).toContain(".data.get('clinicId', null) == resource.data.get('clinicId', null)");
-
-    const clientsBlock = rules.slice(rules.indexOf('match /clients/{clientId}'), rules.indexOf('// Neurofeedback Session Records'));
-    expect(clientsBlock).toContain("resource.data.get('clinicId', null) == null");
-    expect(clientsBlock).toContain(".data.get('clinicId', null) == request.resource.data.get('clinicId', null)");
-    expect(clientsBlock).toContain("request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null) &&\n              relationshipUnchanged()");
-    expect(clientsBlock).toContain("request.resource.data.get('clinicId', null) == null &&\n            request.resource.data.get('clinicianId', null) == null");
-  });
-
-  it('uses canonical clinician ownership before the legacy fallback', () => {
-    expect(rules).toContain('function isCanonicalPatientClinician(patient)');
-    expect(rules).toContain("patient.get('clinicianId', null) == null");
-    const clientsBlock = rules.slice(rules.indexOf('match /clients/{clientId}'), rules.indexOf('// Neurofeedback Session Records'));
-    expect(clientsBlock).toContain('isCanonicalPatientClinician(resource.data)');
-    expect(clientsBlock).not.toContain("resource.data.get('linkedClinicianCode', null) == request.auth.uid ||");
-  });
-
-  it('makes legacy list queries provable only for explicit-null canonical ownership', () => {
-    expect(rules).toContain("patient.get('clinicianId', null) == null");
-    expect(rules).toContain("patient.get('linkedClinicianCode', null) == request.auth.uid");
-    expect(rules).not.toContain("patient.get('linkedClinicianCode', null) == request.auth.uid ||");
-  });
-
-  it('prevents self-links and freezes clinic tenancy', () => {
-    expect(rules).toContain('resource.data.clinicianId != request.auth.uid');
-    expect(rules).toContain("request.resource.data.get('clinicianId', null) != request.auth.uid");
-    expect(rules).toContain("request.resource.data.get('clinicId', null) == null");
-    expect(rules).toContain("request.resource.data.get('clinicId', null) == resource.data.get('clinicId', null)");
-  });
-
-  it('uses an atomic normalized-email uniqueness claim and releases it on terminal transitions', () => {
-    expect(rules).toContain('match /patientInvitationClaims/{clinicianId}/emails/{emailKey}');
-    expect(rules).toContain('function matchesPendingInvitation()');
-    expect(rules).toContain("invitation.get('uniquenessClaimId', null) == emailKey");
-    expect(rules).toContain('clinicianId == request.auth.uid');
-    expect(rules).toContain('emailKey == request.resource.data.patientEmail');
-    expect(rules).toContain('function uniquenessReleased()');
-    expect(rules).toContain('resource.data.expiresAt <= request.time');
-  });
-
-  it('freezes relationship fields except for a valid acceptance or owner unlink', () => {
-    expect(rules).toContain('function relationshipUnchanged()');
-    expect(rules).toContain('function acceptsValidInvitation()');
-    expect(rules).toContain('function createsWithValidInvitation()');
-    expect(rules).toContain('function unlinksOwningClinician()');
-    expect(rules).toContain(') || acceptsValidInvitation()');
-    expect(rules).toContain(') || unlinksOwningClinician()');
-    expect(rules).toContain("request.resource.data.get('acceptedInvitationId', null) == resource.data.get('acceptedInvitationId', null)");
-  });
-
-  // users/{uid} is covered by the emulator tests in tests/firestore-rules/consumer/.
-  it('does not let clinicians create and delete patient profiles', () => {
-    const clientsBlock = rules.slice(rules.indexOf('match /clients/{clientId}'), rules.indexOf('// Neurofeedback Session Records'));
-    expect(clientsBlock).not.toContain("request.resource.data.get('clinicianId', null) == request.auth.uid");
-    expect(clientsBlock).toContain('allow delete: if isAuthenticated() && (\n        request.auth.uid == clientId');
-    expect(clientsBlock).toContain("resource.data.get('acceptedInvitationId', null) == null");
+  it('gives only the owning patient access to a session, with note-only updates and no deletion', () => {
+    const sessions = block('match /sessions/{sessionId}', '// Everything not matched above is denied');
+    expect(sessions).toContain('allow read: if isAuthenticated() && resource.data.patientId == request.auth.uid;');
+    expect(sessions).toContain('allow create: if isAuthenticated() && request.resource.data.patientId == request.auth.uid;');
+    expect(sessions).toContain(".hasOnly(['patientNotes', 'moodRating', 'updatedAt'])");
+    expect(sessions).not.toContain('clinicianNotes');
+    expect(sessions).toContain('allow delete: if false;');
   });
 });

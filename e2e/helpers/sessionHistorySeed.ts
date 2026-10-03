@@ -39,7 +39,7 @@ export async function seedSessionHistory(fixture: LocalPatientFixture, now = Dat
     const timestamp = now - ageMs(index);
     const unmeasured = (UNMEASURED_SESSION_INDEXES as readonly number[]).includes(index);
     const base = {
-      id, patientId: fixture.patient.uid, clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid,
+      id, patientId: fixture.patient.uid, clinicId: 'self-guided',
       patientName: fixture.name, timestamp, date: new Date(timestamp).toLocaleDateString(), schemaVersion: 2,
       experience: 'neuro-gambit',
       protocol: index % 2 === 0 ? 'theta-beta-ratio' : 'alpha-enhancement',

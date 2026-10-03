@@ -10,7 +10,7 @@ import { ProtocolDetailsModal } from '../ProtocolDetailsModal';
 
 const template = getClinicalProtocolTemplate('beta-downtraining')!;
 const assigned = (customRewardEnabled: boolean): ClientProfile => ({
-  id: 'patient-1', name: 'Patient', email: 'patient@example.com', status: 'active', clinicianId: 'clinician-1',
+  id: 'patient-1', name: 'Patient', email: 'patient@example.com', status: 'active',
   assignedProtocol: 'beta-downtraining', allowedExperiences: [], brainMaps: [], badges: [],
   completedSessionsCount: 0, currentStreak: 0,
   customProtocolConfig: { ...template, alias: 'Test 123', customRewardEnabled },
@@ -94,13 +94,12 @@ describe('patient protocol details training rule', () => {
     expect(text).not.toContain('at or below 14');
   });
 
-  it('does not present template rationale as a note from the clinician', async () => {
+  it('shows neither template rationale nor a stored assignment note', async () => {
     const templateOnly = await details(assigned(false));
     expect(template.clinicalNotes).toBeTruthy();
     expect(templateOnly).not.toContain(template.clinicalNotes);
-    expect(templateOnly).not.toContain('Note from your clinician');
     const edited = await details({ ...assigned(false), customProtocolConfig: { ...template, clinicalNotes: 'Keep sessions in the evening.' } });
-    expect(edited).toContain('Note from your clinician');
-    expect(edited).toContain('Keep sessions in the evening.');
+    expect(edited).not.toContain('Note from your clinician');
+    expect(edited).not.toContain('Keep sessions in the evening.');
   });
 });

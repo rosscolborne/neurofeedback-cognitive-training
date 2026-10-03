@@ -1,7 +1,6 @@
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClinicBrandConfig } from '../../../types';
 import { createBlankProfile } from '../../../services/storageEngine';
 
 // NFCT-13 part 2: Home's "See all achievements" opens Progress at its
@@ -15,9 +14,8 @@ vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => false, setMuted: vi.fn() } }));
 vi.mock('../../../services/storageEngine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/storageEngine')>()),
-  storageEngine: { getSessions: vi.fn(async () => []), hasPendingInvitationNotice: vi.fn(async () => false) },
+  storageEngine: { getSessions: vi.fn(async () => []) },
 }));
-vi.mock('../../messaging/useMessageUnread', () => ({ useMessageUnread: () => ({ byPatient: {}, error: null }) }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../../../consumer/games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));
 vi.mock('../../../consumer/games/mentalMath/MentalMathProgressCard', () => ({ MentalMathProgressCard: 'mental-math-progress-card' }));
@@ -27,7 +25,6 @@ vi.mock('../ProgressHistory', () => ({ ProgressHistory: ({ gamesSection }: { gam
 
 import { PatientShell } from '../PatientShell';
 
-const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 
 const tab = (renderer: ReactTestRenderer, label: string) => act(() => {
   renderer.root.findByType('nav').findAllByType('button').find((button) => button.props['aria-label'] === label)!.props.onClick();
@@ -42,7 +39,7 @@ describe('the "See all achievements" request', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     await act(async () => {
       renderer = create(
-        <PatientShell brand={brand} client={createBlankProfile('patient-1', 'p@example.com', 'Pat')} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />,
+        <PatientShell client={createBlankProfile('patient-1', 'p@example.com', 'Pat')} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />,
       );
     });
   });

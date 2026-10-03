@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { ClientProfile, ProtocolType } from '../../types';
 import { eegEngine } from '../../services/eegEngine';
-import { DEFAULT_PROTOCOL, resolvePatientProtocol } from '../../services/protocols';
+import { DEFAULT_PROTOCOL } from '../../services/protocols';
 import { HeadsetFitModal } from './HeadsetFitModal';
 import { BrandLogo } from '../brand/BrandLogo';
 import { ArrowRight, Check, Wifi, Target, Waves, Moon, Activity } from 'lucide-react';
 
 interface OnboardingFlowProps {
-  client: ClientProfile;
   onFinish: (updatedClient: Partial<ClientProfile>) => Promise<void>;
 }
 
-export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish }) => {
+export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onFinish }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedGoal, setSelectedGoal] = useState<string>('focus');
   const [isPairing, setIsPairing] = useState(false);
@@ -41,7 +40,6 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
     if (selectedGoal === 'calm') assignedProtocol = 'alpha-enhancement';
     if (selectedGoal === 'sleep') assignedProtocol = 'beta-downtraining';
     if (selectedGoal === 'performance') assignedProtocol = 'smr-enhancement';
-    if (client.clinicianId || client.linkedClinicianCode) assignedProtocol = resolvePatientProtocol(client);
 
     setIsSaving(true);
     setSaveError(null);
@@ -142,9 +140,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ client, onFinish
               What is your primary training intention?
             </h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              {client.clinicianId || client.linkedClinicianCode
-                ? 'Your clinician’s protocol assignment remains active during setup.'
-                : 'This helps us personalize your training protocol.'}
+              This helps us personalize your training protocol.
             </p>
           </div>
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientProfile, ClinicBrandConfig } from '../../../types';
+import type { ClientProfile } from '../../../types';
 
 const state = vi.hoisted(() => ({
   muted: false,
@@ -25,15 +25,13 @@ vi.mock('firebase/auth', () => ({ signOut: vi.fn(), reauthenticateWithCredential
   EmailAuthProvider: { credential: (email: string, password: string) => ({ email, password }) } }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, preparePatientAccountDeletion: state.prepareDeletion, hasPendingInvitationNotice: async () => false } }));
+vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, preparePatientAccountDeletion: state.prepareDeletion } }));
 vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
 vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
-vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 
 import { PatientShell } from '../PatientShell';
@@ -42,7 +40,6 @@ const client: ClientProfile = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', status: 'active',
   allowedExperiences: ['neuro-gambit'], brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
 };
-const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 
 // Firebase Auth and Firestore throw an Error carrying a string code.
 const firebaseError = (code: string) =>
@@ -59,7 +56,7 @@ const stubWindow = (overrides: Record<string, unknown>) => {
 /** Mirrors App: a profile persisted elsewhere replaces the mounted client. */
 const StatefulShell: React.FC<{ initial: ClientProfile; onPersisted: (updated: ClientProfile) => void }> = ({ initial, onPersisted }) => {
   const [current, setCurrent] = React.useState(initial);
-  return <PatientShell brand={brand} client={current} onUpdateClient={vi.fn()} onClientPersistedElsewhere={(updated) => { onPersisted(updated); setCurrent(updated); }} />;
+  return <PatientShell client={current} onUpdateClient={vi.fn()} onClientPersistedElsewhere={(updated) => { onPersisted(updated); setCurrent(updated); }} />;
 };
 
 const rendered = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
@@ -96,7 +93,7 @@ describe('PatientShell persisted profile writes', () => {
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((resolve) => { finishReauth = resolve; }));
     let renderer!: ReactTestRenderer;
     try {
-      await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
+      await act(async () => { renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'secret');
       await act(async () => {
@@ -123,7 +120,7 @@ describe('PatientShell persisted profile writes', () => {
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { rejectReauth = reject; }));
     const onClientPersistedElsewhere = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} />); });
+    await act(async () => { renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} />); });
     try {
       openProfileDeletion(renderer);
       // The in-app step is the only confirmation: no browser dialog first.
@@ -175,7 +172,7 @@ describe('PatientShell persisted profile writes', () => {
     state.auth.currentUser = { uid: client.id, email: client.email, delete: vi.fn(async () => {}) };
     state.reauthenticate.mockRejectedValueOnce(firebaseError('auth/wrong-password'));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
+    await act(async () => { renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
     try {
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'Wrong-Horse-7731');
@@ -246,10 +243,10 @@ describe('PatientShell persisted profile writes', () => {
     state.auth.currentUser = user;
     state.reauthenticate.mockResolvedValue(undefined);
     const permissionDenied = firebaseError('permission-denied');
-    const appointmentError = new Error('A future appointment could not be cancelled automatically. Your clinic connection is removed; contact support to finish account deletion.');
+    const appError = new Error('Your patient profile is unavailable. Please contact support.');
     state.prepareDeletion
       .mockImplementationOnce(async (_uid: string, onDeactivated?: (updated: ClientProfile) => void) => { onDeactivated?.(deactivated); throw permissionDenied; })
-      .mockImplementationOnce(async (_uid: string, onDeactivated?: (updated: ClientProfile) => void) => { onDeactivated?.(deactivated); throw appointmentError; });
+      .mockImplementationOnce(async (_uid: string, onDeactivated?: (updated: ClientProfile) => void) => { onDeactivated?.(deactivated); throw appError; });
     const persisted = vi.fn();
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<StatefulShell initial={client} onPersisted={persisted} />); });
@@ -267,7 +264,7 @@ describe('PatientShell persisted profile writes', () => {
 
       typeDeletionPassword(renderer, 'Correct-Horse-7731');
       await act(async () => { submitDeletion(renderer); await flush(); });
-      expect(deletionError(renderer)).toBe(appointmentError.message);
+      expect(deletionError(renderer)).toBe(appError.message);
       // Only the unexpected Firebase error is logged; the app-authored one is not.
       expect(consoleError.mock.calls.filter(([, logged]) => logged instanceof Error)).toEqual([[expect.any(String), permissionDenied]]);
       expect(user.delete).not.toHaveBeenCalled();
@@ -289,7 +286,7 @@ describe('PatientShell persisted profile writes', () => {
     const marked = { ...client, accountDeletionStartedAt: new Date(), clinicianId: undefined, clinicId: undefined };
     let renderer!: ReactTestRenderer;
     try {
-      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
+      await act(async () => { renderer = create(<PatientShell client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
       const submit = async () => {
         act(() => renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Finish account deletion')!.props.onClick());
         // Resuming is already confirmed: no browser dialog (the stub has none) and no repeated warning.
@@ -301,7 +298,7 @@ describe('PatientShell persisted profile writes', () => {
       expect(user.delete).toHaveBeenCalledTimes(1);
       expect(deletionError(renderer)).toBe('Unable to connect. Check your internet connection and try again.');
       await act(async () => { renderer.unmount(); });
-      await act(async () => { renderer = create(<PatientShell brand={brand} client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
+      await act(async () => { renderer = create(<PatientShell client={marked} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
       expect(JSON.stringify(renderer.toJSON())).toContain('Finish deleting your account');
       await submit();
       expect(user.delete).toHaveBeenCalledTimes(2);
@@ -332,7 +329,7 @@ describe('PatientShell persisted profile writes', () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
+      renderer = create(<PatientShell client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
     });
     const profileTab = renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -347,7 +344,7 @@ describe('PatientShell persisted profile writes', () => {
     expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('avatar save offline');
     const refreshedClient = { ...client, completedSessionsCount: 3, badges: ['first-light'] };
     await act(async () => {
-      renderer.update(<PatientShell brand={brand} client={refreshedClient} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
+      renderer.update(<PatientShell client={refreshedClient} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
     });
     const retry = renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Retry')!;
     await act(async () => { await retry.props.onClick(); });
@@ -372,7 +369,7 @@ describe('PatientShell persisted profile writes', () => {
     const onClientPersistedElsewhere = vi.fn();
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={assigned} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} />);
+      renderer = create(<PatientShell client={assigned} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} />);
     });
     act(() => renderer.root.find((node) => (node.type as unknown) === 'home-screen').props.onStartSession('neuro-gambit'));
     const session = { id: 'session-1', patientId: client.id };
@@ -395,7 +392,7 @@ describe('PatientShell persisted profile writes', () => {
     state.getSessions.mockResolvedValueOnce(allRows);
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
+      renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
     });
     act(() => renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -417,7 +414,7 @@ describe('PatientShell persisted profile writes', () => {
     let renderer!: ReactTestRenderer;
     try {
       await act(async () => {
-        renderer = create(<PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
+        renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
       });
       act(() => renderer.root.findAllByType('button').find((button) =>
         button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -442,7 +439,7 @@ describe('PatientShell persisted profile writes', () => {
     const model = { alphaPeakHz: 9.8, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z' };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell brand={brand} client={{ ...client, individualBaselineModel: model }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onRecalibrate={onRecalibrate} />);
+      renderer = create(<PatientShell client={{ ...client, individualBaselineModel: model }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onRecalibrate={onRecalibrate} />);
     });
     act(() => renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -458,12 +455,12 @@ describe('PatientShell persisted profile writes', () => {
     expect(onRecalibrate).toHaveBeenCalledTimes(1);
     expect(onUpdateClient).not.toHaveBeenCalled();
 
-    await act(async () => { renderer.update(<PatientShell brand={brand} client={{ ...client, individualBaselineModel: { ...model, algorithmVersion: 'neurogambit-15s-v1', thetaMean: 2, betaMean: 4, alphaMean: 6 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
+    await act(async () => { renderer.update(<PatientShell client={{ ...client, individualBaselineModel: { ...model, algorithmVersion: 'neurogambit-15s-v1', thetaMean: 2, betaMean: 4, alphaMean: 6 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
     expect(summary()).toContain('Current');
     expect(summary()).not.toContain('9.8 Hz');
-    await act(async () => { renderer.update(<PatientShell brand={brand} client={{ ...client, individualBaselineModel: { ...model, expiresAt: 0 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
+    await act(async () => { renderer.update(<PatientShell client={{ ...client, individualBaselineModel: { ...model, expiresAt: 0 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
     expect(summary()).toContain('Expired');
-    await act(async () => { renderer.update(<PatientShell brand={brand} client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
+    await act(async () => { renderer.update(<PatientShell client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
     expect(summary()).toContain('Not calibrated');
     renderer.unmount();
   });

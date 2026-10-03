@@ -5,9 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const authState = vi.hoisted(() => ({
   value: { user: null, role: null, loading: false, logout: vi.fn() } as Record<string, unknown>,
 }));
-const defaultBrand = vi.hoisted(() => ({ clinicId: 'app', name: 'NFCT', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }));
 const storage = vi.hoisted(() => ({
-  getCurrentClient: vi.fn(), getClinicBrandConfig: vi.fn(), saveClient: vi.fn(),
+  getCurrentClient: vi.fn(), saveClient: vi.fn(),
 }));
 const baselineEngine = vi.hoisted(() => ({ individualBaselineModel: null as unknown }));
 const routeState = vi.hoisted(() => ({ pathname: '/' }));
@@ -15,7 +14,6 @@ const routeState = vi.hoisted(() => ({ pathname: '/' }));
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState.value }));
 vi.mock('../services/storageEngine', () => ({ storageEngine: storage }));
 vi.mock('../services/eegEngine', () => ({ eegEngine: baselineEngine }));
-vi.mock('../services/brandEngine', () => ({ applyBrandToDOM: vi.fn(), BRAND_PRESETS: [defaultBrand] }));
 vi.mock('../components/patient/PatientShell', () => ({ PatientShell: 'patient-shell' }));
 vi.mock('../components/brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../components/account/UnsyncedSignOutDialog', () => ({ UnsyncedSignOutDialog: 'unsynced-dialog' }));
@@ -130,26 +128,6 @@ describe('mounted App account lifecycle', () => {
     renderer.unmount();
   });
 
-  it('loads a linked patient clinic brand per account and ignores a late brand from the previous account', async () => {
-    let resolveFirst!: (value: unknown) => void;
-    authState.value = { user: { uid: 'patient-one' }, role: 'patient', loading: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-one', clinicId: 'clinic-one' });
-    storage.getClinicBrandConfig.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }));
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<App />); await flush(); await flush(); });
-    expect(storage.getClinicBrandConfig).toHaveBeenCalledWith('clinic-one');
-
-    authState.value = { user: { uid: 'patient-two' }, role: 'patient', loading: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-two', clinicId: 'clinic-two' });
-    storage.getClinicBrandConfig.mockResolvedValueOnce({ ...defaultBrand, clinicId: 'clinic-two', name: 'Clinic Two' });
-    await act(async () => { renderer.update(<App />); await flush(); await flush(); });
-    expect(patientShell(renderer).props.brand).toMatchObject({ clinicId: 'clinic-two', name: 'Clinic Two' });
-
-    await act(async () => { resolveFirst({ ...defaultBrand, clinicId: 'clinic-one', name: 'Clinic One' }); await flush(); });
-    expect(patientShell(renderer).props.brand).toMatchObject({ clinicId: 'clinic-two', name: 'Clinic Two' });
-    renderer.unmount();
-  });
-
   it('shows a practitioner account a sign-out screen without loading any patient data', async () => {
     const logout = vi.fn().mockResolvedValueOnce('unsynced');
     authState.value = { user: { uid: 'clinician-one' }, role: 'clinician', loading: false, logout };
@@ -158,7 +136,6 @@ describe('mounted App account lifecycle', () => {
     expect(JSON.stringify(renderer.toJSON())).toContain('Practitioner accounts aren’t supported');
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
     expect(storage.getCurrentClient).not.toHaveBeenCalled();
-    expect(storage.getClinicBrandConfig).not.toHaveBeenCalled();
 
     // Sign-out asks before discarding writes that have not uploaded.
     await act(async () => { renderer.root.findByType('button').props.onClick(); await flush(); });

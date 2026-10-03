@@ -23,13 +23,15 @@ describe('users/{uid}', () => {
 });
 
 describe('clients/{patientId} reads', () => {
-    it('allows the patient, their canonical clinician, and their clinic colleagues', async () => {
+    it('allows only the patient', async () => {
         await assertSucceeds(getDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`)));
-        await assertSucceeds(getDoc(doc(await as(ids.clinicianA), `clients/${ids.patientA}`)));
-        await assertSucceeds(getDoc(doc(await as(ids.colleagueA), `clients/${ids.patientA}`)));
+        await assertSucceeds(getDoc(doc(await as(ids.legacyPatient), `clients/${ids.legacyPatient}`)));
     });
 
-    it('denies other patients, unrelated clinicians, role-less users, and anonymous users', async () => {
+    it('denies former clinicians and their colleagues, other patients, role-less users, and anonymous users', async () => {
+        // patient-a is linked to clinician-a under the retired clinician product.
+        await assertFails(getDoc(doc(await as(ids.clinicianA), `clients/${ids.patientA}`)));
+        await assertFails(getDoc(doc(await as(ids.colleagueA), `clients/${ids.patientA}`)));
         await assertFails(getDoc(doc(await as(ids.patientB), `clients/${ids.patientA}`)));
         await assertFails(getDoc(doc(await as(ids.clinicianB), `clients/${ids.patientA}`)));
         await assertFails(getDoc(doc(await as(ids.clinicianX), `clients/${ids.patientA}`)));
@@ -37,22 +39,20 @@ describe('clients/{patientId} reads', () => {
         await assertFails(getDoc(doc(await anonymous(), `clients/${ids.patientA}`)));
     });
 
-    it('uses the legacy link only when no canonical clinician is set', async () => {
-        await assertSucceeds(getDoc(doc(await as(ids.clinicianA), `clients/${ids.legacyPatient}`)));
-        // Split-brain: canonical clinician-b wins over the stale legacy clinician-a.
+    it('denies a former clinician through the legacy link fields too', async () => {
+        await assertFails(getDoc(doc(await as(ids.clinicianA), `clients/${ids.legacyPatient}`)));
         await assertFails(getDoc(doc(await as(ids.clinicianA), `clients/${ids.splitPatient}`)));
-        await assertSucceeds(getDoc(doc(await as(ids.clinicianB), `clients/${ids.splitPatient}`)));
+        await assertFails(getDoc(doc(await as(ids.clinicianB), `clients/${ids.splitPatient}`)));
     });
 
-    it("supports the roster queries the app issues and rejects another clinician's roster", async () => {
+    it('denies every roster query', async () => {
         const clinicianA = await as(ids.clinicianA);
-        await assertSucceeds(getDocs(query(collection(clinicianA, 'clients'), where('clinicianId', '==', ids.clinicianA))));
-        await assertSucceeds(getDocs(query(collection(clinicianA, 'clients'),
+        await assertFails(getDocs(query(collection(clinicianA, 'clients'), where('clinicianId', '==', ids.clinicianA))));
+        await assertFails(getDocs(query(collection(clinicianA, 'clients'),
             where('linkedClinicianCode', '==', ids.clinicianA), where('clinicianId', '==', null))));
-        await assertSucceeds(getDocs(query(collection(await as(ids.colleagueA), 'clients'), where('clinicId', '==', clinicA))));
-        await assertFails(getDocs(query(collection(await as(ids.clinicianB), 'clients'), where('clinicianId', '==', ids.clinicianA))));
-        await assertFails(getDocs(query(collection(await as(ids.clinicianB), 'clients'), where('clinicId', '==', clinicA))));
-        await assertFails(getDocs(collection(await as(ids.clinicianA), 'clients')));
+        await assertFails(getDocs(query(collection(await as(ids.colleagueA), 'clients'), where('clinicId', '==', clinicA))));
+        await assertFails(getDocs(collection(clinicianA, 'clients')));
+        await assertFails(getDocs(collection(await as(ids.patientA), 'clients')));
     });
 });
 
@@ -93,52 +93,30 @@ describe('clients/{patientId} updates', () => {
         await assertFails(updateDoc(reference, { acceptedInvitationId: 'INVB-BBBB-BBBB' }));
     });
 
-    it('lets the canonical clinician update care fields and fully unlink, but not reassign', async () => {
-        const clinicianA = await as(ids.clinicianA);
-        const reference = doc(clinicianA, `clients/${ids.patientA}`);
-        await assertSucceeds(updateDoc(reference, { assignedProtocol: 'alpha-enhancement' }));
-        await assertFails(updateDoc(reference, { clinicianId: ids.clinicianB }));
-        await assertFails(updateDoc(reference, { clinicId: clinicB }));
-        await assertFails(updateDoc(reference, { clinicianId: null }));
-        await assertSucceeds(updateDoc(reference, {
-            clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null,
-        }));
+    it('denies every update by a former clinician or colleague, including care fields and unlinking', async () => {
+        for (const uid of [ids.clinicianA, ids.colleagueA]) {
+            const reference = doc(await as(uid), `clients/${ids.patientA}`);
+            await assertFails(updateDoc(reference, { assignedProtocol: 'alpha-enhancement' }));
+            await assertFails(updateDoc(reference, { prescribedSessionsPerWeek: 4 }));
+            await assertFails(updateDoc(reference, {
+                clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null,
+            }));
+        }
+        const legacy = doc(await as(ids.clinicianA), `clients/${ids.legacyPatient}`);
+        await assertFails(updateDoc(legacy, { clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null }));
     });
 
-    it('rejects an unlink that also changes other profile fields', async () => {
-        await assertFails(updateDoc(doc(await as(ids.clinicianA), `clients/${ids.patientA}`), {
-            clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null, name: 'Renamed on the way out',
-        }));
-    });
-
-    it('lets clinic colleagues update care fields but never the relationship', async () => {
-        const colleague = await as(ids.colleagueA);
-        const reference = doc(colleague, `clients/${ids.patientA}`);
-        await assertSucceeds(updateDoc(reference, { prescribedSessionsPerWeek: 4 }));
-        await assertFails(updateDoc(reference, { clinicianId: ids.colleagueA }));
-        await assertFails(updateDoc(reference, {
-            clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null,
-        }));
-    });
-
-    it('denies updates from unrelated clinicians, other patients, stale legacy owners, and anonymous users', async () => {
-        await assertFails(updateDoc(doc(await as(ids.clinicianB), `clients/${ids.patientA}`), { assignedProtocol: 'x' }));
+    it('denies updates from other patients and anonymous users', async () => {
         await assertFails(updateDoc(doc(await as(ids.patientB), `clients/${ids.patientA}`), { name: 'x' }));
-        await assertFails(updateDoc(doc(await as(ids.clinicianA), `clients/${ids.splitPatient}`), { assignedProtocol: 'x' }));
         await assertFails(updateDoc(doc(await anonymous(), `clients/${ids.patientA}`), { name: 'x' }));
-    });
-
-    it('lets a legacy-only clinician unlink but never convert the link into a canonical one', async () => {
-        const reference = doc(await as(ids.clinicianA), `clients/${ids.legacyPatient}`);
-        await assertFails(updateDoc(reference, { clinicianId: ids.clinicianA }));
-        await assertSucceeds(updateDoc(reference, { clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null }));
     });
 });
 
 describe('clients/{patientId} deletion', () => {
-    it('allows only an unlinked patient to delete their own profile', async () => {
+    it('allows only a patient with no stored relationship to delete their own profile', async () => {
         await assertSucceeds(deleteDoc(doc(await as(ids.unlinked), `clients/${ids.unlinked}`)));
         await assertFails(deleteDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`)));
         await assertFails(deleteDoc(doc(await as(ids.clinicianA), `clients/${ids.patientA}`)));
+        await assertFails(deleteDoc(doc(await as(ids.patientB), `clients/${ids.unlinked}`)));
     });
 });

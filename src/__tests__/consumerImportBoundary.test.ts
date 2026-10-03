@@ -285,13 +285,13 @@ describe('import boundary checker', () => {
   });
 
   it('finds clinical paths in the modules a file loads, not only in the file itself', () => {
-    // messageRepository reads clients/{patientId}; anything that imports it reaches that path.
-    expect(clinicalPathsReachedFrom('src/services/messageRepository.ts'))
-      .toContainEqual(expect.stringMatching(/^src\/services\/messageRepository\.ts: doc\(\.\.\. 'clients' \.\.\.\)$/));
-    const importer = Object.keys(SOURCES).find((file) => !isTestFile(file) && file !== 'src/services/messageRepository.ts'
+    // storageEngine reads clients/{uid}; anything that imports it reaches that path.
+    expect(clinicalPathsReachedFrom('src/services/storageEngine.ts'))
+      .toContainEqual(expect.stringMatching(/^src\/services\/storageEngine\.ts: doc\(\.\.\. 'clients' \.\.\.\)$/));
+    const importer = Object.keys(SOURCES).find((file) => !isTestFile(file) && file !== 'src/services/storageEngine.ts'
       && factsOf(file).clinicalPaths.length === 0
-      && factsOf(file).specifiers.some((specifier) => resolveModule(file, specifier) === 'src/services/messageRepository.ts'));
+      && factsOf(file).specifiers.some((specifier) => resolveModule(file, specifier) === 'src/services/storageEngine.ts'));
     expect(importer).toBeDefined();
-    expect(clinicalPathsReachedFrom(importer!)).toContainEqual(expect.stringContaining(' -> src/services/messageRepository.ts: '));
+    expect(clinicalPathsReachedFrom(importer!)).toContainEqual(expect.stringContaining(' -> src/services/storageEngine.ts: '));
   });
 });

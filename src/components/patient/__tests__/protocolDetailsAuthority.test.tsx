@@ -18,7 +18,7 @@ async function details(client: ClientProfile) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-// A clinician-edited note, as kept on the profile after the clinician unlinks (existing unlink policy).
+// A note a clinician saved with an assignment under the retired clinician product.
 const withClinicianNote = (client: ClientProfile): ClientProfile => ({
   ...client, customProtocolConfig: { ...getClinicalProtocolTemplate('theta-beta-ratio')!, clinicalNotes: 'Keep sessions in the evening.' },
 });
@@ -26,25 +26,22 @@ const withClinicianNote = (client: ClientProfile): ClientProfile => ({
 const unrunnable = (client: ClientProfile): ClientProfile => ({
   ...client, customProtocolConfig: { ...getClinicalProtocolTemplate('theta-beta-ratio')!, customRewardEnabled: 'yes' as never },
 });
+const unlinked = () => createBlankProfile('patient-1', 'patient@example.com');
+const legacyLinked = () => ({ ...unlinked(), clinicianId: 'clinician-1' });
 
-describe('protocol details authority wording', () => {
-  it('does not present a self-directed protocol as assigned or show clinician notes without a clinician', async () => {
-    const text = await details(withClinicianNote(createBlankProfile('patient-1', 'patient@example.com')));
-    expect(text).toContain('Your self-directed protocol');
+describe('protocol details wording', () => {
+  it.each([
+    ['an unlinked patient', unlinked],
+    ['a profile linked under the retired clinician product', legacyLinked],
+  ] as const)('presents the protocol as the patient\'s own, with no clinician note or clinician contact, for %s', async (_who, client) => {
+    const text = await details(withClinicianNote(client()));
+    expect(text).toContain('Your protocol');
     expect(text).not.toContain('Your assigned protocol');
     expect(text).not.toContain('Note from your clinician');
     expect(text).not.toContain('Keep sessions in the evening.');
-    const unavailable = await details(unrunnable(createBlankProfile('patient-1', 'patient@example.com')));
+    const unavailable = await details(unrunnable(client()));
     expect(unavailable).toContain('Training unavailable.');
-    expect(unavailable).not.toContain('contact your clinician');
-  });
-
-  it('keeps the assigned-protocol wording and clinician notes for a linked patient', async () => {
-    const linked = { ...createBlankProfile('patient-1', 'patient@example.com'), clinicianId: 'clinician-1' };
-    const text = await details(withClinicianNote(linked));
-    expect(text).toContain('Your assigned protocol');
-    expect(text).toContain('Note from your clinician');
-    expect(text).toContain('Keep sessions in the evening.');
-    expect(await details(unrunnable(linked))).toContain('Please contact your clinician.');
+    expect(unavailable).toContain('Choose a protocol again in your training setup.');
+    expect(unavailable).not.toContain('clinician');
   });
 });

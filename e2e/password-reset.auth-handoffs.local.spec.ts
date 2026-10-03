@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient } from './helpers/localEmulator';
+import { seedPatient } from './helpers/localEmulator';
 
 const authEmulator = 'http://127.0.0.1:9099';
 const projectId = 'demo-neurasticity-protocol-e2e';
@@ -17,7 +17,7 @@ async function resetEmailsFor(email: string): Promise<RecordedOobCode[]> {
 }
 
 test('password reset cooldown sends one email per request and treats unknown addresses the same', async ({ page, browser }) => {
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   const email = fixture.patient.email;
   const missingEmail = `missing-${randomUUID().slice(0, 12)}@example.test`;
   const newPassword = 'ResetLocalPassword!789';
