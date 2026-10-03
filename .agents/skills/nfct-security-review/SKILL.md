@@ -1,6 +1,6 @@
 ---
 name: nfct-security-review
-description: Adversarially review NFCT changes for security at a risk-routed tier (LIGHT, STANDARD or DEEP), each with an explicit stopping point. Read-only by default; use for changes to Firebase Auth, Firestore rules, Cloud Functions, account deletion, trusted scoring or progression, EEG persistence or privacy, secrets or configuration, or user ownership, and when asked for a security review, security hardening or an adversarial audit.
+description: Adversarially review NFCT changes for security at a risk-routed tier (LIGHT, STANDARD or DEEP), each with an explicit stopping point. Read-only by default; use for changes to Firebase Auth, Firestore rules, Cloud Functions, account deletion, trusted scoring or progression, EEG persistence or privacy, secrets or configuration, or user ownership, and when asked for a security review, security hardening or an adversarial audit. Implementers never run it on their own change: if your diff adds, changes or removes one of these boundaries and no separate orchestrator exists, you hold the orchestrator role and must have a separate reviewer run it at the routed tier before your task is complete.
 ---
 
 # NFCT security review

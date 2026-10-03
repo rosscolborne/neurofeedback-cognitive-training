@@ -1,6 +1,6 @@
 ---
 name: nfct-orchestration
-description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR, owning agent topology, review and security-tier routing, and bounded convergence. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, choosing review depth, or tracking parallel work to completion or a checkpoint.
+description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR, owning agent topology, review and security-tier routing, and bounded convergence. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, choosing review depth, or tracking parallel work to completion or a checkpoint. Also use as a solo agent with no separate orchestrator whose task ends in a PR that needs review or security routing, including cleanup or removal PRs: you route that PR and start its reviewers.
 ---
 
 # NFCT orchestration
@@ -8,11 +8,18 @@ description: Plan, coordinate and track multi-stream NFCT work across several ca
 The orchestrator decomposes the objective, assigns streams and roles, tracks
 dependencies and completion, and routes findings to their owners. It owns
 agent topology and review routing, and it keeps review within the
-[bounded review](../../../AGENTS.md#bounded-review) budget. It does not
-implement streams itself unless explicitly asked. It may act as the
-integrator under [nfct-integration](../nfct-integration/SKILL.md), but then it
-never reviews the integrated result. Point each stream at the skill that owns
+[bounded review](../../../AGENTS.md#bounded-review) budget. In multi-stream
+work it does not implement streams itself unless explicitly asked. It may act
+as the integrator under [nfct-integration](../nfct-integration/SKILL.md), but
+then it never reviews the integrated result. Point each stream at the skill that owns
 its procedure rather than restating it.
+
+A solo agent whose task ends in a PR holds this role for that PR
+([bounded review](../../../AGENTS.md#bounded-review)): apply
+[review routing](#review-routing), the [security tier](#security-tier) and
+[agent topology](#agent-topology) to it, and skip stream planning and
+integration. You implemented the change, so start a separate reviewer; never
+review it yourself.
 
 ## Read first
 
@@ -73,8 +80,10 @@ implementer or integrator.
 You choose the review gates and their depth; reviewers do not. Each gate runs
 within the [review budget](../../../AGENTS.md#review-budget).
 
-- The integration PR, or each independent PR, gets one independent review and
-  one security review at its tier.
+- The integration PR, each independent PR, or a solo task's PR is routed per
+  [which PRs get review](../../../AGENTS.md#which-prs-get-review): one
+  independent review and one security review at its tier, or a recorded
+  reason to skip.
 - A single stream gets its own review before integration only when it is
   risky on its own.
 - User-facing work gets exploratory QA.
@@ -103,6 +112,9 @@ Record the choice in the plan and the PR body as two short lines:
 Security review: STANDARD
 Reason: repository writes + offline persistent cache; no auth or rules changes.
 ```
+
+A PR that skips review records that instead, for example
+`Review: skipped (docs-only)`.
 
 ## Agent topology
 
@@ -179,7 +191,7 @@ agent work is complete when:
 - the requested functionality is implemented and integrated: the integration
   report says its agent work is complete or, for independent PRs, the
   combined check has passed at the heads that will merge;
-- the applicable tests pass, and the final head's CI (7) has started;
+- the applicable tests pass, and the final head's CI (7) state is reported;
 - phases 4–6 have passed, with QA and the selected reviews finished within
   their budget and no BLOCKER open;
 - open SHOULD-FIX and FOLLOW-UP findings are carded, and the remaining human

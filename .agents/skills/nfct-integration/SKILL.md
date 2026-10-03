@@ -196,10 +196,12 @@ one.
 4. **Final validation.** If anything was committed after gate 1's run, rerun
    the full deterministic suite once on the final head. This is the one
    combined validation pass the report cites; do not rerun it after each fix.
-5. **Remote validation.** Push the final head, mark the PR ready for review,
-   and report that Pre-merge validation has not run on it yet, with the
-   command (`gh workflow run ci.yml --ref <branch>`); start it only if the user
-   asked you to, and do not wait for it
+5. **Remote validation.** Push the final head. For a native-sensitive
+   change, run `ios.yml` on it first
+   ([AGENTS.md](../../../AGENTS.md#lifecycle-and-remote-validation), step 3).
+   Mark the PR ready for review, and report that Pre-merge validation has
+   not run on it yet, with the command (`gh workflow run ci.yml --ref
+   <branch>`); start it only if the user asked you to, and do not wait for it
    ([completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)).
    It is a merge gate: the PR is merge-ready only with a green `Pre-merge
    validation` status on that head. If it has failed, the PR is not
