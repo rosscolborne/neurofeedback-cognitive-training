@@ -267,11 +267,13 @@ Review and test depth follow the change's realistic blast radius.
   does not get several reviewer or tester agents, or the browser, emulator or
   native suites, unless it touches a boundary below.
 - A cohesive change in between (one objective and one PR, even across
-  several files, subtasks or acceptance criteria) is one stream with no
-  orchestration. It gets the checks that cover what it touches and only the
-  gates [routed](#which-prs-get-review) for it; it does not get extra
-  reviewer, tester or QA agents, or suites beyond what it touches, unless it
-  touches a boundary below.
+  several files, subtasks or acceptance criteria) is one stream: no stream
+  planning, splitting or integration. Its agent still routes it and starts
+  the routed reviewers ([bounded review](#bounded-review)). It gets the checks
+  that cover what it touches and only the gates
+  [routed](#which-prs-get-review) for it; it does not get extra reviewer,
+  tester or QA agents, or suites beyond what it touches, unless it touches a
+  boundary below.
 - Substantial work (several features or cards, an integration, an overnight
   batch) keeps the full [checks](#checks) and the routed reviews and QA.
 - Exploratory QA scales the same way: a trivial copy or comment change is
