@@ -246,7 +246,7 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
 
   // The history and totals survive a reload.
   await page.reload();
-  await arriveAtHome(page);
+  await arriveAtHome(page, { afterReload: true });
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   await page.getByRole('button', { name: 'Mental Math records and history', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();

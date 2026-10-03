@@ -123,7 +123,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
 
   // It survives a reload.
   await page.reload();
-  await arriveAtHome(page);
+  await arriveAtHome(page, { afterReload: true });
   await expect(overview(page, 'streak')).toHaveText('1');
   await expect(achievementRow(page, 'first-run')).toHaveAttribute('data-earned', 'true');
 });

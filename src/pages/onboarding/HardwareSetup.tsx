@@ -18,6 +18,8 @@ interface HardwareSetupProps {
  */
 export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pair' }) => {
   const navigate = useNavigate();
+  // Replaces this step in history, so the browser's Back from Home never reopens setup.
+  const leaveSetup = () => navigate('/', { replace: true });
 
   const [step, setStep] = useState<SetupStep>(initialStep);
   const [connecting, setConnecting] = useState(false);
@@ -112,7 +114,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
         </div>
 
         <button
-          onClick={() => navigate('/')}
+          onClick={leaveSetup}
           style={{
             background: 'transparent',
             border: 'none',
@@ -307,7 +309,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
           </div>
 
           <button
-            onClick={() => navigate('/')}
+            onClick={leaveSetup}
             disabled={goodChannelsCount < 2}
             className="btn btn-primary"
             style={{

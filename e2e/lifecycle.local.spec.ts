@@ -64,7 +64,7 @@ test('wrong deletion password keeps the account and profile intact', async ({ br
     await expect(confirmDeletion).toBeEnabled();
     expect(await authenticatedUserId(player)).toBe(fixture.player.uid);
     await player.reload();
-    await arriveAtHome(player);
+    await arriveAtHome(player, { afterReload: true });
     await player.getByRole('button', { name: 'Profile', exact: true }).click();
     await expect(player.getByText(fixture.player.email)).toBeVisible();
     const stored = await readAccountRecords(fixture.player.uid);

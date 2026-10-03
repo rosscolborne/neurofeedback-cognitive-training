@@ -217,7 +217,7 @@ test('a run saved while Firestore is unreachable survives a reload and is upload
 
   // The queued write is in the persistent cache, so it survives a full reload.
   await page.reload();
-  await arriveAtHome(page);
+  await arriveAtHome(page, { afterReload: true });
   expect(await readGameSessions(uid)).toHaveLength(0);
 
   await context.unroute(firestore);
