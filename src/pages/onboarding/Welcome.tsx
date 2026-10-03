@@ -41,7 +41,7 @@ export const Welcome: React.FC = () => {
         justifyContent: 'center',
         padding: 'calc(32px + env(safe-area-inset-top, 0px)) 24px calc(32px + env(safe-area-inset-bottom, 0px))',
         boxSizing: 'border-box',
-        backgroundColor: 'var(--surface-patient-base)',
+        backgroundColor: 'var(--surface-base)',
         backgroundImage: 'radial-gradient(circle at 50% 35%, rgba(209, 109, 77, 0.09) 0%, rgba(248, 247, 244, 0) 65%)',
         position: 'relative',
         overflow: 'hidden',
@@ -133,7 +133,7 @@ export const Welcome: React.FC = () => {
               padding: '14px',
               fontSize: '15px',
               borderRadius: 'var(--radius-xl)',
-              backgroundColor: 'var(--surface-patient-card)',
+              backgroundColor: 'var(--surface-card)',
               border: '1px solid var(--border-default)',
               color: 'var(--text-primary)',
             }}

@@ -87,7 +87,6 @@ describe('CatalogueCard emphasis', () => {
     const items = renderer.root.findAllByProps({ className: 'train-card-mix-item' });
     expect(items.map(visibleTextOf)).toEqual(['Math 100%', 'Memory <1%']);
     expect(renderer.root.findByProps({ className: 'train-card-mix-bar' }).children).toHaveLength(1);
-    expect(renderer.root.findAll((node) => String(node.props.className).includes('train-card-tags'))).toHaveLength(0);
     act(() => renderer.unmount());
   });
 });

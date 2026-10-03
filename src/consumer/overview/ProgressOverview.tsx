@@ -27,8 +27,7 @@ import {
 import '../games/mentalMath/mentalMath.css';
 import './overview.css';
 
-// Progress's game performance (NFCT-13 part 2), ahead of the optional
-// neurofeedback history: all-time figures and the streak (stats/summary), the
+// Progress's game performance (NFCT-13 part 2): all-time figures and the streak (stats/summary), the
 // games (per-game progress, NFCT-22), this week's or this month's activity
 // from at most 31 dailyStats documents, and every achievement in the
 // catalogue, earned or not yet. Nothing here is EEG-derived, and no domain

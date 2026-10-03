@@ -79,9 +79,9 @@ export function consumerProfile(timezone: string, weeklyGoal: UserProfile['prefe
   };
 }
 
-/** What the inherited sign-up leaves at users/{uid}: not a consumer profile. */
-export const legacyProfile: DocumentRead<UserProfile> = {
-  status: 'unreadable', id: 'player-1', fromCache: false, hasPendingWrites: false, error: new Error('legacy profile') as never,
+/** A users/{uid} document this build cannot read (such as a newer schema). */
+export const unreadableProfile: DocumentRead<UserProfile> = {
+  status: 'unreadable', id: 'player-1', fromCache: false, hasPendingWrites: false, error: new Error('unreadable profile') as never,
 };
 
 /** One finished Mental Math run as a history row: verified by the server, or still on this device. */
@@ -128,7 +128,7 @@ export function fakeSources(state: FakeState) {
     // A new object per harness, so the per-repository profile read is never shared between tests.
     profile: { getProfile: vi.fn(async () => {
       if (state.profile === 'error') throw new Error('offline');
-      return state.profile ?? legacyProfile;
+      return state.profile ?? unreadableProfile;
     }) },
     gameSessions: {
       subscribeToGameSessionHistory: vi.fn((_options: unknown, onNext: (page: GameSessionHistoryPage) => void, onError: (error: Error) => void) => {

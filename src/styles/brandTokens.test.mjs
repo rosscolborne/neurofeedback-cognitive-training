@@ -21,7 +21,7 @@ describe('brand tokens', () => {
   it('keeps the accent readable as text on every light surface, and text on the accent readable', () => {
     const accent = token('brand-primary');
     expect(accent).toBeDefined();
-    for (const surface of ['#FFFFFF', token('surface-patient-base'), token('surface-patient-card')]) {
+    for (const surface of ['#FFFFFF', token('surface-base'), token('surface-card')]) {
       expect(surface).toBeDefined();
       expect(contrast(accent, surface)).toBeGreaterThanOrEqual(4.5);
     }

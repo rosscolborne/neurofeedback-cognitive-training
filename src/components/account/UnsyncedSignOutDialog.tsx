@@ -75,7 +75,7 @@ export const UnsyncedSignOutDialog: React.FC<UnsyncedSignOutDialogProps> = ({ si
         aria-describedby="unsynced-sign-out-description"
         style={{
           width: 'min(440px, 100%)', maxHeight: '100%', overflowY: 'auto',
-          borderRadius: '24px', background: 'var(--surface-patient-card)', border: '1px solid var(--border-subtle)',
+          borderRadius: '24px', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)',
           boxShadow: '0 24px 70px rgba(58, 49, 43, 0.2)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px',
         }}
       >

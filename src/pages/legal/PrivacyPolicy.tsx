@@ -8,7 +8,7 @@ export const PrivacyPolicy: React.FC = () => {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'var(--surface-patient-base)',
+      background: 'var(--surface-base)',
       color: 'var(--text-primary)',
       padding: '40px 20px',
       maxWidth: '800px',

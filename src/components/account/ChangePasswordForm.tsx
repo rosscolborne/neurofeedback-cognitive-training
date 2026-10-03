@@ -57,7 +57,7 @@ export const ChangePasswordForm: React.FC = () => {
 
   return (
     <div
-      className="card-patient"
+      className="card-surface"
       style={{ backgroundColor: '#FFFFFF' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>

@@ -52,9 +52,9 @@ describe('the player’s zone and today', () => {
     const fromProfile = playerZone(profileRead('America/Toronto', null), 'UTC');
     expect(fromProfile).toEqual({ zone: 'America/Toronto', source: 'profile' });
     expect(playerToday(fromProfile, nowMs)).toBe('2026-09-30');
-    // The inherited sign-up's profile is not a consumer profile: the device's zone is used.
-    const legacy: DocumentRead<UserProfile> = { status: 'unreadable', id: 'player-1', fromCache: false, hasPendingWrites: false, error: new Error('legacy') as never };
-    expect(playerZone(legacy, 'Asia/Tokyo')).toEqual({ zone: 'Asia/Tokyo', source: 'device' });
+    // A profile this build cannot read: the device's zone is used.
+    const unreadable: DocumentRead<UserProfile> = { status: 'unreadable', id: 'player-1', fromCache: false, hasPendingWrites: false, error: new Error('unreadable') as never };
+    expect(playerZone(unreadable, 'Asia/Tokyo')).toEqual({ zone: 'Asia/Tokyo', source: 'device' });
     expect(playerZone(null, 'UTC')).toEqual({ zone: 'UTC', source: 'device' });
     expect(playerToday({ zone: 'UTC', source: 'device' }, nowMs)).toBe(TODAY);
   });

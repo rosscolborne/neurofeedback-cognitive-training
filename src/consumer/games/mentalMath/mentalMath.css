@@ -1,4 +1,4 @@
-/* Mental Math (NFCT-21, NFCT-22). Same column, surfaces and tokens as the patient app. */
+/* Mental Math (NFCT-21, NFCT-22). Same column, surfaces and tokens as the rest of the app. */
 
 .mm-screen {
   width: 100%;
@@ -11,7 +11,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  background-color: var(--surface-patient-base);
+  background-color: var(--surface-base);
 }
 
 .mm-topbar {
@@ -39,7 +39,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
@@ -122,7 +122,7 @@
   min-height: 48px;
   border: 1.5px solid var(--border-default);
   border-radius: var(--radius-md);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   color: var(--text-primary);
   font-size: 17px;
   font-weight: 600;
@@ -148,7 +148,7 @@
 
 .mm-level-locked {
   border-style: dashed;
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-tertiary);
   cursor: not-allowed;
 }
@@ -177,7 +177,7 @@
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   cursor: pointer;
 }
 
@@ -232,7 +232,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
 }
 
 .mm-hud-stats {
@@ -315,7 +315,7 @@
   padding: 0 var(--space-3);
   border: 1.5px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--surface-patient-card);
+  background: var(--surface-card);
   color: var(--text-primary);
   font: 600 14px var(--font-body);
   cursor: pointer;
@@ -328,7 +328,7 @@
 }
 
 .mm-pause:active:not(:disabled) {
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
 }
 
 .mm-pause:disabled {
@@ -349,7 +349,7 @@
   padding: var(--space-5) var(--space-4);
   border: 2px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   text-align: center;
   transition: border-color 0.12s ease, background-color 0.12s ease;
 }
@@ -417,7 +417,7 @@
   min-height: 60px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   color: var(--text-primary);
   font: 600 24px var(--font-body);
   font-variant-numeric: tabular-nums;
@@ -429,12 +429,12 @@
 }
 
 .mm-key:active:not([aria-disabled='true']) {
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
 }
 
 .mm-key-muted {
   color: var(--text-secondary);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
 }
 
 .mm-key-submit {
@@ -514,7 +514,7 @@
   padding: var(--space-4);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
 }
 
 .mm-score-top {
@@ -621,7 +621,7 @@
   height: 36px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-secondary);
 }
 
@@ -655,7 +655,7 @@
 }
 
 .mm-highlight-achieved .mm-highlight-icon {
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   color: var(--status-completed);
 }
 
@@ -665,7 +665,7 @@
 }
 
 .mm-highlight-achieved.mm-highlight-pending {
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
 }
 
 .mm-highlight-achieved.mm-highlight-pending .mm-highlight-icon {
@@ -686,7 +686,7 @@
 .mm-save {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
@@ -709,7 +709,7 @@
   z-index: 1;
   margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
   padding: var(--space-3) var(--space-4) max(var(--space-4), env(safe-area-inset-bottom, 16px));
-  background-color: var(--surface-patient-base);
+  background-color: var(--surface-base);
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -854,7 +854,7 @@
   padding: var(--space-4);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
 }
 
 .mm-progress-card-icon {

@@ -1,6 +1,5 @@
 /* ==========================================================================
-   WAVEABLE DESIGN SYSTEM SPECIFICATION V1.0
-   White-Label Neurofeedback Platform CSS Architecture
+   App-wide design tokens, base styles and shared components
    ========================================================================== */
 
 @import './fonts.css';
@@ -13,9 +12,9 @@
   --brand-on-primary: #FFFFFF;
 
   /* Surfaces */
-  --surface-patient-base: #F8F7F4;
-  --surface-patient-card: #FFFFFF;
-  --surface-patient-recessed: #F2F1EE;
+  --surface-base: #F8F7F4;
+  --surface-card: #FFFFFF;
+  --surface-recessed: #F2F1EE;
 
 
   /* Text & Ink */
@@ -42,14 +41,6 @@
   --status-active-text: #467034;
   --status-paused-text: #735C1E;
   --status-alert-text: #A84646;
-
-  /* Color-Blind-Safe EEG Bands */
-  --chart-delta: #4A90D9;  /* Solid Blue */
-  --chart-theta: #E8967A;  /* Soft Coral / Orange */
-  --chart-alpha: #7B68AE;  /* Purple */
-  --chart-smr:   #5C8C46;  /* Sage Green */
-  --chart-beta:  #C4A35A;  /* Ochre Gold */
-  --chart-gamma: #3A78C0;  /* Deep Ocean Blue */
 
   /* Shapes & Radii */
   --radius-xs: 4px;
@@ -85,7 +76,7 @@
 html, body {
   width: 100%;
   min-height: 100%;
-  background-color: var(--surface-patient-base);
+  background-color: var(--surface-base);
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 15px;
@@ -132,8 +123,8 @@ a, button, input, label, select, textarea {
 }
 
 /* Clean Hairline Cards (No Drop Shadows) */
-.card-patient {
-  background-color: var(--surface-patient-card);
+.card-surface {
+  background-color: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
@@ -181,12 +172,8 @@ a, button, input, label, select, textarea {
   }
 
   .btn-ghost:hover {
-    background-color: var(--surface-patient-recessed);
+    background-color: var(--surface-recessed);
     color: var(--text-primary);
-  }
-
-  .btn-dense:hover {
-    background-color: #2D3A44;
   }
 }
 
@@ -209,15 +196,6 @@ a, button, input, label, select, textarea {
   border-radius: var(--radius-md);
   padding: 8px 16px;
   font-size: 14px;
-}
-
-.btn-dense {
-  background-color: #3A4B58;
-  color: #FFFFFF;
-  border-radius: var(--radius-md);
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
 }
 
 /* Status Tags */
@@ -253,7 +231,7 @@ a, button, input, label, select, textarea {
 }
 
 .status-tag-neutral {
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-secondary);
 }
 
@@ -294,7 +272,7 @@ a, button, input, label, select, textarea {
     gap: 12px;
   }
 
-  .card-patient {
+  .card-surface {
     padding: 18px;
   }
 }
@@ -317,7 +295,7 @@ a, button, input, label, select, textarea {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--surface-patient-card);
+  background: var(--surface-card);
 }
 
 .list-row {
@@ -343,7 +321,7 @@ a, button, input, label, select, textarea {
 
 @media (hover: hover) {
   .list-row:hover:not(:disabled) {
-    background: var(--surface-patient-base);
+    background: var(--surface-base);
   }
 }
 
@@ -457,7 +435,7 @@ a, button, input, label, select, textarea {
   list-style: none;
 }
 
-/* The hairline card surface of .card-patient. */
+/* The hairline card surface of .card-surface. */
 .train-grid > .train-card {
   position: relative;
   display: grid;
@@ -467,7 +445,7 @@ a, button, input, label, select, textarea {
   align-items: start;
   min-width: 0;
   padding: 16px;
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -524,18 +502,6 @@ a, button, input, label, select, textarea {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
-}
-
-.train-card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 4px 0 0;
-}
-
-.train-card-tag {
-  padding: 2px 8px;
-  font-size: 11px;
 }
 
 /* What a game trains (NFCT-65): "Trains" beside a thin bar split by the
@@ -716,10 +682,6 @@ a, button, input, label, select, textarea {
   }
 }
 
-.account-deletion-finish {
-  max-width: 420px;
-}
-
 .account-deletion-confirmation {
   display: flex;
   flex-direction: column;
@@ -737,14 +699,6 @@ a, button, input, label, select, textarea {
   margin-top: 12px;
   padding-top: 0;
   border-top: 0;
-}
-
-.account-deletion-recovery .account-deletion-confirmation {
-  max-width: 420px;
-  padding: 16px;
-  border: 1px solid var(--account-deletion-red);
-  border-radius: var(--radius-md);
-  background: var(--status-alert-bg);
 }
 
 .account-deletion-label {

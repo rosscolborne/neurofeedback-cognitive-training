@@ -1,4 +1,4 @@
-/* Home and Progress around game performance (NFCT-13). Same column, surfaces and tokens as the patient app. */
+/* Home and Progress around game performance (NFCT-13). Same column, surfaces and tokens as the rest of the app. */
 
 .ov-stack {
   display: flex;
@@ -13,7 +13,7 @@
   padding: var(--space-5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
 }
 
 .ov-card-head {
@@ -115,7 +115,7 @@
   height: 48px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-tertiary);
 }
 
@@ -169,7 +169,7 @@
   height: 32px;
   border: 2px solid transparent;
   border-radius: var(--radius-full);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--brand-on-primary);
 }
 
@@ -273,7 +273,7 @@
   height: 40px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-tertiary);
 }
 
@@ -360,7 +360,7 @@
   gap: var(--space-1);
   padding: var(--space-1);
   border-radius: var(--radius-xl);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
 }
 
 .ov-segment {
@@ -376,7 +376,7 @@
 }
 
 .ov-segment[aria-pressed='true'] {
-  background-color: var(--surface-patient-card);
+  background-color: var(--surface-card);
   color: var(--text-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
@@ -449,7 +449,7 @@
   max-height: 52px;
   border: 2px solid transparent;
   border-radius: var(--radius-sm);
-  background-color: var(--surface-patient-recessed);
+  background-color: var(--surface-recessed);
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;

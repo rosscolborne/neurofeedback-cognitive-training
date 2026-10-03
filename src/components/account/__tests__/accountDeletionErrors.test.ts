@@ -23,7 +23,7 @@ describe('getAccountDeletionErrorMessage', () => {
     },
   );
 
-  it('asks the patient to wait after too many attempts', () => {
+  it('asks the player to wait after too many attempts', () => {
     const message = getAccountDeletionErrorMessage(firebaseError('auth/too-many-requests'));
     expect(message).toBe('Too many attempts. Please wait a few minutes and try again.');
     expectReadable(message);

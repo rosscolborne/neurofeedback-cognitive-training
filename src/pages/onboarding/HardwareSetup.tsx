@@ -72,7 +72,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
       style={{
         minHeight: '100dvh',
         width: '100%',
-        backgroundColor: 'var(--surface-patient-base, #F8F7F4)',
+        backgroundColor: 'var(--surface-base, #F8F7F4)',
         color: 'var(--text-primary, #1A1A1A)',
         display: 'flex',
         flexDirection: 'column',
@@ -149,7 +149,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
               width: '80px',
               height: '80px',
               borderRadius: '50%',
-              backgroundColor: 'var(--surface-patient-card, #FFFFFF)',
+              backgroundColor: 'var(--surface-card, #FFFFFF)',
               border: '1px solid var(--border-default, #E8E6E1)',
               display: 'flex',
               alignItems: 'center',
@@ -282,7 +282,7 @@ export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pai
                 <div
                   key={sensor.id}
                   style={{
-                    background: 'var(--surface-patient-card, #FFFFFF)',
+                    background: 'var(--surface-card, #FFFFFF)',
                     border: `1px solid ${isGood ? '#10B981' : isFair ? '#F59E0B' : 'var(--border-default, #E8E6E1)'}`,
                     borderRadius: 'var(--radius-md, 12px)',
                     padding: '10px 6px',

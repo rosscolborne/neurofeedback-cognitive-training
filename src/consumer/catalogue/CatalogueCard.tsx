@@ -23,10 +23,6 @@ export interface CatalogueCardProps {
   readonly name: string;
   readonly description: string;
   readonly icon: React.ComponentType<{ size?: number }>;
-  /** Short labels under the description, such as an experience's type. */
-  readonly tags?: readonly string[];
-  /** What the tags are, for screen readers ("Type"). */
-  readonly tagsLabel?: string;
   /**
    * What a game trains, heaviest first, as whole percentages that sum to 100.
    * Describes the game's design, not the player.
@@ -73,12 +69,11 @@ const EmphasisMix: React.FC<{ readonly id: string; readonly shares: readonly Cat
 );
 
 export const CatalogueCard: React.FC<CatalogueCardProps> = ({
-  id, name, description, icon: Icon, tags = [], tagsLabel, emphasis = [], facts, action, className, onSelect,
+  id, name, description, icon: Icon, emphasis = [], facts, action, className, onSelect,
 }) => {
   const describedBy = [
     `${id}-desc`,
     emphasis.length > 0 ? `${id}-emphasis` : null,
-    tags.length > 0 ? `${id}-tags` : null,
     facts.length > 0 ? `${id}-facts` : null,
   ].filter(Boolean).join(' ');
   return (
@@ -91,14 +86,6 @@ export const CatalogueCard: React.FC<CatalogueCardProps> = ({
       </button>
       <p id={`${id}-desc`} className="train-card-desc">{description}</p>
       {emphasis.length > 0 && <EmphasisMix id={`${id}-emphasis`} shares={emphasis} />}
-      {tags.length > 0 && (
-        <p id={`${id}-tags`} className="train-card-tags">
-          <span className="visually-hidden">{tagsLabel}: </span>
-          {tags.map((tag, index) => (
-            <span key={tag} className="status-tag status-tag-neutral train-card-tag">{tag}{comma(index, tags.length)}</span>
-          ))}
-        </p>
-      )}
       <div className="train-card-foot">
         {facts.length > 0 && (
           <p id={`${id}-facts`} className="train-card-facts">
