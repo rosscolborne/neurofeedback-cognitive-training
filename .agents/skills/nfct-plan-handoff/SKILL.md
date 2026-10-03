@@ -37,6 +37,16 @@ stop.
 If the task conflicts with a hard rule, an ADR or the card's contract, say so
 in the plan instead of planning around it.
 
+Before finalizing, check for in-flight work that could collide with the
+task: `origin/development` (`git fetch`), `git worktree list` (and `git
+status` in any worktree that looks related), and open PRs targeting
+`development` (`gh pr list --base development`, with their changed files
+where relevant). Do not audit other branches, cards or sessions. Carry
+in-flight work into the plan and prompt only when it materially affects the
+task: an open PR touching the same files or subsystem, a worktree that already
+owns the task, a need to stack on or wait for another PR, base selection, or
+a likely merge conflict. Otherwise say nothing about it.
+
 ## Keep the plan proportional
 
 Plan the smallest change that meets the task. Do not add process, abstraction
@@ -83,7 +93,8 @@ routing does not justify.
 
 ## Output
 
-Reply with exactly these four sections and nothing else.
+Reply to the initial invocation with exactly these four sections and nothing
+else.
 
 ### `## Plan`
 
@@ -159,3 +170,18 @@ This is the fresh-chat configuration for the agent that receives the
 prompt: the orchestrator if the prompt starts with `/nfct-orchestration`.
 Choose it as in the execution strategy above. Reviewer and tester routing
 belongs in the implementation prompt, not here.
+
+## Follow-ups in the same conversation
+
+The four-section output is for the initial invocation and for a revised plan.
+
+- A narrow question, challenge, clarification or alternative: answer it
+  concisely. Do not restart planning, re-read unaffected areas, or
+  regenerate the four sections.
+- A request that changes the plan (revise it, add a constraint, change a
+  decision or the scope, or produce an updated handoff): update only the
+  affected reasoning, reusing the repo findings already established unless
+  new evidence requires revisiting them, then re-emit all four sections with
+  a self-contained `## Implementation prompt`.
+- If the user asks for a fresh plan, recompute it. If the user asks not to
+  regenerate the full output, don't.
