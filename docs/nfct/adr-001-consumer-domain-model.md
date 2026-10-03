@@ -419,7 +419,7 @@ Three more server-only aggregates, maintained by `onGameSessionCreated` in the *
 **Compatibility.** One `aggregateVersion` covers the summary, every day and the achievement set:
 
 - current: apply;
-- older (or no summary although earlier sessions already count, because they were processed before NFCT-13): rebuild every stats document inside the processing transaction from the stored results, in `endedAt` order, then apply. "Older" is decided from the `schemaVersion` and `aggregateVersion` alone, before the shape is read, so a bump that also changes the shape rebuilds rather than failing sessions;
+- older: rebuild every stats document inside the processing transaction from the stored results, in `endedAt` order, then apply. "Older" is decided from the `schemaVersion` and `aggregateVersion` alone, before the shape is read, so a bump that also changes the shape rebuilds rather than failing sessions;
 - newer, from newer code: never written; the session is retried and then marked `failed` with `stats-newer-than-code`;
 - unreadable: the session is marked `failed` with `stats-unreadable` until the admin rebuild repairs it;
 - a post-commit upgrade batch that meets newer or unreadable stats upgrades nothing and stops with `stats-not-current`; one that meets missing or older stats upgrades the session and progress and leaves the stats to the next rebuild, which then includes the upgrade.
