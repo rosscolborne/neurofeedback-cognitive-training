@@ -72,29 +72,43 @@ describe('classify-changes', () => {
   const ALL_SCENARIOS = { native: 'true', scenarios: '' };
   const NO_MAC = { native: 'false', scenarios: 'smoke' };
   it.each([
-    // What the Xcode build or the Simulator scenarios depend on starts the macOS job.
-    ['ios/App/App/Info.plist', SMOKE], ['ios/App/ci_scripts/ci_post_clone.sh', SMOKE], ['capacitor.config.ts', SMOKE],
-    ['package.json', SMOKE], ['package-lock.json', SMOKE], ['.nvmrc', SMOKE], ['vite.config.ts', SMOKE],
-    ['scripts/verify-ios-release.mjs', SMOKE], ['src/main.tsx', SMOKE], ['src/App.tsx', SMOKE],
-    ['src/contexts/AuthContext.tsx', SMOKE], ['src/services/firebase.ts', SMOKE], ['src/services/firebaseConfig.ts', SMOKE],
-    ['src/pages/onboarding/RoleSelection.tsx', SMOKE], ['.github/workflows/ci.yml', SMOKE],
-    // Mental Math, the scenario driver and the iOS workflow run every scenario.
-    ['src/consumer/games/mentalMath/MentalMathScreen.tsx', ALL_SCENARIOS], ['scripts/ios/simulator-smoke.mjs', ALL_SCENARIOS],
-    ['.github/workflows/ios.yml', ALL_SCENARIOS],
-    // Unit tests, other web code, documentation and the other workflows do not.
-    ['src/consumer/games/mentalMath/__tests__/MentalMathScreen.test.tsx', NO_MAC], ['src/contexts/__tests__/AuthContextRoleLookup.test.tsx', NO_MAC],
-    ['src/index.css', NO_MAC], ['src/consumer/catalogue/GameCatalogue.tsx', NO_MAC], ['firestore.rules', NO_MAC],
-    ['ios/App/README.md', NO_MAC], ['docs/nfct/ios.md', NO_MAC],
+    // The native build's own inputs start the macOS job.
+    ['ios/App/App/Info.plist', SMOKE], ['ios/App/App.xcodeproj/project.pbxproj', SMOKE], ['ios/App/ci_scripts/ci_post_clone.sh', SMOKE],
+    ['ci_scripts/ci_post_clone.sh', SMOKE], ['capacitor.config.ts', SMOKE], ['package.json', SMOKE], ['package-lock.json', SMOKE],
+    ['.nvmrc', SMOKE], ['vite.config.ts', SMOKE], ['scripts/verify-ios-release.mjs', SMOKE],
+    // So does app code that calls native APIs through Capacitor.
+    ['src/consumer/games/mentalMath/MentalMathGame.tsx', SMOKE], ['src/services/eegEngine.ts', SMOKE], ['src/services/pdfReportGenerator.ts', SMOKE],
+    // The scenario driver and the iOS workflow run every scenario.
+    ['scripts/ios/simulator-smoke.mjs', ALL_SCENARIOS], ['scripts/ios/simulator-scenarios.mjs', ALL_SCENARIOS], ['.github/workflows/ios.yml', ALL_SCENARIOS],
+    // Ordinary feature work does not, even on screens the scenarios drive.
+    ['src/App.tsx', NO_MAC], ['src/main.tsx', NO_MAC], ['src/contexts/AuthContext.tsx', NO_MAC], ['src/services/firebase.ts', NO_MAC],
+    ['src/services/firebaseConfig.ts', NO_MAC], ['src/pages/onboarding/RoleSelection.tsx', NO_MAC],
+    ['src/consumer/games/mentalMath/MentalMathScreen.tsx', NO_MAC], ['src/consumer/catalogue/GameCatalogue.tsx', NO_MAC], ['src/index.css', NO_MAC],
+    ['shared/games/mental-math/v1/params.ts', NO_MAC], ['firestore.rules', NO_MAC], ['e2e/mental-math.lifecycle.local.spec.ts', NO_MAC],
+    // Nor do tests, documentation (even under ios/) or the other workflows.
+    ['src/consumer/games/mentalMath/__tests__/MentalMathScreen.test.tsx', NO_MAC], ['src/services/__tests__/eegEngine.test.ts', NO_MAC],
+    ['ios/App/README.md', NO_MAC], ['docs/nfct/ios.md', NO_MAC], ['.github/workflows/ci.yml', NO_MAC],
     ['.github/workflows/web.yml', NO_MAC], ['.github/workflows/backend.yml', NO_MAC], ['.github/workflows/release.yml', NO_MAC],
+    // A file that no longer exists is judged by its path alone.
+    ['src/services/removedNativeBridge.ts', NO_MAC],
   ])('macOS job for %s', (path, expected) => {
     const { native, scenarios } = classify([path]);
     expect({ native, scenarios }).toEqual(expected);
   });
 
-  it('runs every scenario if any one file needs them', () => {
-    const { native, scenarios } = classify(['src/App.tsx', 'src/consumer/games/mentalMath/__tests__/x.test.tsx', 'scripts/ios/simulator-runtime.mjs']);
-    expect({ native, scenarios }).toEqual(ALL_SCENARIOS);
-    expect(classify(['src/App.tsx', 'src/consumer/games/mentalMath/__tests__/x.test.tsx']).scenarios).toBe('smoke');
+  it('runs the macOS job if any one file needs it, and every scenario only for the driver or the workflow', () => {
+    const mac = (paths) => { const { native, scenarios } = classify(paths); return { native, scenarios }; };
+    expect(mac(['src/App.tsx', 'ios/App/README.md', 'src/contexts/AuthContext.tsx'])).toEqual(NO_MAC);
+    expect(mac(['src/App.tsx', 'src/services/eegEngine.ts'])).toEqual(SMOKE);
+    expect(mac(['src/App.tsx', 'capacitor.config.ts', 'scripts/ios/simulator-runtime.mjs'])).toEqual(ALL_SCENARIOS);
+  });
+
+  it('counts every app file that uses Capacitor as native', () => {
+    const tracked = spawnSync('git', ['ls-files', 'src'], { encoding: 'utf8' }).stdout.trim().split('\n')
+      .filter((path) => /\.(ts|tsx)$/.test(path) && !/(^|\/)__tests__\/|\.test\.tsx?$/.test(path));
+    const native = tracked.filter((path) => /@capacitor\/|@capacitor-community\/|\bCapacitor\./.test(readFileSync(path, 'utf8')));
+    expect(native).toEqual(expect.arrayContaining(['src/services/eegEngine.ts', 'src/services/pdfReportGenerator.ts']));
+    for (const path of native) expect(classify([path]).native, path).toBe('true');
   });
 
   it('fails safe: an empty, missing or unreadable listing runs everything', () => {

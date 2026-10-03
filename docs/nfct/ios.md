@@ -208,25 +208,32 @@ Xcode version and Simulator runtimes. In order:
 development → main promotions (stopping after step 4), and weekly; nothing
 runs it on a push. Pre-merge validation skips the release-bundle, WebKit and
 native jobs for a branch that changes only documentation or agent
-instructions. Otherwise it runs the native job only when the branch changes
-native-relevant paths (unit tests in `__tests__/` do not count), or when
-change detection fails (`scripts/ci/classify-changes.sh`):
+instructions.
 
-- `ios/`, `capacitor.config.*`, `package.json`, `package-lock.json`,
-  `.nvmrc`, `vite.config.ts`;
-- the iOS scripts, `ios.yml` and `ci.yml`;
-- what the scenarios drive: the Firebase setup, `src/App.tsx` and
-  `AuthContext.tsx`, the onboarding screens and Mental Math
-  (`src/consumer/games/mentalMath/`).
+Simulator CI is optional for ordinary feature work. Pre-merge validation runs
+the native job only for a native or iOS-sensitive change, or when change
+detection fails (`scripts/ci/classify-changes.sh`). That means:
 
-Pre-merge validation runs every scenario when the branch changes Mental Math,
-the iOS scripts or `ios.yml`, and only `smoke` otherwise. A manual run of
-`ios.yml` runs every scenario unless told otherwise; the weekly run runs
-`smoke` on the oldest supported iOS, against `development`.
+- the native build's own inputs: `ios/`, `ci_scripts/`, `capacitor.config.*`,
+  `package.json`, `package-lock.json` (the Swift packages come from
+  `node_modules`), `.nvmrc`, `vite.config.ts` (the bundle's base path under
+  `capacitor://`), `scripts/verify-ios-release.mjs`, the iOS scripts and
+  `ios.yml`;
+- app code that calls native APIs through Capacitor (`@capacitor/…`,
+  `Capacitor.…`), detected in the changed files themselves: today
+  `MentalMathGame.tsx`, `eegEngine.ts` and `pdfReportGenerator.ts`.
 
-Changing the Train tab or navigation (for example `PatientShell.tsx`) does
-not start the macOS job in Pre-merge validation: dispatch
-`-f webkit=false -f scenarios=mental-math` for that branch
+Documentation and tests never count. Web code the scenarios merely drive does
+not count either: the app shell, sign-in, onboarding, the Train tab and the
+game screens. The WebKit and emulator suites cover it.
+
+Pre-merge validation runs every scenario when the branch changes the iOS
+scripts or `ios.yml`, and only `smoke` otherwise. A manual run of `ios.yml`
+runs every scenario unless told otherwise. The weekly run runs `smoke` on the
+oldest supported iOS, against `development`.
+
+When a web change could still matter on iOS, run the scenarios for it by
+hand, for example `-f webkit=false -f scenarios=mental-math`
 ([below](#running-scenarios-from-an-agent-or-a-terminal)).
 
 To move to a newer Xcode, change `XCODE_APP` and the Swift package cache key

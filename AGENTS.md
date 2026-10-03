@@ -356,7 +356,7 @@ locally: `npm run test:e2e:webkit`, after `npx playwright install webkit` and
 `npm ci --prefix functions`; it starts the Functions emulator and needs Java
 21. The unsigned Xcode build and the iOS Simulator scenarios need GitHub-hosted
 macOS: `.github/workflows/ios.yml`, run by hand on any branch or from
-Pre-merge validation when native-relevant files change
+Pre-merge validation for native or iOS-sensitive changes only
 ([Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)). On a Mac,
 `npm run sync:ios && npm run ios:build` runs the same Xcode build.
 

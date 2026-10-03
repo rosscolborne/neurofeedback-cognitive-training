@@ -10,8 +10,10 @@
 # - backend: true unless every file clearly cannot change how this branch's
 #   web app talks to the backend (the nfct-dev canary,
 #   docs/nfct/nfct-dev-canary.md#when-it-runs).
-# - native: true when a file the Xcode build or the Simulator scenarios
-#   depend on changes (the macOS job; docs/nfct/ios.md).
+# - native: true only for a native or iOS-sensitive change (the macOS job:
+#   the Xcode build and the Simulator scenarios; docs/nfct/ios.md). Simulator
+#   CI is optional for ordinary feature work, so web screens the scenarios
+#   merely drive do not count.
 # - scenarios: the Simulator scenarios to run; empty runs them all.
 #
 # All fail safe toward more testing: an unreadable or empty listing, or any
@@ -44,16 +46,25 @@ non_backend_paths="${docs_paths}"'|^(e2e/|tests/|ios/|ci_scripts/|scripts/ios/|b
 # e2e/ is otherwise test-only. A test keeps this in step with its imports.
 canary_paths='^(e2e/canary/|e2e/fixtures\.ts$|e2e/helpers/(auth|journeys)\.ts$)'
 
-# macOS minutes are expensive, so the native job runs only for a change to
-# something the Xcode build or the Simulator scenarios depend on. Other
-# web-only changes cannot break the native compile; the WebKit and emulator
-# suites cover them. Unit tests next to the code cannot change what the
-# Simulator runs, so __tests__/ paths never count.
-native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package(-lock)?\.json$|\.nvmrc$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/(ci|ios)\.yml$|src/main\.tsx$|src/App\.tsx$|src/contexts/AuthContext\.tsx$|src/services/firebase(Config)?\.ts$|src/pages/onboarding/|src/consumer/games/mentalMath/)'
-# Every scenario when Mental Math or the driver changes; otherwise the smoke
-# scenario (sign-up and relaunch) is enough. Dispatch the iOS workflow for
-# anything else a scenario drives.
-all_scenarios_paths='^(src/consumer/games/mentalMath/|scripts/ios/|\.github/workflows/ios\.yml$)'
+# macOS minutes are expensive and the Simulator flakes (NFCT-50), so the
+# native job runs only for a native or iOS-sensitive change:
+# - the native build's own inputs: the iOS project, the Xcode Cloud hook,
+#   the Capacitor config, the dependencies the Swift packages come from,
+#   Node for the hook, Vite's build (the bundle's base path under
+#   capacitor://), the iOS scripts and ios.yml;
+# - app code that calls native APIs through Capacitor (native_api, checked in
+#   the changed files themselves, so new native code counts too).
+# Web code the scenarios merely drive (App, sign-in, onboarding, the games)
+# does not: the WebKit and emulator suites cover it, and the iOS workflow
+# can be run by hand for it. Documentation and tests never count.
+native_paths='^(ios/|ci_scripts/|capacitor\.config\.|package(-lock)?\.json$|\.nvmrc$|vite\.config\.ts$|scripts/ios/|scripts/verify-ios-release\.mjs$|\.github/workflows/ios\.yml$)'
+native_api='@capacitor/|@capacitor-community/|\bCapacitor\.'
+app_code='^src/.*\.(ts|tsx|js|jsx|mjs)$'
+not_native="${docs_paths}"'|(^|/)__tests__/|\.test\.(ts|tsx|js|mjs)$'
+# Every scenario when the driver or the workflow changes; otherwise the
+# smoke scenario (sign-up and relaunch) is enough. Run the iOS workflow by
+# hand for anything else.
+all_scenarios_paths='^(scripts/ios/|\.github/workflows/ios\.yml$)'
 
 # any_line matches|differs <pattern> [file]: whether any line of the file
 # (default: the listing) matches the pattern, or any line does not. A grep
@@ -76,12 +87,18 @@ if any_line matches "$canary_paths" || any_line differs "$non_backend_paths"; th
 if [ "$code" = true ]; then
   candidates=$(mktemp) || run_everything
   trap 'rm -f "$candidates"' EXIT
-  grep -v '/__tests__/' "$changed" > "$candidates"
+  grep -vE "$not_native" "$changed" > "$candidates"
   if [ "$?" -gt 1 ]; then run_everything; fi
-  if any_line matches "$native_paths" "$candidates"; then
-    native=true
-    if any_line matches "$all_scenarios_paths" "$candidates"; then scenarios=; fi
+  if any_line matches "$native_paths" "$candidates"; then native=true; fi
+  if [ "$native" = false ]; then
+    while IFS= read -r path; do
+      if [[ "$path" =~ $app_code ]] && [ -f "$path" ] && grep -qE "$native_api" -- "$path"; then
+        native=true
+        break
+      fi
+    done < "$candidates"
   fi
+  if [ "$native" = true ] && any_line matches "$all_scenarios_paths" "$candidates"; then scenarios=; fi
 fi
 echo "code=$code"
 echo "backend=$backend"

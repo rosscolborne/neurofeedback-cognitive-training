@@ -27,10 +27,12 @@ tests (`scripts/__tests__/classify-changes.test.mjs`):
   suite.
 - **The canary:** unless every changed file clearly cannot change how the web
   app talks to the backend ([when it runs](nfct-dev-canary.md#when-it-runs)).
-- **The macOS job:** only for files the Xcode build or the Simulator scenarios
-  depend on ([list](ios.md#the-macos-job-iosyml-native)). It runs every
-  scenario when Mental Math, the iOS scripts or `ios.yml` change, and `smoke`
-  otherwise.
+- **The macOS job (Xcode build and Simulator scenarios):** only for a native
+  or iOS-sensitive change: the native build's inputs, or app code that calls
+  native APIs through Capacitor ([list](ios.md#the-macos-job-iosyml-native)).
+  Simulator CI is optional for ordinary feature work, including web screens
+  the scenarios drive. It runs every scenario when the iOS scripts or
+  `ios.yml` change, and `smoke` otherwise.
 
 Every check fails safe: a failed or empty diff runs everything, and so does a
 run on `development` itself. Backend waits for `web` to pass; iOS runs beside
