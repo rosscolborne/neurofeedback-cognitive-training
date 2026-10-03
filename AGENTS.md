@@ -431,6 +431,7 @@ conflict.
 | [nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) | Test user-facing changes like a user in a real browser against the local app, including UI checks |
 | [nfct-orchestration](.agents/skills/nfct-orchestration/SKILL.md) | Plan, assign and track multi-stream work through integration into one validated PR; own agent topology and review routing |
 | [nfct-integration](.agents/skills/nfct-integration/SKILL.md) | Converge finished parallel streams into one validated integration PR |
+| [nfct-plan-handoff](.agents/skills/nfct-plan-handoff/SKILL.md) | Plan one task read-only and write a handoff prompt for an implementation agent (manual only: run it only when the user invokes it) |
 
 ## Checks
 
