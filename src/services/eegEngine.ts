@@ -172,7 +172,7 @@ export class EEGEngine {
           try {
             await this.startHostedBluetoothAnalysis();
           } catch (e) {
-            console.info('[EEG] Using on-device DSP analysis:', e);
+            console.info('[EEG] Hosted analysis unavailable; checking fit in the browser only:', e);
           }
         }
         return { success: true, deviceName: this.deviceName || undefined };
@@ -306,7 +306,7 @@ export class EEGEngine {
           try {
             await this.startHostedBluetoothAnalysis();
           } catch (e) {
-            console.info('[EEG] Using on-device DSP analysis:', e);
+            console.info('[EEG] Hosted analysis unavailable; checking fit in the browser only:', e);
           }
         }
         return { success: true, deviceName: this.deviceName || undefined };
@@ -365,7 +365,7 @@ export class EEGEngine {
         try {
           await this.startHostedBluetoothAnalysis();
         } catch (e) {
-          console.info('[EEG] Using on-device DSP analysis:', e);
+          console.info('[EEG] Hosted analysis unavailable; checking fit in the browser only:', e);
         }
       }
       return { success: true, deviceName: this.deviceName || undefined };

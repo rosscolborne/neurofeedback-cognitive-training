@@ -115,10 +115,15 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
   const lastCoveredSourceSequenceRef = useRef(0);
   const eegDataRef = useRef<EEGDataPoint | null>(null);
   const isPausedRef = useRef(isPaused);
+  const isSessionStartedRef = useRef(isSessionStarted);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
+
+  useEffect(() => {
+    isSessionStartedRef.current = isSessionStarted;
+  }, [isSessionStarted]);
 
   useEffect(() => {
     return () => {
@@ -216,9 +221,10 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
         lastAccumulatedSourceSequenceRef.current = sourceState.sequence;
       }
 
-      // Average mindfulness over the session, from new frames only
+      // Average mindfulness over the session itself (not the fit check or
+      // briefing before Begin Training), from new frames only
       const scores = data.brainflowScores;
-      if (!isPausedRef.current && isFitAccepted && hasNewHardwareSourceFrame
+      if (!isPausedRef.current && isSessionStartedRef.current && hasNewHardwareSourceFrame
         && scores?.method === (isDemoSession ? 'demo' : 'brainflow')
         && scores.mindfulnessScore != null && Number.isFinite(scores.mindfulnessScore)) {
         mindfulnessAccRef.current.total += scores.mindfulnessScore;
@@ -230,7 +236,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       unsubscribe();
       eegEngine.stop();
     };
-  }, [isDemoSession, isFitAccepted]);
+  }, [isDemoSession]);
 
   // Main session timer interval
   useEffect(() => {

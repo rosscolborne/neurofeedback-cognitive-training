@@ -155,3 +155,39 @@ it('ends a full session on its last tick, ignores later frames, and counts a rep
   expect(reloaded).toMatchObject({ completedSessionsCount: 1, tidalGardenState: garden });
   await act(async () => { view.unmount(); });
 });
+
+it('averages mindfulness only from the session itself, not the fit check or briefing before Begin Training', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  engine.isHardwareConnected = true;
+  stream.sequence = 0;
+  stream.lastFrameAtMs = 0;
+  const onComplete = vi.fn(async (_session: SessionRecord) => undefined);
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(<SessionRunner client={createBlankProfile('patient-1', 'patient@example.test')} selectedExperience="neuro-gambit"
+    onComplete={onComplete} onCancel={vi.fn()} />); });
+  await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
+  // Fit accepted, briefing still open: these frames are not session time.
+  for (let frameIndex = 0; frameIndex < 20; frameIndex++) {
+    await act(async () => {
+      stream.sequence++;
+      stream.lastFrameAtMs = Date.now();
+      stream.callback?.(frame(10));
+    });
+  }
+  await act(async () => { button(view, 'Begin Training').props.onClick(); });
+  for (let second = 0; second < 5; second++) {
+    await act(async () => {
+      stream.sequence++;
+      stream.lastFrameAtMs = Date.now();
+      stream.callback?.(frame(90));
+      vi.advanceTimersByTime(1_000);
+    });
+  }
+  await act(async () => { button(view, 'End Session & Save').props.onClick(); });
+  await act(async () => { await button(view, 'Save & View Summary').props.onClick(); });
+  expect(onComplete).toHaveBeenCalledOnce();
+  expect(onComplete.mock.calls[0][0]).toMatchObject({ durationSeconds: 5, averageMindfulness: 90 });
+  await act(async () => { view.unmount(); });
+});
