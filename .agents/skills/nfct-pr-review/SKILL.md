@@ -116,7 +116,8 @@ For each, give the file and line, the concrete failure scenario, and the
 evidence (a command, probe result or code path). Say which concerns you checked
 and ruled out, and what you could not verify.
 
-End with an explicit verdict: either **ready to merge once CI is green**, or
+End with an explicit verdict: either **ready to merge** (hosted Pre-merge
+validation is the owner's step), or
 the BLOCKER and SHOULD-FIX items to fix first. After a verification pass, only
 an open BLOCKER keeps the verdict at not ready; list any SHOULD-FIX still open
 so it can get its one repair or be carded.

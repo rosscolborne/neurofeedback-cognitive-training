@@ -232,8 +232,8 @@ for review only at step 5, when its final head is ready for validation.
 ## Hand off and clean up
 
 - Do not merge the integration PR: you implemented it. The owner does the
-  remaining human checks, runs the hosted validation they want on the head
-  being merged, and merges. Recommend a merge commit rather than a
+  remaining human checks, runs Pre-merge validation on the head being
+  merged (the owner's merge gate), and merges only if it is green. Recommend a merge commit rather than a
   squash; it keeps each stream's commits and SHAs, so the stream branches pass
   the merged check in
   [nfct-worktrees](../nfct-worktrees/SKILL.md#clean-up-a-task-worktree). After
@@ -265,7 +265,8 @@ Only when the user explicitly asks for separate PRs:
   (`gh pr edit <n> --base development`); otherwise it merges into its base branch.
 - The integration work is complete when the combined check has passed at
   the heads that will merge. Each PR is merge-ready once its own local
-  checks and review pass.
+  checks and review pass, and then merges after the owner's Pre-merge
+  validation is green on it.
 
 ## Report
 
@@ -288,5 +289,6 @@ Give one concise report, in the PR body and in your final message:
   - Hosted CI: *not run* (with the exact owner commands), or the state and
     run URL of a run the owner started, at `<sha>`.
   - Merge readiness: *MERGE-READY* (every gate passed locally and in review
-    with no BLOCKER open at `<sha>`; only the listed owner actions, human
-    checks and carded findings remain), or *NOT READY*, with what blocks it.
+    with no BLOCKER open at `<sha>`; ready for the owner's Pre-merge
+    validation, and only the listed owner actions, human checks and carded
+    findings remain), or *NOT READY*, with what blocks it.

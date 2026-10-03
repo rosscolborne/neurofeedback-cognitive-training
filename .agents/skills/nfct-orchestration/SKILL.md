@@ -158,7 +158,7 @@ changes only where dependencies require it.
 | 4. Run the combined deterministic suite | Integrator, per the [testing skill](../neurasticity-development-testing/SKILL.md) |
 | 5. Exploratory QA, where the work is user-facing | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
 | 6. Independent review, and security review at the [routed tier](#security-tier) | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
-| 7. Hosted CI (Pre-merge validation, and `ios.yml` scenarios for native-sensitive work) on the final head: owner-dispatched ([hosted CI](../../../AGENTS.md#hosted-ci)) | Integrator names the exact owner commands; whoever merges confirms any run is green |
+| 7. Pre-merge validation on the final head, the owner's merge gate, and `ios.yml` scenarios for native-sensitive work: owner-dispatched ([hosted CI](../../../AGENTS.md#hosted-ci)) | Integrator names the exact owner commands; whoever merges confirms Pre-merge validation is green |
 | 8. Targeted human visual and hardware checks | Owner, from the QA report's HUMAN CHECK items |
 | 9. Merge | Owner |
 
@@ -217,7 +217,8 @@ phase and what blocks it.
 
 Merging into `development` is the owner's decision. The orchestrator merges only when
 explicitly delegated, never a PR it implemented or integrated, and only after
-confirming that any hosted run on the head being merged is green.
+confirming the owner's Pre-merge validation is green on the head being
+merged.
 
 ## Reshape when contracts change
 

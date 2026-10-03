@@ -45,7 +45,7 @@ it.
 
 1. The agent runs the local checks and the journeys the change can affect,
    and reports the hosted runs the change calls for
-   ([AGENTS.md](../../AGENTS.md#completion-and-merge-readiness)).
+   ([AGENTS.md](../../AGENTS.md#hosted-ci)).
 2. Push the final head. If `development` has moved on, merge it into the branch
    first. The run tests the head alone, not the merge GitHub will make, so
    `Pre-merge result` fails a head that does not contain `development`'s
@@ -57,8 +57,8 @@ it.
    is pending while the run works, then success or failure, and links to the
    run. A later push leaves the new head without the status, so run it again
    on the new head.
-5. Once it has run, merge only a head whose `Pre-merge validation` status
-   is green. `gh pr checks <n>` lists it.
+5. Merge only with a green `Pre-merge validation` status on the exact head:
+   it is the owner's merge gate. `gh pr checks <n>` lists it.
 
 The checks of a manually started run do not appear on the pull request:
 GitHub leaves `workflow_dispatch` runs out of a commit's status rollup. On
@@ -82,7 +82,7 @@ ruleset: `Pre-merge validation`, from the GitHub Actions integration.
   time it moves.
 
 Until the check is required, the rule above is a process rule
-([AGENTS.md](../../AGENTS.md#completion-and-merge-readiness)), and a pull
+([AGENTS.md](../../AGENTS.md#hosted-ci)), and a pull
 request into `development` shows no checks at all: an unvalidated merge looks
 like a validated one. Add the required check when this model lands.
 

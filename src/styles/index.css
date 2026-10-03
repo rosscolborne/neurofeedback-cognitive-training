@@ -26,7 +26,6 @@
   /* Borders & Hairlines */
   --border-default: #E8E6E1;
   --border-subtle: #F2F1EE;
-  --border-focus: var(--brand-primary);
 
   /* Status Colors */
   --status-active: #5C8C46;
@@ -57,8 +56,6 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
 
   /* Typography */
   --font-display: 'DM Serif Display', Georgia, serif;

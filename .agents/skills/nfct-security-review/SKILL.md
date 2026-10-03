@@ -184,6 +184,7 @@ anything else new FOLLOW-UP. Give each prior finding's status.
 ## Verdict
 
 State the tier you reviewed at, then end with an explicit verdict: either
-**no security blockers; ready to merge once CI is green**, or the BLOCKER and
+**no security blockers; ready to merge** (hosted Pre-merge validation is
+the owner's step), or the BLOCKER and
 SHOULD-FIX items to fix first. After a verification pass, only an open BLOCKER
 keeps the verdict at not ready; list any SHOULD-FIX still open.

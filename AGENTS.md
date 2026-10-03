@@ -106,11 +106,11 @@ Finishing an agent task and a PR being ready to merge are separate states:
   the orchestrator's items, unless it or your role's skill
   ([nfct-integration](.agents/skills/nfct-integration/SKILL.md) for an
   integrator) gives them to you.
-- **Merge-ready**: the task is complete on the PR's current head: the local
-  checks passed on that head, and the routed reviews and QA passed with no
-  BLOCKER open. Hosted CI is owner-dispatched ([hosted CI](#hosted-ci)): it
-  is not part of the agent's merge readiness, but a hosted run that failed on
-  that head blocks it until fixed.
+- **Merge-ready**: ready for the owner's merge gate. The task is complete
+  on the PR's current head: the local checks passed on that head, and the
+  routed reviews and QA passed with no BLOCKER open. The owner then runs
+  Pre-merge validation on that head and merges only if it is green
+  ([hosted CI](#hosted-ci)).
 
 Stopping earlier because the user said to, or at a [checkpoint](#checkpoints),
 is not completion: keep the PR draft and report the items still open.
@@ -120,11 +120,15 @@ is not completion: keep the PR draft and report the items still open.
 Before marking a PR ready for review or reporting its task complete, confirm
 each item that applies:
 
-1. **Local checks** pass on the final head ([checks](#checks),
+1. **Local checks** fitted to the change pass on the final head
+   ([proportional validation](#proportional-validation),
    [revalidation](#revalidation)), and the diff holds only intended files.
 2. **Exploratory QA** has passed for a user-facing, auth, onboarding,
    navigation, persistence or training-flow change
    ([user-facing and stateful changes](#user-facing-and-stateful-changes)).
+   For a trivial copy or comment change, the implementer's own quick look at
+   the changed screen, or a render test that shows the new text, satisfies
+   it.
 3. **Review routing** is recorded in the PR body: the security tier and its
    reason, or why review was skipped
    ([which PRs get review](#which-prs-get-review)).
@@ -198,10 +202,10 @@ Local Linux validation is the default and is what agents run.
   Pre-merge validation on the final head is
   `gh workflow run ci.yml --ref <branch>`.
 
-When the owner has run Pre-merge validation on a head, whoever merges
-confirms it is green on that exact head (`gh pr checks <n>`); a failed run
-blocks the merge until the branch owner fixes it, and is a finding, not a
-flake to re-run. A development → main promotion instead needs its Release
+Pre-merge validation on a PR's final head is the owner's merge gate: the
+owner dispatches it, and whoever merges confirms it is green on that exact
+head (`gh pr checks <n>`). A failed run blocks the merge until the branch
+owner fixes it, and is a finding, not a flake to re-run. A development → main promotion instead needs its Release
 checks and `Require development source`
 ([promotion](docs/nfct/ci.md#promotion-development--main)).
 
@@ -264,6 +268,9 @@ Review and test depth follow the change's realistic blast radius.
   native suites, unless it touches a boundary below.
 - Substantial work (several features or cards, an integration, an overnight
   batch) keeps the full [checks](#checks) and the routed reviews and QA.
+- Exploratory QA scales the same way: a trivial copy or comment change is
+  covered by the implementer's own quick check or a render test
+  ([ready checkpoint](#ready-checkpoint), item 2).
 - Auth, authorization, Firestore rules, persistence, migrations, the account
   lifecycle, native or EEG code, shared infrastructure, and any change whose
   impact is uncertain or high keep deep validation, however small the diff.
