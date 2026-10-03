@@ -42,6 +42,8 @@ const TAGS: Record<HistoryRowTag, { readonly text: string; readonly tone: string
   // Neutral, not a warning: quitting a run is a normal choice.
   'ended-early': { text: 'Ended early', tone: 'status-tag-neutral' },
   flagged: { text: 'Flagged', tone: 'status-tag-paused' },
+  // Neutral, not a warning: the run upgrades to valid on its own once its start level unlocks.
+  'awaiting-unlock': { text: 'Waiting on level unlock', tone: 'status-tag-neutral' },
   'not-uploaded': { text: 'Not uploaded yet', tone: 'status-tag-neutral' },
   'new-best': { text: 'New best', tone: 'status-tag-completed' },
 };
