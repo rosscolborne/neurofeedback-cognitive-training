@@ -83,14 +83,15 @@ higher-value work.
   does not finish the objective. Its agent work is complete only when
   [nfct-integration](.agents/skills/nfct-integration/SKILL.md) has combined
   and validated them in one pushed integration PR, unless the user explicitly
-  asked for independent PRs. It is merge-ready once Pre-merge validation is green too
-  (see [completion and merge readiness](#completion-and-merge-readiness)).
+  asked for independent PRs (see
+  [completion and merge readiness](#completion-and-merge-readiness)).
 - Do not merge your own PR. Merging is the owner's decision; an agent merges
   only when explicitly delegated, and never a PR it implemented or
   integrated.
 - Finish with a report giving, where applicable: branch and worktree, commit
-  SHA, PR URL, remote validation state, files and scope changed, checks and tests run
-  with results, review and QA results, and unresolved risks, blockers or follow-ups.
+  SHA, PR URL, files and scope changed, checks and tests run with results,
+  review and QA results, hosted CI state and the owner actions it needs, and
+  unresolved risks, blockers or follow-ups.
 
 ## Completion and merge readiness
 
@@ -105,8 +106,11 @@ Finishing an agent task and a PR being ready to merge are separate states:
   the orchestrator's items, unless it or your role's skill
   ([nfct-integration](.agents/skills/nfct-integration/SKILL.md) for an
   integrator) gives them to you.
-- **Merge-ready**: the task is complete and every merge gate is satisfied on
-  the PR's current head, including a green `Pre-merge validation` status.
+- **Merge-ready**: ready for the owner's merge gate. The task is complete
+  on the PR's current head: the local checks passed on that head, and the
+  routed reviews and QA passed with no BLOCKER open. The owner then runs
+  Pre-merge validation on that head and merges only if it is green
+  ([hosted CI](#hosted-ci)).
 
 Stopping earlier because the user said to, or at a [checkpoint](#checkpoints),
 is not completion: keep the PR draft and report the items still open.
@@ -116,95 +120,94 @@ is not completion: keep the PR draft and report the items still open.
 Before marking a PR ready for review or reporting its task complete, confirm
 each item that applies:
 
-1. **Local checks** pass on the final head ([checks](#checks),
+1. **Local checks** fitted to the change pass on the final head
+   ([proportional validation](#proportional-validation),
    [revalidation](#revalidation)), and the diff holds only intended files.
 2. **Exploratory QA** has passed for a user-facing, auth, onboarding,
    navigation, persistence or training-flow change
    ([user-facing and stateful changes](#user-facing-and-stateful-changes)).
+   For a trivial copy or comment change, the implementer's own quick look at
+   the changed screen, or a render test that shows the new text, satisfies
+   it.
 3. **Review routing** is recorded in the PR body: the security tier and its
    reason, or why review was skipped
    ([which PRs get review](#which-prs-get-review)).
 4. **Independent review**, and a separate **security review** when the tier
    is STANDARD or DEEP, have finished within the [review budget](#review-budget):
    fixes verified, no BLOCKER open.
-5. **Native-sensitive validation** has passed where
-   [step 3 below](#lifecycle-and-remote-validation) requires it, or is listed
-   as an owner action (item 6).
+5. **Native-sensitive changes** name their `ios.yml` scenarios as an owner
+   action ([hosted CI](#hosted-ci)).
 6. **Owner actions** are listed: what only the owner can do, such as a deploy
-   to `nfct-dev`, human visual or hardware checks, or a required validation
-   you could not run.
+   to `nfct-dev`, a hosted workflow with its exact command, inputs and ref,
+   human visual or hardware checks, or a required validation you could not
+   run.
 7. **Follow-up cards** are filed for FOLLOW-UP and still-open SHOULD-FIX
    findings ([out-of-scope work](#out-of-scope-work)).
 8. **PR state** matches: draft while any item above is open, ready for review
    once all hold.
 
-### Lifecycle and remote validation
+### Lifecycle
 
-No push or pull request update starts CI ([docs/nfct/ci.md](docs/nfct/ci.md)).
-Remote validation is started by hand: the full suite once on a PR's final
-head before it merges, and single workflows where they add something a local
-run cannot (macOS, the Simulator, the real-backend canary).
-
-1. Run every required local check, then push and open the PR as a draft
-   (`gh pr create --draft`), or update it.
+1. Run the required local checks ([proportional validation](#proportional-validation)),
+   then push and open the PR as a draft (`gh pr create --draft`), or update it.
 2. Have the PR's routed exploratory QA and reviews run
    ([bounded review](#bounded-review) says who starts them), fix and
    revalidate within the [review budget](#review-budget), and push the fixes
    as one batch.
-3. Do not start remote validation yourself unless the user asks for it, or
-   the task needs what only a remote run gives. A native-sensitive change
-   does: one to native code or build configuration (`ios/`, including
-   `Package.swift`), to Capacitor plugin dependencies, or to how app code
-   calls a native API. Run the `ios.yml` scenarios it can affect, `smoke` at
-   minimum, on its pushed head
-   ([how](docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal)),
-   or, when `smoke` is all it can affect, Pre-merge validation on its final
-   head, which runs `smoke` for it; wait for
-   that run, or, if you cannot run it, name it as an owner action. Otherwise
-   run only the workflow that gives what you need, on a pushed head that has
-   passed the local checks. Other remote validation, Pre-merge validation
-   included, stays manual and risk-based.
-4. Pass the [ready checkpoint](#ready-checkpoint), then mark the PR ready for
+3. Pass the [ready checkpoint](#ready-checkpoint), then mark the PR ready for
    review (`gh pr ready <n>`).
-5. Report the PR URL, the review and QA results, and the remote validation
-   state of the head, and finish. Usually that is "Pre-merge validation not
-   run", with the command to run it: `gh workflow run ci.yml --ref <branch>`.
-   Report a run you started but did not need to wait for as *pending*; do
-   not poll or `--watch` it.
+4. Report the PR URL, the local validation and its head SHA, the review and
+   QA results, the hosted CI state (usually "not run") and the exact owner
+   actions, and finish.
 
-Before substantial rework of a ready PR, such as merging its
-base with conflicts or a review fix pass, convert it back to draft
-(`gh pr ready --undo <n>`), cancel any validation run of the head being
-replaced (`gh run cancel <id>`), and mark it ready again once the reworked
-batch passes locally. Test locally, batch related changes, and push when a
-coherent batch is ready, not after each small edit: each new head needs its
-own Pre-merge validation. After a remote failure, diagnose and fix it locally
-and batch the next push where practical.
+Before substantial rework of a ready PR, such as merging its base with
+conflicts or a review fix pass, convert it back to draft
+(`gh pr ready --undo <n>`) and mark it ready again once the reworked batch
+passes locally. Test locally, batch related changes, and push when a coherent
+batch is ready, not after each small edit.
 
 The report says plainly what has and has not run, for example:
 
 - Agent work: complete
 - Review and QA: independent review passed; security review (STANDARD)
   passed; exploratory QA passed
-- Remote validation: Pre-merge validation not run on `<sha>`
-  (`gh workflow run ci.yml --ref <branch>`)
-- Merge readiness: NOT YET — needs a green Pre-merge validation on this head
+- Local validation: all checks green on `<sha>`
+- Hosted CI: not run. Owner action: `gh workflow run ci.yml --ref <branch>`
+  (and, for a native-sensitive change,
+  `gh workflow run ios.yml --ref <branch> -f webkit=false -f scenarios=smoke`)
+- Merge readiness: MERGE-READY on `<sha>`
 
-Pre-merge validation is a merge gate. Whoever merges, and any later
-integration or merge check, first confirms a green `Pre-merge validation`
-status on the exact head being merged (`gh pr checks <n>`). A PR whose
-validation failed is not merge-ready; the branch owner fixes the failure
-before it merges. A development → main promotion instead needs its Release
+### Hosted CI
+
+No push or pull request update starts CI ([docs/nfct/ci.md](docs/nfct/ci.md)).
+Local Linux validation is the default and is what agents run.
+
+- Do not dispatch `ci.yml` (Pre-merge validation), `ios.yml`, `web.yml`,
+  `backend.yml` or any other hosted or macOS workflow yourself. "Merge-ready",
+  "safe to merge", "run the tests" and "pre-merge validation" do not
+  authorize one.
+- Exceptions: the user explicitly authorizes a hosted run, or the task cannot
+  be done without remote evidence, such as diagnosing a hosted failure or
+  changing CI itself where only a run can verify it. Even then, run the
+  narrowest workflow and jobs, and never repeat on hosted Linux what passed
+  locally (for example `ios.yml -f webkit=false`). Wait only for a run you
+  started, and stop at the first failed required job and act on its log.
+- Otherwise name the exact owner action: the command with its inputs and
+  ref. A native-sensitive change (to `ios/`, including `Package.swift`, other
+  native build configuration, Capacitor plugin dependencies, or how app code
+  calls a native API) needs the `ios.yml` scenarios it can affect, `smoke` at
+  minimum:
+  `gh workflow run ios.yml --ref <branch> -f webkit=false -f scenarios='smoke'`
+  ([scenarios](docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal)).
+  Pre-merge validation on the final head is
+  `gh workflow run ci.yml --ref <branch>`.
+
+Pre-merge validation on a PR's final head is the owner's merge gate: the
+owner dispatches it, and whoever merges confirms it is green on that exact
+head (`gh pr checks <n>`). A failed run blocks the merge until the branch
+owner fixes it, and is a finding, not a flake to re-run. A development → main promotion instead needs its Release
 checks and `Require development source`
 ([promotion](docs/nfct/ci.md#promotion-development--main)).
-
-Wait for CI only when the user explicitly asks you to wait, when your PR
-needs native-sensitive validation (step 3 above), or when the task is to
-diagnose a CI failure or to change CI itself and only a run can verify it.
-Asking for a PR to be merge-ready or safe to merge, or for its CI status, is
-not a request to wait: report what has run and finish. While you do wait,
-stop as soon as a required job fails and act on that job's log; do not wait
-for the other jobs first.
 
 ## Bounded review
 
@@ -254,6 +257,28 @@ Firestore rules, a Function or a native dependency is routed like adding one;
   or changes what CI runs is not test-only, and a change to the hard rules or
   to review, security or CI policy, here or in a skill, is not docs-only.
 - Record the decision in the PR body either way.
+
+### Proportional validation
+
+Review and test depth follow the change's realistic blast radius.
+
+- A trivial, isolated change (copy, a comment, a contained one-file fix) gets
+  its targeted tests and the fast static checks, and at most one reviewer. It
+  does not get several reviewer or tester agents, or the browser, emulator or
+  native suites, unless it touches a boundary below.
+- Substantial work (several features or cards, an integration, an overnight
+  batch) keeps the full [checks](#checks) and the routed reviews and QA.
+- Exploratory QA scales the same way: a trivial copy or comment change is
+  covered by the implementer's own quick check or a render test
+  ([ready checkpoint](#ready-checkpoint), item 2).
+- Auth, authorization, Firestore rules, persistence, migrations, the account
+  lifecycle, native or EEG code, shared infrastructure, and any change whose
+  impact is uncertain or high keep deep validation, however small the diff.
+- Reuse shared evidence. When the implementer or integrator reports green
+  checks on a commit (the commands and the SHA), reviewers, security
+  reviewers and QA on that same commit rely on them instead of rerunning the
+  matrix. They run or add a check only for a concrete risk it does not cover,
+  and say which.
 
 ### Review budget
 
@@ -313,7 +338,8 @@ agent that would start others is.
 
 After a fix, rerun the checks that cover what it changed, not every suite.
 Run the full required suite once on the final head before reporting the work
-complete. [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md#revalidation-after-a-fix)
+complete, with independent suites in parallel
+[QA lanes](#parallel-agents-qa-lanes). [neurasticity-development-testing](.agents/skills/neurasticity-development-testing/SKILL.md#revalidation-after-a-fix)
 has the detail.
 
 ### Checkpoints
@@ -432,12 +458,11 @@ release check (`npm run verify:ios-release`). Run the WebKit iPhone suite
 locally: `npm run test:e2e:webkit`, after `npx playwright install webkit` and
 `npm ci --prefix functions`; it starts the Functions emulator and needs Java
 21. The unsigned Xcode build and the iOS Simulator scenarios need GitHub-hosted
-macOS: `.github/workflows/ios.yml`, run by hand on any branch or from
-Pre-merge validation for native or iOS-sensitive changes only
-([Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)). On a Mac,
-`npm run sync:ios && npm run ios:build` runs the same Xcode build.
+macOS (`.github/workflows/ios.yml`), which the owner dispatches
+([hosted CI](#hosted-ci); [Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)).
+On a Mac, `npm run sync:ios && npm run ios:build` runs the same Xcode build.
 
-Remote runs ([docs/nfct/ci.md](docs/nfct/ci.md)) are all manual, apart from
+Hosted runs ([docs/nfct/ci.md](docs/nfct/ci.md)) are all manual, apart from
 a promotion's release checks and the weekly minimum-iOS run: Pre-merge
 validation (`ci.yml`) calls Web
 (`web.yml`), Backend (`backend.yml`) and iOS (`ios.yml`), skipping what a
@@ -587,6 +612,13 @@ scripts/qa-lane.sh list
 scripts/qa-lane.sh down nfct22                              # stops everything in the lane
 ```
 
+- Parallel validation: once the candidate tree is stable, run independent
+  suites (rules, repositories, Functions, the Chromium and WebKit Playwright
+  suites, the canary rehearsal) at the same time, one lane each, all on the
+  same commit. Serialize only on a real conflict: build shared output such as
+  `functions/lib` once before fanning out, give each Playwright run its own
+  `--output` directory, and do not share external accounts or other mutable
+  state across lanes.
 - A lane has no internet: requests off the machine fail fast. Run installs,
   `npx playwright install`, downloads, `git` and `gh` outside it. The app's
   fonts are bundled, so pages render as they do online. Browsers in it still report

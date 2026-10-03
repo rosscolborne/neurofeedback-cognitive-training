@@ -3,9 +3,9 @@ import { summarizeEegWindows, type EegCapture, type EegCaptureProvider, type Eeg
 import { eegEngine as defaultEngine, type EEGEngine } from './eegEngine';
 
 // The simulated EEG provider for games: the existing Demo Mode synthetic EEG
-// (eegEngine's simulator), reduced to a recording summary. It lives outside
-// src/consumer because eegEngine uses the clinical types; games receive it as
-// an EegCaptureProvider and never see where the data comes from.
+// (eegEngine's simulator), reduced to a recording summary. It lives beside
+// eegEngine in src/services; games receive it as an EegCaptureProvider and
+// never see where the data comes from.
 //
 // Provenance is fixed here: everything this provider produces is 'simulated'.
 // The recording schema also requires a device and processing block. The

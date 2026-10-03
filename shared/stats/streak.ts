@@ -8,10 +8,8 @@ import { daysBetween, localDateFromOrdinal, localDateOrdinal, type LocalDate, ty
 // its gap exactly. `current`, `longest` and `lastActiveDate` are derived from
 // the runs; whether the current streak is still alive depends on "today" in
 // the player's zone, so streakStatus decides it when the summary is read.
-//
-// Reference logic: computeActiveStreak in src/components/patient/patientMetrics.ts
-// (consecutive local days ending today or yesterday; several sessions on one
-// day count once), re-typed over local dates.
+// A streak is consecutive local days ending today or yesterday; several
+// sessions on one day count once.
 
 export const EMPTY_STREAK: StreakState = Object.freeze({ runs: [], current: 0, longest: 0, lastActiveDate: null });
 

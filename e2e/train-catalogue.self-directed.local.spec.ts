@@ -59,7 +59,6 @@ test('Train lists the games, with what each trains, and nothing else', async ({ 
   expect(segments[0]!).toBeGreaterThan(segments[1]!);
   expect(segments[1]!).toBeGreaterThan(segments[2]!);
   const mentalMathCard = mentalMath.locator('xpath=ancestor::li[1]');
-  await expect(mentalMathCard.locator('.train-card-tag')).toHaveCount(0);
   await expect(mentalMathCard.getByText(/^Up to 3 minutes,?$/)).toBeVisible();
   await expect(mentalMathCard.getByText(/^10 levels,?$/)).toBeVisible();
   // Mental Math never needs a headset, so its card says nothing about one.

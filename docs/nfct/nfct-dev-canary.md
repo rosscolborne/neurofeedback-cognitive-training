@@ -25,8 +25,8 @@ fixture seeding, no Firestore polling and no retries.
 
 - **Workflow and job:** `Backend (Firebase)` / **`nfct-dev canary`**
   (`.github/workflows/backend.yml`, job `canary`).
-- **Runs:** in [Pre-merge validation](ci.md), started by hand on a pull
-  request's final head, after `web` passes and alongside `emulators`; or
+- **Runs:** in [Pre-merge validation](ci.md), started by hand by the owner
+  on a pull request's final head, after `web` passes and alongside `emulators`; or
   alone, by hand: `gh workflow run backend.yml --ref <branch> -f
   emulators=false`, once `backend.yml` is on `main`
   ([when the buttons appear](ci.md#when-the-run-workflow-buttons-appear));

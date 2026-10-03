@@ -285,10 +285,12 @@ Simulator evidence.
 
 #### Running scenarios from an agent or a terminal
 
-Any branch, any scenarios, no Mac. A manual run runs the native job (unless
-`-f native=false`), on GitHub-hosted macOS, whose minutes cost ten times Linux
-minutes: run only the scenarios you need. `-f webkit=false` leaves out the
-WebKit suite when you run it locally instead.
+Any branch, any scenarios, no Mac. The owner dispatches it; an agent runs it
+only when explicitly authorized, and otherwise reports the exact command as
+an owner action ([AGENTS.md "Hosted CI"](../../AGENTS.md#hosted-ci)). A
+manual run runs the native job (unless `-f native=false`), on GitHub-hosted
+macOS, whose minutes cost ten times Linux minutes: run only the scenarios
+you need. `-f webkit=false` leaves out the WebKit suite, which runs locally.
 
 ```bash
 branch=$(git branch --show-current)

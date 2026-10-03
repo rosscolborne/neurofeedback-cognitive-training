@@ -1,28 +1,27 @@
 # Neurasticity
 
-> **This is the `neurofeedback-cognitive-training` (NFCT) consumer fork.** It
-> was forked from the Waveable clinical repository on 2026-09-29 and is being
-> migrated; the text below still describes the inherited app. Read
-> [AGENTS.md](AGENTS.md) and [docs/nfct/FORK.md](docs/nfct/FORK.md) first.
+> **This is `neurofeedback-cognitive-training` (NFCT)**, the consumer
+> cognitive-training app: games with optional Muse EEG, on the web and as an
+> iPhone app. It was forked from the Waveable clinical repository on
+> 2026-09-29 ([docs/nfct/FORK.md](docs/nfct/FORK.md)). Read
+> [AGENTS.md](AGENTS.md) first: it has the checks and emulator-first local
+> development ([Running locally](AGENTS.md#running-locally)).
 
-Neurasticity connects a Muse Athena directly from the user's Chrome or Edge
-browser. It can send the browser-collected EEG windows to its BrainFlow
-analysis service for the shared smoothing, mindfulness, restfulness, fit, and
-training calculations. The service never attempts to use Bluetooth itself.
+EEG is optional. A Muse Athena connects directly from the user's Chrome or
+Edge browser, and the app can send the browser-collected EEG windows to its
+BrainFlow analysis service for headset fit and the mindfulness and
+restfulness metrics. The service never attempts to use Bluetooth itself.
 
-## Local development
+## BrainFlow development
 
-Install the web app dependencies:
-
-Neurasticity's current Vite toolchain requires Node.js 20.19+ (or 22.12+),
-plus Python 3.11+ with `uv`.
+Use Node.js 22 (`.nvmrc`) and, for the BrainFlow service, Python 3.11+ with
+`uv`:
 
 ```bash
-npm install
+npm ci --legacy-peer-deps
 ```
 
-Then start the complete app (the BrainFlow analysis service and Vite frontend)
-with:
+To start the BrainFlow analysis service and the Vite frontend together:
 
 ```bash
 npm run dev
@@ -59,11 +58,8 @@ outside BrainFlow.
 
 ## Checks
 
-```bash
-npm run build
-npm test                 # offline Vitest suite
-npm run test:python
-```
+The full list of checks is in [AGENTS.md](AGENTS.md#checks). The inherited
+BrainFlow service's own suite is `npm run test:python`.
 
 `npm test` excludes the two service-backed Vitest files by name:
 `backendFitE2E.test.ts` and `eegPipelineIntegration.test.ts`. They remain in

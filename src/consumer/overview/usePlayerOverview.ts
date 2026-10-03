@@ -79,9 +79,8 @@ function useKeyedSubscription<T>(
 }
 
 // One profile read per player and repository: it only supplies the time zone
-// and the weekly goal, and the inherited sign-up's profile documents are not
-// consumer profiles, so every read of one reports it as unreadable. Failed
-// reads are not kept, so the next screen tries again.
+// and the weekly goal. Failed reads are not kept, so the next screen tries
+// again.
 const profileReads = new WeakMap<object, Map<string, Promise<DocumentRead<UserProfile>>>>();
 
 function readProfileOnce(profile: OverviewSources['profile'], playerId: string): Promise<DocumentRead<UserProfile>> {

@@ -168,7 +168,7 @@ export const Login: React.FC = () => {
   return (
     <div style={{
       minHeight: '100dvh',
-      background: 'var(--surface-patient-base)',
+      background: 'var(--surface-base)',
       color: 'var(--text-primary)',
       padding: 'calc(32px + env(safe-area-inset-top, 0px)) 20px calc(32px + env(safe-area-inset-bottom, 0px))',
       display: 'flex',
@@ -213,7 +213,7 @@ export const Login: React.FC = () => {
 
       {resetView && resetSent && (
         <div role="status" style={{
-          background: 'var(--surface-patient-card)',
+          background: 'var(--surface-card)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)',
           padding: '14px',
@@ -249,7 +249,7 @@ export const Login: React.FC = () => {
             autoComplete="email"
             style={{
               width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
+              background: 'var(--surface-card)', border: `1px solid var(--border-subtle)`,
               color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
             }}
           />
@@ -268,7 +268,7 @@ export const Login: React.FC = () => {
             enterKeyHint="go"
             style={{
               width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-patient-card)', border: `1px solid var(--border-subtle)`,
+              background: 'var(--surface-card)', border: `1px solid var(--border-subtle)`,
               color: 'var(--text-primary)', fontSize: '16px', boxSizing: 'border-box'
             }}
           />

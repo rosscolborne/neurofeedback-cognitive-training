@@ -43,7 +43,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, profile, sta
       </h1>
 
       {/* Profile Info Card */}
-      <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="card-surface" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <input
             ref={photoInput}
@@ -98,7 +98,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, profile, sta
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '2px solid var(--surface-patient-card)',
+                border: '2px solid var(--surface-card)',
               }}
             >
               <Camera size={11} />
