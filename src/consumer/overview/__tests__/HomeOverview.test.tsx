@@ -140,11 +140,28 @@ describe('Home', () => {
     expect(byData(r, 'recent-runs')).toHaveLength(1);
   });
 
-  it('says a run still being checked will update the streak', async () => {
+  it('shows a run whose result is pending as loading, never narrating how it is scored (NFCT-66)', async () => {
     const { r } = await renderHome({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
-    expect(one(r, 'streak-caption')).toBe('Your latest run is still being checked. Your streak and achievements update once it’s confirmed.');
+    expect(one(r, 'streak-caption')).toBe('Loading your streak…');
+    const banned = /server|being checked|confirm|verif|provisional|processing/i;
+    expect(visibleText(r)).not.toMatch(banned);
     const withStats = await renderHome({ summary: readable(summaryWith([TODAY])), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
-    expect(visibleText(withStats.r)).toContain('Your latest run is still being checked. Your streak updates once it’s confirmed.');
+    expect(visibleText(withStats.r)).not.toMatch(banned);
+  });
+
+  it('recovers from a failed live read by subscribing again, instead of staying unavailable (NFCT-66)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const state: FakeState = { summary: 'error', runs: [runEntry('sessionAAAAAAAAAAAA1')] };
+      const { r, sources } = await renderHome(state);
+      expect(one(r, 'streak-caption')).toBe('Your streak couldn’t be loaded right now.');
+      state.summary = readable(summaryWith([TODAY]));
+      await act(async () => { vi.advanceTimersByTime(2_000); });
+      expect(sources.stats.subscribeToSummary).toHaveBeenCalledTimes(2);
+      expect(one(r, 'streak')).toBe('1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('waits for the connection instead of claiming no stats when the summary is not cached offline', async () => {

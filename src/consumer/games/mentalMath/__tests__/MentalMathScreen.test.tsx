@@ -352,7 +352,7 @@ describe('MentalMathScreen', () => {
 
   it.each([
     ['consent-required', 'Simulated EEG (Demo Mode) was not saved: saving EEG needs your EEG consent.'],
-    ['consent-unavailable', 'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).'],
+    ['consent-unavailable', 'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be loaded (you may be offline, on a slow connection, or have profile changes still uploading).'],
     ['invalid', 'Simulated EEG (Demo Mode) was not saved: the recording was incomplete.'],
     ['session-not-saved', 'Simulated EEG (Demo Mode) was not saved because the run was not saved.'],
     ['owner-changed', 'Simulated EEG (Demo Mode) was not saved because you signed out.'],
@@ -401,7 +401,7 @@ describe('MentalMathScreen', () => {
     await h.flush();
     expect(h.recordingSaves).toHaveBeenCalledTimes(1);
     expect(h.saveStatus()).toBe('Saved on this device. Uploading to your account…');
-    expect(h.eegStatus()).toBe('Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).');
+    expect(h.eegStatus()).toBe('Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be loaded (you may be offline, on a slow connection, or have profile changes still uploading).');
   });
 
   it('never makes the session wait on EEG: with the recording still checking consent, the run is saved', async () => {
@@ -411,7 +411,7 @@ describe('MentalMathScreen', () => {
     h.playToEnd([]);
     await h.flush();
     expect(h.saveStatus()).toBe('Run saved to your account.');
-    expect(h.eegStatus()).toBe('Checking your EEG consent before saving Simulated EEG (Demo Mode)…');
+    expect(h.eegStatus()).toBe('Saving Simulated EEG (Demo Mode)…');
   });
 
   it('reports an EEG save that throws as not saved, and the run as saved', async () => {
@@ -604,21 +604,21 @@ describe('MentalMathScreen', () => {
       await h.flush();
       expect(h.title()).toBe('Run complete');
       const local = (h.saves[0]!.session as MentalMathSessionDraft).summary;
-      expect(h.byData('data-summary', 'verification')).toBe('Provisional');
-      expect(h.byData('data-summary', 'caption')).toBe('Provisional. Checking your run with the server…');
+      expect(h.byData('data-summary', 'verification')).toBe('Pending');
+      expect(h.byData('data-summary', 'caption')).toBe('');
       expect(h.byData('data-result', 'score')).toBe(format(local.score));
       // Predicted achievements read exactly as confirmed ones (no layout shift), marked provisional.
       const pending = (name: string) => h.root().find((node) => node.props['data-summary'] === name && node.type === 'li').props['data-pending'];
-      expect(h.byData('data-summary', 'record')).toBe('New personal best (provisional, until the server checks your run)From level 1: best score, most correct answers and highest level.');
-      expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (provisional, until the server checks your run)You can now start a run at level 2.');
+      expect(h.byData('data-summary', 'record')).toBe('New personal best (pending)From level 1: best score, most correct answers and highest level.');
+      expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (pending)You can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['true', 'true']);
 
       const { decision, processed } = trustedFor(h);
       if (decision.result.validity !== 'valid') throw new Error('expected a valid result');
       const result: ServerResult = { ...decision.result, score: 4321, metrics: { ...decision.result.metrics, difficultyPoints: 4000, speedBonusPoints: 321 } };
       h.publish(pickerState(decision.progress, [processed(result)]));
-      expect(h.byData('data-summary', 'verification')).toBe('Verified');
-      expect(h.byData('data-summary', 'caption')).toBe('Checked and confirmed by the server.');
+      expect(h.byData('data-summary', 'verification')).toBe('Final');
+      expect(h.byData('data-summary', 'caption')).toBe('');
       expect(h.byData('data-result', 'score')).toBe(format(4321));
       expect(h.byData('data-result', 'difficulty-points')).toBe(format(4000));
       expect(h.byData('data-result', 'speed-bonus')).toBe(`+${format(321)}`);
@@ -643,7 +643,7 @@ describe('MentalMathScreen', () => {
       const flagged = { ...decision.result, validity: 'flagged', reasons: ['rt-below-floor'] } as ServerResult;
       h.publish(pickerState(null, [processed(flagged)]));
       expect(h.byData('data-summary', 'verification')).toBe('Flagged');
-      expect(h.byData('data-summary', 'caption')).toBe('Too many answers came in faster than the server accepts. It counts toward your totals, but not your records or unlocks.');
+      expect(h.byData('data-summary', 'caption')).toBe('Too many answers came in faster than allowed. It counts toward your totals, but not your records or unlocks.');
       expect(h.byData('data-summary', 'record')).toContain('Flagged runs don’t set records');
       expect(h.byData('data-summary', 'unlock')).toContain('Next unlock: start level 2');
     });
@@ -725,10 +725,10 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-total', 'runs-completed')).toBe('—');
       expect(totalsNote(h)).toBe('Loading your totals…');
 
-      // The records arrive: the preview counts this run, and the note says so.
+      // The records arrive: the preview counts this run, and the loading note goes.
       h.publish(pickerState(null));
       expect(h.byData('data-total', 'runs-completed')).toBe('1');
-      expect(totalsNote(h)).toBe('Includes runs the server hasn’t checked yet.');
+      expect(h.root().findAll((node) => typeof node.props.className === 'string' && node.props.className.includes('mm-totals-note'))).toHaveLength(0);
     });
 
     it('marks a predicted flag as provisional, like a predicted best, until the server decides', async () => {
@@ -737,8 +737,8 @@ describe('MentalMathScreen', () => {
       // Answers far faster than the 250 ms floor: the preview predicts the server's rt-below-floor flag.
       h.playToEnd([true, true, true, true, true, true, true, true, true, true], 100);
       await h.flush();
-      expect(h.byData('data-summary', 'verification')).toBe('Provisional');
-      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set records (provisional, until the server checks your run)No record yet from level 1.');
+      expect(h.byData('data-summary', 'verification')).toBe('Pending');
+      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set records (pending)No record yet from level 1.');
       expect(highlight(h, 'record').props['data-pending']).toBe('true');
 
       const document = { ...h.saves[0]!.session, schemaVersion: 1, userId: 'player-1', seed: SEED, createdAt: h.saves[0]!.session.endedAt } as unknown as ClientSessionDocument;
@@ -759,7 +759,7 @@ describe('MentalMathScreen', () => {
       const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
       const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
       h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
-      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when the server checked your run. It counts toward your totals now, and toward your records and unlocks once that level is unlocked.');
+      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when this run was scored. It counts toward your totals now, and toward your records and unlocks once that level is unlocked.');
       expect(h.byData('data-summary', 'record')).toBe('Not a record yetThis run can still set a record once level 1 is unlocked.');
     });
 
@@ -774,7 +774,7 @@ describe('MentalMathScreen', () => {
       const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
       const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
       h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
-      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when the server checked your run. It counts toward your totals, but not your records or unlocks.');
+      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when this run was scored. It counts toward your totals, but not your records or unlocks.');
       expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set recordsNo record yet from level 1.');
     });
 
@@ -782,7 +782,7 @@ describe('MentalMathScreen', () => {
       const pending = sessionRecord('sessionBBBBBBBBBBBB1', playRun({ seed: SEED, startLevel: 1, correct: 7 }), { seed: SEED });
       const h = harness({ state: pickerState(null, [pending]) });
       const best = h.root().find((node) => node.props['data-picker'] === 'best');
-      expect(textOf(best)).toMatch(/^Your best from level 1: [\d,]+ Provisional$/);
+      expect(textOf(best)).toMatch(/^Your best from level 1: [\d,]+ Pending$/);
       expect(provisionalTags(best)).toHaveLength(1);
 
       // Once the server has checked it, the same best is shown plainly.
@@ -816,7 +816,7 @@ describe('MentalMathScreen', () => {
       const h = harness({ initialView: 'progress', state: pickerState(decision.progress, [pending]), history: { entries: [entry], unreadable: [], nextCursor: null, fromCache: false } });
       const levelOne = h.root().findByProps({ 'data-best-level': 1 });
       expect(provisionalTags(levelOne)).toHaveLength(1);
-      expect(textOf(levelOne)).toMatch(/^Level 1Provisional[\d,]+7 correct · reached level 3$/);
+      expect(textOf(levelOne)).toMatch(/^Level 1Pending[\d,]+7 correct · reached level 3$/);
       // The history shows trusted results only: the checked run set a best when it was processed.
       const row = h.root().findByProps({ 'data-history-row': 'sessionBBBBBBBBBBBB1' });
       expect(textOf(row)).toContain('New best');

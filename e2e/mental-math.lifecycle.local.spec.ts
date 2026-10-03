@@ -190,7 +190,7 @@ test('offline at the end of a run: the run is saved on the device, simulated EEG
   await expect(page.locator('.mm-save')).toHaveText('Saved on this device. Uploading to your account…');
   // EEG consent is confirmed only with the server, so offline the recording is not saved, and the run still is.
   await expect(page.locator('.mm-eeg-status')).toHaveText(
-    'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).',
+    'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be loaded (you may be offline, on a slow connection, or have profile changes still uploading).',
     { timeout: 15_000 },
   );
   expect(await readGameSessions(uid)).toHaveLength(0);

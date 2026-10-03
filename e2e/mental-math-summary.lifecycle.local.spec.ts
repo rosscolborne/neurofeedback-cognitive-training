@@ -58,10 +58,10 @@ async function playRun(page: Page, level: number, script: readonly boolean[]): P
   await runOut(page);
 }
 
-/** Lets page time flow and waits for trusted scoring to verify the run on screen. */
+/** Lets page time flow and waits for trusted scoring's valid result on screen. */
 async function expectVerified(page: Page): Promise<void> {
   await page.clock.resume();
-  await expect(verification(page)).toHaveText('Verified', { timeout: 30_000 });
+  await expect(verification(page)).toHaveText('Final', { timeout: 30_000 });
 }
 
 /**
@@ -111,9 +111,10 @@ test('the summary shows a provisional score at once, then the server score, its 
   await page.clock.resume();
   await expect(page.locator('.mm-save')).toHaveText('Saved on this device. Uploading to your account…');
 
-  // 1. The optimistic preview: this device's score, marked provisional, with its predicted best and unlock.
-  await expect(verification(page)).toHaveText('Provisional');
-  await expect(page.locator('[data-summary="caption"]')).toHaveText('Provisional. Your run will be checked once it uploads.');
+  // 1. The optimistic preview: this device's score, marked pending, with its predicted best and unlock.
+  // No line narrates how the run is scored (NFCT-66); the save line says it is waiting to upload.
+  await expect(verification(page)).toHaveText('Pending');
+  await expect(page.locator('[data-summary="caption"]')).toHaveText('');
   const provisional = await shownScore(page).innerText();
   await expect(record(page)).toContainText('New personal best');
   await expect(unlock(page)).toContainText('Level 2 unlocked');
@@ -132,12 +133,12 @@ test('the summary shows a provisional score at once, then the server score, its 
 
   // Back online: the run uploads, onGameSessionCreated scores it, and the result replaces the preview.
   await context.setOffline(false);
-  await expect(verification(page)).toHaveText('Verified', { timeout: 30_000 });
+  await expect(verification(page)).toHaveText('Final', { timeout: 30_000 });
   const result = await newestResult(uid);
   expect(result.validity).toBe('valid');
   await expect(shownScore(page)).toHaveText(format(result.score));
   expect(provisional).toBe(format(result.score));
-  await expect(page.locator('[data-summary="caption"]')).toHaveText('Checked and confirmed by the server.');
+  await expect(page.locator('[data-summary="caption"]')).toHaveText('');
   // The trusted result replaced the preview in place: the predictions are now confirmed, and nothing moved.
   await expect(record(page)).toHaveAttribute('data-pending', 'false');
   await expect(unlock(page)).toHaveAttribute('data-pending', 'false');

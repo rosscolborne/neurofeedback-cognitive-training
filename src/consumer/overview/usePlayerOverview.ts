@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LocalDate, LocalDateRange, StatsSummary, UserProfile, WeeklyGoal } from '@nfct/shared';
 import type { DocumentRead } from '../firestore/reads';
+import { subscribeWithRetry } from '../firestore/retryingSubscription';
 import type { GameSessionHistoryPage, GameSessionRepository } from '../repositories/gameSessionRepository';
 import type { ProfileRepository } from '../repositories/profileRepository';
 import type { AchievementsRead, DailyStatsRead, StatsRepository } from '../repositories/statsRepository';
@@ -53,23 +54,24 @@ export const browserOverviewClock: OverviewClock = {
 
 type Keyed<T> = { readonly key: string; readonly value: Loaded<T> };
 
-/** A subscription's latest value for `key`; loading until the subscription for that key has answered. */
+/**
+ * A subscription's latest value for `key`: loading until the subscription for
+ * that key has answered, unavailable after a failure until it recovers (it
+ * re-subscribes with backoff; a synchronous refusal, such as signed out, stays
+ * unavailable).
+ */
 function useKeyedSubscription<T>(
   key: string | null,
-  subscribe: (onNext: (value: T) => void, onError: () => void) => () => void,
+  subscribe: (onNext: (value: T) => void, onError: (error: Error) => void) => () => void,
 ): Loaded<T> {
   const [state, setState] = useState<Keyed<T> | null>(null);
   useEffect(() => {
     if (key === null) return undefined;
-    const fail = () => setState({ key, value: { status: 'unavailable' } });
-    let stop: () => void = () => {};
-    try {
-      stop = subscribe((value) => setState({ key, value: { status: 'ready', value } }), fail);
-    } catch {
-      // Not signed in, or a caller error the repository refused: nothing to show.
-      fail();
-    }
-    return () => stop();
+    return subscribeWithRetry(
+      subscribe,
+      (value) => setState({ key, value: { status: 'ready', value } }),
+      () => setState({ key, value: { status: 'unavailable' } }),
+    );
     // Deliberately keyed: `subscribe` is rebuilt every render, and the key names everything it reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);

@@ -147,11 +147,11 @@ describe('Progress', () => {
     expect(calendarDays(r)).toHaveLength(0);
   });
 
-  it('says a run still being checked will update the figures, the activity and the achievements', async () => {
+  it('shows the figures, the activity and the achievements as loading while a run’s result is pending (NFCT-66)', async () => {
     const { r } = await renderProgress({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
-    expect(one(r, 'all-time-note')).toBe('Your latest run is still being checked. Your streak and all-time figures update once it’s confirmed.');
-    expect(one(r, 'activity-note')).toBe('Your latest run is still being checked. Your activity updates once it’s confirmed.');
-    expect(one(r, 'achievements-note')).toBe('Your latest run is still being checked. Your achievements update once it’s confirmed.');
+    expect(one(r, 'all-time-note')).toBe('Loading your progress…');
+    expect(one(r, 'activity-note')).toBe('Loading your activity…');
+    expect(one(r, 'achievements-note')).toBe('Loading your achievements…');
     expect(achievementRows(r)).toHaveLength(0);
   });
 

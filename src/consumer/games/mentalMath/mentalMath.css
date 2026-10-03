@@ -493,7 +493,7 @@
   line-height: 1.1;
 }
 
-/* Provisional values read as provisional: the number is muted until the server confirms it. */
+/* Pending values read as pending: the number is muted until trusted scoring decides it. */
 .mm-score[data-verification='provisional'] .mm-result-value,
 .mm-score[data-verification='not-saved'] .mm-result-value {
   color: var(--text-secondary);

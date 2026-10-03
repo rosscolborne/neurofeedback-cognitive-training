@@ -6,6 +6,7 @@ import type { EegCapture, EegCaptureProvider } from '../../eeg/eegCapture';
 import type { EegRecordingDraft, EegRecordingRepository, EegRecordingSave } from '../../repositories/eegRecordingRepository';
 import type { GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
+import { subscribeWithRetry } from '../../firestore/retryingSubscription';
 import { Keypad } from './Keypad';
 import { MentalMathProgress } from './MentalMathProgress';
 import { ProvisionalTag } from './ProvisionalTag';
@@ -316,25 +317,23 @@ const StartLevelPicker: React.FC<{
   useEffect(() => { initialFocus.current.current?.focus(); }, []);
 
   useEffect(() => {
-    let stop: () => void = () => {};
     const apply = (next: PickerData) => {
       setData(next);
       if (next.status === 'loading') return;
       setSelected((current) => (!touched.current || current === null || current > next.choices.unlocked ? next.choices.defaultLevel : current));
     };
-    try {
-      stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, (state: ProgressWithRecentSessions) => {
+    // Re-subscribes after a failure, so a transient one does not keep the picker at level 1.
+    return subscribeWithRetry<ProgressWithRecentSessions>(
+      (onNext, onError) => progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, onNext, onError),
+      (state) => {
         const current = currentProgress(state);
         apply({ status: 'ready', choices: startLevelChoices(state), progress: current.progress, unchecked: current.unchecked });
-      }, (error) => {
+      },
+      (error) => {
         logProgressReadFailure(error);
         apply({ status: 'unavailable', choices: startLevelChoices(null) });
-      });
-    } catch (error) {
-      logProgressReadFailure(error);
-      apply({ status: 'unavailable', choices: startLevelChoices(null) });
-    }
-    return () => stop();
+      },
+    );
   }, [progress]);
 
   const choices = data.status === 'loading' ? null : data.choices;
