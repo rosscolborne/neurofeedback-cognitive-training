@@ -1,4 +1,4 @@
-import { localDateIn, mentalMathV1 as mm, type FirestoreTimestamp } from '@nfct/shared';
+import { localDateIn, mentalMathV1 as mm, mentalMathV2, type FirestoreTimestamp } from '@nfct/shared';
 
 // Realistic Mental Math v1 sessions for trusted-scoring tests (NFCT-19), played
 // through NFCT-17's pure run reducer exactly as the game screen drives it:
@@ -45,6 +45,32 @@ export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs =
   return run;
 }
 
+/**
+ * Plays a gameVersion 2 (time bank, NFCT-60) run through the v2 reducer: the
+ * same player as playRun, until the bank runs out or `stopAtMs`.
+ */
+export function playTimeBankRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs = Number.POSITIVE_INFINITY }: RunPlan): mentalMathV2.MentalMathRun {
+  const peak = Math.max(startLevel, targetPeak);
+  let run = mentalMathV2.startRun({ seed, startLevel });
+  let clock = 0;
+  for (let index = 0; clock < Math.min(stopAtMs, run.endsAtMs) && !mentalMathV2.isTrialCapReached(run); index += 1) {
+    run = mentalMathV2.presentQuestion(run, clock);
+    const current = run.current!;
+    const answered = mentalMathV2.answerQuestion(run, {
+      questionId: current.id,
+      response: current.level < peak ? current.expected : current.expected + 1,
+      rtMs: rtMs + (index % 5) * 37,
+    });
+    if (!answered.accepted) {
+      run = mentalMathV2.discardQuestion(run);
+      break;
+    }
+    run = answered.run;
+    clock = answered.trial.shownAtMs + answered.trial.rtMs;
+  }
+  return run;
+}
+
 /** 'YYYY-MM-DD' of an instant in a known time zone. */
 function localDateOf(timezone: string, ms: number): string {
   const date = localDateIn(timezone, ms);
@@ -60,10 +86,12 @@ export type SessionPlan = RunPlan & {
   readonly timezone?: string;
   /** The value stored as createdAt; default: a timestamp one second after endedAt. */
   readonly createdAt?: unknown;
+  /** 1 (default): the fixed 90 s run. 2: the time-bank run (NFCT-60), completed when its bank runs out. */
+  readonly gameVersion?: 1 | 2;
 };
 
 /**
- * A Mental Math v1 session document as a conforming client writes it, with
+ * A Mental Math session document (gameVersion 1 by default, or 2) as a conforming client writes it, with
  * timestamps built by `timestamp` (the Admin SDK's Timestamp.fromMillis in
  * emulator tests, TestTimestamp in pure tests).
  */
@@ -72,16 +100,19 @@ export function mentalMathSession(
   timestamp: (ms: number) => FirestoreTimestamp,
 ): Record<string, unknown> {
   const status = plan.status ?? 'completed';
-  const run = playRun(status === 'abandoned' ? { stopAtMs: 30_000, ...plan } : plan);
+  const runPlan = status === 'abandoned' ? { stopAtMs: 30_000, ...plan } : plan;
+  const timeBank = plan.gameVersion === 2;
+  const run = timeBank ? playTimeBankRun(runPlan) : playRun(runPlan);
   const lastEnd = run.trials.reduce((end, trial) => Math.max(end, trial.shownAtMs + trial.rtMs), 0);
-  const activeDurationMs = status === 'completed' ? mm.RUN_DURATION_MS : lastEnd;
+  const completedMs = timeBank ? (run as mentalMathV2.MentalMathRun).endsAtMs : mm.RUN_DURATION_MS;
+  const activeDurationMs = status === 'completed' ? completedMs : lastEnd;
   const timezone = plan.timezone ?? 'America/Toronto';
   const scored = mm.score(run.trials, { modeId: mm.MODE_ID, startLevel: plan.startLevel });
   return {
     schemaVersion: 1,
     userId: plan.uid,
     gameId: mm.GAME_ID,
-    gameVersion: mm.GAME_VERSION,
+    gameVersion: timeBank ? mentalMathV2.GAME_VERSION : mm.GAME_VERSION,
     modeId: mm.MODE_ID,
     startLevel: plan.startLevel,
     seed: plan.seed,

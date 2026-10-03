@@ -65,7 +65,8 @@ function pendingNote(phase: StatsPhase, section: 'figures' | 'activity' | 'achie
   switch (phase) {
     case 'loading': return null;
     case 'offline': return `${subject} will show when you’re back online.`;
-    case 'checking': return `Your latest run is still being checked. ${subject} ${section === 'activity' ? 'updates' : 'update'} once it’s confirmed.`;
+    // A run whose result is still pending: the section shows its loading line and updates when the result lands.
+    case 'checking': return null;
     case 'catching-up': return `${subject} ${section === 'activity' ? 'catches' : 'catch'} up after your next finished run.`;
     case 'unavailable': return `${subject} couldn’t be loaded right now.`;
     default: return null;
@@ -171,7 +172,7 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
           {view?.kind === 'today-unknown' && (
             <p className="ov-help">{`Your current streak can’t be shown because your time zone (${overview.zone.zone}) isn’t recognised.`}</p>
           )}
-          <p className="ov-help">A streak counts training days in a row: days with a finished run that the server has checked.</p>
+          <p className="ov-help">A streak counts training days in a row: days with at least one finished run.</p>
         </section>
       )}
 

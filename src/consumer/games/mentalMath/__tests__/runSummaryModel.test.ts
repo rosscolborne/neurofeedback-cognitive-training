@@ -52,7 +52,7 @@ describe('post-session summary', () => {
     expect(model.verification).toEqual({ kind: 'provisional', detail: 'checking' });
     expect(model.record).toEqual({ kind: 'new-best', startLevel: 1, metrics: ['score', 'correct', 'peakLevel'] });
     expect(model.unlock).toEqual({ kind: 'unlocked', levels: [2] });
-    expect(model.totals).toEqual({ sessionsCompleted: 1, activeMs: outcome.activeDurationMs, includesUnverified: true });
+    expect(model.totals).toEqual({ sessionsCompleted: 1, activeMs: outcome.activeDurationMs });
   });
 
   it('says the run is waiting to upload while it is only on this device', () => {
@@ -72,7 +72,7 @@ describe('post-session summary', () => {
     expect(model.breakdown).toEqual({ difficultyPoints: 1000, speedBonusPoints: 234 });
     expect(model.record).toEqual({ kind: 'new-best', startLevel: 1, metrics: ['score', 'correct', 'peakLevel'] });
     expect(model.unlock).toEqual({ kind: 'unlocked', levels: [2] });
-    expect(model.totals).toEqual({ sessionsCompleted: 1, activeMs: outcome.activeDurationMs, includesUnverified: false });
+    expect(model.totals).toEqual({ sessionsCompleted: 1, activeMs: outcome.activeDurationMs });
   });
 
   it('shows no new best for a lower-scoring repeat at the same start level, and names the best to beat', () => {
@@ -103,7 +103,7 @@ describe('post-session summary', () => {
     const model = summary(outcome, 'queued', pickerState(null, [stored(outcome), stored(older, undefined, OLDER)]));
     expect(model.unlock).toEqual({ kind: 'next', unlocked: 2, nextLevel: 3, reachLevel: 4 });
     expect(model.record).toMatchObject({ kind: 'best-so-far', startLevel: 1 });
-    expect(model.totals).toMatchObject({ sessionsCompleted: 2, includesUnverified: true });
+    expect(model.totals).toMatchObject({ sessionsCompleted: 2 });
   });
 
   it('explains a flagged run: it counts in totals but sets no records or unlocks', () => {
@@ -150,20 +150,14 @@ describe('post-session summary', () => {
     const forged = runSummary({ outcome, environment: ENVIRONMENT, run: { ...RUN, seed: SEED + 1 }, save: 'confirmed', state: pickerState(progressWith(1), [stored(outcome)]) });
     expect(forged.verification).toMatchObject({ kind: 'provisional' });
     expect(forged.record).toMatchObject({ kind: 'ineligible', reason: 'invalid' });
-    expect(forged.totals).toEqual({ sessionsCompleted: 1, activeMs: 0, includesUnverified: false });
+    expect(forged.totals).toEqual({ sessionsCompleted: 1, activeMs: 0 });
 
-    // Predicted flagged (start level 2 is still locked): it counts in the totals, so they include an unchecked run.
+    // Predicted flagged (start level 2 is still locked): it counts in the totals.
     const locked = playRun({ seed: SEED, startLevel: 2, correct: 3 });
     const flagged = summary(locked, 'confirmed', pickerState(null, [stored(locked)]));
     expect(flagged.record).toMatchObject({ kind: 'ineligible', reason: 'flagged' });
-    expect(flagged.totals).toMatchObject({ sessionsCompleted: 1, includesUnverified: true });
+    expect(flagged.totals).toMatchObject({ sessionsCompleted: 1 });
 
-    // Checked by the server, with another run still pending on this device.
-    const older = weak(1_790_000_000_000);
-    const decision = trusted(outcome, null);
-    const withPending = summary(outcome, 'confirmed', pickerState(decision.progress, [stored(outcome, decision.result), stored(older, undefined, OLDER)]));
-    expect(withPending.totals).toMatchObject({ includesUnverified: true });
-    expect(summary(outcome, 'confirmed', pickerState(decision.progress, [stored(outcome, decision.result)])).totals).toMatchObject({ includesUnverified: false });
   });
 
   it('shows no score for a run trusted scoring found invalid', () => {
@@ -196,7 +190,7 @@ describe('post-session summary', () => {
     const model = summary(outcome, 'failed', pickerState(progressWith(1), []));
     expect(model.verification).toEqual({ kind: 'not-saved' });
     expect(model.record).toMatchObject({ kind: 'ineligible', reason: 'not-saved' });
-    expect(model.totals).toMatchObject({ sessionsCompleted: 1, includesUnverified: false });
+    expect(model.totals).toMatchObject({ sessionsCompleted: 1 });
   });
 
   it('describes the next unlock from the mode’s own policy', () => {

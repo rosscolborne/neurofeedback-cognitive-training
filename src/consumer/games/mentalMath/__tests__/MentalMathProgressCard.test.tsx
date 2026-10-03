@@ -31,10 +31,10 @@ describe('MentalMathProgressCard (NFCT-52)', () => {
     expect(renderer.root.findByProps({ id: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID }).props['aria-label']).toBe('Mental Math records and history');
   });
 
-  it('marks the numbers provisional while they count a run the server hasn’t checked', () => {
+  it('marks the numbers pending while they count a run without a trusted result', () => {
     const pending = sessionRecord('sessionAAAAAAAAAAAA1', playRun({ seed: 4242, startLevel: 1, correct: 7 }), { seed: 4242 });
     const { summary, tags } = renderCard(pickerState(null, [pending]));
-    expect(textOf(summary)).toBe('1 run completed · 2 of 10 start levels unlocked Provisional');
+    expect(textOf(summary)).toBe('1 run completed · 2 of 10 start levels unlocked Pending');
     expect(tags).toHaveLength(1);
   });
 });

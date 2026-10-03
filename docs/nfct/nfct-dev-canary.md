@@ -56,7 +56,7 @@ serves the bundle with `vite preview` and drives it as an ordinary user:
    `gameSessions` query, and real Firestore enforces the composite index that
    emulators do not.
 5. Start a run, **Pause**, **Quit run**: "Run saved to your account." appears
-   only after the server acknowledges the session write. No 90-second run is
+   only after the server acknowledges the session write. No whole run is
    needed.
 6. Sign in again in a new browser context with no cache: the account comes back
    home, reading its profile from the server. That the profile was saved is
@@ -73,7 +73,9 @@ project's quota. It writes the request counts to the job summary.
 Not checked yet:
 
 - Trusted scoring (a session `result`, progress). nfct-dev has no Functions
-  deployed (Spark). Extend the journey when they are.
+  deployed (Spark), so every real-backend run stays Pending
+  ([trusted scoring on nfct-dev](#trusted-scoring-on-nfct-dev)). Extend the
+  journey when they are.
 
 ## When it runs
 
@@ -267,6 +269,97 @@ credentials, never from a pull request.
    classification.
 4. Keep the fork-workflow approval setting at its default or stricter
    (Settings > Actions > General).
+
+## Trusted scoring on nfct-dev
+
+Every run's score, records, unlocks, streak, activity and achievements come
+from trusted scoring in `functions/` (NFCT-19, NFCT-13), never from the
+client. On 2026-10-03 the Cloud Functions API was not even enabled on nfct-dev
+(`npx firebase functions:list --project dev`: 403 `SERVICE_DISABLED`), and the
+project is on Spark, which cannot run Functions. So nothing scores a run saved
+there: it keeps a session without `result`, Home, Progress and Mental Math
+history show it as **Pending** for ever, and the stats-driven cards keep
+loading. The client is behaving correctly; this is the missing server path.
+
+Nothing else in the repository blocks it (NFCT-66 traced the whole path):
+
+| Piece | State |
+| --- | --- |
+| Trigger | `onGameSessionCreated` (Firestore `onDocumentCreated`, 2nd gen, retries on) writes `result`, `progress/{gameId}`, `stats/summary`, `dailyStats/*` and `achievements/*` in one transaction |
+| Sweep | `sweepUnprocessedSessions` (every 60 minutes, Cloud Scheduler) re-drives `pending`, `failed` and `unsupported` sessions 1 hour to 7 days old, 100 per run |
+| Region | `northamerica-northeast2`, the same as nfct-dev's Firestore (`functions/src/index.ts`) |
+| Runtime and build | Node 22 (`firebase.json`, `functions/package.json`); the predeploy step bundles `src/` and `shared/` into `lib/index.js`, which is all that is uploaded; the CLI disables the buildpack's own build |
+| Parameters and secrets | None |
+| Rules | The client may read its own `gameSessions`, `progress`, `stats`, `dailyStats` and `achievements`, and may write none of the trusted fields |
+| Indexes | `firestore.indexes.json` covers the client's history query and the Functions' queries, including the collection-group `processing.state` + `createdAt` index the sweep and re-drive use |
+| Client | Live listeners on the session, progress and stats documents; each re-subscribes after a failure (`src/consumer/firestore/retryingSubscription.ts`), so the result shows without a reload once it is written |
+
+### Owner steps
+
+Run these from a clean checkout of the commit to deploy (normally
+`development`'s head), on your own machine. Agents do not deploy.
+
+1. **Upgrade nfct-dev to Blaze** (Firebase console > Usage and billing >
+   Modify plan) and set a budget alert. `maxInstances: 10` bounds the trigger;
+   the sweep runs 24 times a day.
+2. **Confirm the database location** is `northamerica-northeast2`
+   (Firebase console > Firestore > the `(default)` database). If it is not,
+   stop: `REGION` in `functions/src/index.ts` must match it.
+3. **Install and test:**
+   `npm ci --legacy-peer-deps && npm ci --prefix functions && npm run test:functions`
+   (Java 21).
+4. **Deploy rules and indexes** if nfct-dev's are older than this commit:
+   `npx firebase deploy --only firestore --project dev`. Answer **No** to
+   deleting indexes, never pass `--force`, and wait until every index has
+   built (Firebase console > Firestore > Indexes).
+
+   **Mental Math gameVersion 2 (NFCT-60, the time bank).** Builds from that
+   change on write sessions with `gameVersion: 2`, which rules older than it
+   refuse (`supportedGameVersions()` now allows 1 to 2): deploy these rules
+   before anyone plays on such a build, or its runs fail to save (the canary
+   fails the same way). Older builds keep writing `gameVersion: 1`, which stays
+   allowed. Functions from this commit register both versions: every run saved
+   before the deploy is a fixed 90 s gameVersion 1 run and is judged by v1's
+   own rules in step 7, exactly as before; time-bank runs are judged by v2's.
+   A player's records restart with their first time-bank run (the v1 records
+   are kept in `bestsArchive`), and unlocked start levels carry over.
+5. **Deploy the Functions:** `npx firebase deploy --only functions --project dev`.
+   The CLI enables the APIs it needs (Cloud Functions, Cloud Build, Artifact
+   Registry, Cloud Run, Eventarc, Pub/Sub, Cloud Scheduler) and grants the
+   service agents their roles. A first 2nd-gen deploy can fail while those
+   permissions propagate; wait a few minutes and run it again. If only the
+   scheduled sweep fails (for example, Cloud Scheduler in this region),
+   deploy the trigger alone with
+   `npx firebase deploy --only functions:onGameSessionCreated --project dev`
+   and report the sweep's error.
+6. **Verify:** `npx firebase functions:list --project dev` lists
+   `onGameSessionCreated` and `sweepUnprocessedSessions` in
+   `northamerica-northeast2`. Play a Mental Math run on a TestFlight or
+   nfct-dev web build: within seconds the summary's tag changes from
+   **Pending** to **Final**, Home's recent runs and Mental Math history show
+   the score, and Home's streak and achievements appear. Reload, or sign in
+   again: the same values come back. Errors go to
+   `npx firebase functions:log --project dev`.
+7. **Score the runs saved before the deploy.** A trigger fires only for new
+   documents, so earlier sessions stay pending until something re-drives them.
+   The sweep takes those from the last 7 days, 100 an hour. To do all of them
+   at once, with your Application Default Credentials
+   (`gcloud auth application-default login`):
+
+   ```bash
+   # Lists what it would re-drive (pending, failed and unsupported sessions)
+   npm run functions:redrive-sessions -- --project nfct-dev --live --dry-run --older-than-minutes 0 --newer-than-days 365
+   # Re-drives them through the trigger's pipeline, then finishes each user's start-level upgrades
+   npm run functions:redrive-sessions -- --project nfct-dev --live --older-than-minutes 0 --newer-than-days 365
+   ```
+
+   Repeat while it reports targets (`--limit` defaults to 100). Each re-driven
+   session updates its user's progress and stats as it commits. Should a
+   user's aggregates ever look wrong, rebuild them from their stored results:
+   `npm run functions:rebuild-progress -- --project nfct-dev --live --uid <uid>`.
+8. **Afterwards:** remove `functions/` from the canary's skip list
+   (`scripts/ci/classify-changes.sh` and [When it runs](#when-it-runs)), and
+   extend the canary journey to wait for a **Final** score.
 
 ## Running it by hand
 

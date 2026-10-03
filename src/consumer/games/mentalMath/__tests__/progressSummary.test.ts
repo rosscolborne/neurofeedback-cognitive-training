@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readSessionProgressFields, type ServerResult } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../../repositories/gameSessionRepository';
 import { clientSessionDocument } from '../runSummaryModel';
-import { formatPlayTime, gameOverview, historyRow, progressCardSummary } from '../progressSummary';
+import { formatPlayTime, gameOverview, historyRow, historyRowView, progressCardSummary, type HistoryRow } from '../progressSummary';
 import { currentProgress, previewDecision } from '../startLevel';
 import { pickerState, playRun, progressWith, sessionRecord } from './fixtures';
 
@@ -86,7 +86,7 @@ describe('per-game progress', () => {
       ...overrides,
     });
     const valid = decision.result;
-    expect(historyRow(entry({}, valid))).toMatchObject({ state: 'verified', personalBest: true, startLevel: 1, completed: true, activeMs: 90_000, score: valid.validity === 'valid' ? valid.score : -1 });
+    expect(historyRow(entry({}, valid))).toMatchObject({ state: 'verified', personalBest: true, startLevel: 1, completed: true, activeMs: document.activeDurationMs, score: valid.validity === 'valid' ? valid.score : -1 });
     expect(historyRow(entry({}, { ...valid, validity: 'flagged', reasons: ['run-overrun'] } as ServerResult))).toMatchObject({ state: 'flagged', personalBest: false });
     expect(historyRow(entry({}, { processedAt: at(1), scoringVersion: 1, validity: 'invalid', reasons: ['schema-invalid'] }))).toMatchObject({ state: 'invalid', score: null });
     expect(historyRow(entry({ hasPendingWrites: true }))).toMatchObject({ state: 'on-device', score: null });
@@ -100,6 +100,24 @@ describe('per-game progress', () => {
     const row = historyRow({ id: 'sessionAAAAAAAAAAAA1', session: readSessionProgressFields(raw), awaitingResult: false, hasPendingWrites: false });
     expect(row.state).toBe('verified');
     expect(row.score).toBe(decision.result.validity === 'valid' ? decision.result.score : -1);
+  });
+
+  it('reads each row at a glance: score, pending or none, and at most one tag (NFCT-64)', () => {
+    const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
+      id: 'sessionAAAAAAAAAAAA1', endedAtMs: 0, startLevel: 1, completed: true, activeMs: 90_000,
+      state: 'verified', score: 500, personalBest: false, ...overrides,
+    });
+    expect(historyRowView(row({}))).toEqual({ score: { kind: 'score', value: 500, muted: false }, tag: null });
+    expect(historyRowView(row({ personalBest: true }))).toEqual({ score: { kind: 'score', value: 500, muted: false }, tag: 'new-best' });
+    expect(historyRowView(row({ state: 'flagged' })).tag).toBe('flagged');
+    expect(historyRowView(row({ state: 'invalid', score: null }))).toEqual({ score: { kind: 'none' }, tag: 'not-counted' });
+    for (const state of ['checking', 'delayed'] as const) expect(historyRowView(row({ state, score: null }))).toEqual({ score: { kind: 'pending' }, tag: null });
+    expect(historyRowView(row({ state: 'on-device', score: null }))).toEqual({ score: { kind: 'pending' }, tag: 'not-uploaded' });
+    // Ended early: one tag, its score kept (quieter), and pending stays pending.
+    expect(historyRowView(row({ completed: false, score: 120 }))).toEqual({ score: { kind: 'score', value: 120, muted: true }, tag: 'ended-early' });
+    expect(historyRowView(row({ completed: false, state: 'flagged', score: 120 })).tag).toBe('ended-early');
+    expect(historyRowView(row({ completed: false, state: 'checking', score: null }))).toEqual({ score: { kind: 'pending' }, tag: 'ended-early' });
+    expect(historyRowView(row({ completed: false, state: 'invalid', score: null }))).toEqual({ score: { kind: 'none' }, tag: 'not-counted' });
   });
 
   it('formats play time with units', () => {

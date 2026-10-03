@@ -19,7 +19,6 @@ import {
 import { AchievementRow, GoalMeter, StreakStrip } from './OverviewParts';
 import {
   browserOverviewClock,
-  hasUncheckedRun,
   runRows,
   statsPhase,
   useRecentRuns,
@@ -58,7 +57,7 @@ export interface HomeOverviewProps {
   readonly clock?: OverviewClock;
 }
 
-const INTRO = 'A 90-second arithmetic run that adapts as you play.';
+const INTRO = 'Quick arithmetic against the clock that adapts as you play.';
 
 function heroText(phase: StatsPhase, nudge: StreakNudge, view: StreakView | null): string {
   if (phase === 'new') return `${INTRO} Finish your first run to start a streak and earn your first achievement.`;
@@ -81,8 +80,7 @@ const StreakCard: React.FC<{
   readonly overview: PlayerOverview;
   readonly summary: StatsSummary | null;
   readonly view: StreakView | null;
-  readonly checking: boolean;
-}> = ({ phase, overview, summary, view, checking }) => {
+}> = ({ phase, overview, summary, view }) => {
   const { today, goal, days } = overview;
   const alive = view?.kind === 'status' && view.status.alive;
   const current = view?.kind === 'status' ? view.status.current : view?.kind === 'none' ? 0 : null;
@@ -95,10 +93,10 @@ const StreakCard: React.FC<{
   ) ?? null, [weekDays]);
 
   let caption: string;
-  if (phase === 'loading') caption = 'Loading your streak…';
+  // A run whose result is still pending counts as loading: the streak updates by itself when it lands.
+  if (phase === 'loading' || phase === 'checking') caption = 'Loading your streak…';
   else if (phase === 'unavailable') caption = 'Your streak couldn’t be loaded right now.';
   else if (phase === 'offline') caption = 'Your streak will show when you’re back online.';
-  else if (phase === 'checking') caption = 'Your latest run is still being checked. Your streak and achievements update once it’s confirmed.';
   else if (phase === 'catching-up') caption = 'Your streak and achievements catch up after your next finished run.';
   else if (view?.kind === 'today-unknown') caption = `Longest: ${daysText(view.longest)}. Your current streak can’t be shown because ${zoneText(overview.zone)} isn’t recognised.`;
   else if (view?.kind === 'status' && !view.status.alive) caption = `Last trained ${formatLocalDate(view.status.lastActiveDate!, today)}. Longest: ${daysText(longest)}.`;
@@ -120,9 +118,6 @@ const StreakCard: React.FC<{
         </span>
       </div>
       <p className="ov-help" data-overview="streak-caption">{caption}</p>
-      {phase === 'stats' && checking && (
-        <p className="ov-status" role="status">Your latest run is still being checked. Your streak updates once it’s confirmed.</p>
-      )}
       {phase === 'stats' && today !== null && summary && <StreakStrip days={streakStrip(summary.streak, today)} />}
       {phase === 'stats' && today !== null && (
         <div className="ov-divider" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -153,8 +148,6 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
   const summary = overview.summary.status === 'ready' && overview.summary.value.status === 'readable' ? overview.summary.value.data : null;
   const view = summary ? streakView(summary.streak, overview.today) : null;
   const nudge = view ? streakNudge(view) : null;
-  // A run this device saved that trusted scoring has not confirmed yet: the streak may be about to change.
-  const checking = rows !== null && hasUncheckedRun(rows);
   const lists = useMemo(
     () => (overview.achievements.status === 'ready' ? achievementLists(overview.achievements.value.achievements) : null),
     [overview.achievements],
@@ -180,7 +173,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
 
       {/* Nothing while loading, so a new player never sees a streak card come and go. */}
       {phase !== 'new' && phase !== 'loading' && (
-        <StreakCard phase={phase} overview={overview} summary={summary} view={view} checking={checking} />
+        <StreakCard phase={phase} overview={overview} summary={summary} view={view} />
       )}
 
       {phase === 'stats' && (

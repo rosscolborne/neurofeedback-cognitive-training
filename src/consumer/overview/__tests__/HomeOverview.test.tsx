@@ -47,7 +47,7 @@ const weekDays = (r: ReactTestRenderer) => r.root.findAll((node) => node.type ==
 describe('Home', () => {
   it('invites a new player to play, without a streak, zeros or achievements', async () => {
     const { r, handlers } = await renderHome({ summary: missing(), runs: [] });
-    expect(one(r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play. Finish your first run to start a streak and earn your first achievement.');
+    expect(one(r, 'hero-text')).toBe('Quick arithmetic against the clock that adapts as you play. Finish your first run to start a streak and earn your first achievement.');
     expect(byData(r, 'streak-card')).toHaveLength(0);
     expect(byData(r, 'home-achievements')).toHaveLength(0);
     expect(byData(r, 'recent-runs')).toHaveLength(0);
@@ -130,7 +130,7 @@ describe('Home', () => {
     expect(one(r, 'streak-caption')).toBe('Longest: 2 days. Your current streak can’t be shown because your profile’s time zone (Mars/Olympus_Mons) isn’t recognised.');
     expect(weekDays(r)).toHaveLength(0);
     expect(byData(r, 'week-summary')).toHaveLength(0);
-    expect(one(r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play.');
+    expect(one(r, 'hero-text')).toBe('Quick arithmetic against the clock that adapts as you play.');
   });
 
   it('tells a player whose runs predate streaks that the next run brings them up to date', async () => {
@@ -140,11 +140,28 @@ describe('Home', () => {
     expect(byData(r, 'recent-runs')).toHaveLength(1);
   });
 
-  it('says a run still being checked will update the streak', async () => {
+  it('shows a run whose result is pending as loading, never narrating how it is scored (NFCT-66)', async () => {
     const { r } = await renderHome({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
-    expect(one(r, 'streak-caption')).toBe('Your latest run is still being checked. Your streak and achievements update once it’s confirmed.');
+    expect(one(r, 'streak-caption')).toBe('Loading your streak…');
+    const banned = /server|being checked|confirm|verif|provisional|processing/i;
+    expect(visibleText(r)).not.toMatch(banned);
     const withStats = await renderHome({ summary: readable(summaryWith([TODAY])), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
-    expect(visibleText(withStats.r)).toContain('Your latest run is still being checked. Your streak updates once it’s confirmed.');
+    expect(visibleText(withStats.r)).not.toMatch(banned);
+  });
+
+  it('recovers from a failed live read by subscribing again, instead of staying unavailable (NFCT-66)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const state: FakeState = { summary: 'error', runs: [runEntry('sessionAAAAAAAAAAAA1')] };
+      const { r, sources } = await renderHome(state);
+      expect(one(r, 'streak-caption')).toBe('Your streak couldn’t be loaded right now.');
+      state.summary = readable(summaryWith([TODAY]));
+      await act(async () => { vi.advanceTimersByTime(2_000); });
+      expect(sources.stats.subscribeToSummary).toHaveBeenCalledTimes(2);
+      expect(one(r, 'streak')).toBe('1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('waits for the connection instead of claiming no stats when the summary is not cached offline', async () => {
@@ -155,7 +172,7 @@ describe('Home', () => {
   it('never calls a player new while offline with nothing cached, or when the runs cannot be read', async () => {
     // No connection and nothing cached: no runs in the cache says nothing about the account.
     const offline = await renderHome({ summary: missing(true), runs: [] }, offlineClock);
-    expect(one(offline.r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play.');
+    expect(one(offline.r, 'hero-text')).toBe('Quick arithmetic against the clock that adapts as you play.');
     expect(visibleText(offline.r)).not.toContain('Start here');
     expect(one(offline.r, 'streak-caption')).toBe('Your streak will show when you’re back online.');
 

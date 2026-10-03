@@ -7,6 +7,7 @@ import {
   type GameIconKey,
   type GameListing,
 } from '@nfct/shared';
+import { largestRemainderPercentages } from './percentages';
 
 // What a catalogue card shows for each game (NFCT-12), derived from the
 // code-owned listings and game definitions in @nfct/shared and the v1 domain
@@ -17,6 +18,8 @@ export interface CatalogueDomain {
   readonly label: string;
   /** Product taxonomy, not a measurement: how prominently the game is filed here. */
   readonly weight: number;
+  /** The weight as a whole percentage; a game's percentages sum to 100. */
+  readonly percent: number;
 }
 
 export interface CatalogueGame {
@@ -28,6 +31,11 @@ export interface CatalogueGame {
   readonly domains: readonly CatalogueDomain[];
   /** The fixed run length of the game's timed modes, or null when no mode is timed. */
   readonly runLengthMs: { readonly min: number; readonly max: number } | null;
+  /**
+   * With no fixed run length: the longest a run can last, from modes that end
+   * by their own rule (Mental Math's time bank, NFCT-60), or null.
+   */
+  readonly maxRunLengthMs: number | null;
   /** The highest level of any mode. */
   readonly levels: number;
 }
@@ -35,10 +43,12 @@ export interface CatalogueGame {
 const DOMAIN_ORDER: ReadonlyMap<string, number> = new Map(DOMAIN_CATALOG.domains.map((id, index) => [id, index]));
 
 function domainsOf(listing: GameListing): CatalogueDomain[] {
-  return Object.entries(listing.definition.domainWeights)
+  const weighted = Object.entries(listing.definition.domainWeights)
     .filter((entry): entry is [DomainId, number] => DOMAIN_ORDER.has(entry[0]) && (entry[1] ?? 0) > 0)
-    .sort(([a, weightA], [b, weightB]) => weightB - weightA || DOMAIN_ORDER.get(a)! - DOMAIN_ORDER.get(b)!)
-    .map(([id, weight]) => ({ id, label: DOMAIN_LABELS[id], weight }));
+    .sort(([a, weightA], [b, weightB]) => weightB - weightA || DOMAIN_ORDER.get(a)! - DOMAIN_ORDER.get(b)!);
+  // Heaviest first, so a leftover rounding point goes to the heavier domain on a tie.
+  const percents = largestRemainderPercentages(weighted.map(([, weight]) => weight));
+  return weighted.map(([id, weight], index) => ({ id, label: DOMAIN_LABELS[id], weight, percent: percents[index]! }));
 }
 
 function runLengthOf(listing: GameListing): CatalogueGame['runLengthMs'] {
@@ -46,6 +56,13 @@ function runLengthOf(listing: GameListing): CatalogueGame['runLengthMs'] {
     .map((mode) => mode.runDurationMs)
     .filter((length): length is number => typeof length === 'number');
   return lengths.length === 0 ? null : { min: Math.min(...lengths), max: Math.max(...lengths) };
+}
+
+function maxRunLengthOf(listing: GameListing): number | null {
+  const lengths = listing.definition.modes
+    .map((mode) => mode.maxRunDurationMs)
+    .filter((length): length is number => typeof length === 'number');
+  return lengths.length === 0 ? null : Math.max(...lengths);
 }
 
 export function toCatalogueGame(listing: GameListing): CatalogueGame {
@@ -56,6 +73,7 @@ export function toCatalogueGame(listing: GameListing): CatalogueGame {
     icon: listing.icon,
     domains: domainsOf(listing),
     runLengthMs: runLengthOf(listing),
+    maxRunLengthMs: maxRunLengthOf(listing),
     levels: Math.max(...listing.definition.modes.map(maxLevelOf)),
   };
 }
@@ -69,6 +87,11 @@ function durationLabel(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (seconds >= 120 && seconds % 60 === 0) return `${seconds / 60} minutes`;
   return seconds === 1 ? '1 second' : `${seconds} seconds`;
+}
+
+/** "Up to 3 minutes": a run with no fixed length but a longest possible one. */
+export function maxRunLengthLabel(ms: number): string {
+  return `Up to ${durationLabel(ms)}`;
 }
 
 /** "90 seconds", "2 minutes", or a range when a game's timed modes differ. */

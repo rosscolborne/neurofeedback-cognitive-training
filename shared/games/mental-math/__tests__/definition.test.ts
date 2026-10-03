@@ -25,7 +25,8 @@ describe('Mental Math v1 definition', () => {
     });
     expect(mm.definition.domainWeights).not.toHaveProperty('reasoning');
     expect(mm.definition.performanceIndex).toBeUndefined();
-    expect(mentalMath.definition).toBe(mm.definition); // the current version is v1
+    expect(mentalMath.definition).not.toBe(mm.definition); // new runs are gameVersion 2, the time bank (NFCT-60)
+    expect(mentalMath.definition.gameVersion).toBe(2);
   });
 
   it('has one adaptive 90 s mode, timed-90, with levels 1-10 starting from level 1', () => {

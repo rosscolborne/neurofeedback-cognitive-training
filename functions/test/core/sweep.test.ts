@@ -60,7 +60,7 @@ describe('sweepUnprocessedSessions', () => {
     const created = at(3);
     const uid = newUid();
     const { id } = await writeSessionAt(db, uid, created, { seed: 504, startLevel: 1, targetPeak: 3 }, {
-      gameVersion: 2, processing: { state: 'unsupported', reason: 'unknown-game-version', attempts: 1, updatedAt: ts(created) },
+      gameVersion: 3, processing: { state: 'unsupported', reason: 'unknown-game-version', attempts: 1, updatedAt: ts(created) },
     });
 
     const before = await sweepAt(created + 2 * HOUR);
@@ -68,12 +68,12 @@ describe('sweepUnprocessedSessions', () => {
     // Not re-driven, so no attempt is spent on it.
     expect((await readDoc(db, sessionPath(uid, id)))?.processing).toMatchObject({ state: 'unsupported', attempts: 1 });
 
-    const v2 = defineGameVersionModule({
-      definition: defineGame({ ...mm.definition, gameVersion: 2 }),
+    const v3 = defineGameVersionModule({
+      definition: defineGame({ ...mm.definition, gameVersion: 3 }),
       reasonOutcomes: mm.REASON_OUTCOMES,
       check: (session) => mm.checkSession(session),
     });
-    const after = await sweepAt(created + 3 * HOUR, createGameModuleRegistry([mentalMathV1Module, v2]));
+    const after = await sweepAt(created + 3 * HOUR, createGameModuleRegistry([mentalMathV1Module, v3]));
 
     expect(after.results).toMatchObject([{ sessionId: id, state: 'unsupported', now: 'valid' }]);
     const session = await readDoc(db, sessionPath(uid, id));

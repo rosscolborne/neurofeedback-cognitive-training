@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtHome, loginThroughUi } from './helpers/auth';
 import { readGameSessions, readPlayerStats, seedPlayer } from './helpers/localEmulator';
+import { formatPlayTime } from '../src/consumer/games/mentalMath/progressSummary';
 import { answer, runOut, startRun } from './helpers/mentalMath';
 
 // NFCT-13 part 2: Home and Progress around streaks, the week and
@@ -54,7 +55,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
 
   // A new player: Home invites a first run instead of showing zeros.
   await expect(overview(page, 'hero-text')).toHaveText(
-    'A 90-second arithmetic run that adapts as you play. Finish your first run to start a streak and earn your first achievement.',
+    'Quick arithmetic against the clock that adapts as you play. Finish your first run to start a streak and earn your first achievement.',
   );
   await expect(overview(page, 'streak-card')).toHaveCount(0);
   await expect(overview(page, 'home-achievements')).toHaveCount(0);
@@ -78,7 +79,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   for (const correct of CLIMB) await answer(page, correct);
   await runOut(page);
   await page.clock.resume();
-  await expect(page.locator('[data-summary="verification"]')).toHaveText('Verified', { timeout: 30_000 });
+  await expect(page.locator('[data-summary="verification"]')).toHaveText('Final', { timeout: 30_000 });
 
   // What trusted scoring wrote in the same commit as the result (observation only).
   const [session] = await readGameSessions(uid);
@@ -97,7 +98,8 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(strip).toHaveCount(7);
   await expect(strip.and(page.locator('[data-trained="true"]'))).toHaveCount(1);
   await expect(page.locator(`.ov-week-day[data-date="${today}"]`)).toHaveAttribute('data-trained', 'true');
-  await expect(overview(page, 'week-summary')).toHaveText('This week: 1 finished run · 1 min 30 s played');
+  // A time-bank run (NFCT-60) lasts as long as its answers earned.
+  await expect(overview(page, 'week-summary')).toHaveText(`This week: 1 finished run · ${formatPlayTime(session!.data.activeDurationMs as number)} played`);
   // The inherited sign-up has no consumer profile, so no weekly goal is set: none is shown.
   await expect(overview(page, 'weekly-goal')).toHaveCount(0);
   await expect(overview(page, 'achievement-count')).toHaveText('1 of 9 earned');
@@ -126,4 +128,22 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await arriveAtHome(page, { afterReload: true });
   await expect(overview(page, 'streak')).toHaveText('1');
   await expect(achievementRow(page, 'first-run')).toHaveAttribute('data-earned', 'true');
+
+  // NFCT-66: after the reload, the run is resolved everywhere it is listed, with the trusted score, nothing
+  // pending, and no copy about how it was scored. Home's recent runs first, then the game's full history.
+  const score = new Intl.NumberFormat('en-US').format((session!.data.result as { score: number }).score);
+  const homeRow = overview(page, 'recent-runs').locator('li[data-history-row]');
+  await expect(homeRow).toHaveCount(1);
+  await expect(homeRow.locator('.mm-history-score')).toHaveText(score);
+  await expect(homeRow).not.toContainText('Pending');
+  const noBackendCopy = /server|being checked|confirm|verif|provisional|processing/i;
+  await expect(overview(page, 'home')).not.toContainText(noBackendCopy);
+  await page.getByRole('button', { name: 'All Mental Math runs and records', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
+  const historyRow = page.getByRole('list', { name: 'Runs, newest first' }).getByRole('listitem');
+  await expect(historyRow).toHaveCount(1);
+  await expect(historyRow.locator('.mm-history-score')).toHaveText(score);
+  await expect(historyRow).toContainText('New best');
+  await expect(historyRow).not.toContainText('Pending');
+  await expect(page.locator('.mm-progress')).not.toContainText(noBackendCopy);
 });

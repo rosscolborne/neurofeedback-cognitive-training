@@ -37,6 +37,12 @@ export interface GameModeDefinition {
    * untimed mode. Mental Math timed-90: 90_000. Absent means untimed.
    */
   readonly runDurationMs?: number | null;
+  /**
+   * For a mode with no fixed length that still ends by its own rule (Mental
+   * Math gameVersion 2's time bank): the longest a run can last in active
+   * time. Absent or null when there is no such bound or the length is fixed.
+   */
+  readonly maxRunDurationMs?: number | null;
   /** The unlocked start level when there is no valid progress for this mode. */
   readonly initiallyUnlockedStartLevel: number;
   /**
@@ -159,6 +165,12 @@ function modeProblems(mode: GameModeDefinition): string[] {
   if (runDurationMs !== undefined && runDurationMs !== null
     && (!isPositiveInt(runDurationMs) || runDurationMs > MAX_ACTIVE_DURATION_MS)) {
     problems.push(`mode '${mode.id}': runDurationMs must be null or 1-${MAX_ACTIVE_DURATION_MS}`);
+  }
+  const { maxRunDurationMs } = mode;
+  if (maxRunDurationMs !== undefined && maxRunDurationMs !== null
+    && (!isPositiveInt(maxRunDurationMs) || maxRunDurationMs > MAX_ACTIVE_DURATION_MS
+      || (runDurationMs !== undefined && runDurationMs !== null))) {
+    problems.push(`mode '${mode.id}': maxRunDurationMs must be null or 1-${MAX_ACTIVE_DURATION_MS}, and only without a fixed runDurationMs`);
   }
   const { initiallyUnlockedStartLevel: initial } = mode;
   if (!Number.isInteger(initial) || initial < 1 || initial > mode.levels.length) {

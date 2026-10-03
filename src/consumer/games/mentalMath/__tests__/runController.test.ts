@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mentalMath } from '@nfct/shared';
-import { FEEDBACK_MS, MAX_ENTRY_DIGITS, MentalMathRunController, type RunOutcome } from '../runController';
+import { BANK_CHANGE_SHOW_MS, FEEDBACK_MS, MAX_ENTRY_DIGITS, MentalMathRunController, type RunOutcome } from '../runController';
 import { answerOf } from './fixtures';
 import { ManualClock } from './manualClock';
 
@@ -30,12 +30,13 @@ function outcomeOf(onEnd: ReturnType<typeof setup>['onEnd']): RunOutcome {
 }
 
 describe('MentalMathRunController', () => {
-  it('ends the run as completed at exactly 90 s of active time, discarding the question on screen', () => {
+  it('ends the run as completed when the time bank runs out, discarding the question on screen', () => {
     const { clock, onEnd, controller } = setup();
     controller.start();
     // Never answering: each level-1 question times out at 8 s, with a feedback flash off the clock.
-    const timeouts = Math.floor(mentalMath.RUN_DURATION_MS / LEVEL_1_LIMIT_MS);
-    clock.advance(mentalMath.RUN_DURATION_MS + timeouts * FEEDBACK_MS - 1);
+    // Timeouts neither add to nor take from the bank, so it runs out at the starting 45 s.
+    const timeouts = Math.floor(mentalMath.START_BANK_MS / LEVEL_1_LIMIT_MS);
+    clock.advance(mentalMath.START_BANK_MS + timeouts * FEEDBACK_MS - 1);
     expect(controller.getSnapshot().phase).toBe('question');
     expect(controller.getSnapshot().remainingMs).toBeGreaterThan(0);
     expect(onEnd).not.toHaveBeenCalled();
@@ -43,14 +44,36 @@ describe('MentalMathRunController', () => {
     clock.advance(1);
     const outcome = outcomeOf(onEnd);
     expect(outcome.status).toBe('completed');
-    expect(outcome.activeDurationMs).toBe(mentalMath.RUN_DURATION_MS);
-    // The question shown at 88 s was discarded at expiry, not recorded.
+    expect(outcome.activeDurationMs).toBe(mentalMath.START_BANK_MS);
+    // The question shown at 40 s was discarded at expiry, not recorded.
     expect(outcome.run.trials).toHaveLength(timeouts);
     expect(outcome.run.trials.every((trial) => trial.timedOut && trial.rtMs === LEVEL_1_LIMIT_MS)).toBe(true);
     expect(outcome.run.current).toBeNull();
     expect(controller.getSnapshot().phase).toBe('ended');
     expect(clock.pendingTimers).toBe(0);
     // The session the reducer built passes trusted plausibility.
+    expect(mentalMath.checkSession({ modeId: mentalMath.MODE_ID, startLevel: 1, peakLevel: 1, status: 'completed', activeDurationMs: outcome.activeDurationMs, seed: SEED, trials: [...outcome.run.trials] }).outcome).toBe('valid');
+  });
+
+  it('ends as completed, not abandoned, on a quit after a wrong answer has emptied the bank', () => {
+    const { clock, onEnd, controller } = setup();
+    controller.start();
+    // Five level-1 timeouts use 40 s of the 45 s bank (each with its feedback flash off the clock).
+    clock.advance(5 * LEVEL_1_LIMIT_MS + 5 * FEEDBACK_MS);
+    expect(controller.getSnapshot().remainingMs).toBe(mentalMath.START_BANK_MS - 5 * LEVEL_1_LIMIT_MS);
+    clock.advance(1_000);
+    const question = current(controller);
+    type(controller, answerOf(question.text) + 1);
+    controller.submit(question.id);
+    // The wrong answer costs more than the 4 s left, so the run is over once its feedback ends.
+    expect(controller.getSnapshot().phase).toBe('feedback');
+    expect(controller.getSnapshot().remainingMs).toBe(0);
+    expect(onEnd).not.toHaveBeenCalled();
+
+    controller.quit();
+    const outcome = outcomeOf(onEnd);
+    expect(outcome.status).toBe('completed');
+    expect(outcome.activeDurationMs).toBe(5 * LEVEL_1_LIMIT_MS + 1_000);
     expect(mentalMath.checkSession({ modeId: mentalMath.MODE_ID, startLevel: 1, peakLevel: 1, status: 'completed', activeDurationMs: outcome.activeDurationMs, seed: SEED, trials: [...outcome.run.trials] }).outcome).toBe('valid');
   });
 
@@ -63,7 +86,8 @@ describe('MentalMathRunController', () => {
     controller.submit(question.id);
     expect(controller.getSnapshot().phase).toBe('feedback');
     const remaining = controller.getSnapshot().remainingMs;
-    expect(remaining).toBe(mentalMath.RUN_DURATION_MS - 1_500);
+    // A correct answer in 1.5 s at level 1 (under a third of 8 s) adds 3 s to the bank.
+    expect(remaining).toBe(mentalMath.START_BANK_MS - 1_500 + 3_000);
 
     clock.advance(FEEDBACK_MS - 1);
     expect(controller.getSnapshot().phase).toBe('feedback');
@@ -89,7 +113,7 @@ describe('MentalMathRunController', () => {
     controller.pause();
     expect(controller.getSnapshot()).toMatchObject({ phase: 'paused', pauseReason: 'player', question: null, entry: '', trialsRecorded: 0 });
     const frozen = controller.getSnapshot().remainingMs;
-    expect(frozen).toBe(mentalMath.RUN_DURATION_MS - 2_000);
+    expect(frozen).toBe(mentalMath.START_BANK_MS - 2_000);
 
     clock.advance(10 * 60_000);
     expect(controller.getSnapshot().remainingMs).toBe(frozen);
@@ -118,7 +142,7 @@ describe('MentalMathRunController', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'paused', pauseReason: 'background', trialsRecorded: 0 });
     clock.advance(24 * 60 * 60_000);
     expect(onEnd).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().remainingMs).toBe(mentalMath.RUN_DURATION_MS - 3_000);
+    expect(controller.getSnapshot().remainingMs).toBe(mentalMath.START_BANK_MS - 3_000);
     // Pauses are unlimited.
     for (let i = 0; i < 25; i += 1) {
       controller.resume();
@@ -126,7 +150,7 @@ describe('MentalMathRunController', () => {
       controller.pause('player');
     }
     expect(controller.getSnapshot().trialsRecorded).toBe(0);
-    expect(controller.getSnapshot().remainingMs).toBe(mentalMath.RUN_DURATION_MS - 3_250);
+    expect(controller.getSnapshot().remainingMs).toBe(mentalMath.START_BANK_MS - 3_250);
   });
 
   it('pausing during feedback keeps the recorded trial and loses no active time', () => {
@@ -138,7 +162,7 @@ describe('MentalMathRunController', () => {
     controller.submit(question.id);
     controller.pause();
     clock.advance(5_000);
-    expect(controller.getSnapshot()).toMatchObject({ phase: 'paused', trialsRecorded: 1, remainingMs: mentalMath.RUN_DURATION_MS - 1_000 });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'paused', trialsRecorded: 1, remainingMs: mentalMath.START_BANK_MS - 1_000 + 3_000, bankChange: null });
     controller.resume();
     expect(controller.getSnapshot().phase).toBe('question');
   });
@@ -236,14 +260,14 @@ describe('MentalMathRunController', () => {
     expect(outcome).toMatchObject({ status: 'abandoned', activeDurationMs: 5_000 });
     expect(outcome.run.trials).toHaveLength(0);
     expect(outcome.endedAtMs).toBeGreaterThan(outcome.startedAtMs);
-    clock.advance(mentalMath.RUN_DURATION_MS);
+    clock.advance(mentalMath.MAX_RUN_MS);
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 
-  it('shows no question at or after 90 s and discards an answer the run cannot hold', () => {
+  it('shows no question at or after the bank\'s end and discards an answer the run cannot hold', () => {
     const { clock, onEnd, controller } = setup();
     controller.start();
-    // Answer quickly and correctly until the end: every presentation is before 90 s.
+    // Answer quickly and correctly until the end: every presentation is before the bank's end then.
     while (controller.getSnapshot().phase !== 'ended') {
       clock.advance(900);
       const snapshot = controller.getSnapshot();
@@ -255,10 +279,45 @@ describe('MentalMathRunController', () => {
     }
     const outcome = outcomeOf(onEnd);
     const last = outcome.run.trials.at(-1)!;
-    expect(last.shownAtMs + last.rtMs).toBeLessThanOrEqual(mentalMath.RUN_DURATION_MS);
-    expect(outcome.run.trials.every((trial) => trial.shownAtMs < mentalMath.RUN_DURATION_MS)).toBe(true);
-    expect(outcome.activeDurationMs).toBe(mentalMath.RUN_DURATION_MS);
+    const ends = mentalMath.bankEnds(outcome.run.trials);
+    expect(last.shownAtMs + last.rtMs).toBeLessThanOrEqual(outcome.run.endsAtMs);
+    expect(outcome.run.trials.every((trial, index) => trial.shownAtMs < ends.before[index]!)).toBe(true);
+    expect(ends.final).toBe(outcome.run.endsAtMs);
+    // Quick, correct answers earn time: the run outlasts the starting bank, and still ends.
+    expect(outcome.activeDurationMs).toBe(outcome.run.endsAtMs);
+    expect(outcome.activeDurationMs).toBeGreaterThan(mentalMath.START_BANK_MS);
+    expect(outcome.activeDurationMs).toBeLessThanOrEqual(mentalMath.MAX_RUN_MS);
     expect(mentalMath.runPeakLevel(outcome.run)).toBeGreaterThan(1);
+  });
+
+  it('shows each answer\'s time-bank change briefly: +3 s for a quick correct answer, -5 s for a wrong one', () => {
+    const { clock, controller } = setup();
+    controller.start();
+    expect(controller.getSnapshot().bankChange).toBeNull();
+    clock.advance(1_000);
+    const first = current(controller);
+    type(controller, answerOf(first.text));
+    controller.submit(first.id);
+    expect(controller.getSnapshot().bankChange).toEqual({ ms: 3_000, trial: 1 });
+    // It outlasts the feedback flash, into the next question, then clears on its own.
+    clock.advance(FEEDBACK_MS);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'question', bankChange: { ms: 3_000 } });
+    clock.advance(BANK_CHANGE_SHOW_MS - FEEDBACK_MS);
+    expect(controller.getSnapshot().bankChange).toBeNull();
+
+    const second = current(controller);
+    type(controller, answerOf(second.text) + 1);
+    controller.submit(second.id);
+    expect(controller.getSnapshot()).toMatchObject({ bankChange: { ms: -5_000, trial: 2 }, remainingMs: mentalMath.START_BANK_MS + 3_000 - 1_000 - 800 - 5_000 });
+    clock.advance(FEEDBACK_MS);
+
+    // A slow correct answer earns nothing, so nothing is shown.
+    const third = current(controller);
+    clock.advance(7_000);
+    type(controller, answerOf(third.text));
+    controller.submit(third.id);
+    expect(controller.getSnapshot().bankChange).toBeNull();
+    controller.quit();
   });
 
   it('keeps nothing after dispose: no timers, no outcome', () => {
@@ -267,7 +326,7 @@ describe('MentalMathRunController', () => {
     clock.advance(1_000);
     controller.dispose();
     expect(clock.pendingTimers).toBe(0);
-    clock.advance(mentalMath.RUN_DURATION_MS * 2);
+    clock.advance(mentalMath.MAX_RUN_MS * 2);
     expect(onEnd).not.toHaveBeenCalled();
   });
 });

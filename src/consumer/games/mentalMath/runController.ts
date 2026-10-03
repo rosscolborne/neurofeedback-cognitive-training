@@ -3,15 +3,18 @@ import { ActiveStopwatch, type GameClock, type GameTimerHandle } from '../../clo
 
 // The Mental Math GameSessionRunner: drives NFCT-17's pure run reducer with
 // one game clock, and owns everything the reducer deliberately does not: the
-// 90-second active clock, per-question deadlines, the answer-feedback flash,
+// active clock that drains the time bank, per-question deadlines, the
+// answer-feedback flash and the brief time-bank change beside the timer,
 // pause and backgrounding, the digit entry, and ending the run exactly once.
 //
 // Timing rules (design J):
 // - Active time runs only while a question is on screen. Answer feedback,
 //   pauses and backgrounding do not consume it.
-// - Expiry always wins. No question is presented at or after 90 s, and the
-//   question on screen at expiry is discarded, never recorded. A late answer
-//   the reducer refuses as 'run-over' is treated the same way.
+// - The run ends when the time bank runs out (the reducer's endsAtMs, which
+//   each recorded answer moves; NFCT-60). That end is 'completed'.
+// - Expiry always wins. No question is presented at or after the bank's end,
+//   and the question on screen at expiry is discarded, never recorded. A late
+//   answer the reducer refuses as 'run-over' is treated the same way.
 // - Pausing or backgrounding discards the question on screen; resuming
 //   presents a fresh one at the same level. Pauses are unlimited.
 // - Only quit() ends a run early, as 'abandoned'.
@@ -27,6 +30,8 @@ type AnswerResult = mentalMath.AnswerResult;
 export const FEEDBACK_MS = 400;
 /** How often the remaining time on screen is refreshed while the clock runs. */
 export const HUD_REFRESH_MS = 250;
+/** How long the time-bank change ("+3s", "−5s") stays beside the timer, in wall time. */
+export const BANK_CHANGE_SHOW_MS = 1_200;
 /** Responses have at most this many digits (NFCT-17's response bound). */
 export const MAX_ENTRY_DIGITS = String(mentalMath.MAX_RESPONSE).length;
 
@@ -41,10 +46,18 @@ export interface RunFeedback {
   readonly expected: number;
 }
 
+/** The time bank change of the last answer, shown briefly beside the timer. */
+export interface BankChange {
+  /** Applied change in ms (after the bank cap and run limit), never 0. */
+  readonly ms: number;
+  /** The trial it came from (its 1-based count), so each change renders as its own flash. */
+  readonly trial: number;
+}
+
 export interface RunOutcome {
   readonly status: 'completed' | 'abandoned';
   readonly run: MentalMathRun;
-  /** Active run time: pauses and feedback excluded, at most the run length. */
+  /** Active run time: pauses and feedback excluded, at most the time bank's end. */
   readonly activeDurationMs: number;
   /** Device wall clock. */
   readonly startedAtMs: number;
@@ -63,7 +76,10 @@ export interface RunSnapshot {
   readonly score: number;
   /** Correct answers in a row. */
   readonly streak: number;
+  /** Active time left in the time bank. */
   readonly remainingMs: number;
+  /** The last answer's change to the time bank, while it is on screen. */
+  readonly bankChange: BankChange | null;
   readonly trialsRecorded: number;
   readonly outcome: RunOutcome | null;
 }
@@ -91,6 +107,8 @@ export class MentalMathRunController {
   private deadlineTimer: GameTimerHandle | null = null;
   private feedbackTimer: GameTimerHandle | null = null;
   private hudTimer: GameTimerHandle | null = null;
+  private bankChangeTimer: GameTimerHandle | null = null;
+  private bankChange: BankChange | null = null;
   private disposed = false;
   private listeners = new Set<() => void>();
   private snapshot: RunSnapshot;
@@ -154,6 +172,7 @@ export class MentalMathRunController {
     this.pauseReason = reason;
     this.entry = '';
     this.feedback = null;
+    this.bankChange = null;
     this.emit();
   }
 
@@ -165,11 +184,15 @@ export class MentalMathRunController {
     this.presentNext();
   }
 
-  /** Ends the run early as 'abandoned'. */
+  /**
+   * Ends the run early as 'abandoned', unless its time has already run out: a
+   * wrong answer can empty the bank, and a Quit during that answer's feedback
+   * then ends a run that is already over, so it ends as 'completed'.
+   */
   quit(): void {
     if (this.phase === 'ready' || this.phase === 'ended' || this.disposed) return;
     this.run = mentalMath.discardQuestion(this.run);
-    this.end('abandoned');
+    this.end(this.stopwatch.elapsed() >= this.run.endsAtMs ? 'completed' : 'abandoned');
   }
 
   /** Stops every timer without ending the run: nothing is reported or kept. */
@@ -182,7 +205,7 @@ export class MentalMathRunController {
 
   private presentNext(): void {
     const now = this.stopwatch.elapsed();
-    if (now >= mentalMath.RUN_DURATION_MS) {
+    if (now >= this.run.endsAtMs) {
       this.end('completed');
       return;
     }
@@ -204,8 +227,8 @@ export class MentalMathRunController {
     if (this.deadlineTimer !== null) this.clock.clearTimeout(this.deadlineTimer);
     const current = this.run.current;
     const target = current === null
-      ? mentalMath.RUN_DURATION_MS
-      : Math.min(current.shownAtMs + current.timeLimitMs, mentalMath.RUN_DURATION_MS);
+      ? this.run.endsAtMs
+      : Math.min(current.shownAtMs + current.timeLimitMs, this.run.endsAtMs);
     this.deadlineTimer = this.clock.setTimeout(() => this.onDeadline(), Math.max(0, target - this.stopwatch.elapsed()));
   }
 
@@ -218,7 +241,7 @@ export class MentalMathRunController {
       this.handleResult(mentalMath.timeOutQuestion(this.run, { questionId: current.id }));
       return;
     }
-    if (now >= mentalMath.RUN_DURATION_MS) {
+    if (now >= this.run.endsAtMs) {
       this.expire();
       return;
     }
@@ -243,6 +266,7 @@ export class MentalMathRunController {
     this.stopwatch.stop();
     this.phase = 'feedback';
     const { trial } = result;
+    this.showBankChange(result.bankChangeMs);
     this.feedback = { questionText: mentalMath.formatQuestion(trial), correct: trial.correct, timedOut: trial.timedOut, expected: trial.expected };
     this.feedbackTimer = this.clock.setTimeout(() => {
       this.feedbackTimer = null;
@@ -251,6 +275,23 @@ export class MentalMathRunController {
       this.presentNext();
     }, FEEDBACK_MS);
     this.emit();
+  }
+
+  /**
+   * Shows a non-zero bank change beside the timer for BANK_CHANGE_SHOW_MS of
+   * wall time, through the feedback flash and into the next question.
+   */
+  private showBankChange(ms: number): void {
+    if (this.bankChangeTimer !== null) this.clock.clearTimeout(this.bankChangeTimer);
+    this.bankChangeTimer = null;
+    this.bankChange = ms === 0 ? null : { ms, trial: this.run.trials.length };
+    if (this.bankChange === null) return;
+    this.bankChangeTimer = this.clock.setTimeout(() => {
+      this.bankChangeTimer = null;
+      if (this.disposed) return;
+      this.bankChange = null;
+      this.emit();
+    }, BANK_CHANGE_SHOW_MS);
   }
 
   private expire(): void {
@@ -267,10 +308,11 @@ export class MentalMathRunController {
     this.pauseReason = null;
     this.entry = '';
     this.feedback = null;
+    this.bankChange = null;
     this.outcome = {
       status,
       run: this.run,
-      activeDurationMs: Math.min(this.stopwatch.elapsed(), mentalMath.RUN_DURATION_MS),
+      activeDurationMs: Math.min(this.stopwatch.elapsed(), this.run.endsAtMs),
       startedAtMs: this.startedAtMs,
       endedAtMs,
     };
@@ -289,12 +331,13 @@ export class MentalMathRunController {
   }
 
   private clearTimers(): void {
-    for (const timer of [this.deadlineTimer, this.feedbackTimer, this.hudTimer]) {
+    for (const timer of [this.deadlineTimer, this.feedbackTimer, this.hudTimer, this.bankChangeTimer]) {
       if (timer !== null) this.clock.clearTimeout(timer);
     }
     this.deadlineTimer = null;
     this.feedbackTimer = null;
     this.hudTimer = null;
+    this.bankChangeTimer = null;
   }
 
   private buildSnapshot(): RunSnapshot {
@@ -308,7 +351,8 @@ export class MentalMathRunController {
       level: this.run.staircase.level,
       score: this.score,
       streak: this.run.answerStreak,
-      remainingMs: Math.max(0, mentalMath.RUN_DURATION_MS - this.stopwatch.elapsed()),
+      remainingMs: mentalMath.bankRemainingMs(this.run, this.stopwatch.elapsed()),
+      bankChange: this.bankChange,
       trialsRecorded: this.run.trials.length,
       outcome: this.outcome,
     };

@@ -226,7 +226,7 @@ describe('trusted session processing', () => {
       const uid = newUid();
       const id = newSessionId();
       const doc = sessionDoc(uid, { seed: 8, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(5), createdAt: ts(Date.now()) });
-      await db.doc(sessionPath(uid, id)).set({ ...doc, gameVersion: 2 });
+      await db.doc(sessionPath(uid, id)).set({ ...doc, gameVersion: 3 });
 
       await runSessionPipeline(context, uid, id);
       const unsupported = await readDoc(db, sessionPath(uid, id));
@@ -234,13 +234,13 @@ describe('trusted session processing', () => {
       expect(unsupported?.processing).toMatchObject({ state: 'unsupported', reason: 'unknown-game-version', attempts: 1 });
       expect(await readDoc(db, progressPath(uid))).toBeUndefined();
 
-      // A later deploy registers gameVersion 2 (here a copy of v1's rules) and the admin re-drive picks it up.
-      const v2 = defineGameVersionModule({
-        definition: defineGame({ ...mm.definition, gameVersion: 2 }),
+      // A later deploy registers gameVersion 3 (here a copy of v1's rules) and the admin re-drive picks it up.
+      const v3 = defineGameVersionModule({
+        definition: defineGame({ ...mm.definition, gameVersion: 3 }),
         reasonOutcomes: mm.REASON_OUTCOMES,
         check: (session) => mm.checkSession(session),
       });
-      const later = coreContext(db, { registry: createGameModuleRegistry([mentalMathV1Module, v2]) });
+      const later = coreContext(db, { registry: createGameModuleRegistry([mentalMathV1Module, v3]) });
       const { results } = await redriveSessions(later, {
         states: ['unsupported'], uid, createdAfter: ts(0), createdBefore: ts(Date.now() + 60_000), limit: 10, scanBudget: 100, dryRun: false,
       });
@@ -249,7 +249,7 @@ describe('trusted session processing', () => {
       const processed = await readDoc(db, sessionPath(uid, id));
       expect(processed?.result).toMatchObject({ validity: 'valid' });
       expect(processed?.processing).toBeUndefined();
-      expect(await readDoc(db, progressPath(uid))).toMatchObject({ gameVersion: 2, sessionsCompleted: 1 });
+      expect(await readDoc(db, progressPath(uid))).toMatchObject({ gameVersion: 3, sessionsCompleted: 1 });
     });
 
     it('judges a late session of an earlier game version with that version\'s own frozen module', async () => {
@@ -279,6 +279,23 @@ describe('trusted session processing', () => {
       // Its records go to its own version's (archived) record set; the unlock it earned carries over.
       expect(progress).toMatchObject({ gameVersion: 2, sessionsCompleted: 2, bests: {}, bestPeakLevel: { 'timed-90': 5 }, unlocked: { 'timed-90': 4 } });
       expect(progress?.bestsArchive['1']['timed-90:1'].score.sessionId).toBe(late.id);
+    });
+
+    it('processes a saved fixed 90 s v1 run and a time-bank v2 run, each by its own rules, as valid (NFCT-60)', async () => {
+      const uid = newUid();
+      const legacy = await writeSession(db, uid, { seed: 41, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(30), order: 1 });
+      await runSessionPipeline(context, uid, legacy.id);
+      expect(legacy.doc).toMatchObject({ gameVersion: 1, activeDurationMs: 90_000 });
+      expect((await readDoc(db, sessionPath(uid, legacy.id)))?.result).toMatchObject({ validity: 'valid', reasons: [], recordKey: 'timed-90:1' });
+
+      const timeBank = await writeSession(db, uid, { seed: 42, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(10), order: 2, gameVersion: 2 });
+      await runSessionPipeline(context, uid, timeBank.id);
+      expect(timeBank.doc.gameVersion).toBe(2);
+      expect(timeBank.doc.activeDurationMs).not.toBe(90_000);
+      expect((await readDoc(db, sessionPath(uid, timeBank.id)))?.result).toMatchObject({ validity: 'valid', reasons: [], recordKey: 'timed-90:1', personalBest: true });
+      expect(await readDoc(db, progressPath(uid))).toMatchObject({
+        gameVersion: 2, sessionsCompleted: 2, activeMs: 90_000 + (timeBank.doc.activeDurationMs as number), unlocked: { 'timed-90': 3 },
+      });
     });
 
     it('records a scorer fault as failed after the retry window; a later re-drive applies the session exactly once', async () => {

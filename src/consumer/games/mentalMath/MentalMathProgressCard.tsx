@@ -3,6 +3,7 @@ import { Calculator, ChevronRight } from 'lucide-react';
 import { mentalMath } from '@nfct/shared';
 import { progressRepository } from '../../repositories';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
+import { subscribeWithRetry } from '../../firestore/retryingSubscription';
 import { progressCardSummary } from './progressSummary';
 import { ProvisionalTag } from './ProvisionalTag';
 import { currentProgress } from './startLevel';
@@ -23,16 +24,11 @@ export const MentalMathProgressCard: React.FC<{
 }> = ({ onOpen, progress = progressRepository }) => {
   const [state, setState] = useState<ProgressWithRecentSessions | null | 'unavailable'>(null);
 
-  useEffect(() => {
-    const fail = () => setState('unavailable');
-    let stop: () => void = () => {};
-    try {
-      stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, setState, fail);
-    } catch {
-      fail();
-    }
-    return () => stop();
-  }, [progress]);
+  useEffect(() => subscribeWithRetry<ProgressWithRecentSessions>(
+    (onNext, onError) => progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, onNext, onError),
+    setState,
+    () => setState('unavailable'),
+  ), [progress]);
 
   const overview = useMemo(
     () => (state === null || state === 'unavailable' ? null : progressCardSummary(currentProgress(state))),

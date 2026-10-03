@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_CATALOGUE, type GameListing, type GameModeDefinition } from '@nfct/shared';
-import { catalogueGames, runLengthLabel, toCatalogueGame } from '../catalogueGames';
+import { GAME_CATALOGUE, mentalMath, type GameListing, type GameModeDefinition } from '@nfct/shared';
+import { catalogueGames, maxRunLengthLabel, runLengthLabel, toCatalogueGame } from '../catalogueGames';
 
 const mode = (id: string, levels: number, runDurationMs?: number | null): GameModeDefinition => ({
   id,
@@ -26,13 +26,16 @@ describe('catalogue games', () => {
       summary: GAME_CATALOGUE[0]!.summary,
       icon: 'calculator',
       domains: [
-        { id: 'math', label: 'Math', weight: 0.7 },
-        { id: 'processing-speed', label: 'Processing speed', weight: 0.2 },
-        { id: 'memory', label: 'Memory', weight: 0.1 },
+        { id: 'math', label: 'Math', weight: 0.7, percent: 70 },
+        { id: 'processing-speed', label: 'Processing speed', weight: 0.2, percent: 20 },
+        { id: 'memory', label: 'Memory', weight: 0.1, percent: 10 },
       ],
-      runLengthMs: { min: 90_000, max: 90_000 },
+      // The time bank (NFCT-60): no fixed length, at most MAX_RUN_MS.
+      runLengthMs: null,
+      maxRunLengthMs: mentalMath.MAX_RUN_MS,
       levels: 10,
     }]);
+    expect(maxRunLengthLabel(mentalMath.MAX_RUN_MS)).toBe('Up to 3 minutes');
   });
 
   it('keeps catalogue order', () => {
@@ -45,6 +48,15 @@ describe('catalogue games', () => {
     const game = toCatalogueGame(listing({ domainWeights: { verbal: 0.2, spatial: 0.4, memory: 0, reasoning: 0.4 } }));
     expect(game.domains.map((domain) => domain.id)).toEqual(['reasoning', 'spatial', 'verbal']);
     expect(game.domains.map((domain) => domain.label)).toEqual(['Reasoning', 'Spatial', 'Verbal']);
+    expect(game.domains.map((domain) => domain.percent)).toEqual([40, 40, 20]);
+  });
+
+  it('shows each game\'s weights as whole percentages that sum to 100, the leftover point to the heavier domain on a tie', () => {
+    const game = toCatalogueGame(listing({ domainWeights: { memory: 1 / 3, verbal: 1 / 3, reasoning: 1 / 3 } }));
+    expect(game.domains.map(({ id, percent }) => [id, percent])).toEqual([['reasoning', 34], ['memory', 33], ['verbal', 33]]);
+    for (const catalogueGame of catalogueGames()) {
+      expect(catalogueGame.domains.reduce((total, domain) => total + domain.percent, 0)).toBe(100);
+    }
   });
 
   it('reads the run length from timed modes only, and the level count from the longest mode', () => {

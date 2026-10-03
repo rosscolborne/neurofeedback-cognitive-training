@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { devices, type Page } from '@playwright/test';
+import { devices, type Locator, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtHome } from './helpers/auth';
 import { readGameSessions } from './helpers/localEmulator';
+import { formatPlayTime } from '../src/consumer/games/mentalMath/progressSummary';
 import { answer, openMentalMath, runOut, startRun } from './helpers/mentalMath';
 
 // NFCT-22: the post-session summary and Mental Math's per-game progress,
@@ -34,8 +35,10 @@ type Result = {
 
 /** Trusted scoring's result for the player's newest session (observation only). */
 async function newestResult(uid: string): Promise<Result> {
+  // By the server's createdAt: device endedAt does not order runs, because each run here starts
+  // from the real wall clock and time-bank runs (NFCT-60) differ in length.
   const sessions = (await readGameSessions(uid))
-    .sort((a, b) => (b.data.endedAt as { toMillis(): number }).toMillis() - (a.data.endedAt as { toMillis(): number }).toMillis());
+    .sort((a, b) => (b.data.createdAt as { toMillis(): number }).toMillis() - (a.data.createdAt as { toMillis(): number }).toMillis());
   const result = sessions[0]?.data.result as Result | undefined;
   if (!result) throw new Error('The newest session has no trusted result');
   return result;
@@ -43,7 +46,7 @@ async function newestResult(uid: string): Promise<Result> {
 
 /**
  * Back to the real wall clock before a run. Each fast-forwarded run leaves
- * page time about 90 s ahead of the emulator's clock, and the rules refuse a
+ * page time a minute or more ahead of the emulator's clock, and the rules refuse a
  * session that ends more than 5 minutes after the server's time.
  */
 async function realWallClock(page: Page): Promise<void> {
@@ -58,10 +61,10 @@ async function playRun(page: Page, level: number, script: readonly boolean[]): P
   await runOut(page);
 }
 
-/** Lets page time flow and waits for trusted scoring to verify the run on screen. */
+/** Lets page time flow and waits for trusted scoring's valid result on screen. */
 async function expectVerified(page: Page): Promise<void> {
   await page.clock.resume();
-  await expect(verification(page)).toHaveText('Verified', { timeout: 30_000 });
+  await expect(verification(page)).toHaveText('Final', { timeout: 30_000 });
 }
 
 /**
@@ -90,6 +93,19 @@ async function highlightHeights(page: Page): Promise<Array<{ name: string; text:
   return page.evaluate(() => (window as unknown as { nfctHighlightHeights: Array<{ name: string; text: string; height: number }> }).nfctHighlightHeights);
 }
 
+/**
+ * A resolved run ended early, as a history row shows it (NFCT-64): one neutral
+ * "Ended early" tag, its trusted score quieter than a finished run's, its play
+ * time in the meta line, and neither a dash nor "Pending".
+ */
+async function expectEndedEarly(row: Locator): Promise<void> {
+  await expect(row).toHaveAttribute('data-run', 'ended-early');
+  await expect(row.locator('[data-history-tag]')).toHaveText('Ended early');
+  await expect(row.locator('.mm-history-score-muted')).toHaveText(/^\d[\d,]*$/);
+  await expect(row.locator('.mm-history-meta')).toHaveText('Start level 1 · 1\u00A0s');
+  await expect(row).not.toContainText(/—|Pending|No score/);
+}
+
 /** Back to the picker, once it has loaded the player's levels (page time must flow for Firestore meanwhile). */
 async function playAgain(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Play again', exact: true }).click();
@@ -111,9 +127,10 @@ test('the summary shows a provisional score at once, then the server score, its 
   await page.clock.resume();
   await expect(page.locator('.mm-save')).toHaveText('Saved on this device. Uploading to your account…');
 
-  // 1. The optimistic preview: this device's score, marked provisional, with its predicted best and unlock.
-  await expect(verification(page)).toHaveText('Provisional');
-  await expect(page.locator('[data-summary="caption"]')).toHaveText('Provisional. Your run will be checked once it uploads.');
+  // 1. The optimistic preview: this device's score, marked pending, with its predicted best and unlock.
+  // No line narrates how the run is scored (NFCT-66); the save line says it is waiting to upload.
+  await expect(verification(page)).toHaveText('Pending');
+  await expect(page.locator('[data-summary="caption"]')).toHaveText('');
   const provisional = await shownScore(page).innerText();
   await expect(record(page)).toContainText('New personal best');
   await expect(unlock(page)).toContainText('Level 2 unlocked');
@@ -132,12 +149,12 @@ test('the summary shows a provisional score at once, then the server score, its 
 
   // Back online: the run uploads, onGameSessionCreated scores it, and the result replaces the preview.
   await context.setOffline(false);
-  await expect(verification(page)).toHaveText('Verified', { timeout: 30_000 });
+  await expect(verification(page)).toHaveText('Final', { timeout: 30_000 });
   const result = await newestResult(uid);
   expect(result.validity).toBe('valid');
   await expect(shownScore(page)).toHaveText(format(result.score));
   expect(provisional).toBe(format(result.score));
-  await expect(page.locator('[data-summary="caption"]')).toHaveText('Checked and confirmed by the server.');
+  await expect(page.locator('[data-summary="caption"]')).toHaveText('');
   // The trusted result replaced the preview in place: the predictions are now confirmed, and nothing moved.
   await expect(record(page)).toHaveAttribute('data-pending', 'false');
   await expect(unlock(page)).toHaveAttribute('data-pending', 'false');
@@ -210,7 +227,7 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
   const completed = await newestResult(uid);
 
   // Ten more runs, each quit after a second of play: they count in history and time played, not as completed.
-  // Page time keeps running from the finished run (about 90 s ahead, well inside the rules' 5 minutes),
+  // Page time keeps running from the finished run (about a minute ahead, well inside the rules' 5 minutes),
   // so every quit run ends after it and the history order is the order they were played.
   for (let run = 0; run < 10; run += 1) {
     await playAgain(page);
@@ -228,30 +245,39 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
   await page.getByRole('button', { name: 'Records and history', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
   await expect(page.locator('[data-total="runs-completed"]')).toHaveText('1');
-  await expect(page.locator('[data-total="time-played"]')).toHaveText('1\u00A0min 40\u00A0s');
+  // The completed run lasted until its time bank ran out; the ten quit runs add a second each.
+  const played = (await readGameSessions(uid)).reduce((sum, session) => sum + (session.data.activeDurationMs as number), 0);
+  await expect(page.locator('[data-total="time-played"]')).toHaveText(formatPlayTime(played));
   await expect(page.locator('[data-total="unlocked"]')).toHaveText('1 of 10');
 
   // 6. History: the newest ten, then the next page from the cursor, with nothing repeated.
   const rows = page.locator('li[data-history-row]');
   await expect(rows).toHaveCount(10);
-  await expect(rows.first()).toContainText('Ended early');
+  await expectEndedEarly(rows.first());
   await page.getByRole('button', { name: 'Show more runs', exact: true }).click();
   await expect(rows).toHaveCount(11);
   await expect(page.getByRole('button', { name: 'Show more runs', exact: true })).toHaveCount(0);
   const ids = await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-history-row')));
   expect(new Set(ids).size).toBe(11);
-  // The oldest run is the finished one, with its trusted score.
-  await expect(rows.last()).toContainText(format(completed.score));
+  // The oldest run is the finished one (the player's first, so a new best), with its trusted score in the normal treatment.
+  await expect(rows.last().locator('.mm-history-score')).toHaveText(format(completed.score));
+  await expect(rows.last()).toHaveAttribute('data-run', 'completed');
+  await expect(rows.last().locator('.mm-history-score-muted')).toHaveCount(0);
+  await expect(rows.last().locator('[data-history-tag]')).toHaveText('New best');
   await expect(rows.last()).toContainText('Start level 1');
 
-  // The history and totals survive a reload.
+  // The history and totals survive a reload. Home's recent runs show the same rows, ended early, first.
   await page.reload();
   await arriveAtHome(page, { afterReload: true });
+  const homeRows = page.locator('[data-overview="recent-runs"] li[data-history-row]');
+  await expect(homeRows).toHaveCount(3);
+  for (const row of await homeRows.all()) await expectEndedEarly(row);
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   await page.getByRole('button', { name: 'Mental Math records and history', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
   await expect(page.locator('[data-total="runs-completed"]')).toHaveText('1');
   await expect(rows).toHaveCount(10);
+  await expectEndedEarly(rows.first());
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
 });

@@ -90,7 +90,7 @@ export async function expectMentalMathReadyForNewPlayer(page: Page): Promise<voi
 /**
  * Starts a Mental Math run, pauses it and quits. Quitting saves the run as
  * unfinished; the handoff says it is saved only once the server has
- * acknowledged the write, so no 90-second run is needed.
+ * acknowledged the write, so no whole run is needed.
  */
 export async function startPauseAndQuitMentalMathRun(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Start at level 1', exact: true }).click();

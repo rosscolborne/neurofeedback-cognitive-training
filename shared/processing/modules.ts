@@ -1,4 +1,4 @@
-import { mentalMathV1 } from '../games/mental-math';
+import { mentalMathV1, mentalMathV2 } from '../games/mental-math';
 import { createGameModuleRegistry, defineGameVersionModule, type GameVersionModule } from './registry';
 
 // The registered game-version modules: what this build can process. Each
@@ -28,5 +28,22 @@ export const mentalMathV1Module: GameVersionModule = defineGameVersionModule({
   },
 });
 
+/**
+ * Mental Math gameVersion 2 (NFCT-60): the time-bank run. The same adapter as
+ * v1, over the v2 checks, which judge the run's length by its time bank.
+ */
+export const mentalMathV2Module: GameVersionModule = defineGameVersionModule({
+  definition: mentalMathV2.definition,
+  reasonOutcomes: mentalMathV2.REASON_OUTCOMES,
+  check(session, { summary }) {
+    const report = mentalMathV2.checkSession({ ...session, summary: summary ?? undefined });
+    if (summary !== null) return report;
+    return mentalMathV2.reportOf([
+      ...report.issues,
+      { code: 'summary-mismatch', outcome: mentalMathV2.REASON_OUTCOMES['summary-mismatch'], trialIndex: null },
+    ]);
+  },
+});
+
 /** Every module this build registers. */
-export const GAME_MODULE_REGISTRY = createGameModuleRegistry([mentalMathV1Module]);
+export const GAME_MODULE_REGISTRY = createGameModuleRegistry([mentalMathV1Module, mentalMathV2Module]);

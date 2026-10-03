@@ -6,6 +6,7 @@ import type { EegCapture, EegCaptureProvider } from '../../eeg/eegCapture';
 import type { EegRecordingDraft, EegRecordingRepository, EegRecordingSave } from '../../repositories/eegRecordingRepository';
 import type { GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
+import { subscribeWithRetry } from '../../firestore/retryingSubscription';
 import { Keypad } from './Keypad';
 import { MentalMathProgress } from './MentalMathProgress';
 import { ProvisionalTag } from './ProvisionalTag';
@@ -316,25 +317,23 @@ const StartLevelPicker: React.FC<{
   useEffect(() => { initialFocus.current.current?.focus(); }, []);
 
   useEffect(() => {
-    let stop: () => void = () => {};
     const apply = (next: PickerData) => {
       setData(next);
       if (next.status === 'loading') return;
       setSelected((current) => (!touched.current || current === null || current > next.choices.unlocked ? next.choices.defaultLevel : current));
     };
-    try {
-      stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, (state: ProgressWithRecentSessions) => {
+    // Re-subscribes after a failure, so a transient one does not keep the picker at level 1.
+    return subscribeWithRetry<ProgressWithRecentSessions>(
+      (onNext, onError) => progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, onNext, onError),
+      (state) => {
         const current = currentProgress(state);
         apply({ status: 'ready', choices: startLevelChoices(state), progress: current.progress, unchecked: current.unchecked });
-      }, (error) => {
+      },
+      (error) => {
         logProgressReadFailure(error);
         apply({ status: 'unavailable', choices: startLevelChoices(null) });
-      });
-    } catch (error) {
-      logProgressReadFailure(error);
-      apply({ status: 'unavailable', choices: startLevelChoices(null) });
-    }
-    return () => stop();
+      },
+    );
   }, [progress]);
 
   const choices = data.status === 'loading' ? null : data.choices;
@@ -359,7 +358,7 @@ const StartLevelPicker: React.FC<{
       <div className="mm-panel">
         <div>
           <h1 ref={headingRef} tabIndex={-1} className="mm-title font-display">Mental Math</h1>
-          <p className="mm-muted">A 90-second run of arithmetic. Questions get harder as you answer correctly and easier after a miss.</p>
+          <p className="mm-muted">Arithmetic against the clock: you start with {mentalMath.START_BANK_MS / 1000} seconds, quick right answers add time and misses cost some. Questions get harder as you answer correctly and easier after a miss.</p>
         </div>
 
         <fieldset className="mm-levels" disabled={choices === null} aria-describedby="mm-levels-help">
@@ -428,6 +427,12 @@ function formatRemaining(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+/** A time-bank change as the HUD shows it: "+3s", "−5s" (a true minus sign), "+1.5s" when the cap clipped it. */
+export function formatBankChange(ms: number): string {
+  const seconds = Math.abs(ms) / 1000;
+  return `${ms < 0 ? '\u2212' : '+'}${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
+}
+
 const RunView: React.FC<{
   readonly controller: MentalMathRunController;
   readonly eeg: EegInfo | null;
@@ -477,9 +482,22 @@ const RunView: React.FC<{
     <div className="mm-screen mm-run">
       <header className="mm-hud">
         <dl className="mm-hud-stats" aria-label="Run status">
-          <div className="mm-hud-item">
+          <div className={`mm-hud-item mm-hud-time-item${snapshot.bankChange ? ' mm-hud-time-changed' : ''}`}>
             <dt className="mm-hud-label">Time left</dt>
-            <dd className="mm-hud-value font-mono" data-hud="time">{formatRemaining(snapshot.remainingMs)}</dd>
+            <dd className="mm-hud-value font-mono">
+              <span data-hud="time">{formatRemaining(snapshot.remainingMs)}</span>
+              {/* Over the label, just above the time. Read out with the answer feedback instead; keyed so each answer's change animates afresh. */}
+                {snapshot.bankChange && (
+                  <span
+                    key={snapshot.bankChange.trial}
+                    className={`mm-bank-change ${snapshot.bankChange.ms > 0 ? 'mm-bank-gain' : 'mm-bank-loss'}`}
+                    data-hud="bank-change"
+                    aria-hidden="true"
+                  >
+                    {formatBankChange(snapshot.bankChange.ms)}
+                  </span>
+                )}
+            </dd>
           </div>
           <div className="mm-hud-item">
             <dt className="mm-hud-label">Level</dt>
@@ -517,7 +535,10 @@ const RunView: React.FC<{
 };
 
 const QuestionCard: React.FC<{ readonly snapshot: RunSnapshot }> = ({ snapshot }) => {
-  const { feedback, question, entry, phase } = snapshot;
+  const { feedback, question, entry, phase, bankChange } = snapshot;
+  const spokenChange = feedback !== null && bankChange !== null
+    ? ` · ${formatBankChange(bankChange.ms).replace('s', ' seconds')}`
+    : '';
   const text = feedback?.questionText ?? question?.text ?? '';
   const tone = feedback === null ? '' : feedback.correct ? ' mm-card-correct' : ' mm-card-wrong';
   return (
@@ -529,6 +550,7 @@ const QuestionCard: React.FC<{ readonly snapshot: RunSnapshot }> = ({ snapshot }
       </p>
       <p className="mm-feedback" role="status">
         {feedback === null ? '' : feedback.correct ? 'Correct' : feedback.timedOut ? `Time's up · ${feedback.expected}` : `Not quite · ${feedback.expected}`}
+        {spokenChange && <span className="mm-visually-hidden">{spokenChange}</span>}
       </p>
     </section>
   );

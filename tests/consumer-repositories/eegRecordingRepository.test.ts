@@ -228,9 +228,9 @@ describe('saving a recording after its session', () => {
     const device = await signedInDevice();
     await withProfile(device, { eegConsent: true });
     // A game version the client accepts and the rules do not support.
-    const unsupported = defineGame({ ...testGame, gameVersion: 2 });
+    const unsupported = defineGame({ ...testGame, gameVersion: 3 });
     const started = device.sessions.startGameSession();
-    const saved = await started.save({ definition: unsupported, session: sessionDraft({ gameVersion: 2 }) });
+    const saved = await started.save({ definition: unsupported, session: sessionDraft({ gameVersion: 3 }) });
 
     const eeg = await device.eeg.saveRecording(saved, eegDraft());
 

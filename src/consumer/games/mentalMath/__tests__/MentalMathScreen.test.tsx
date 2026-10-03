@@ -145,7 +145,7 @@ function harness({ state = pickerState(null), progressError, eegProvider = null,
       advance(FEEDBACK_MS);
     }
     // Long enough for every remaining question to time out, feedback flashes included.
-    advance(mentalMath.RUN_DURATION_MS * 2);
+    advance(mentalMath.MAX_RUN_MS * 2);
   };
   const flush = async () => { await act(async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve(); }); };
   const title = () => root().findAll((node) => node.props.id === 'mm-handoff-title').map((node) => textOf(node))[0] ?? null;
@@ -224,7 +224,7 @@ describe('MentalMathScreen', () => {
   it('plays a full run with the keypad, answers each question once, and saves once as completed', async () => {
     const h = harness();
     h.press('Start at level 1');
-    expect(h.hud('time')).toBe('1:30');
+    expect(h.hud('time')).toBe('0:45'); // the starting time bank
     // Submit needs an answer, and a complete answer never submits itself.
     expect(h.buttons('Submit')[0]!.props['aria-disabled']).toBe('true');
     h.advance(1_000);
@@ -236,6 +236,10 @@ describe('MentalMathScreen', () => {
     // A double tap on Submit resolves the question once.
     const submit = h.buttons('Submit')[0]!;
     act(() => { submit.props.onClick(); submit.props.onClick(); });
+    // Right in 3 s (under two thirds of level 1's 8 s): +2 s, beside the timer and in the spoken feedback.
+    expect(h.hud('bank-change')).toBe('+2s');
+    expect(h.hud('time')).toBe('0:44');
+    expect(textOf(h.root().find((node) => node.props.className === 'mm-feedback'))).toBe('Correct · +2 seconds');
     h.advance(FEEDBACK_MS);
     expect(h.hud('score')).not.toBe('0');
     expect(h.save).not.toHaveBeenCalled();
@@ -244,7 +248,9 @@ describe('MentalMathScreen', () => {
     expect(h.save).toHaveBeenCalledTimes(1);
     const input = h.saves[0]!;
     const session = input.session as MentalMathSessionDraft;
-    expect(session).toMatchObject({ gameId: 'mental-math', modeId: 'timed-90', status: 'completed', startLevel: 1, activeDurationMs: 90_000 });
+    // Completed when the time bank ran out, which the trials alone determine.
+    expect(session).toMatchObject({ gameId: 'mental-math', modeId: 'timed-90', status: 'completed', startLevel: 1 });
+    expect(session.activeDurationMs).toBe(mentalMath.bankEnds(session.trials).final);
     // Six answered questions, plus the timeouts after them; nothing for the question on screen at expiry.
     expect(session.trials.filter((trial) => !trial.timedOut)).toHaveLength(6);
     expect(session.trials[0]!.rtMs).toBe(3_000);
@@ -267,7 +273,7 @@ describe('MentalMathScreen', () => {
     h.advance(60_000);
     expect(h.save).not.toHaveBeenCalled();
     act(() => h.renderer.unmount());
-    h.advance(mentalMath.RUN_DURATION_MS * 2);
+    h.advance(mentalMath.MAX_RUN_MS * 2);
     expect(h.save).not.toHaveBeenCalled();
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(h.clock.pendingTimers).toBe(0);
@@ -309,7 +315,7 @@ describe('MentalMathScreen', () => {
     act(() => h.visibility.set(false));
     // Still paused, still the same run, clock frozen.
     expect(h.buttons('Resume')).toHaveLength(1);
-    expect(h.hud('time')).toBe('1:26');
+    expect(h.hud('time')).toBe('0:41');
     expect(h.save).not.toHaveBeenCalled();
     h.press('Resume');
     expect(h.question()).not.toBeNull();
@@ -352,7 +358,7 @@ describe('MentalMathScreen', () => {
 
   it.each([
     ['consent-required', 'Simulated EEG (Demo Mode) was not saved: saving EEG needs your EEG consent.'],
-    ['consent-unavailable', 'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).'],
+    ['consent-unavailable', 'Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be loaded (you may be offline, on a slow connection, or have profile changes still uploading).'],
     ['invalid', 'Simulated EEG (Demo Mode) was not saved: the recording was incomplete.'],
     ['session-not-saved', 'Simulated EEG (Demo Mode) was not saved because the run was not saved.'],
     ['owner-changed', 'Simulated EEG (Demo Mode) was not saved because you signed out.'],
@@ -401,7 +407,7 @@ describe('MentalMathScreen', () => {
     await h.flush();
     expect(h.recordingSaves).toHaveBeenCalledTimes(1);
     expect(h.saveStatus()).toBe('Saved on this device. Uploading to your account…');
-    expect(h.eegStatus()).toBe('Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).');
+    expect(h.eegStatus()).toBe('Simulated EEG (Demo Mode) wasn’t saved because your EEG consent couldn’t be loaded (you may be offline, on a slow connection, or have profile changes still uploading).');
   });
 
   it('never makes the session wait on EEG: with the recording still checking consent, the run is saved', async () => {
@@ -411,7 +417,7 @@ describe('MentalMathScreen', () => {
     h.playToEnd([]);
     await h.flush();
     expect(h.saveStatus()).toBe('Run saved to your account.');
-    expect(h.eegStatus()).toBe('Checking your EEG consent before saving Simulated EEG (Demo Mode)…');
+    expect(h.eegStatus()).toBe('Saving Simulated EEG (Demo Mode)…');
   });
 
   it('reports an EEG save that throws as not saved, and the run as saved', async () => {
@@ -461,10 +467,10 @@ describe('MentalMathScreen', () => {
     // Run 2 is still the screen, still running, and nothing more was saved.
     expect(h.title()).toBeNull();
     expect(h.question()).toBe(runTwoQuestion);
-    expect(h.hud('time')).toBe('1:28');
+    expect(h.hud('time')).toBe('0:43');
     expect(h.saves).toHaveLength(1);
     h.advance(1_000);
-    expect(h.hud('time')).toBe('1:27');
+    expect(h.hud('time')).toBe('0:42');
 
     h.playToEnd([]);
     await h.flush();
@@ -478,7 +484,7 @@ describe('MentalMathScreen', () => {
     h.press('Start at level 1');
     h.advance(5_000);
     act(() => h.renderer.unmount());
-    h.advance(mentalMath.RUN_DURATION_MS * 2);
+    h.advance(mentalMath.MAX_RUN_MS * 2);
     expect(h.save).not.toHaveBeenCalled();
     expect(h.clock.pendingTimers).toBe(0);
   });
@@ -604,21 +610,24 @@ describe('MentalMathScreen', () => {
       await h.flush();
       expect(h.title()).toBe('Run complete');
       const local = (h.saves[0]!.session as MentalMathSessionDraft).summary;
-      expect(h.byData('data-summary', 'verification')).toBe('Provisional');
-      expect(h.byData('data-summary', 'caption')).toBe('Provisional. Checking your run with the server…');
+      expect(h.byData('data-summary', 'verification')).toBe('Pending');
+      expect(h.byData('data-summary', 'caption')).toBe('');
       expect(h.byData('data-result', 'score')).toBe(format(local.score));
       // Predicted achievements read exactly as confirmed ones (no layout shift), marked provisional.
       const pending = (name: string) => h.root().find((node) => node.props['data-summary'] === name && node.type === 'li').props['data-pending'];
-      expect(h.byData('data-summary', 'record')).toBe('New personal best (provisional, until the server checks your run)From level 1: best score, most correct answers and highest level.');
-      expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (provisional, until the server checks your run)You can now start a run at level 2.');
+      expect(h.byData('data-summary', 'record')).toBe('New personal best (pending)From level 1: best score, most correct answers and highest level.');
+      expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (pending)You can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['true', 'true']);
+      // The totals count the run before it is scored, so they are marked too (NFCT-66).
+      const totalsTitle = () => textOf(h.root().findByProps({ id: 'mm-totals-title' }));
+      expect(totalsTitle()).toBe('Mental Math so far Pending');
 
       const { decision, processed } = trustedFor(h);
       if (decision.result.validity !== 'valid') throw new Error('expected a valid result');
       const result: ServerResult = { ...decision.result, score: 4321, metrics: { ...decision.result.metrics, difficultyPoints: 4000, speedBonusPoints: 321 } };
       h.publish(pickerState(decision.progress, [processed(result)]));
-      expect(h.byData('data-summary', 'verification')).toBe('Verified');
-      expect(h.byData('data-summary', 'caption')).toBe('Checked and confirmed by the server.');
+      expect(h.byData('data-summary', 'verification')).toBe('Final');
+      expect(h.byData('data-summary', 'caption')).toBe('');
       expect(h.byData('data-result', 'score')).toBe(format(4321));
       expect(h.byData('data-result', 'difficulty-points')).toBe(format(4000));
       expect(h.byData('data-result', 'speed-bonus')).toBe(`+${format(321)}`);
@@ -626,6 +635,7 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlockedYou can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['false', 'false']);
       expect(h.byData('data-total', 'runs-completed')).toBe('1');
+      expect(totalsTitle()).toBe('Mental Math so far');
       expect(textOf(h.root())).not.toMatch(/EEG|µV|alpha|theta|focus/i);
 
       // The unlocked level is selectable in the picker.
@@ -643,7 +653,7 @@ describe('MentalMathScreen', () => {
       const flagged = { ...decision.result, validity: 'flagged', reasons: ['rt-below-floor'] } as ServerResult;
       h.publish(pickerState(null, [processed(flagged)]));
       expect(h.byData('data-summary', 'verification')).toBe('Flagged');
-      expect(h.byData('data-summary', 'caption')).toBe('Too many answers came in faster than the server accepts. It counts toward your totals, but not your records or unlocks.');
+      expect(h.byData('data-summary', 'caption')).toBe('Too many answers came in faster than allowed. It counts toward your totals, but not your records or unlocks.');
       expect(h.byData('data-summary', 'record')).toContain('Flagged runs don’t set records');
       expect(h.byData('data-summary', 'unlock')).toContain('Next unlock: start level 2');
     });
@@ -725,10 +735,10 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-total', 'runs-completed')).toBe('—');
       expect(totalsNote(h)).toBe('Loading your totals…');
 
-      // The records arrive: the preview counts this run, and the note says so.
+      // The records arrive: the preview counts this run, and the loading note goes.
       h.publish(pickerState(null));
       expect(h.byData('data-total', 'runs-completed')).toBe('1');
-      expect(totalsNote(h)).toBe('Includes runs the server hasn’t checked yet.');
+      expect(h.root().findAll((node) => typeof node.props.className === 'string' && node.props.className.includes('mm-totals-note'))).toHaveLength(0);
     });
 
     it('marks a predicted flag as provisional, like a predicted best, until the server decides', async () => {
@@ -737,8 +747,8 @@ describe('MentalMathScreen', () => {
       // Answers far faster than the 250 ms floor: the preview predicts the server's rt-below-floor flag.
       h.playToEnd([true, true, true, true, true, true, true, true, true, true], 100);
       await h.flush();
-      expect(h.byData('data-summary', 'verification')).toBe('Provisional');
-      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set records (provisional, until the server checks your run)No record yet from level 1.');
+      expect(h.byData('data-summary', 'verification')).toBe('Pending');
+      expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set records (pending)No record yet from level 1.');
       expect(highlight(h, 'record').props['data-pending']).toBe('true');
 
       const document = { ...h.saves[0]!.session, schemaVersion: 1, userId: 'player-1', seed: SEED, createdAt: h.saves[0]!.session.endedAt } as unknown as ClientSessionDocument;
@@ -759,7 +769,7 @@ describe('MentalMathScreen', () => {
       const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
       const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
       h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
-      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when the server checked your run. It counts toward your totals now, and toward your records and unlocks once that level is unlocked.');
+      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when this run was scored. It counts toward your totals now, and toward your records and unlocks once that level is unlocked.');
       expect(h.byData('data-summary', 'record')).toBe('Not a record yetThis run can still set a record once level 1 is unlocked.');
     });
 
@@ -774,7 +784,7 @@ describe('MentalMathScreen', () => {
       const decision = previewDecision(null, 'sessionAAAAAAAAAAAA1', document)!;
       const locked = { ...decision.result, validity: 'flagged', reasons: ['start-level-locked'] } as ServerResult;
       h.publish(pickerState(null, [{ id: 'sessionAAAAAAAAAAAA1', session: { ...document, result: locked } as unknown as GameSession, awaitingResult: false, hasPendingWrites: false }]));
-      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when the server checked your run. It counts toward your totals, but not your records or unlocks.');
+      expect(h.byData('data-summary', 'caption')).toBe('This start level wasn’t unlocked yet when this run was scored. It counts toward your totals, but not your records or unlocks.');
       expect(h.byData('data-summary', 'record')).toBe('Flagged runs don’t set recordsNo record yet from level 1.');
     });
 
@@ -782,7 +792,7 @@ describe('MentalMathScreen', () => {
       const pending = sessionRecord('sessionBBBBBBBBBBBB1', playRun({ seed: SEED, startLevel: 1, correct: 7 }), { seed: SEED });
       const h = harness({ state: pickerState(null, [pending]) });
       const best = h.root().find((node) => node.props['data-picker'] === 'best');
-      expect(textOf(best)).toMatch(/^Your best from level 1: [\d,]+ Provisional$/);
+      expect(textOf(best)).toMatch(/^Your best from level 1: [\d,]+ Pending$/);
       expect(provisionalTags(best)).toHaveLength(1);
 
       // Once the server has checked it, the same best is shown plainly.
@@ -816,7 +826,7 @@ describe('MentalMathScreen', () => {
       const h = harness({ initialView: 'progress', state: pickerState(decision.progress, [pending]), history: { entries: [entry], unreadable: [], nextCursor: null, fromCache: false } });
       const levelOne = h.root().findByProps({ 'data-best-level': 1 });
       expect(provisionalTags(levelOne)).toHaveLength(1);
-      expect(textOf(levelOne)).toMatch(/^Level 1Provisional[\d,]+7 correct · reached level 3$/);
+      expect(textOf(levelOne)).toMatch(/^Level 1Pending[\d,]+7 correct · reached level 3$/);
       // The history shows trusted results only: the checked run set a best when it was processed.
       const row = h.root().findByProps({ 'data-history-row': 'sessionBBBBBBBBBBBB1' });
       expect(textOf(row)).toContain('New best');

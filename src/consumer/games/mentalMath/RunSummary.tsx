@@ -3,6 +3,7 @@ import { ChevronRight, LockOpen, Trophy } from 'lucide-react';
 import { mentalMath } from '@nfct/shared';
 import { FactGrid } from '../../../components/ui/FactGrid';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
+import { subscribeWithRetry } from '../../firestore/retryingSubscription';
 import { formatPlayTime } from './progressSummary';
 import type { RunOutcome } from './runController';
 import { eegMessage, saveMessage, type EegInfo, type SaveState } from './runSave';
@@ -16,11 +17,13 @@ import {
   type Verification,
 } from './runSummaryModel';
 import type { SessionEnvironment } from './sessionDraft';
+import { ProvisionalTag } from './ProvisionalTag';
 
 // The post-session summary (NFCT-22). It shows this device's provisional
 // preview at once and replaces it with trusted scoring's result when that
-// arrives, in the same layout. The score is never presented as final until the
-// server has checked the run. The heading keeps the id `mm-handoff-title`.
+// arrives, in the same layout. The score is marked Pending until trusted
+// scoring has decided; the copy never describes how (NFCT-66). The heading
+// keeps the id `mm-handoff-title`.
 
 const numberFormat = new Intl.NumberFormat();
 const percentFormat = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 });
@@ -41,9 +44,9 @@ export interface RunSummaryProps {
 function verificationTag(verification: Verification): { readonly text: string; readonly tone: string } {
   switch (verification.kind) {
     case 'provisional':
-      return { text: 'Provisional', tone: 'status-tag-neutral' };
+      return { text: 'Pending', tone: 'status-tag-neutral' };
     case 'verified':
-      return { text: 'Verified', tone: 'status-tag-active' };
+      return { text: 'Final', tone: 'status-tag-active' };
     case 'flagged':
       return { text: 'Flagged', tone: 'status-tag-paused' };
     case 'invalid':
@@ -57,35 +60,27 @@ const TIMING_FLAGS = new Set(['trial-overlap', 'run-overrun', 'active-duration-m
 
 /** Why trusted scoring flagged a run, in plain words. */
 function flagExplanation(reasons: readonly string[]): string {
-  if (reasons.includes('start-level-locked')) return 'This start level wasn’t unlocked yet when the server checked your run.';
-  if (reasons.includes('rt-below-floor')) return 'Too many answers came in faster than the server accepts.';
-  if (reasons.some((reason) => TIMING_FLAGS.has(reason))) return 'The run’s timing didn’t add up when the server checked it.';
-  return 'The run didn’t pass every check on the server.';
+  if (reasons.includes('start-level-locked')) return 'This start level wasn’t unlocked yet when this run was scored.';
+  if (reasons.includes('rt-below-floor')) return 'Too many answers came in faster than allowed.';
+  if (reasons.some((reason) => TIMING_FLAGS.has(reason))) return 'The run’s timing didn’t add up.';
+  return 'The run didn’t meet the scoring rules.';
 }
 
 function verificationCaption(verification: Verification): string {
   switch (verification.kind) {
     case 'provisional':
-      switch (verification.detail) {
-        case 'saving':
-          return 'Provisional until the server checks your run.';
-        case 'on-device':
-          return 'Provisional. Your run will be checked once it uploads.';
-        case 'checking':
-          return 'Provisional. Checking your run with the server…';
-        case 'delayed':
-          return 'Provisional. The server couldn’t check your run yet and will try again later.';
-      }
-      break;
+      // Pending says enough while the result is on its way (the save line covers an upload);
+      // only a result that is taking a while gets a line, and it says nothing about why.
+      return verification.detail === 'delayed' ? 'Your final score isn’t ready yet. Check back later.' : '';
     case 'verified':
-      return 'Checked and confirmed by the server.';
+      return '';
     case 'flagged':
       // ADR-001 decision 12: once the start level is unlocked, trusted scoring upgrades the run to valid.
       return verification.upgradable
         ? `${flagExplanation(verification.reasons)} It counts toward your totals now, and toward your records and unlocks once that level is unlocked.`
         : `${flagExplanation(verification.reasons)} It counts toward your totals, but not your records or unlocks.`;
     case 'invalid':
-      return 'This run didn’t pass the server’s checks, so it doesn’t count toward your progress.';
+      return 'This run didn’t meet the scoring rules, so it doesn’t count toward your progress.';
     case 'not-saved':
       return 'This run wasn’t saved, so its score doesn’t count.';
   }
@@ -112,7 +107,7 @@ interface Line {
   readonly detail: string;
   readonly tone: 'achieved' | 'neutral' | 'muted';
   /**
-   * A verdict from the provisional preview, not yet confirmed by the server:
+   * A verdict from the provisional preview, not yet decided by trusted scoring:
    * an achievement, or a flagged or invalid prediction. Its text is the same
    * as once confirmed, so the layout never shifts; only its styling (and a
    * screen-reader note) differs.
@@ -127,7 +122,7 @@ function recordLine(record: RecordLine, provisional: boolean, unavailable: boole
         ? { title: 'Records unavailable', detail: 'Your records couldn’t be loaded right now.', tone: 'muted' }
         : { title: 'Records', detail: 'Loading your records…', tone: 'muted' };
     case 'pending':
-      return { title: 'Records', detail: 'Your records update once the server checks this run.', tone: 'muted' };
+      return { title: 'Records', detail: 'Loading your records…', tone: 'muted' };
     case 'new-best': {
       // Kept to two lines at phone width, so the card never outgrows its reserved height (NFCT-52).
       const what = record.metrics.length > 0 ? `From level ${record.startLevel}: ${listWords(record.metrics.map((metric) => METRIC_WORDS[metric]))}.` : `From level ${record.startLevel}.`;
@@ -191,17 +186,16 @@ const Highlight: React.FC<{ readonly icon: React.ReactNode; readonly line: Line;
     <span className="mm-highlight-text">
       <strong className="mm-highlight-title">
         {line.title}
-        {line.pending && <span className="mm-visually-hidden"> (provisional, until the server checks your run)</span>}
+        {line.pending && <span className="mm-visually-hidden"> (pending)</span>}
       </strong>
       <span className="mm-highlight-detail">{line.detail}</span>
     </span>
   </li>
 );
 
-/** What the totals include, or why there are none to show yet. */
-function totalsNote(totals: RunSummaryModel['totals'], unavailable: boolean): string {
-  if (totals === null) return unavailable ? 'Your totals couldn’t be loaded right now.' : 'Loading your totals…';
-  return totals.includesUnverified ? 'Includes runs the server hasn’t checked yet.' : 'Totals include every run the server has checked.';
+/** Why there are no totals to show yet. */
+function totalsNote(unavailable: boolean): string {
+  return unavailable ? 'Your totals couldn’t be loaded right now.' : 'Loading your totals…';
 }
 
 const SCORING_HELP = `Each correct answer earns its level’s difficulty points: ${mentalMath.basePoints(mentalMath.MIN_LEVEL)} at level ${mentalMath.MIN_LEVEL}, rising to ${mentalMath.basePoints(mentalMath.MAX_LEVEL)} at level ${mentalMath.MAX_LEVEL}. A quick answer adds a speed bonus of up to half those points. Wrong answers and timeouts score nothing.`;
@@ -222,20 +216,15 @@ export const RunSummary: React.FC<RunSummaryProps> = ({ outcome, run, environmen
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
 
-  useEffect(() => {
-    const fail = () => setUnavailable(true);
-    let stop: () => void = () => {};
-    try {
-      stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, (next) => {
-        setUnavailable(false);
-        setState(next);
-      }, fail);
-    } catch {
-      // For example signed out: the summary still shows the run, without records.
-      fail();
-    }
-    return () => stop();
-  }, [progress]);
+  // Re-subscribes after a failure; signed out, the summary still shows the run, without records.
+  useEffect(() => subscribeWithRetry<ProgressWithRecentSessions>(
+    (onNext, onError) => progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, onNext, onError),
+    (next) => {
+      setUnavailable(false);
+      setState(next);
+    },
+    () => setUnavailable(true),
+  ), [progress]);
 
   const model = useMemo(
     () => runSummary({ outcome, environment, run, save: save.status, state }),
@@ -294,7 +283,9 @@ export const RunSummary: React.FC<RunSummaryProps> = ({ outcome, run, environmen
       </section>
 
       <section className="mm-panel mm-panel-compact" aria-labelledby="mm-totals-title">
-        <h2 id="mm-totals-title" className="mm-section-title">Mental Math so far</h2>
+        <h2 id="mm-totals-title" className="mm-section-title">
+          Mental Math so far{provisional && totals !== null && <> <ProvisionalTag /></>}
+        </h2>
         <FactGrid
           minColumnWidth={136}
           facts={[
@@ -302,7 +293,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({ outcome, run, environmen
             { label: 'Time played', value: <span data-total="time-played">{totals ? formatPlayTime(totals.activeMs) : '—'}</span> },
           ]}
         />
-        <p className="mm-help mm-totals-note">{totalsNote(totals, unavailable)}</p>
+        {totals === null && <p className="mm-help mm-totals-note">{totalsNote(unavailable)}</p>}
         <button type="button" className="btn btn-ghost mm-link mm-link-row" onClick={onViewProgress}>
           Records and history <ChevronRight size={16} aria-hidden="true" />
         </button>

@@ -38,6 +38,24 @@ describe('Mental Math v1 simulation', () => {
     expect(medianAt('average', 1)).toBeGreaterThan(medianAt('beginner', 1));
   });
 
+  it('gives a higher start level no longer runs or meaningfully higher scores than level 1 (NFCT-60)', () => {
+    const fairness = runSimulation({ generatorRuns: 1, questionsPerRun: 1, scoringRuns: 100, seed: 7 });
+    const cell = (profile: string, startLevel: number) =>
+      fairness.scoring.find((entry) => entry.profile === profile && entry.startLevel === startLevel)!;
+    for (const profile of ['average', 'strong', 'expert']) {
+      const fromOne = cell(profile, 1);
+      for (let startLevel = 2; startLevel <= 10; startLevel += 1) {
+        const higher = cell(profile, startLevel);
+        expect({ profile, startLevel, length: higher.runLengthMs.median <= fromOne.runLengthMs.median })
+          .toEqual({ profile, startLevel, length: true });
+        expect({ profile, startLevel, score: higher.score.median <= 1.05 * fromOne.score.median })
+          .toEqual({ profile, startLevel, score: true });
+      }
+    }
+    // Every run ends, within the time bank's limit.
+    for (const entry of fairness.scoring) expect(entry.runLengthMs.max).toBeLessThanOrEqual(180_000);
+  });
+
   it('is deterministic and renders Markdown tables', () => {
     expect(runSimulation(SMALL)).toEqual(report);
     const text = formatSimulationReport(report);
