@@ -42,7 +42,7 @@ describe('the "See all achievements" request', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     await act(async () => {
       renderer = create(
-        <PatientShell brand={brand} client={createBlankProfile('patient-1', 'p@example.com', 'Pat')} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} onOpenRebrand={vi.fn()} />,
+        <PatientShell brand={brand} client={createBlankProfile('patient-1', 'p@example.com', 'Pat')} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />,
       );
     });
   });

@@ -1,7 +1,5 @@
 import type { AppointmentStatus, AppointmentType } from '../../types';
 
-export type AppointmentTimeDisambiguation = 'earlier' | 'later' | 'reject';
-
 export interface ProductionAppointment {
   dataKind: 'canonical';
   id: string;
@@ -45,27 +43,3 @@ export type AppointmentRecord = ProductionAppointment | LegacyAppointment;
 export function isCanonicalAppointment(appointment: AppointmentRecord): appointment is ProductionAppointment {
   return appointment.dataKind === 'canonical';
 }
-
-export interface AppointmentDraft {
-  requestId: string;
-  patientId: string;
-  localDate: string;
-  localTime: string;
-  timezone: string;
-  timeDisambiguation?: AppointmentTimeDisambiguation;
-  durationMinutes: number;
-  type: AppointmentType;
-  notes?: string;
-}
-
-export interface AppointmentEdit {
-  localDate: string;
-  localTime: string;
-  timezone: string;
-  timeDisambiguation?: AppointmentTimeDisambiguation;
-  durationMinutes: number;
-  type: AppointmentType;
-  notes?: string;
-}
-
-export type AppointmentListRole = 'clinician' | 'patient';

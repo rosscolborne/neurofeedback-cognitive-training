@@ -6,10 +6,6 @@ import {
   validatePasswordChange,
 } from './passwordChange';
 
-interface ChangePasswordFormProps {
-  variant?: 'patient' | 'clinician';
-}
-
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 12px',
@@ -21,9 +17,7 @@ const inputStyle: React.CSSProperties = {
   fontSize: '16px',
 };
 
-export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
-  variant = 'patient',
-}) => {
+export const ChangePasswordForm: React.FC = () => {
   const { user, changePassword } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -64,8 +58,8 @@ export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
 
   return (
     <div
-      className={variant === 'patient' ? 'card-patient' : 'card-clinician'}
-      style={{ padding: variant === 'patient' ? undefined : '20px', backgroundColor: '#FFFFFF' }}
+      className="card-patient"
+      style={{ backgroundColor: '#FFFFFF' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
         <KeyRound size={18} color="var(--brand-primary)" aria-hidden="true" />
@@ -146,9 +140,9 @@ export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
           <div>
             <button
               type="submit"
-              className={variant === 'patient' ? 'btn btn-primary' : 'btn btn-dense'}
+              className="btn btn-primary"
               disabled={isSubmitting}
-              style={{ padding: variant === 'patient' ? '10px 20px' : '9px 14px', fontSize: variant === 'patient' ? '14px' : '12px', opacity: isSubmitting ? 0.7 : 1 }}
+              style={{ padding: '10px 20px', fontSize: '14px', opacity: isSubmitting ? 0.7 : 1 }}
             >
               {isSubmitting ? 'Changing password…' : 'Change password'}
             </button>

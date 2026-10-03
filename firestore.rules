@@ -946,29 +946,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // A device assignment belongs to the patient named by its document ID.
-    // Patients may manage their own assignment; clinicians must own the client.
-    match /deviceAssignments/{patientId} {
-      allow read: if isAuthenticated() && (
-        patientId == request.auth.uid || isPatientClinician(patientId)
-      );
-      allow create: if isAuthenticated() &&
-        request.resource.data.patientId == patientId &&
-        request.resource.data.assignedByUserId == request.auth.uid && (
-          patientId == request.auth.uid || isPatientClinician(patientId)
-        );
-      allow update: if isAuthenticated() &&
-        resource.data.patientId == patientId &&
-        request.resource.data.patientId == resource.data.patientId &&
-        request.resource.data.assignedByUserId == resource.data.assignedByUserId &&
-        request.resource.data.assignedAt == resource.data.assignedAt && (
-          patientId == request.auth.uid || isPatientClinician(patientId)
-        );
-      allow delete: if isAuthenticated() && (
-        patientId == request.auth.uid || isPatientClinician(patientId)
-      );
-    }
-
     // A canonical conversation is scoped to one patient/clinician relationship.
     // Its summary and new immutable message are committed atomically.
     match /messageThreads/{patientId}/relationships/{clinicianId} {
@@ -1338,12 +1315,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Clinic Brand Configurations (brands/{brandId}), legacy. Branding now
-    // lives on clinics/{id}; the app neither reads nor writes here.
-    match /brands/{brandId} {
-      allow read, write: if false;
-    }
-
     // Production tenant records. Practitioner IDs are Firebase user IDs until
     // role claims are introduced by the authentication backend.
     match /clinics/{clinicId} {
@@ -1374,15 +1345,6 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.clinicId == resource.data.clinicId;
-      allow delete: if false;
-    }
-
-    match /protocolCatalog/{protocolId} {
-      allow read: if isClinicMember(resource.data.clinicId) || isClinicPatient(resource.data.clinicId);
-      allow create: if isAuthenticated() && isClinicMember(request.resource.data.clinicId);
-      allow update: if isAuthenticated() &&
-        request.resource.data.clinicId == resource.data.clinicId &&
-        isClinicMember(resource.data.clinicId);
       allow delete: if false;
     }
 

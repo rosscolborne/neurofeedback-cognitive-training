@@ -2,21 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
-import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
+import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
 import {
-  findPendingLifecycleInvitation, readLocalInvitationRecord, readPendingInvitationState,
-  seedLinkedPatient, seedPendingLifecycleInvitation,
+  readLocalInvitationRecord, readPendingInvitationState,
+  seedLinkedPatient, seedPendingInvitation, seedPendingLifecycleInvitation,
 } from './helpers/localEmulator';
-
-async function submitInvitation(page: Page, email: string, name = 'Invited Patient') {
-  await page.getByRole('button', { name: 'Invite Patient' }).click();
-  await page.getByPlaceholder('e.g. Alex Morgan').fill(name);
-  await page.getByPlaceholder('patient@example.com').fill(email);
-  await page.locator('form select').nth(0).selectOption('ADHD (Inattentive)');
-  await page.locator('form select').nth(1).selectOption('alpha-enhancement');
-  await page.getByPlaceholder('e.g. 3').fill('3');
-  await page.getByRole('button', { name: 'Create Invitation' }).click();
-}
 
 test('wrong patient account sees a rejection and leaves the invitation pending', async ({ browser, permissionErrorGuard }) => {
   const invited = await seedLinkedPatient({ clinicianId: null, clinicId: null });
@@ -119,58 +109,12 @@ test('reopening the invitation a patient already accepted shows no conflict', as
   }
 });
 
-test('clinician cancels a pending invite and can issue a new one despite cancellation history', async ({ browser }) => {
-  const fixture = await seedLinkedPatient();
-  const email = `pending-${randomUUID().slice(0, 12)}@example.test`;
-  const context = await browser.newContext();
-  try {
-    const page = await context.newPage();
-    await loginThroughUi(page, fixture.clinician);
-    await arriveAtClinicianDashboard(page);
-    await submitInvitation(page, email);
-    await expect(page.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-    const cancelledCode = await findPendingLifecycleInvitation(fixture.clinician.uid, email);
-    await page.getByRole('button', { name: 'Done' }).click();
-
-    await submitInvitation(page, email);
-    await expect(page.getByRole('alert').filter({ hasText: 'A pending invitation already exists' })).toBeVisible();
-    expect(await readPendingInvitationState(fixture.clinician.uid, email))
-      .toEqual({ pendingCount: 1, claimExists: true });
-    await page.getByRole('button', { name: 'Cancel', exact: true }).last().click();
-
-    const pending = page.locator('.card-clinician').filter({ hasText: 'Pending invitations' });
-    await pending.getByRole('button', { name: 'Cancel' }).click();
-    await expect(pending.getByText(cancelledCode, { exact: true })).toHaveCount(0);
-    expect(await readPendingInvitationState(fixture.clinician.uid, email))
-      .toEqual({ pendingCount: 0, claimExists: false });
-
-    await submitInvitation(page, email);
-    await expect(page.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-    const replacementCode = await findPendingLifecycleInvitation(fixture.clinician.uid, email);
-    expect(replacementCode).not.toBe(cancelledCode);
-    await page.getByRole('button', { name: 'Done' }).click();
-    await page.getByRole('button', { name: 'Invitation history (1)' }).click();
-    await expect(page.getByText('Cancelled · Cancellation date unavailable')).toBeVisible();
-    expect(await readPendingInvitationState(fixture.clinician.uid, email))
-      .toEqual({ pendingCount: 1, claimExists: true });
-  } finally {
-    await context.close();
-  }
-});
-
 test('first-time patient signup retains the signed-out invitation deep link', async ({ browser }) => {
   const fixture = await seedLinkedPatient();
   const email = `new-patient-${randomUUID().slice(0, 12)}@example.test`;
-  const clinicianContext = await browser.newContext();
+  const code = await seedPendingInvitation(fixture.clinician.uid, email, 'New Patient', { assignedProtocol: 'alpha-enhancement' });
   const patientContext = await browser.newContext();
   try {
-    const clinician = await clinicianContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    await submitInvitation(clinician, email, 'New Patient');
-    await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-    const code = await findPendingLifecycleInvitation(fixture.clinician.uid, email);
-
     const patient = await patientContext.newPage();
     await patient.goto(`/#/connect/${code}`);
     await expect(patient.getByRole('button', { name: 'Begin Journey' })).toBeVisible();
@@ -207,12 +151,11 @@ test('first-time patient signup retains the signed-out invitation deep link', as
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
     await patient.getByRole('button', { name: 'Train', exact: true }).click();
     await expect(patient.locator('main .card-patient')).toHaveCount(assigned.allowed!.length);
-    await expect(clinician.getByRole('row').filter({ hasText: 'New Patient' })).toHaveCount(1);
     expect(await readLocalInvitationRecord(code)).toMatchObject({ status: 'accepted', patientId: assigned.uid, assignedProtocol: 'alpha-enhancement' });
     expect(await readPendingInvitationState(fixture.clinician.uid, email))
       .toEqual({ pendingCount: 0, claimExists: false });
   } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+    await patientContext.close();
   }
 });
 
@@ -220,15 +163,9 @@ test('signup with a different email cannot consume a pre-account invitation', as
   const fixture = await seedLinkedPatient();
   const invitedEmail = `invited-${randomUUID().slice(0, 12)}@example.test`;
   const wrongEmail = `other-${randomUUID().slice(0, 12)}@example.test`;
-  const clinicianContext = await browser.newContext();
+  const code = await seedPendingInvitation(fixture.clinician.uid, invitedEmail, 'Invited Patient', { assignedProtocol: 'alpha-enhancement' });
   const patientContext = await browser.newContext();
   try {
-    const clinician = await clinicianContext.newPage();
-    await loginThroughUi(clinician, fixture.clinician);
-    await arriveAtClinicianDashboard(clinician);
-    await submitInvitation(clinician, invitedEmail);
-    await expect(clinician.getByRole('heading', { name: 'Invitation created' })).toBeVisible();
-    const code = await findPendingLifecycleInvitation(fixture.clinician.uid, invitedEmail);
     const invitationBefore = await readLocalInvitationRecord(code);
 
     const patient = await patientContext.newPage();
@@ -248,7 +185,7 @@ test('signup with a different email cannot consume a pre-account invitation', as
     expect(await readPendingInvitationState(fixture.clinician.uid, invitedEmail))
       .toEqual({ pendingCount: 1, claimExists: true });
   } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
+    await patientContext.close();
   }
 });
 
@@ -290,51 +227,6 @@ test('signed-out login and signed-in direct links preserve the invitation code',
     await page.reload();
     await arriveAtPatientDashboard(page);
     await expect(page.getByRole('alert').filter({ hasText: 'already connected to a clinician' })).toHaveCount(0);
-  } finally {
-    await context.close();
-  }
-});
-
-test('clinician opening a patient invitation sees an explanation without accepting it', async ({ browser }) => {
-  const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
-  const code = await seedPendingLifecycleInvitation(fixture);
-  const context = await browser.newContext();
-  try {
-    const page = await context.newPage();
-    await loginThroughUi(page, fixture.clinician);
-    await arriveAtClinicianDashboard(page);
-    await page.goto(`/#/connect/${code}`);
-    await expect(page.getByRole('heading', { name: 'Patient invitation' })).toBeVisible();
-    await expect(page.getByText('This invitation is for a patient account. Sign in with the invited patient email address to accept it.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Accept Invitation' })).toHaveCount(0);
-    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
-      .toEqual({ pendingCount: 1, claimExists: true });
-    await page.getByRole('button', { name: 'Return to clinician dashboard' }).click();
-    await arriveAtClinicianDashboard(page);
-  } finally {
-    await context.close();
-  }
-});
-
-test('clinician signing in from a patient invitation sees the same explanation', async ({ browser }) => {
-  const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
-  const code = await seedPendingLifecycleInvitation(fixture);
-  const context = await browser.newContext();
-  try {
-    const page = await context.newPage();
-    await page.goto(`/#/connect/${code}`);
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await page.getByPlaceholder('name@example.com', { exact: true }).fill(fixture.clinician.email);
-    await page.getByPlaceholder('Your password', { exact: true }).fill(fixture.clinician.password);
-    await page.getByRole('button', { name: 'Log In', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Patient invitation' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Accept Invitation' })).toHaveCount(0);
-    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
-      .toEqual({ pendingCount: 1, claimExists: true });
-    await page.getByRole('button', { name: 'Return to clinician dashboard' }).click();
-    await arriveAtClinicianDashboard(page);
-    await page.reload();
-    await arriveAtClinicianDashboard(page);
   } finally {
     await context.close();
   }

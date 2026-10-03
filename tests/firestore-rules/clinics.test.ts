@@ -100,25 +100,17 @@ describe('practitioners/{uid}', () => {
     });
 });
 
-describe('brands/{brandId} (legacy, unused by the app)', () => {
-    it('is neither readable nor writable by any client', async () => {
+describe('retired legacy collections (brands, protocolCatalog)', () => {
+    it('falls under the default deny for every client', async () => {
         await assertFails(getDoc(doc(await anonymous(), 'brands/brand-a')));
         await assertFails(getDoc(doc(await as(ids.clinicianA), 'brands/brand-a')));
         await assertFails(setDoc(doc(await as(ids.clinicianB), 'brands/brand-a'), { name: 'Defaced' }));
         await assertFails(setDoc(doc(await as(ids.patientA), 'brands/new-brand'), { name: 'Spam' }));
         await assertFails(deleteDoc(doc(await as(ids.clinicianA), 'brands/brand-a')));
-    });
-});
-
-describe('protocolCatalog', () => {
-    it('lets clinic members create and edit protocols for their clinic only', async () => {
-        await assertSucceeds(setDoc(doc(await as(ids.clinicianA), 'protocolCatalog/new-a'), { id: 'new-a', clinicId: clinicA, name: 'A2' }));
-        await assertSucceeds(updateDoc(doc(await as(ids.colleagueA), 'protocolCatalog/protocol-a'), { name: 'Renamed' }));
-        await assertFails(setDoc(doc(await as(ids.clinicianB), 'protocolCatalog/new-b'), { id: 'new-b', clinicId: clinicA, name: 'Forged' }));
-        await assertFails(updateDoc(doc(await as(ids.clinicianB), 'protocolCatalog/protocol-a'), { name: 'Defaced' }));
-        await assertFails(updateDoc(doc(await as(ids.clinicianA), 'protocolCatalog/protocol-a'), { clinicId: ids.clinicianB }));
-        await assertFails(deleteDoc(doc(await as(ids.clinicianA), 'protocolCatalog/protocol-a')));
-        await assertFails(getDoc(doc(await anonymous(), 'protocolCatalog/protocol-a')));
+        await assertFails(getDoc(doc(await as(ids.clinicianA), 'protocolCatalog/protocol-a')));
+        await assertFails(getDoc(doc(await as(ids.patientA), 'protocolCatalog/protocol-a')));
+        await assertFails(setDoc(doc(await as(ids.clinicianA), 'protocolCatalog/new-a'), { id: 'new-a', clinicId: clinicA, name: 'A2' }));
+        await assertFails(updateDoc(doc(await as(ids.colleagueA), 'protocolCatalog/protocol-a'), { name: 'Renamed' }));
     });
 });
 

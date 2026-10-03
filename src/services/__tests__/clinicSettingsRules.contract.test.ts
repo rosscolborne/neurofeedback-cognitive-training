@@ -12,7 +12,7 @@ describe('clinic settings Firestore rule contract', () => {
   });
 
   it('binds practitioner creation to the authenticated user and tenant membership', () => {
-    const block = rules.slice(rules.indexOf('match /practitioners/{practitionerId}'), rules.indexOf('match /protocolCatalog/{protocolId}'));
+    const block = rules.slice(rules.indexOf('match /practitioners/{practitionerId}'), rules.indexOf('// Everything not matched above is denied.'));
     expect(block).toContain('practitionerId == request.auth.uid');
     expect(block).toContain('request.resource.data.userId == request.auth.uid');
     expect(block).toContain('isClinicMemberAfter(request.resource.data.clinicId)');

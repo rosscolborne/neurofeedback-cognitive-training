@@ -1,4 +1,4 @@
-import { calendarDayIn, mentalMathV1 as mm, type FirestoreTimestamp } from '@nfct/shared';
+import { localDateIn, mentalMathV1 as mm, type FirestoreTimestamp } from '@nfct/shared';
 
 // Realistic Mental Math v1 sessions for trusted-scoring tests (NFCT-19), played
 // through NFCT-17's pure run reducer exactly as the game screen drives it:
@@ -45,11 +45,11 @@ export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs =
   return run;
 }
 
-/** 'YYYY-MM-DD' of an instant in a time zone. */
-export function localDateIn(timezone: string, ms: number): string {
-  const day = calendarDayIn(timezone, ms);
-  if (day === null) throw new Error(`unknown time zone ${timezone}`);
-  return new Date(day * 86_400_000).toISOString().slice(0, 10);
+/** 'YYYY-MM-DD' of an instant in a known time zone. */
+function localDateOf(timezone: string, ms: number): string {
+  const date = localDateIn(timezone, ms);
+  if (date === null) throw new Error(`unknown time zone ${timezone}`);
+  return date;
 }
 
 export type SessionPlan = RunPlan & {
@@ -91,7 +91,7 @@ export function mentalMathSession(
     startedAt: timestamp(plan.endedAtMs - activeDurationMs - 12_000),
     endedAt: timestamp(plan.endedAtMs),
     activeDurationMs,
-    localDate: localDateIn(timezone, plan.endedAtMs),
+    localDate: localDateOf(timezone, plan.endedAtMs),
     timezone,
     createdAt: plan.createdAt ?? timestamp(plan.endedAtMs + 1_000),
     client: { appVersion: '0.1.0', platform: 'web' },

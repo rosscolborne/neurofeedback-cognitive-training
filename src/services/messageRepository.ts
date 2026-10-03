@@ -9,7 +9,6 @@ import {
   messageUnreadStatus, relationshipKey, type MessageRelationship, type MessageSenderRole, type MessageUnreadStatus,
   type ProductionMessage, type ProductionMessageThread,
 } from './messageMappers';
-import { isClinicianDemoWorkspace } from './clinicianDemoBoundary';
 
 const MAX_MESSAGE_LENGTH = 4000; const DEFAULT_PAGE_SIZE = 30; const MAX_PAGE_SIZE = 100;
 export interface MessagePageCursor { relationshipKey: string; createdAt: unknown; id: string; }
@@ -30,7 +29,6 @@ export interface MessageRepository {
 interface AuthorizedRelationship extends MessageRelationship { senderId: string; senderRole: MessageSenderRole; }
 const asError = (error: unknown) => error instanceof Error ? error : new Error('Messaging is unavailable.');
 const currentUserId = () => {
-  if (isClinicianDemoWorkspace()) throw new Error('Messaging is unavailable in the sample clinician workspace.');
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Sign in to use messaging.');
   return uid;

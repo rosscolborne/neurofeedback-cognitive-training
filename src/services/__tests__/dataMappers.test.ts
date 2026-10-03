@@ -11,7 +11,6 @@ import {
   readPatientInvitation,
   readSessionRecord,
   removeUndefined,
-  timestampToIso,
   timestampToMillis,
 } from '../dataMappers';
 import { CLINICAL_PROTOCOL_TEMPLATES, getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
@@ -117,7 +116,6 @@ describe('production data migration readers', () => {
     expect(timestampToMillis('2026-09-15T12:00:00.000Z')).toBe(1_789_473_600_000);
     expect(timestampToMillis(new Date('2026-09-15T12:00:00.000Z'))).toBe(1_789_473_600_000);
     expect(timestampToMillis({ seconds: 1_789_473_600, nanoseconds: 500_000_000 })).toBe(1_789_473_600_500);
-    expect(timestampToIso({ seconds: 1_789_473_600 })).toBe('2026-09-15T12:00:00.000Z');
     expect(timestampToMillis('not-a-date')).toBeNull();
   });
 

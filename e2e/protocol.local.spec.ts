@@ -2,28 +2,33 @@ import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
-import { arriveAtClinicianDashboard, arriveAtPatientDashboard, loginThroughUi, startPatientTrainingInDemoMode } from './helpers/auth';
-import { readPatientTrainingRecord, seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
+import { arriveAtPatientDashboard, loginThroughUi, startPatientTrainingInDemoMode } from './helpers/auth';
+import { seedLinkedPatient, setPatientFields, type LocalPatientFixture } from './helpers/localEmulator';
 
 const seedPatient = seedLinkedPatient;
 type Fixture = LocalPatientFixture;
 
-async function clinicianDetail(page: Page, fixture: Fixture) {
-  await loginThroughUi(page, fixture.clinician);
-  await arriveAtClinicianDashboard(page);
-  await page.getByRole('row').filter({ hasText: fixture.name }).click();
-  await expect(page.getByRole('heading', { name: fixture.name })).toBeVisible();
-}
-
-async function openBuilder(page: Page) {
-  await page.getByRole('button', { name: 'Adjust Protocol' }).click();
-  await expect(page.getByRole('heading', { name: /Clinical Protocol Architect/ })).toBeVisible();
-}
-
-async function saveBuilder(page: Page) {
-  await page.getByRole('button', { name: 'Assign protocol', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /Clinical Protocol Architect/ })).toBeHidden();
-}
+// Clinician-defined rewards as the retired protocol builder saved them on the patient's profile.
+const betaTemplate = getClinicalProtocolTemplate('beta-downtraining')!;
+const thetaTemplate = getClinicalProtocolTemplate('theta-beta-ratio')!;
+const customSingleBand = (targetCondition: 'above' | 'below') => ({
+  assignedProtocol: 'beta-downtraining',
+  customProtocolConfig: {
+    ...betaTemplate, id: `custom-single-band-${targetCondition}`, customRewardEnabled: true,
+    rewardBand: { ...betaTemplate.rewardBand, freqMin: 18, freqMax: 24, targetCondition, targetThreshold: 999 },
+  },
+});
+const customRatio = {
+  assignedProtocol: 'theta-beta-ratio',
+  customProtocolConfig: {
+    ...thetaTemplate, id: 'custom-ratio', customRewardEnabled: true,
+    ratioReward: {
+      numerator: { freqMin: 5, freqMax: 9 }, denominator: { freqMin: 15, freqMax: 29 },
+      targetCondition: 'below', targetThreshold: 999,
+    },
+    rewardBand: { ...thetaTemplate.rewardBand },
+  },
+};
 
 async function patientDetails(page: Page, fixture: Fixture) {
   await loginThroughUi(page, fixture.patient);
@@ -86,58 +91,14 @@ test('fresh patient signup shows the default TBR protocol and only its assigned 
   }
 });
 
-test('clinician protocol change updates patient Home and Train without losing Garden progress', async ({ browser }) => {
-  const theta = getClinicalProtocolTemplate('theta-beta-ratio')!;
-  const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
-  const fixture = await seedLinkedPatient({
-    assignedProtocol: theta.protocolType,
-    allowedExperiences: theta.recommendedExperiences,
-    tidalGardenState: { stage: 3, growthPoints: 601, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
-  });
-  const clinicianContext = await browser.newContext();
-  const patientContext = await browser.newContext();
-  try {
-    const clinician = await clinicianContext.newPage();
-    const patient = await patientContext.newPage();
-    await loginThroughUi(patient, fixture.patient);
-    await arriveAtPatientDashboard(patient);
-
-    await clinicianDetail(clinician, fixture);
-    await openBuilder(clinician);
-    await clinician.getByRole('button', { name: /Hardt Alpha Synchrony Protocol/ }).click();
-    await saveBuilder(clinician);
-
-    await patient.reload();
-    await arriveAtPatientDashboard(patient);
-    await expect(patient.locator('main')).toContainText('Hardt Alpha Synchrony Protocol');
-    await expect(patient.getByRole('button', { name: 'NeuroGambit', exact: true })).toHaveCount(1);
-    await patient.getByRole('button', { name: 'Train', exact: true }).click();
-    const cards = patient.locator('main .card-patient');
-    await expect(cards).toHaveCount(alpha.recommendedExperiences.length);
-    await expect(cards.getByText('NeuroGambit', { exact: true })).toHaveCount(1);
-    expect(await readPatientTrainingRecord(fixture.patient.uid)).toMatchObject({
-      assignedProtocol: 'alpha-enhancement', tidalGardenState: { stage: 3, growthPoints: 601, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' },
-    });
-  } finally {
-    await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
-  }
-});
-
 async function inZoneTrend(page: Page): Promise<number | null> {
   const text = await telemetryCell(page, 'In zone · last 10s').innerText();
   const value = text.match(/(\d+)%/);
   return value ? Number(value[1]) : null;
 }
 
-test('unassigned patient resolves the same default in clinician, patient, and Demo training', async ({ browser }) => {
+test('unassigned patient resolves the default protocol in details and Demo training', async ({ browser }) => {
   const fixture = await seedPatient();
-  const clinicianPage = await browser.newPage();
-  await clinicianDetail(clinicianPage, fixture);
-  await openBuilder(clinicianPage);
-  await expect(clinicianPage.getByText('Default training compares 4–8 Hz power with 13–30 Hz power. Reward when the ratio is below 1.85.')).toBeVisible();
-  await expect(clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' })).not.toBeChecked();
-  await clinicianPage.close();
-
   const patientPage = await browser.newPage();
   const dialog = await patientDetails(patientPage, fixture);
   await expect(detailValue(dialog, 'Protocol')).toContainText('Lubar Theta/Beta Ratio Protocol');
@@ -151,53 +112,10 @@ test('unassigned patient resolves the same default in clinician, patient, and De
   await patientPage.close();
 });
 
-test('switching a custom ratio to default Beta clears the prior rule across reload', async ({ browser }) => {
-  const fixture = await seedPatient();
-  const clinicianPage = await browser.newPage();
-  await clinicianDetail(clinicianPage, fixture);
-  await openBuilder(clinicianPage);
-  await clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' }).check();
-  await clinicianPage.getByRole('spinbutton', { name: 'Theta Min Frequency' }).fill('5');
-  await clinicianPage.getByRole('spinbutton', { name: 'Reward threshold' }).fill('2.6');
-  await saveBuilder(clinicianPage);
-  await openBuilder(clinicianPage);
-  await clinicianPage.getByRole('button', { name: /Beta De-arousal Downtraining/ }).click();
-  await saveBuilder(clinicianPage);
-  await clinicianPage.reload();
-  await arriveAtClinicianDashboard(clinicianPage);
-  await clinicianPage.getByRole('row').filter({ hasText: fixture.name }).click();
-  await openBuilder(clinicianPage);
-  const custom = clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' });
-  await expect(custom).not.toBeChecked();
-  await expect(clinicianPage.getByText('Default training measures 13–30 Hz spectral amplitude. Reward when below 14 µV.')).toBeVisible();
-  await custom.check();
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Min Frequency', exact: true })).toHaveValue('13');
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Max Frequency', exact: true })).toHaveValue('30');
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Reward threshold' })).toHaveValue('14');
-  await expect(clinicianPage.getByRole('combobox', { name: 'Reward condition' })).toHaveValue('below');
-  await clinicianPage.close();
-
-  const patientPage = await browser.newPage();
-  const dialog = await patientDetails(patientPage, fixture);
-  await expect(detailValue(dialog, 'Protocol')).toContainText('Beta De-arousal Downtraining');
-  await expect(detailValue(dialog, 'Reward when')).toContainText('Below 14 µV');
-  await returnHome(patientPage);
-  await startPatientTrainingInDemoMode(patientPage);
-  await expect(pageReward(patientPage, /BETA \(13–30 Hz\)/)).toContainText('µV');
-  await expect(patientPage.getByText('Ratio rewards are only supported by ratio protocols.')).toHaveCount(0);
-  await patientPage.close();
-});
-
 function pageReward(page: Page, label: RegExp | string) { return telemetryCell(page, label); }
 
 test('default Beta feedback agrees with the live reward value and in-zone trend', async ({ browser }) => {
   const fixture = await seedPatient({ assignedProtocol: 'beta-downtraining' });
-  const clinicianPage = await browser.newPage();
-  await clinicianDetail(clinicianPage, fixture);
-  await openBuilder(clinicianPage);
-  await expect(clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' })).not.toBeChecked();
-  await clinicianPage.close();
-
   const page = await browser.newPage();
   const dialog = await patientDetails(page, fixture);
   await expect(detailValue(dialog, 'Protocol')).toContainText('Beta De-arousal Downtraining');
@@ -247,28 +165,8 @@ test('default Beta feedback agrees with the live reward value and in-zone trend'
   await page.close();
 });
 
-test('custom single-band and ratio rules survive reload and drive the visible reward tile', async ({ browser }) => {
-  const fixture = await seedPatient({ assignedProtocol: 'beta-downtraining' });
-  const clinicianPage = await browser.newPage();
-  await clinicianDetail(clinicianPage, fixture);
-  await openBuilder(clinicianPage);
-  await clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' }).check();
-  await clinicianPage.getByRole('spinbutton', { name: 'Min Frequency', exact: true }).fill('18');
-  await clinicianPage.getByRole('spinbutton', { name: 'Max Frequency', exact: true }).fill('24');
-  await clinicianPage.getByRole('combobox', { name: 'Reward condition' }).selectOption('above');
-  await clinicianPage.getByRole('spinbutton', { name: 'Reward threshold' }).fill('999');
-  await saveBuilder(clinicianPage);
-  await clinicianPage.reload();
-  await arriveAtClinicianDashboard(clinicianPage);
-  await clinicianPage.getByRole('row').filter({ hasText: fixture.name }).click();
-  await openBuilder(clinicianPage);
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Min Frequency', exact: true })).toHaveValue('18');
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Max Frequency', exact: true })).toHaveValue('24');
-  await expect(clinicianPage.getByRole('combobox', { name: 'Reward condition' })).toHaveValue('above');
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Reward threshold' })).toHaveValue('999');
-  await clinicianPage.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await clinicianPage.close();
-
+test('custom single-band and ratio rewards drive patient details and the visible reward tile', async ({ browser }) => {
+  const fixture = await seedPatient(customSingleBand('above'));
   let patientPage = await browser.newPage();
   let dialog = await patientDetails(patientPage, fixture);
   await expect(detailValue(dialog, 'Training band')).toContainText('18–24 Hz');
@@ -280,13 +178,7 @@ test('custom single-band and ratio rules survive reload and drive the visible re
   await expect.poll(() => inZoneTrend(patientPage)).toBeLessThan(20);
   await patientPage.close();
 
-  const directionPage = await browser.newPage();
-  await clinicianDetail(directionPage, fixture);
-  await openBuilder(directionPage);
-  await directionPage.getByRole('combobox', { name: 'Reward condition' }).selectOption('below');
-  await saveBuilder(directionPage);
-  await directionPage.close();
-
+  await setPatientFields(fixture.patient.uid, customSingleBand('below'));
   patientPage = await browser.newPage();
   dialog = await patientDetails(patientPage, fixture);
   await expect(detailValue(dialog, 'Reward when')).toContainText('Below 999 µV');
@@ -296,31 +188,8 @@ test('custom single-band and ratio rules survive reload and drive the visible re
   await expect.poll(() => inZoneTrend(patientPage)).toBeGreaterThan(80);
   await patientPage.close();
 
-  // The same isolated patient switches to a clinician-defined two-band ratio.
-  const secondClinicianPage = await browser.newPage();
-  await clinicianDetail(secondClinicianPage, fixture);
-  await openBuilder(secondClinicianPage);
-  await secondClinicianPage.getByRole('button', { name: /Lubar Theta\/Beta Ratio Protocol/ }).click();
-  await secondClinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' }).check();
-  await secondClinicianPage.getByRole('spinbutton', { name: 'Theta Min Frequency' }).fill('5');
-  await secondClinicianPage.getByRole('spinbutton', { name: 'Theta Max Frequency' }).fill('9');
-  await secondClinicianPage.getByRole('spinbutton', { name: 'Beta Min Frequency' }).fill('15');
-  await secondClinicianPage.getByRole('spinbutton', { name: 'Beta Max Frequency' }).fill('29');
-  await secondClinicianPage.getByRole('combobox', { name: 'Reward condition' }).selectOption('below');
-  await secondClinicianPage.getByRole('spinbutton', { name: 'Reward threshold' }).fill('999');
-  await saveBuilder(secondClinicianPage);
-  await secondClinicianPage.reload();
-  await arriveAtClinicianDashboard(secondClinicianPage);
-  await secondClinicianPage.getByRole('row').filter({ hasText: fixture.name }).click();
-  await openBuilder(secondClinicianPage);
-  await expect(secondClinicianPage.getByRole('spinbutton', { name: 'Theta Min Frequency' })).toHaveValue('5');
-  await expect(secondClinicianPage.getByRole('spinbutton', { name: 'Theta Max Frequency' })).toHaveValue('9');
-  await expect(secondClinicianPage.getByRole('spinbutton', { name: 'Beta Min Frequency' })).toHaveValue('15');
-  await expect(secondClinicianPage.getByRole('spinbutton', { name: 'Beta Max Frequency' })).toHaveValue('29');
-  await expect(secondClinicianPage.getByRole('combobox', { name: 'Reward condition' })).toHaveValue('below');
-  await expect(secondClinicianPage.getByRole('spinbutton', { name: 'Reward threshold' })).toHaveValue('999');
-  await secondClinicianPage.close();
-
+  // The same patient switches to a clinician-defined two-band ratio.
+  await setPatientFields(fixture.patient.uid, customRatio);
   patientPage = await browser.newPage();
   dialog = await patientDetails(patientPage, fixture);
   await expect(detailValue(dialog, 'Theta')).toContainText('5–9 Hz');
@@ -336,36 +205,6 @@ test('custom single-band and ratio rules survive reload and drive the visible re
   await controls.getByRole('button', { name: 'Drift' }).click();
   await expect.poll(async () => pageReward(patientPage, /THETA\/BETA \(5–9 \/ 15–29 Hz\)/).innerText()).not.toBe(focusRatio);
   await patientPage.close();
-});
-
-test('condition edits persist without changing assigned protocol or custom reward', async ({ browser }) => {
-  const fixture = await seedPatient({ assignedProtocol: 'beta-downtraining' });
-  const clinicianPage = await browser.newPage();
-  await clinicianDetail(clinicianPage, fixture);
-  await openBuilder(clinicianPage);
-  await clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' }).check();
-  await clinicianPage.getByRole('spinbutton', { name: 'Reward threshold' }).fill('18');
-  await saveBuilder(clinicianPage);
-  await clinicianPage.getByRole('button', { name: 'Back to Patient Roster' }).click();
-  await clinicianPage.getByRole('row').filter({ hasText: fixture.name }).getByTitle('Edit Patient').click();
-  const edit = clinicianPage.getByRole('heading', { name: 'Edit Patient Clinical Profile' }).locator('..');
-  await edit.getByText('Primary Clinical Indication').locator('..').locator('select').selectOption('Generalized Anxiety');
-  await clinicianPage.getByRole('button', { name: 'Save Changes' }).click();
-  // The dialog closes once the server has accepted the save. With the
-  // persistent cache (NFCT-20) the SDK stores a write locally before sending
-  // it, so reloading straight after the click can abandon it.
-  await expect(edit).toBeHidden();
-  await clinicianPage.reload();
-  await arriveAtClinicianDashboard(clinicianPage);
-  const row = clinicianPage.getByRole('row').filter({ hasText: fixture.name });
-  await expect(row).toContainText('Generalized Anxiety');
-  await expect(row).toContainText('Beta De-arousal Downtraining');
-  await row.click();
-  await expect(clinicianPage.getByRole('heading', { name: fixture.name }).locator('..').locator('..')).toContainText('Generalized Anxiety');
-  await openBuilder(clinicianPage);
-  await expect(clinicianPage.getByRole('checkbox', { name: 'Use clinician-defined reward criteria' })).toBeChecked();
-  await expect(clinicianPage.getByRole('spinbutton', { name: 'Reward threshold' })).toHaveValue('18');
-  await clinicianPage.close();
 });
 
 test('Demo telemetry follows Focus and Drift and remains labeled simulated', async ({ browser }) => {

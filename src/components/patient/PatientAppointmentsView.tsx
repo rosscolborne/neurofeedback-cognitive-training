@@ -25,7 +25,7 @@ export const PatientAppointmentsView: React.FC<PatientAppointmentsViewProps> = (
     setState('loading'); setError('');
     try {
       let skipped = 0;
-      const loaded = await repository.list('patient', [], { onUnreadable: (count) => { skipped = count; } });
+      const loaded = await repository.list({ onUnreadable: (count) => { skipped = count; } });
       if (!mountedRef.current || request !== loadRequestRef.current) return;
       setAppointments(loaded); setUnreadableCount(skipped); setState('ready');
     } catch (reason) {
@@ -37,7 +37,7 @@ export const PatientAppointmentsView: React.FC<PatientAppointmentsViewProps> = (
     const request = ++loadRequestRef.current;
     let active = true;
     let skipped = 0;
-    repository.list('patient', [], { onUnreadable: (count) => { skipped = count; } }).then((loaded) => {
+    repository.list({ onUnreadable: (count) => { skipped = count; } }).then((loaded) => {
       if (!active || request !== loadRequestRef.current) return;
       setAppointments(loaded);
       setUnreadableCount(skipped);

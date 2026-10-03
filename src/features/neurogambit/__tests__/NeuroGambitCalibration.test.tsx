@@ -5,7 +5,7 @@ import type { IndividualBaselineModel } from '../../../types';
 import type { NeuroGambitBaseline } from '../types';
 
 const state = vi.hoisted(() => ({
-  auth: { user: { uid: 'patient-a' }, role: 'patient', isDemoWorkspace: false } as Record<string, unknown>,
+  auth: { user: { uid: 'patient-a' }, role: 'patient' } as Record<string, unknown>,
   getExistingCurrentClient: vi.fn(), saveIndividualBaselineModel: vi.fn(),
   individualBaselineModel: null as unknown, toBrainStateEvent: vi.fn(), clockJumpTo: null as Date | null,
   engineReplacement: null as unknown,
@@ -56,7 +56,7 @@ const modal = (renderer: ReactTestRenderer) => renderer.root.find((node) => (nod
 describe('NeuroGambit persisted baseline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.auth = { user: { uid: 'patient-a' }, role: 'patient', isDemoWorkspace: false };
+    state.auth = { user: { uid: 'patient-a' }, role: 'patient' };
     state.individualBaselineModel = null;
     state.clockJumpTo = null;
     state.engineReplacement = null;
@@ -123,7 +123,7 @@ describe('NeuroGambit persisted baseline', () => {
     let pending!: Promise<void>;
     act(() => { pending = modal(renderer).props.onBaselineReady(calibrated, saved); });
     await act(async () => { await Promise.resolve(); });
-    state.auth = { user: { uid: 'patient-b' }, role: 'patient', isDemoWorkspace: false };
+    state.auth = { user: { uid: 'patient-b' }, role: 'patient' };
     await act(async () => { renderer.update(<NeuroGambitContainer eegData={null} patientId="patient-b" onBaselinePersisted={onBaselinePersisted} />); });
     await act(async () => { resolveSave(); await expect(pending).rejects.toThrow('account changed'); });
     expect(state.individualBaselineModel).toBeNull();

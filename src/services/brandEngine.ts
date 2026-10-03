@@ -9,12 +9,6 @@ export interface ContrastResult {
   passesAAANormal: boolean;
 }
 
-export interface BrandColorPreset {
-  id: string;
-  label: string;
-  accent: string;
-}
-
 export const BRAND_SMALL_TEXT_SURFACES = ['#FFFFFF', '#F8F7F4', '#FAFAFA'] as const;
 
 export const isValidHexColor = (value: string): boolean => /^#[0-9a-f]{6}$/i.test(value.trim());
@@ -138,15 +132,6 @@ export const BRAND_PRESETS: ClinicBrandConfig[] = [
   },
 ];
 
-/** Color-only choices: applying one never substitutes a fabricated clinic identity. */
-export const BRAND_COLOR_PRESETS: BrandColorPreset[] = [
-  { id: 'terracotta', label: 'Warm terracotta', accent: '#A8482F' },
-  { id: 'soft-coral', label: 'Deep coral', accent: '#9E4D36' },
-  { id: 'amber', label: 'Burnished amber', accent: '#A65024' },
-  { id: 'lavender', label: 'Deep lavender', accent: '#74507D' },
-  { id: 'ochre', label: 'Antique ochre', accent: '#795D1C' },
-];
-
 export function applyBrandToDOM(brand: ClinicBrandConfig) {
   const root = document.documentElement;
   root.style.setProperty('--brand-primary', brand.primaryAccent);
@@ -154,5 +139,65 @@ export function applyBrandToDOM(brand: ClinicBrandConfig) {
   root.style.setProperty('--brand-primary-subtle', brand.primarySubtle);
   root.style.setProperty('--brand-on-primary', brand.onPrimary);
   root.style.setProperty('--surface-patient-base', brand.patientBaseSurface);
-  root.style.setProperty('--surface-clinician-base', brand.clinicianBaseSurface);
 }
+
+const MAX_CLINIC_NAME = 120;
+const MAX_TAGLINE = 180;
+const MAX_LOGO_URL = 700_000;
+
+const optionalText = (value: unknown, maximum: number): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, maximum);
+};
+
+const timestampString = (value: unknown): string | null => {
+  if (typeof value === 'string' && !Number.isNaN(Date.parse(value))) return value;
+  if (value && typeof value === 'object') {
+    const candidate = value as { seconds?: unknown; toDate?: unknown };
+    if (typeof candidate.toDate === 'function') {
+      const date = (candidate.toDate as () => Date)();
+      if (date instanceof Date && !Number.isNaN(date.getTime())) return date.toISOString();
+    }
+    if (typeof candidate.seconds === 'number' && Number.isFinite(candidate.seconds)) {
+      return new Date(candidate.seconds * 1000).toISOString();
+    }
+  }
+  return null;
+};
+
+const safeLogoUrl = (value: unknown): string => {
+  const candidate = optionalText(value, MAX_LOGO_URL);
+  if (
+    candidate.startsWith('/') ||
+    candidate.startsWith('https://') ||
+    candidate.startsWith('http://') ||
+    candidate.startsWith('data:image/png;') ||
+    candidate.startsWith('data:image/webp;') ||
+    candidate.startsWith('data:image/svg+xml;')
+  ) return candidate;
+  return '/app-logo.png';
+};
+
+/** Maps a linked clinic's persisted, untrusted branding to a complete safe palette, or rejects it. */
+export const mapClinicBrand = (value: unknown, expectedClinicId: string): ClinicBrandConfig | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (raw.clinicId !== expectedClinicId) return null;
+  const name = optionalText(raw.name, MAX_CLINIC_NAME);
+  const accent = typeof raw.primaryAccent === 'string' ? raw.primaryAccent.trim().toUpperCase() : '';
+  if (!name || !isBrandAccentUsable(accent)) return null;
+  const logoUrl = safeLogoUrl(raw.logoUrl);
+  try {
+    const mapped = createBrandPalette(accent, name, logoUrl);
+    mapped.clinicId = expectedClinicId;
+    mapped.tagline = optionalText(raw.tagline, MAX_TAGLINE);
+    mapped.typographyStyle = raw.typographyStyle === 'modern-sans' ? 'modern-sans' : 'editorial-serif';
+    mapped.createdAt = timestampString(raw.createdAt) ?? '';
+    const updatedAt = timestampString(raw.updatedAt);
+    if (updatedAt) mapped.updatedAt = updatedAt;
+    mapped.schemaVersion = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1;
+    return mapped;
+  } catch {
+    return null;
+  }
+};

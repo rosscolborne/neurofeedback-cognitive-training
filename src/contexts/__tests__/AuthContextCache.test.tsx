@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CachePreparation } from '../../services/firestoreCacheLifecycle';
 
 // AuthContext publishes an account, and reads Firestore for it, only once the
@@ -8,7 +8,6 @@ import type { CachePreparation } from '../../services/firestoreCacheLifecycle';
 
 const firebaseAuth = vi.hoisted(() => ({
   callback: null as null | ((user: unknown) => Promise<void>),
-  signOut: vi.fn(),
   createUser: vi.fn(),
   currentUser: null as null | { uid: string },
 }));
@@ -31,7 +30,6 @@ vi.mock('../../services/firebase', () => ({
 }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
-  signOut: firebaseAuth.signOut,
   signInWithEmailAndPassword: vi.fn(),
   createUserWithEmailAndPassword: firebaseAuth.createUser,
   updateProfile: vi.fn(),
@@ -44,18 +42,12 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import { AuthProvider, useAuth } from '../AuthContext';
-import { deactivateClinicianDemoWorkspace, isClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
-
-const memoryStorage = () => {
-  const values = new Map<string, string>();
-  return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) };
-};
 
 let observed: ReturnType<typeof useAuth>;
 const Probe = () => {
@@ -75,10 +67,7 @@ const ready: CachePreparation = { status: 'ready' };
 describe('AuthContext and the Firestore cache lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    deactivateClinicianDemoWorkspace();
-    vi.stubGlobal('localStorage', memoryStorage());
     firebaseAuth.currentUser = null;
-    firebaseAuth.signOut.mockResolvedValue(undefined);
     firestore.getDoc.mockResolvedValue({ exists: () => true, data: () => ({ role: 'patient' }) });
     firestore.setDoc.mockResolvedValue(undefined);
     cache.prepareForUser.mockResolvedValue(ready);
@@ -86,11 +75,6 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     cache.hasUnsyncedWrites.mockResolvedValue(false);
     cache.endSession.mockResolvedValue(undefined);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
-  afterEach(() => {
-    deactivateClinicianDemoWorkspace();
-    vi.unstubAllGlobals();
   });
 
   it('publishes a signed-in account, and reads its role, only once the cache is ready for it', async () => {
@@ -210,24 +194,5 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     renderer.unmount();
   });
 
-  it('entering the demo workspace clears a signed-out account\'s cache first', async () => {
-    const renderer = await mount();
-    const order: string[] = [];
-    firebaseAuth.signOut.mockImplementation(async () => { order.push('signOut'); });
-    cache.prepareForUser.mockImplementation(async (uid: string | null) => { order.push(`prepare:${uid}`); return ready; });
 
-    await act(async () => { await observed.loginAsDemoClinician(); });
-    expect(order).toEqual(['signOut', 'prepare:null']);
-    expect(isClinicianDemoWorkspace()).toBe(true);
-    renderer.unmount();
-  });
-
-  it('does not enter the demo workspace while the page reloads for a cache cleanup', async () => {
-    const renderer = await mount();
-    cache.prepareForUser.mockResolvedValueOnce({ status: 'reloading' });
-
-    await act(async () => { await observed.loginAsDemoClinician(); });
-    expect(isClinicianDemoWorkspace()).toBe(false);
-    renderer.unmount();
-  });
 });

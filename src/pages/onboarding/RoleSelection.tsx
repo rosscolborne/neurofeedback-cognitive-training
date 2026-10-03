@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, UserRole } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
 import { APP_DISPLAY_NAME } from '../../config/appIdentity';
-import { Stethoscope } from 'lucide-react';
 
 export const RoleSelection: React.FC = () => {
   const { user, selectRole } = useAuth();
@@ -14,11 +13,7 @@ export const RoleSelection: React.FC = () => {
     setLoading(true);
     try {
       await selectRole(selectedRole);
-      if (selectedRole === 'patient') {
-        navigate('/hardware-setup');
-      } else {
-        navigate('/');
-      }
+      navigate('/hardware-setup');
     } catch (err) {
       console.error(err);
       navigate('/');
@@ -65,29 +60,6 @@ export const RoleSelection: React.FC = () => {
           <div>
             <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '4px', color: 'var(--text-primary)' }}>Train my brain</h3>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>I want to use the headband to improve my focus and relaxation.</p>
-          </div>
-        </button>
-
-        <button 
-          onClick={() => handleSelectRole('clinician')}
-          disabled={loading}
-          style={{
-            background: 'var(--surface-patient-card)',
-            border: `2px solid var(--border-subtle)`,
-            padding: '24px',
-            borderRadius: 'var(--radius-lg)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            gap: '12px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            textAlign: 'left'
-          }}
-        >
-          <Stethoscope size={32} color="var(--brand-primary)" />
-          <div>
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '4px', color: 'var(--text-primary)' }}>I am a practitioner</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>I want to monitor my patients and assign training protocols.</p>
           </div>
         </button>
       </div>

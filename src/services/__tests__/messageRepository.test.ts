@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { relationshipKey, type MessageRelationship } from '../messageMappers';
 
-const state = vi.hoisted(() => ({ auth: { currentUser: { uid: 'clinician-1' } as null | { uid: string } }, generated: 0, demoWorkspace: false }));
+const state = vi.hoisted(() => ({ auth: { currentUser: { uid: 'clinician-1' } as null | { uid: string } }, generated: 0 }));
 const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), getDocs: vi.fn(), runTransaction: vi.fn(), onSnapshot: vi.fn((..._args: unknown[]) => vi.fn()), serverTimestamp: vi.fn(() => ({ server: true })) }));
 vi.mock('../firebase', () => ({ auth: state.auth, db: { type: 'db' } }));
-vi.mock('../clinicianDemoBoundary', () => ({ isClinicianDemoWorkspace: () => state.demoWorkspace }));
 vi.mock('firebase/firestore', () => ({
   collection: (_parent: unknown, ...segments: string[]) => ({ type: 'collection', path: segments.join('/') }),
   collectionGroup: (_db: unknown, name: string) => ({ type: 'collectionGroup', path: name }),
@@ -24,16 +23,7 @@ const client = (clinicianId: unknown, linkedClinicianCode?: unknown) => ({ exist
 const missing = () => ({ exists: () => false, data: () => ({}) });
 
 describe('relationship-scoped message repository', () => {
-  beforeEach(() => { vi.clearAllMocks(); state.auth.currentUser = { uid: 'clinician-1' }; state.generated = 0; state.demoWorkspace = false; });
-
-  it('fails closed in the sample clinician workspace before auth or Firestore access', async () => {
-    state.demoWorkspace = true;
-    state.auth.currentUser = null;
-    await expect(messageRepository.resolveActiveRelationship('sample-patient')).rejects.toThrow(/sample clinician workspace/);
-    expect(() => messageRepository.prepareMessage(rel('sample-patient', 'demo-clinician'), 'Hello')).toThrow(/sample clinician workspace/);
-    expect(firestore.getDoc).not.toHaveBeenCalled();
-    expect(firestore.runTransaction).not.toHaveBeenCalled();
-  });
+  beforeEach(() => { vi.clearAllMocks(); state.auth.currentUser = { uid: 'clinician-1' }; state.generated = 0; });
 
   it('matches R1 fallback exactly and rejects malformed non-null canonical ownership', async () => {
     firestore.getDoc.mockResolvedValueOnce(client(null, 'clinician-1'));

@@ -2,18 +2,6 @@ import { describe, expect, it } from 'vitest';
 import rules from '../../../firestore.rules?raw';
 
 describe('Firestore authorization rule contract', () => {
-  it('derives device clinician access from client ownership instead of assignedByUserId', () => {
-    expect(rules).toContain('patientId == request.auth.uid || isPatientClinician(patientId)');
-    expect(rules).toContain('request.resource.data.patientId == patientId');
-    expect(rules).toContain('request.resource.data.assignedByUserId == resource.data.assignedByUserId');
-  });
-
-  it('authorizes protocol writes through clinic membership and freezes clinicId', () => {
-    expect(rules).toContain('isClinicMember(request.resource.data.clinicId)');
-    expect(rules).toContain('request.resource.data.clinicId == resource.data.clinicId');
-    expect(rules).toContain('isClinicMember(resource.data.clinicId)');
-  });
-
   it('supports legacy clinician session access through the patient ownership helper', () => {
     expect(rules).toContain('function isSessionProvider(session)');
     expect(rules).toContain('isPatientClinician(session.patientId)');
@@ -52,7 +40,7 @@ describe('Firestore authorization rule contract', () => {
     expect(rules).toContain('function isClinicMemberAfter(clinicId)');
     expect(rules).toContain('existsAfter(/databases/$(database)/documents/clinics/$(clinicId))');
     expect(rules).toContain('getAfter(/databases/$(database)/documents/clinics/$(clinicId))');
-    const clinics = rules.slice(rules.indexOf('match /clinics/{clinicId}'), rules.indexOf('match /protocolCatalog/{protocolId}'));
+    const clinics = rules.slice(rules.indexOf('match /clinics/{clinicId}'), rules.indexOf('// Everything not matched above is denied.'));
     expect(clinics).toContain('allow get: if (isClinician()');
     expect(clinics).toContain('clinicId == request.auth.uid');
     expect(clinics).toContain('allow create: if isClinician()');

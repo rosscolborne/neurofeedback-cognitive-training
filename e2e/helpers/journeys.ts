@@ -49,8 +49,9 @@ export async function signUpFreshAccountThroughUi(page: Page, account: FreshAcco
  */
 export async function completeConsumerOnboarding(page: Page): Promise<void> {
   await expect(roleSelectionHeading(page)).toBeVisible();
-  // NFCT-4 removes the practitioner choice from consumer onboarding. Once it
-  // lands, assert here that no practitioner or clinician option is offered.
+  // Training is the only choice: practitioner accounts are retired (NFCT-4).
+  await expect(page.getByRole('button', { name: /Train my brain/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /practitioner|clinician/i })).toHaveCount(0);
   await page.getByRole('button', { name: /Train my brain/ }).click();
   await expectConsumerHome(page, 'Choosing "Train my brain" should save the role and leave role selection');
 }

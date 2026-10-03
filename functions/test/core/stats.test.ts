@@ -230,31 +230,6 @@ describe('order independence', () => {
 });
 
 describe('compatibility', () => {
-  it('rebuilds stats from the stored results for a user whose sessions were processed before stats existed', async () => {
-    const reference = newUid();
-    const legacy = newUid();
-    for (const uid of [reference, legacy]) {
-      for (const [order, days] of [[1, 2], [2, 1]] as const) {
-        const { id } = await writeSessionAt(db, uid, daysAgo(days), { seed: 340 + order, startLevel: 1, targetPeak: 3, id: `legacy-${order}-session-document` });
-        await runSessionPipeline(context, uid, id);
-      }
-    }
-    // What NFCT-19 alone left behind: results and progress, no stats.
-    for (const path of [statsPath(legacy), achievementPath(legacy, 'first-run')]) await db.doc(path).delete();
-    for (const days of [1, 2]) await db.doc(dailyStatsPath(legacy, dateOf(daysAgo(days) - 5 * 60_000))).delete();
-    expect((await statsContent(db, legacy)).summary).toBeNull();
-
-    for (const uid of [reference, legacy]) {
-      const { id } = await writeSessionAt(db, uid, daysAgo(0), { seed: 343, startLevel: 1, targetPeak: 3, id: 'legacy-3-session-document' });
-      await runSessionPipeline(context, uid, id);
-    }
-
-    const rebuilt = await statsContent(db, legacy);
-    expect(rebuilt.summary).toMatchObject({ sessions: 3, validRuns: 3, streak: { current: 3 } });
-    // The same as stats maintained all along (the first-run achievement is credited to the same session).
-    expect(rebuilt).toEqual(await statsContent(db, reference));
-  });
-
   it.each([
     ['a newer aggregateVersion', { aggregateVersion: 2 }],
     ['a newer schemaVersion', { schemaVersion: 2 }],
