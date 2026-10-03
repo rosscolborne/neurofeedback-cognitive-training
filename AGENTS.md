@@ -128,7 +128,8 @@ each item that applies:
    is STANDARD or DEEP, have finished within the [review budget](#review-budget):
    fixes verified, no BLOCKER open.
 5. **Native-sensitive validation** has passed where
-   [step 3 below](#lifecycle-and-remote-validation) requires it.
+   [step 3 below](#lifecycle-and-remote-validation) requires it, or is listed
+   as an owner action (item 6).
 6. **Owner actions** are listed: what only the owner can do, such as a deploy
    to `nfct-dev`, human visual or hardware checks, or a required validation
    you could not run.
@@ -157,7 +158,8 @@ run cannot (macOS, the Simulator, the real-backend canary).
    calls a native API. Run the `ios.yml` scenarios it can affect, `smoke` at
    minimum, on its pushed head
    ([how](docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal)),
-   or Pre-merge validation on its final head, which includes them; wait for
+   or, when `smoke` is all it can affect, Pre-merge validation on its final
+   head, which runs `smoke` for it; wait for
    that run, or, if you cannot run it, name it as an owner action. Otherwise
    run only the workflow that gives what you need, on a pushed head that has
    passed the local checks. Other remote validation, Pre-merge validation
