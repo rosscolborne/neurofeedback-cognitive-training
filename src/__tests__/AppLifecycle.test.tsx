@@ -8,7 +8,7 @@ const authState = vi.hoisted(() => ({
 const routes = vi.hoisted(() => ({ paths: [] as string[] }));
 
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState.value }));
-vi.mock('../components/patient/PatientShell', () => ({ PatientShell: 'patient-shell' }));
+vi.mock('../consumer/shell/AppShell', () => ({ AppShell: 'app-shell' }));
 vi.mock('../components/brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../components/account/UnsyncedSignOutDialog', () => ({ UnsyncedSignOutDialog: 'unsynced-dialog' }));
 vi.mock('../pages/onboarding/Welcome', () => ({ Welcome: 'welcome-page' }));
@@ -22,7 +22,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return {
     ...actual,
     Routes: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    Route: ({ path, element }: { path: string; element: React.ReactNode }) => { routes.paths.push(path); return path === '/' ? element : null; },
+    Route: ({ path, element }: { path: string; element: React.ReactNode }) => { routes.paths.push(path); return path === '/*' ? element : null; },
     Navigate: () => null,
     useNavigate: () => vi.fn(), useParams: () => ({}),
   };
@@ -31,8 +31,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
 import { App } from '../App';
 
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
-const patientShells = (renderer: ReactTestRenderer): ReactTestInstance[] => renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell');
-const patientShell = (renderer: ReactTestRenderer): ReactTestInstance => patientShells(renderer)[0];
+const appShells = (renderer: ReactTestRenderer): ReactTestInstance[] => renderer.root.findAll((node) => (node.type as unknown) === 'app-shell');
+const appShell = (renderer: ReactTestRenderer): ReactTestInstance => appShells(renderer)[0];
 const profileOf = (displayName: string) => ({ schemaVersion: 1, displayName });
 
 describe('mounted App account lifecycle', () => {
@@ -48,21 +48,21 @@ describe('mounted App account lifecycle', () => {
     authState.value = { user: playerA, profile: profileOf('Player A'), loading: false, logout: vi.fn() };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(patientShell(renderer).props.user).toBe(playerA);
-    expect(patientShell(renderer).props.profile).toEqual(profileOf('Player A'));
+    expect(appShell(renderer).props.user).toBe(playerA);
+    expect(appShell(renderer).props.profile).toEqual(profileOf('Player A'));
     // Headset setup is the only EEG action the shell is given; there is no calibration to persist.
-    expect(patientShell(renderer).props.onSetUpHeadset).toEqual(expect.any(Function));
-    expect(patientShell(renderer).props).not.toHaveProperty('onBaselinePersisted');
+    expect(appShell(renderer).props.onSetUpHeadset).toEqual(expect.any(Function));
+    expect(appShell(renderer).props).not.toHaveProperty('onBaselinePersisted');
 
     authState.value = { user: null, profile: null, loading: false, logout: vi.fn() };
     act(() => { renderer.update(<App />); });
-    expect(patientShells(renderer)).toHaveLength(0);
+    expect(appShells(renderer)).toHaveLength(0);
 
     const playerB = { uid: 'player-b', email: 'b@example.com' };
     authState.value = { user: playerB, profile: profileOf('Player B'), loading: false, logout: vi.fn() };
     act(() => { renderer.update(<App />); });
-    expect(patientShell(renderer).props.user).toBe(playerB);
-    expect(patientShell(renderer).props.profile).toEqual(profileOf('Player B'));
+    expect(appShell(renderer).props.user).toBe(playerB);
+    expect(appShell(renderer).props.profile).toEqual(profileOf('Player B'));
     renderer.unmount();
   });
 
@@ -70,7 +70,7 @@ describe('mounted App account lifecycle', () => {
     authState.value = { user: { uid: 'player-a' }, profile: null, loading: false, profileLookupFailed: false, logout: vi.fn(), cacheStatus: 'idle' };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(patientShells(renderer)).toHaveLength(0);
+    expect(appShells(renderer)).toHaveLength(0);
     expect(renderer.root.findAllByType('button')).toHaveLength(0);
     renderer.unmount();
   });
@@ -81,6 +81,8 @@ describe('mounted App account lifecycle', () => {
     await act(async () => { renderer = create(<App />); await flush(); });
     expect(routes.paths).toContain('/hardware-setup');
     expect(routes.paths).not.toContain('/role-selection');
+    // Every other signed-in path, the tabs included, belongs to the one shell.
+    expect(routes.paths.filter((path) => path.includes('*'))).toEqual(['/*']);
     renderer.unmount();
   });
 
@@ -92,12 +94,12 @@ describe('mounted App account lifecycle', () => {
     authState.value = { user: { uid: 'player-a' }, profile: null, loading: true, profileLookupFailed: false, retryProfileLookup, logout, cacheStatus: 'idle' };
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(patientShells(renderer)).toHaveLength(0);
+    expect(appShells(renderer)).toHaveLength(0);
     expect(labels(renderer)).toEqual([]);
 
     authState.value = { ...authState.value, profileLookupFailed: true };
     await act(async () => { renderer.update(<App />); await flush(); });
-    expect(patientShells(renderer)).toHaveLength(0);
+    expect(appShells(renderer)).toHaveLength(0);
     expect(renderer.root.findByProps({ role: 'alert' }).findByType('strong').children.join('')).toBe('Your account couldn’t be loaded.');
     expect(labels(renderer)).toEqual(['Try again', 'Sign out']);
 
@@ -141,13 +143,13 @@ describe('mounted App account lifecycle', () => {
     authState.value = { ...authState.value, profile: profileOf('Player A'), loading: false, profileLookupFailed: false };
     await act(async () => { renderer.update(<App />); await flush(); });
     expect(unsyncedDialog(renderer)).toHaveLength(1);
-    expect(patientShells(renderer)).toHaveLength(0);
+    expect(appShells(renderer)).toHaveLength(0);
     expect(button('Try again').props.disabled).toBe(true);
 
     // Staying signed in lets the app continue with the profile it now has.
     await act(async () => { unsyncedDialog(renderer)[0].props.onStaySignedIn(); await flush(); });
     expect(unsyncedDialog(renderer)).toHaveLength(0);
-    expect(patientShells(renderer)).toHaveLength(1);
+    expect(appShells(renderer)).toHaveLength(1);
     renderer.unmount();
   });
 });

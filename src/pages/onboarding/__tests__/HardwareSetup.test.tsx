@@ -79,7 +79,7 @@ describe('HardwareSetup (optional headset pairing and fit)', () => {
     expect(button(renderer, 'Continue').props.disabled).toBe(false);
 
     act(() => { button(renderer, 'Continue').props.onClick(); });
-    expect(state.navigate).toHaveBeenCalledWith('/');
+    expect(state.navigate).toHaveBeenCalledWith('/', { replace: true });
     await act(async () => { renderer.unmount(); });
   });
 
@@ -89,7 +89,7 @@ describe('HardwareSetup (optional headset pairing and fit)', () => {
 
     act(() => { button(renderer, 'Skip to Dashboard').props.onClick(); });
 
-    expect(state.navigate).toHaveBeenCalledWith('/');
+    expect(state.navigate).toHaveBeenCalledWith('/', { replace: true });
     await act(async () => { renderer.unmount(); });
   });
 

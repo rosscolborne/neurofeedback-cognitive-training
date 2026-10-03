@@ -387,22 +387,15 @@ a, button, input, label, select, textarea {
 }
 
 /* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field.
-   !important is required: the patient bar sets display inline. */
+   !important is required: the tab bar sets display inline. */
 @media (max-width: 767px) {
-  body:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'])):focus) .patient-bottom-nav {
+  body:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'])):focus) .app-tab-bar {
     display: none !important;
   }
 }
 
-.patient-nav-label {
+.app-tab-label {
   font-size: 10px;
-}
-
-/* Seven tabs share 320px; a slightly smaller label keeps neighbouring words apart. */
-@media (max-width: 359px) {
-  .patient-nav-label {
-    font-size: 9px;
-  }
 }
 
 /* Deliberate horizontal scroll: a soft edge shadow appears only while more columns are off-screen

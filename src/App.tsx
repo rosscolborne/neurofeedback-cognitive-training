@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { PatientShell } from './components/patient/PatientShell';
+import { AppShell } from './consumer/shell/AppShell';
 import { BrandLogo } from './components/brand/BrandLogo';
 
 import { useAuth } from './contexts/AuthContext';
@@ -15,7 +15,7 @@ import { useSignOut } from './components/account/useSignOut';
 export function App() {
   const { user, profile, loading, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, profileLookupFailed, retryProfileLookup } = useAuth();
   // Sign-out from the profile lookup's error screen, which asks before
-  // discarding writes that have not uploaded, as the shell's Log Out does.
+  // discarding writes that have not uploaded, as Profile's Log Out does.
   const profileLookupSignOut = useSignOut(logout);
   const navigate = useNavigate();
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${user?.uid ?? 'signed-out'}`;
@@ -95,17 +95,17 @@ export function App() {
         <>
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/hardware-setup" element={<HardwareSetup key={accountIdentity} />} />
+          {/* Home, Train, Progress and Profile: one shell for every tab path, so it stays mounted as the tabs change. */}
           <Route
-            path="/"
+            path="/*"
             element={profile && (
-              <PatientShell
+              <AppShell
                 user={user}
                 profile={profile}
                 onSetUpHeadset={() => navigate('/hardware-setup')}
               />
             )}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
         </>
       )}
     </Routes>

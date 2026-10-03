@@ -34,11 +34,8 @@ vi.mock('../../../consumer/profile/profilePhoto', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../consumer/profile/profilePhoto')>()),
   profilePhotoFromFile: state.photoFromFile,
 }));
-vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
-vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
-vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 
-import { PatientShell } from '../PatientShell';
+import { ProfileScreen } from '../ProfileScreen';
 import { ProfilePhotoError } from '../../../consumer/profile/profilePhoto';
 
 const player = { uid: 'player-1', email: 'player@example.com' } as User;
@@ -61,18 +58,13 @@ const stubWindow = (overrides: Record<string, unknown>) => {
   return () => Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
 };
 
-const shell = (props: Partial<React.ComponentProps<typeof PatientShell>> = {}) => <PatientShell user={player} profile={profile} {...props} />;
+const screen = (props: Partial<React.ComponentProps<typeof ProfileScreen>> = {}) => <ProfileScreen user={player} profile={profile} {...props} />;
 const rendered = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
 const textContent = (node: ReactTestInstance | string): string =>
   typeof node === 'string' ? node : node.children.map(textContent).join('');
-const openProfileTab = (renderer: ReactTestRenderer) =>
-  act(() => renderer.root.findAllByType('button').find((button) => button.findAllByType('span').some((span) => span.children.join('') === 'Profile'))!.props.onClick());
 const deletionTrigger = (renderer: ReactTestRenderer) => renderer.root.findAllByType('button')
   .find((button) => button.children.some((child) => typeof child === 'string' && child.includes('Delete Account')))!;
-const openProfileDeletion = (renderer: ReactTestRenderer) => {
-  openProfileTab(renderer);
-  act(() => deletionTrigger(renderer).props.onClick());
-};
+const openProfileDeletion = (renderer: ReactTestRenderer) => act(() => deletionTrigger(renderer).props.onClick());
 const deletionPasswordInputs = (renderer: ReactTestRenderer) => renderer.root.findAllByProps({ id: 'account-deletion-password' });
 const typeDeletionPassword = (renderer: ReactTestRenderer, value: string) =>
   act(() => renderer.root.findByProps({ id: 'account-deletion-password' }).props.onChange({ target: { value } }));
@@ -83,7 +75,7 @@ const deletionStatusText = (renderer: ReactTestRenderer) => renderer.root
   .findAll((node) => typeof node.type === 'string' && node.props.role === 'status' && String(node.props.className).includes('account-deletion-status'))
   .map((node) => node.children.join(''));
 
-describe('PatientShell profile and account deletion', () => {
+describe('Profile and account deletion', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.reauthenticate.mockReset();
@@ -103,7 +95,7 @@ describe('PatientShell profile and account deletion', () => {
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((resolve) => { finishReauth = resolve; }));
     let renderer!: ReactTestRenderer;
     try {
-      await act(async () => { renderer = create(shell()); });
+      await act(async () => { renderer = create(screen()); });
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'secret');
       await act(async () => {
@@ -129,7 +121,7 @@ describe('PatientShell profile and account deletion', () => {
     let rejectReauth!: (reason: unknown) => void;
     state.reauthenticate.mockReturnValueOnce(new Promise<void>((_resolve, reject) => { rejectReauth = reject; }));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
+    await act(async () => { renderer = create(screen()); });
     try {
       openProfileDeletion(renderer);
       // The in-app step is the only confirmation: no browser dialog first.
@@ -180,7 +172,7 @@ describe('PatientShell profile and account deletion', () => {
     state.auth.currentUser = { uid: player.uid, email: player.email!, delete: vi.fn(async () => {}) };
     state.reauthenticate.mockRejectedValueOnce(firebaseError('auth/wrong-password'));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
+    await act(async () => { renderer = create(screen()); });
     try {
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'Wrong-Horse-7731');
@@ -215,7 +207,7 @@ describe('PatientShell profile and account deletion', () => {
     let acceptProfileDeletion!: () => void;
     state.deleteProfile.mockReturnValueOnce({ acknowledged: new Promise<void>((resolve) => { acceptProfileDeletion = resolve; }) });
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
+    await act(async () => { renderer = create(screen()); });
     try {
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'Correct-Horse-7731');
@@ -252,7 +244,7 @@ describe('PatientShell profile and account deletion', () => {
     const permissionDenied = firebaseError('permission-denied');
     state.deleteProfile.mockReturnValueOnce(refused(permissionDenied));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
+    await act(async () => { renderer = create(screen()); });
     try {
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'Correct-Horse-7731');
@@ -279,7 +271,7 @@ describe('PatientShell profile and account deletion', () => {
     state.reauthenticate.mockResolvedValue(undefined);
     let renderer!: ReactTestRenderer;
     try {
-      await act(async () => { renderer = create(shell()); });
+      await act(async () => { renderer = create(screen()); });
       openProfileDeletion(renderer);
       typeDeletionPassword(renderer, 'secret');
       await act(async () => { submitDeletion(renderer); await flush(); });
@@ -305,12 +297,11 @@ describe('PatientShell profile and account deletion', () => {
 
   it('shows the profile name, initials and sign-in email when there is no photo, and offers an upload', async () => {
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
-    openProfileTab(renderer);
-    const main = textContent(renderer.root.findByType('main'));
-    expect(main).toContain('SP');
-    expect(main).toContain('Sam Player');
-    expect(main).toContain('player@example.com');
+    await act(async () => { renderer = create(screen()); });
+    const text = textContent(renderer.root);
+    expect(text).toContain('SP');
+    expect(text).toContain('Sam Player');
+    expect(text).toContain('player@example.com');
     expect(renderer.root.findAllByProps({ 'aria-label': 'Upload profile photo' })).toHaveLength(1);
     expect(renderer.root.findAllByType('img')).toHaveLength(0);
     const input = renderer.root.findByProps({ 'data-testid': 'profile-photo-input' });
@@ -322,8 +313,7 @@ describe('PatientShell profile and account deletion', () => {
   it('shows the player’s photo instead of initials, and offers to change it', async () => {
     const dataUrl = 'data:image/jpeg;base64,AAAA';
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell({ profile: { ...profile, avatar: { kind: 'photo', dataUrl } } })); });
-    openProfileTab(renderer);
+    await act(async () => { renderer = create(screen({ profile: { ...profile, avatar: { kind: 'photo', dataUrl } } })); });
     expect(renderer.root.findAllByType('img').map((img) => img.props.src)).toEqual([dataUrl]);
     expect(textContent(renderer.root.findByProps({ 'aria-label': 'Change profile photo' }))).not.toContain('SP');
     renderer.unmount();
@@ -337,8 +327,7 @@ describe('PatientShell profile and account deletion', () => {
     state.photoFromFile.mockResolvedValueOnce(dataUrl);
     state.updateProfile.mockRejectedValueOnce(firebaseError('unavailable')).mockResolvedValueOnce(undefined);
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
-    openProfileTab(renderer);
+    await act(async () => { renderer = create(screen()); });
     const input = renderer.root.findByProps({ 'data-testid': 'profile-photo-input' });
     await act(async () => { input.props.onChange({ target: { files: [file], value: 'C:\\fakepath\\me.png' } }); await flush(); });
 
@@ -363,8 +352,7 @@ describe('PatientShell profile and account deletion', () => {
     state.auth.currentUser = { uid: 'other-player', email: 'other@example.com', delete: vi.fn(async () => {}) };
     state.photoFromFile.mockResolvedValueOnce('data:image/jpeg;base64,CCCC');
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
-    openProfileTab(renderer);
+    await act(async () => { renderer = create(screen()); });
     const input = renderer.root.findByProps({ 'data-testid': 'profile-photo-input' });
     await act(async () => { input.props.onChange({ target: { files: [{ type: 'image/png', size: 100 }], value: '' } }); await flush(); });
     expect(state.updateProfile).not.toHaveBeenCalled();
@@ -376,8 +364,7 @@ describe('PatientShell profile and account deletion', () => {
   it('tells the player why a chosen file cannot be their photo, and saves nothing', async () => {
     state.photoFromFile.mockRejectedValueOnce(new ProfilePhotoError('Choose an image file.'));
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell()); });
-    openProfileTab(renderer);
+    await act(async () => { renderer = create(screen()); });
     const input = renderer.root.findByProps({ 'data-testid': 'profile-photo-input' });
     await act(async () => { input.props.onChange({ target: { files: [{ type: 'application/pdf', size: 10 }], value: '' } }); await flush(); });
     expect(textContent(renderer.root.findByProps({ role: 'alert' }))).toBe('Choose an image file.');
@@ -388,21 +375,19 @@ describe('PatientShell profile and account deletion', () => {
 
   it('shows a player who gave no name their email and its initial', async () => {
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell({ profile: { ...profile, displayName: null } })); });
-    openProfileTab(renderer);
-    expect(renderer.root.findByType('main').findAllByType('h2').map(textContent)).not.toContain('Sam Player');
-    expect(textContent(renderer.root.findByType('main'))).toContain('Pplayer@example.com');
+    await act(async () => { renderer = create(screen({ profile: { ...profile, displayName: null } })); });
+    expect(renderer.root.findAllByType('h2').map(textContent)).not.toContain('Sam Player');
+    expect(textContent(renderer.root)).toContain('Pplayer@example.com');
     renderer.unmount();
   });
 
   it('offers headset setup, and shows no calibration, protocol or session data', async () => {
     const onSetUpHeadset = vi.fn();
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell({ onSetUpHeadset })); });
-    openProfileTab(renderer);
-    const main = textContent(renderer.root.findByType('main'));
+    await act(async () => { renderer = create(screen({ onSetUpHeadset })); });
+    const text = textContent(renderer.root);
     expect(renderer.root.findAllByProps({ 'aria-label': 'Neural Imprint' })).toHaveLength(0);
-    expect(main).not.toMatch(/protocol|calibrat|imprint|training setup|sessions total|Export Data|patient|clinic/i);
+    expect(text).not.toMatch(/protocol|calibrat|imprint|training setup|sessions total|Export Data|patient|clinic/i);
     const setUp = renderer.root.findAllByType('button').find((button) => textContent(button).includes('Set Up Headset'))!;
     act(() => setUp.props.onClick());
     expect(onSetUpHeadset).toHaveBeenCalledTimes(1);
