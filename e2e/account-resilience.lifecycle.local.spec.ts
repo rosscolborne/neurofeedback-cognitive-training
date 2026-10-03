@@ -36,7 +36,7 @@ test('a deletion that cannot reach the server deletes nothing, and the account i
   // Relaunch once the connection is back: the same account, with its own profile.
   await restoreFirestore(page);
   await page.reload();
-  await arriveAtHome(page);
+  await arriveAtHome(page, { afterReload: true });
   await expect(page.getByRole('heading', { level: 1 })).toContainText(name.split(' ')[0]);
   const records = await readAccountRecords(player.uid);
   expect(records.authExists).toBe(true);
