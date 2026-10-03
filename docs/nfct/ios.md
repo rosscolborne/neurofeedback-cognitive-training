@@ -300,6 +300,23 @@ main thread stalls during a wait: a stall over two seconds is reported in the
 summary, and a page frozen past a step's deadline gets a two-second grace to
 render before the step fails. `node scripts/ios/simulator-smoke.mjs list` describes the scenarios.
 
+Two steps wait on the backend: Create Account → role selection, and Skip to
+Dashboard → the dashboard. Each gets 30 s. On GitHub's macOS runner the
+Simulator's connection to the Firestore emulator sometimes stops answering
+for 30 to 45 s (NFCT-50). Meanwhile the app shows its own waiting screen: the
+role lookup's loading screen, its error screen while it retries by itself, or
+"Preparing your patient profile…". It carries on as soon as Firestore
+answers.
+
+- **Runs out of time on that waiting screen:** the step gets up to 60 s more,
+  as long as the waiting screen stays up.
+- **Arrives within those 60 s:** the step passes with a `Simulator backend
+  stall (NFCT-50)` warning on the run and a note in the summary.
+- **An error, any other screen, or no arrival:** the step still fails.
+
+The Linux journeys give the same steps 15 s, so they catch a slowdown in the
+app itself.
+
 A new scenario is an entry in `SCENARIOS`: an async `run(ctx)` using
 `ctx.launch()`, `ctx.relaunch()`, `ctx.app.tap/fill/wait/read`,
 `ctx.device.background()`/`foreground()`/`appearance()`, `ctx.checkpoint(name)`,

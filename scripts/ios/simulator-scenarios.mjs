@@ -10,6 +10,8 @@
 //   mental-math  sign up, play a whole 90-second run on the keypad, the session is written
 //   lifecycle    background mid-run pauses it, timed against iOS's own events; a kill mid-run writes nothing; a quit run is saved
 
+import { StepError } from './simulator-driver.mjs';
+
 const button = (name, exact = true) => ({ role: 'button', name, exact });
 const heading = (name, exact = true) => ({ role: 'heading', name, exact });
 const KEYPAD = { role: 'group', name: 'Answer keypad' };
@@ -106,6 +108,70 @@ async function landing(ctx, timeout = 45_000) {
 
 const landedOn = (landed) => `landed on ${landed.screen} at ${landed.hash || '#/'}${landed.recovered ? ` after the account-load error for ${landed.recovered}` : ''}`;
 
+// ---- Steps that wait on the backend ----
+
+/**
+ * On GitHub's macOS runner, the Simulator's connection to the Firestore
+ * emulator sometimes stops answering for about 30 to 45 s (NFCT-50: runs
+ * 36839120021, 37075924837 and 37082805080). The app shows its own waiting
+ * screen and carries on as soon as Firestore answers. Locally, with
+ * Firestore blocked, it carries on within a second of it answering, and the
+ * Linux journeys allow a backend step only 15 s. So a backend step whose
+ * 30 s runs out while the page still shows that waiting screen gets up to
+ * BACKEND_STALL_GRACE_MS more, as long as the waiting screen stays up. The
+ * delay is reported as a warning. An error, any other screen, or no arrival
+ * by the end still fails the step.
+ */
+export const BACKEND_STALL_GRACE_MS = 60_000;
+const BACKEND_STALL_POLL_MS = 5_000;
+const alerts = (screen) => screen?.alerts ?? [];
+/** A screen the page reported (not a failed snapshot) with no headings or fields. */
+const nothingElse = (screen) => Boolean(screen) && screen.ok !== false
+  && (screen.headings ?? []).length === 0 && (screen.fields ?? []).length === 0;
+
+/** The account's role is still being read: the plain loading screen, or its error screen while it retries by itself (NFCT-44). */
+export const READING_ROLE = (screen) => nothingElse(screen) && (
+  (alerts(screen).length === 0 && (screen?.buttons ?? []).length === 0)
+  || (alerts(screen).length === 1 && alerts(screen)[0].startsWith('Your account couldn’t be loaded.')
+    && (screen?.buttons ?? []).every((name) => name === 'Try again' || name === 'Sign out'))
+);
+
+/** App's "Preparing your patient profile…" while it reads or creates clients/{uid}. */
+export const PREPARING_PROFILE = (screen) => nothingElse(screen) && (screen?.buttons ?? []).length === 0
+  && alerts(screen).length === 1 && alerts(screen)[0].startsWith('Preparing your patient profile');
+
+/**
+ * Taps, then waits up to 30 s for `then`, plus the backend-stall grace while
+ * the page shows `waiting` (see BACKEND_STALL_GRACE_MS).
+ */
+export async function tapThroughBackendWait(ctx, target, { then, waiting, step, graceMs = BACKEND_STALL_GRACE_MS }) {
+  const { app } = ctx;
+  const started = Date.now();
+  try {
+    return await app.tap(target, { then, thenTimeout: 30_000 });
+  } catch (error) {
+    if (!(error instanceof StepError) || !waiting(error.result?.screen)) throw error;
+    for (let waited = 0; waited < graceMs; waited += BACKEND_STALL_POLL_MS) {
+      const arrived = await app.waitIfAny(then, { timeout: Math.min(BACKEND_STALL_POLL_MS, graceMs - waited) });
+      if (arrived) {
+        ctx.warn('Simulator backend stall (NFCT-50)', `${step} took ${((Date.now() - started) / 1_000).toFixed(1)} s, on the app's own waiting screen until the backend answered (reported, not failed).`);
+        return arrived;
+      }
+      const screen = await app.snapshot();
+      if (!waiting(screen)) {
+        // It may have just arrived; anything else is a real failure.
+        const late = await app.waitIfAny(then, { timeout: 2_000 });
+        if (late) {
+          ctx.warn('Simulator backend stall (NFCT-50)', `${step} took ${((Date.now() - started) / 1_000).toFixed(1)} s, on the app's own waiting screen until the backend answered (reported, not failed).`);
+          return late;
+        }
+        throw new StepError(`${error.message} It then left the waiting screen without arriving.`, { screen });
+      }
+    }
+    throw new StepError(`${error.message} The waiting screen was still up after ${graceMs / 1_000} s more.`, { screen: await app.snapshot() });
+  }
+}
+
 /** Signs up a new account through the real onboarding UI and chooses the training role. */
 async function signUp(ctx) {
   const { app, account } = ctx;
@@ -116,13 +182,13 @@ async function signUp(ctx) {
   await app.fill({ placeholder: 'you@example.com' }, account.email);
   await app.fill({ placeholder: 'At least 6 characters' }, account.password);
   await ctx.checkpoint('sign-up-form');
-  await app.tap(button('Create Account'), { then: { target: button('Train my brain', false) }, thenTimeout: 30_000 });
+  await tapThroughBackendWait(ctx, button('Create Account'), { then: { target: button('Train my brain', false) }, waiting: READING_ROLE, step: 'Create Account → role selection' });
   await ctx.checkpoint('role-selection');
   await app.tap(button('Train my brain', false), { then: { hash: '#/hardware-setup' }, thenTimeout: 30_000 });
 }
 
 async function toDashboard(ctx) {
-  await ctx.app.tap(button('Skip to Dashboard'), { then: { target: button('Train') }, thenTimeout: 30_000 });
+  await tapThroughBackendWait(ctx, button('Skip to Dashboard'), { then: { target: button('Train') }, waiting: PREPARING_PROFILE, step: 'Skip to Dashboard → dashboard' });
 }
 
 /** Opens Mental Math from the Train tab and starts a run at level 1. */

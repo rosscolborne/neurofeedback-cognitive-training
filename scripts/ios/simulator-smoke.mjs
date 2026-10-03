@@ -122,6 +122,12 @@ export async function runScenario(name, { device, channel, emulators, out }) {
     note(text) {
       notes.push(text);
     },
+    /** A note that is also a warning annotation on the run, so a green run still shows it. */
+    warn(title, text) {
+      notes.push(text);
+      record({ action: 'warning', target: title, ok: true, detail: text });
+      console.log(`::warning title=${title} (${name})::${text}`);
+    },
     /** A screenshot through simctl, plus what the page shows, for agents and reviewers. */
     async checkpoint(label) {
       const file = `${String(screenshots.length + 1).padStart(2, '0')}-${label}.png`;
