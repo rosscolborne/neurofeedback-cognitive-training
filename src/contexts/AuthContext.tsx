@@ -8,12 +8,13 @@ import {
   reauthenticateWithCredential,
   sendPasswordResetEmail,
   updatePassword,
+  updateProfile as updateAuthProfile,
 } from 'firebase/auth';
 import type { UserProfile } from '@nfct/shared';
 import { auth, firestoreCache } from '../services/firebase';
 import type { CacheEndReason, CacheStatus } from '../services/firestoreCacheLifecycle';
 import { profileRepository, type UserProfilePatch } from '../consumer/repositories';
-import { newProfileDraft } from '../consumer/profile/newProfile';
+import { newProfileDraft, profileDisplayName } from '../consumer/profile/newProfile';
 
 /**
  * `unsynced`: the signed-in user has writes the server has not accepted yet,
@@ -148,6 +149,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const currentUser = auth.currentUser;
     if (currentUser?.uid !== uid) return null;
+    // An account deleted elsewhere, or whose deletion stopped after its
+    // profile went, still has a valid ID token for a while. Asking Auth first
+    // makes that account fail (and Auth signs it out) instead of getting a new
+    // blank profile.
+    try {
+      await currentUser.reload();
+    } catch (error) {
+      const code = String((error as { code?: unknown } | null)?.code);
+      throw code === 'auth/network-request-failed' ? lookupError('Auth could not be reached to confirm the account.', 'unavailable') : error;
+    }
+    if (!isCurrent()) return null;
     const draft = signupDraftRef.current;
     const typedName = draft && draft.email === normalizedEmail(currentUser.email) ? draft.displayName : currentUser.displayName;
     await profileRepository.createProfile(newProfileDraft(typedName)).acknowledged;
@@ -260,11 +272,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Creating the account fires the auth listener, which creates the profile
     // with the typed name once this device's cache is the new account's own.
     signupDraftRef.current = { email: normalizedEmail(email), displayName: displayName ?? null };
+    let created: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>;
     try {
-      await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      created = await createUserWithEmailAndPassword(auth, email.trim(), pass);
     } catch (error) {
       signupDraftRef.current = null;
       throw error;
+    }
+    // The draft lives only in memory. If the profile is not created before the
+    // app restarts, a later lookup creates it from the Auth account's name, so
+    // the typed name is kept there too. Best effort: the profile is the record.
+    const name = profileDisplayName(displayName);
+    if (name) {
+      await updateAuthProfile(created.user, { displayName: name }).catch((error) => {
+        console.warn('Could not keep the sign-up name on the account:', error);
+      });
     }
   };
 

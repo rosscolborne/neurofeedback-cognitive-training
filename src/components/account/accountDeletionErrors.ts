@@ -30,7 +30,8 @@ export const getAccountDeletionErrorMessage = (error: unknown): string => {
   if (typeof code === 'string') {
     if (INCORRECT_PASSWORD_CODES.has(code)) return 'Incorrect password. Please try again.';
     if (code === 'auth/too-many-requests') return 'Too many attempts. Please wait a few minutes and try again.';
-    if (code === 'auth/network-request-failed') return 'Unable to connect. Check your internet connection and try again.';
+    // `unavailable`: Firestore could not reach the server, so nothing was deleted.
+    if (code === 'auth/network-request-failed' || code === 'unavailable') return 'Unable to connect. Check your internet connection and try again.';
     if (SIGN_IN_AGAIN_CODES.has(code)) return 'Please sign in again, then restart account deletion.';
     logUnexpected(error);
     return ACCOUNT_DELETION_FALLBACK;

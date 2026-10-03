@@ -1,4 +1,4 @@
-import { deleteDoc, getDoc, serverTimestamp, setDoc, updateDoc, type FieldValue } from 'firebase/firestore';
+import { getDoc, runTransaction, serverTimestamp, setDoc, updateDoc, type FieldValue } from 'firebase/firestore';
 import { z } from 'zod';
 import {
   readUserProfile,
@@ -64,8 +64,11 @@ export interface ProfileRepository {
   withdrawEegConsent(): PendingWrite;
   /**
    * Deletes the profile document, account deletion's step before the Auth
-   * account goes. Game sessions, EEG recordings and the server-owned
-   * aggregates under it stay until server-driven deletion (NFCT-23) removes them.
+   * account goes. Online only: it runs as a transaction, which the SDK never
+   * queues, so offline it fails instead of landing later (after a relaunch
+   * that would find the profile missing and create a blank one). Game
+   * sessions, EEG recordings and the server-owned aggregates under it stay
+   * until server-driven deletion (NFCT-23) removes them.
    */
   deleteProfile(): PendingWrite;
 }
@@ -151,7 +154,9 @@ export function createProfileRepository(context: ConsumerFirestoreContext): Prof
 
     deleteProfile() {
       const ref = profileRef(firestore, signedInUid(context));
-      return pendingWrite(withSdkValidation('profile deletion', () => deleteDoc(ref)));
+      return pendingWrite(withSdkValidation('profile deletion', () => runTransaction(firestore, async (transaction) => {
+        transaction.delete(ref);
+      })));
     },
   };
 }

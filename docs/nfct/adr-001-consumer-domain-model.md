@@ -19,7 +19,7 @@ The consumer model is built new alongside it. The clinical model stays in place,
 
 | Path | Holds | Written by |
 | --- | --- | --- |
-| `users/{uid}` | Profile: display name, preset avatar, preferences, onboarding, EEG consent. No role, and no email (that stays in Auth). | Client, exact key set |
+| `users/{uid}` | Profile: display name, avatar (a preset, or a profile photo stored inline as a bounded image data URL), preferences, onboarding, EEG consent. No role, and no email (that stays in Auth). | Client, exact key set; deleted by its owner |
 | `users/{uid}/gameSessions/{sessionId}` | One finished game session with its raw trials | Client, create only |
 | `users/{uid}/eegRecordings/{recordingId}` | One optional EEG summary, linked to a session | Client, create or delete |
 | `users/{uid}/progress/{gameId}` | Per-game bests, unlocks and totals | Server only |
@@ -140,6 +140,7 @@ Then:
 - **Ledger.** The ledger holds only the uid and timestamps, and a TTL removes it after 30 days.
 - **What is kept.** No game or EEG data is retained. The user can also delete any EEG recording at any time.
 - **Inherited code.** WB-97's tombstoning deletion does not carry over; only its reauthentication UI and error mapping are reused.
+- **Until NFCT-23 lands.** The app deletes the account from the client: it reauthenticates, deletes the profile document (`users/{uid}`, which the rules let only its owner delete), waits for the server to accept that, then deletes the Auth user. A deleted document keeps its subcollections, so game sessions, EEG recordings and the server-owned aggregates remain until the callable above replaces this step.
 - **Trusted scoring stops at the ledger** (NFCT-19). Every transaction that writes a session's `result` or `processing`, or progress, reads `accountDeletions/{uid}` and writes nothing once it exists (decision 12). Because that read is part of the transaction, a processing commit either precedes the ledger write or sees the ledger, so the ledger must be written before the recursive delete (step 1 before step 3, as listed) and no processing commit can recreate data after the delete has listed it.
 
 ### 8. Versioning: four integers, each with one job

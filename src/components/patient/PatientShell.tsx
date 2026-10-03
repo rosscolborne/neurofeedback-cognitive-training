@@ -87,6 +87,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setIsSavingProfile(true);
     setProfileSaveError(null);
     try {
+      // The photo belongs to this shell's player; never save it to another signed-in account.
+      if (auth.currentUser?.uid !== playerId) throw new Error('The signed-in account changed.');
       await updateProfile({ avatar: { kind: 'photo', dataUrl } });
       setPendingPhoto(null);
     } catch (error) {
@@ -137,8 +139,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       await reauthenticateWithCredential(signedIn, EmailAuthProvider.credential(signedIn.email, password));
       ensureSameAccount();
       // The profile goes first, and the Auth account only once the server has
-      // accepted that. If the Auth deletion then fails, trying again repeats
-      // both steps. Game sessions, EEG recordings and the server-owned
+      // accepted that; offline the profile deletion fails rather than waiting
+      // (see deleteProfile). If the Auth deletion then fails, trying again
+      // repeats both steps. Game sessions, EEG recordings and the server-owned
       // aggregates under users/{uid} stay until server-driven deletion (NFCT-23).
       await profileRepository.deleteProfile().acknowledged;
       ensureSameAccount();
@@ -360,7 +363,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   </span>
                 </button>
                 <div style={{ minWidth: 0 }}>
-                  {profile.displayName && <h2 style={{ fontSize: '18px', fontWeight: 600 }}>{profile.displayName}</h2>}
+                  {profile.displayName && <h2 style={{ fontSize: '18px', fontWeight: 600, overflowWrap: 'anywhere' }}>{profile.displayName}</h2>}
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{user.email}</div>
                 </div>
               </div>

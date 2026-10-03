@@ -23,7 +23,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '12px', marginBottom: '4px' }}>
       <h1
         className="font-display"
-        style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15 }}
+        style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15, overflowWrap: 'anywhere' }}
       >
         {getGreeting()}{displayName ? `, ${displayName.split(/\s+/)[0]}.` : '.'}
       </h1>

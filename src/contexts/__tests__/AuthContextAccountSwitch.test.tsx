@@ -25,7 +25,7 @@ vi.mock('../../services/firebase', () => ({ auth: { currentUser: { uid: 'real-us
 vi.mock('../../consumer/repositories', () => ({ profileRepository: profiles }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
-  signInWithEmailAndPassword: firebaseAuth.signIn, createUserWithEmailAndPassword: vi.fn(),
+  signInWithEmailAndPassword: firebaseAuth.signIn, createUserWithEmailAndPassword: vi.fn(), updateProfile: vi.fn(),
   sendPasswordResetEmail: firebaseAuth.sendPasswordResetEmail,
 }));
 

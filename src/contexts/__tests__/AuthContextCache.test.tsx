@@ -9,7 +9,7 @@ import type { CachePreparation } from '../../services/firestoreCacheLifecycle';
 const firebaseAuth = vi.hoisted(() => ({
   callback: null as null | ((user: unknown) => Promise<void>),
   createUser: vi.fn(),
-  currentUser: null as null | { uid: string; email?: string },
+  currentUser: null as null | { uid: string; email?: string; reload?: () => Promise<void> },
 }));
 const profiles = vi.hoisted(() => ({ getProfile: vi.fn(), createProfile: vi.fn() }));
 const cache = vi.hoisted(() => ({
@@ -32,6 +32,7 @@ vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
   signInWithEmailAndPassword: vi.fn(),
   createUserWithEmailAndPassword: firebaseAuth.createUser,
+  updateProfile: vi.fn(async () => {}),
   sendPasswordResetEmail: vi.fn(),
 }));
 
@@ -181,7 +182,7 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
       .mockResolvedValueOnce({ status: 'readable', id: 'new-user', data: { displayName: 'New Player' }, fromCache: false, hasPendingWrites: false });
     let event!: Promise<void>;
     firebaseAuth.createUser.mockImplementation(async () => {
-      const user = { uid: 'new-user', email: 'new@example.com' };
+      const user = { uid: 'new-user', email: 'new@example.com', reload: async () => {} };
       firebaseAuth.currentUser = user;
       // The SDK notifies auth listeners before the call resolves.
       event = firebaseAuth.callback!(user);

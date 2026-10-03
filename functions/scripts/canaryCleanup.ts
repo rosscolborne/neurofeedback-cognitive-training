@@ -224,7 +224,7 @@ export async function runCanaryCleanup(argv: readonly string[], env: CliEnvironm
 }
 
 function describe(candidate: CanaryCandidate): string {
-  const parts = [candidate.authEmail === undefined ? 'no Auth account, named with --uid' : `Auth ${candidate.authEmail}`];
+  const parts = [candidate.authEmail === undefined ? 'no Auth account, named with --uid: not verified as canary data' : `Auth ${candidate.authEmail}`];
   parts.push(`users/${candidate.uid} and its subcollections`);
   parts.push(`created ${new Date(candidate.createdAtMs).toISOString()}`);
   return `${candidate.uid} (${parts.join(', ')})`;

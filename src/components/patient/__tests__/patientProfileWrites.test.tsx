@@ -333,6 +333,7 @@ describe('PatientShell profile and account deletion', () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const dataUrl = 'data:image/jpeg;base64,BBBB';
     const file = { type: 'image/png', size: 100 };
+    state.auth.currentUser = { uid: player.uid, email: player.email!, delete: vi.fn(async () => {}) };
     state.photoFromFile.mockResolvedValueOnce(dataUrl);
     state.updateProfile.mockRejectedValueOnce(firebaseError('unavailable')).mockResolvedValueOnce(undefined);
     let renderer!: ReactTestRenderer;
@@ -353,6 +354,21 @@ describe('PatientShell profile and account deletion', () => {
     expect(state.updateProfile.mock.calls[1][0]).toEqual({ avatar: { kind: 'photo', dataUrl } });
     expect(state.photoFromFile).toHaveBeenCalledOnce();
     expect(renderer.root.findAllByProps({ role: 'alert' })).toHaveLength(0);
+    renderer.unmount();
+    consoleWarn.mockRestore();
+  });
+
+  it('never saves the photo to a different account that is signed in now', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.auth.currentUser = { uid: 'other-player', email: 'other@example.com', delete: vi.fn(async () => {}) };
+    state.photoFromFile.mockResolvedValueOnce('data:image/jpeg;base64,CCCC');
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(shell()); });
+    openProfileTab(renderer);
+    const input = renderer.root.findByProps({ 'data-testid': 'profile-photo-input' });
+    await act(async () => { input.props.onChange({ target: { files: [{ type: 'image/png', size: 100 }], value: '' } }); await flush(); });
+    expect(state.updateProfile).not.toHaveBeenCalled();
+    expect(textContent(renderer.root.findByProps({ role: 'alert' }))).toContain('The profile photo couldn’t be saved.');
     renderer.unmount();
     consoleWarn.mockRestore();
   });

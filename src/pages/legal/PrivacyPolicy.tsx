@@ -28,16 +28,16 @@ export const PrivacyPolicy: React.FC = () => {
       <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '24px' }}>Privacy Policy</h1>
       
       <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <p><strong>Last Updated:</strong> August 2026</p>
+        <p><strong>Last Updated:</strong> October 2026</p>
         
         <h2>1. Information We Collect</h2>
         <p>We collect information you provide directly to us, such as when you create or modify your account, contact customer support, or otherwise communicate with us. This includes neurofeedback data generated during your sessions.</p>
         
         <h2>2. Use of Information</h2>
-        <p>We use the information we collect to provide, maintain, and improve our services, such as facilitating your neurofeedback training and allowing your assigned clinician (if applicable) to monitor your progress.</p>
+        <p>We use the information we collect to provide, maintain, and improve our services, such as facilitating your neurofeedback training.</p>
         
         <h2>3. Data Storage and Security</h2>
-        <p>Your data is securely stored and encrypted in transit and at rest. If you connect with a clinician, your data is shared securely with them through our platform.</p>
+        <p>Your data is securely stored and encrypted in transit and at rest.</p>
         
         <h2>4. Your Rights</h2>
         <p>You have the right to access, correct, or delete your personal data. You can delete your account entirely from the Settings menu within the app.</p>

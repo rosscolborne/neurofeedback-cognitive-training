@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const firebaseAuth = vi.hoisted(() => ({
   callback: null as null | ((user: unknown) => Promise<void>),
   currentUser: null as null | { uid: string; email: string | null; displayName: string | null },
+  reload: vi.fn(async () => {}),
 }));
 const profiles = vi.hoisted(() => ({ getProfile: vi.fn(), createProfile: vi.fn(), updateProfile: vi.fn() }));
 const cache = vi.hoisted(() => ({
@@ -26,13 +27,15 @@ const cache = vi.hoisted(() => ({
 }));
 
 vi.mock('../../services/firebase', () => ({
-  auth: { get currentUser() { return firebaseAuth.currentUser; } },
+  // Auth's current user, with reload() (which asks Auth whether the account still exists).
+  auth: { get currentUser() { return firebaseAuth.currentUser && { ...firebaseAuth.currentUser, reload: firebaseAuth.reload }; } },
   firestoreCache: cache,
 }));
 vi.mock('../../consumer/repositories', () => ({ profileRepository: profiles }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
   signInWithEmailAndPassword: vi.fn(),
+  updateProfile: vi.fn(async () => {}),
   createUserWithEmailAndPassword: vi.fn(async (_auth: unknown, email: string) => {
     const user = { uid: 'carol', email, displayName: null };
     firebaseAuth.currentUser = user;
@@ -111,6 +114,8 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     profiles.getProfile.mockReset();
     profiles.createProfile.mockReset();
     profiles.updateProfile.mockReset();
+    firebaseAuth.reload.mockReset();
+    firebaseAuth.reload.mockResolvedValue(undefined);
     firebaseAuth.currentUser = null;
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -214,6 +219,33 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     renderer.unmount();
   });
 
+  it('asks Auth that the account still exists before creating its profile, and creates none for a deleted account', async () => {
+    profiles.getProfile.mockResolvedValueOnce(missing());
+    // Auth answers a deleted account's reload this way (and signs it out).
+    firebaseAuth.reload.mockRejectedValueOnce(Object.assign(new Error('Firebase: Error (auth/user-token-expired).'), { code: 'auth/user-token-expired' }));
+    const renderer = await signIn();
+    expect(firebaseAuth.reload).toHaveBeenCalledOnce();
+    expect(profiles.createProfile).not.toHaveBeenCalled();
+    expectProfileUnknown();
+    expect(observed.profileLookupFailed).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PROFILE_LOOKUP_AUTO_RETRY_MAX_MS * 2); });
+    expect(profiles.getProfile).toHaveBeenCalledTimes(1);
+    renderer.unmount();
+  });
+
+  it('retries by itself when Auth cannot be reached to confirm the account, then creates the profile', async () => {
+    profiles.getProfile.mockResolvedValueOnce(missing()).mockResolvedValueOnce(missing()).mockResolvedValueOnce(readable());
+    firebaseAuth.reload.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'auth/network-request-failed' }));
+    profiles.createProfile.mockReturnValueOnce(accepted());
+    const renderer = await signIn();
+    expect(profiles.createProfile).not.toHaveBeenCalled();
+    expect(observed.profileLookupFailed).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PROFILE_LOOKUP_AUTO_RETRY_MS); });
+    expect(profiles.createProfile).toHaveBeenCalledOnce();
+    expectOpen();
+    renderer.unmount();
+  });
+
   it('reports a profile this app cannot read as a failure, without overwriting it or retrying by itself', async () => {
     profiles.getProfile.mockResolvedValueOnce(unreadable());
     const renderer = await signIn();
@@ -235,6 +267,38 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     expect(profiles.createProfile).toHaveBeenCalledTimes(1);
     expect(profiles.createProfile.mock.calls[0][0]).toMatchObject({ displayName: 'Carol Ng' });
     expect(observed.user?.uid).toBe('carol');
+    expectOpen('Carol Ng');
+    renderer.unmount();
+  });
+
+  it('also keeps the typed name on the Auth account, so a profile created after a restart still has it', async () => {
+    const { updateProfile } = await import('firebase/auth');
+    profiles.getProfile.mockResolvedValueOnce(missing()).mockResolvedValueOnce(readable('Carol Ng'));
+    profiles.createProfile.mockReturnValueOnce(accepted());
+    const renderer = await render();
+
+    await act(async () => { await observed.signup('carol@example.com', 'secret-password', '  Carol Ng  '); });
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ uid: 'carol' }), { displayName: 'Carol Ng' });
+    renderer.unmount();
+
+    // After a restart the in-memory draft is gone: the lookup uses the Auth account's name.
+    profiles.getProfile.mockReset();
+    profiles.createProfile.mockReset();
+    profiles.getProfile.mockResolvedValueOnce(missing()).mockResolvedValueOnce(readable('Carol Ng'));
+    profiles.createProfile.mockReturnValueOnce(accepted());
+    const restarted = await signIn({ uid: 'carol', email: 'carol@example.com', displayName: 'Carol Ng' });
+    expect(profiles.createProfile.mock.calls[0][0]).toMatchObject({ displayName: 'Carol Ng' });
+    restarted.unmount();
+  });
+
+  it('still signs up when the name cannot be kept on the Auth account', async () => {
+    const { updateProfile } = await import('firebase/auth');
+    vi.mocked(updateProfile).mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'auth/network-request-failed' }));
+    profiles.getProfile.mockResolvedValueOnce(missing()).mockResolvedValueOnce(readable('Carol Ng'));
+    profiles.createProfile.mockReturnValueOnce(accepted());
+    const renderer = await render();
+    await act(async () => { await observed.signup('carol@example.com', 'secret-password', 'Carol Ng'); });
+    expect(profiles.createProfile.mock.calls[0][0]).toMatchObject({ displayName: 'Carol Ng' });
     expectOpen('Carol Ng');
     renderer.unmount();
   });

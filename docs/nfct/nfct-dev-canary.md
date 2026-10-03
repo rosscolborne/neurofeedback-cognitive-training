@@ -59,7 +59,10 @@ serves the bundle with `vite preview` and drives it as an ordinary user:
    only after the server acknowledges the session write. No 90-second run is
    needed.
 6. Sign in again in a new browser context with no cache: the account comes back
-   home, so its profile persisted on the server.
+   home, reading its profile from the server. That the profile was saved is
+   proven at sign-up (step 2 waits for the server to accept it); this step
+   would pass even if the profile were missing, because the app then creates
+   it again.
 
 The permission-denied guard in `e2e/fixtures.ts` also fails the run on any
 denied Firestore request. If the browser passes a generous ceiling of Auth or
