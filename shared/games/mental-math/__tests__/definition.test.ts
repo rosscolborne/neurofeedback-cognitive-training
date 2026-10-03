@@ -20,7 +20,7 @@ describe('Mental Math v1 definition', () => {
       gameVersion: 1,
       scoringVersion: 1,
       domainWeights: { math: 0.7, 'processing-speed': 0.2, memory: 0.1 },
-      limits: { maxTrials: 400, minActiveMs: 0, maxActiveMs: 91_000, minPlausibleRtMs: 250 },
+      limits: { maxTrials: 400, minActiveMs: 0, maxActiveMs: 181_000, minPlausibleRtMs: 250 },
       recordMetrics: ['score', 'correct', 'peakLevel'],
     });
     expect(mm.definition.domainWeights).not.toHaveProperty('reasoning');
@@ -28,7 +28,7 @@ describe('Mental Math v1 definition', () => {
     expect(mentalMath.definition).toBe(mm.definition); // the current version is v1
   });
 
-  it('has one adaptive 90 s mode, timed-90, with levels 1-10 starting from level 1', () => {
+  it('has one adaptive time-bank mode, timed-90 (a typical run shown as 90 s), with levels 1-10 starting from level 1', () => {
     expect(mm.definition.modes).toHaveLength(1);
     expect(mode).toMatchObject({ id: 'timed-90', adaptive: true, runDurationMs: 90_000, initiallyUnlockedStartLevel: 1 });
     expect(mode.levels.map((level) => level.level)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

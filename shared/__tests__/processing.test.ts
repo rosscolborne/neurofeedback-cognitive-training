@@ -358,11 +358,12 @@ describe('decideSession', () => {
   });
 
   it("flags a new user's first session at level 2 start-level-locked, counting only its totals", () => {
-    const decision = decide(session({ startLevel: 2, targetPeak: 4 }), null, 'session-00000001', T0 + MINUTE);
+    const locked = session({ startLevel: 2, targetPeak: 4 });
+    const decision = decide(locked, null, 'session-00000001', T0 + MINUTE);
 
     expect(decision.result).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked'], peakLevel: 4, performanceIndex: null });
     expect(decision.result).not.toHaveProperty('recordKey');
-    expect(decision.progress).toMatchObject({ sessionsCompleted: 1, activeMs: 90_000, bestPeakLevel: {}, bests: {} });
+    expect(decision.progress).toMatchObject({ sessionsCompleted: 1, activeMs: locked.activeDurationMs as number, bestPeakLevel: {}, bests: {} });
     expect(decision.unlockRaised).toBe(false);
   });
 

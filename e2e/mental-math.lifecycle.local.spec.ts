@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { bankEnds, START_BANK_MS } from '../shared/games/mental-math/v1/timeBank';
 import { E2E_FIXED_SESSION_SEED } from '../src/consumer/repositories/e2eSessionSeed';
 import { expect, test } from './fixtures';
 import { arriveAtHome } from './helpers/auth';
@@ -59,7 +60,10 @@ test('a signed-in player enters Mental Math, answers on the keypad and a complet
   await expect(page.locator('.mm-feedback')).toHaveText('');
   // A rapid double click on Submit answers the question once.
   await key(page, 'Submit').dblclick();
-  await expect(page.locator('.mm-feedback')).toHaveText('Correct');
+  await expect(page.locator('.mm-feedback')).toHaveText(/^Correct/);
+  // Right in 2 s, under a third of level 1's 8 s: the time bank gains 3 s, shown beside the timer.
+  await expect(hud(page, 'bank-change')).toHaveText('+3s');
+  await expect(hud(page, 'time')).toHaveText('0:46');
   typed.push(answerOf(first));
   await page.clock.runFor(FEEDBACK_MS);
 
@@ -68,7 +72,7 @@ test('a signed-in player enters Mental Math, answers on the keypad and a complet
   await page.clock.runFor(1_100);
   await typeAnswer(page, answerOf(second));
   await key(page, 'Submit').evaluate((button: HTMLButtonElement) => { button.click(); button.click(); });
-  await expect(page.locator('.mm-feedback')).toHaveText('Correct');
+  await expect(page.locator('.mm-feedback')).toHaveText(/^Correct/);
   typed.push(answerOf(second));
   await page.clock.runFor(FEEDBACK_MS);
 
@@ -82,7 +86,7 @@ test('a signed-in player enters Mental Math, answers on the keypad and a complet
   const sessions = await readGameSessions(uid);
   expect(sessions).toHaveLength(1);
   const session = sessions[0]!.data;
-  expect(session).toMatchObject({ gameId: 'mental-math', gameVersion: 1, modeId: 'timed-90', status: 'completed', startLevel: 1, activeDurationMs: 90_000, seed: E2E_FIXED_SESSION_SEED });
+  expect(session).toMatchObject({ gameId: 'mental-math', gameVersion: 1, modeId: 'timed-90', status: 'completed', startLevel: 1, seed: E2E_FIXED_SESSION_SEED });
   const trials = session.trials as Trial[];
   // One trial per question answered (the double submissions included once), plus the ones left to time out.
   expect(trials.filter((trial) => !trial.timedOut).map((trial) => trial.response)).toEqual(typed);
@@ -90,7 +94,11 @@ test('a signed-in player enters Mental Math, answers on the keypad and a complet
   expect(trials[0]).toMatchObject({ shownAtMs: 0, rtMs: 2_000, correct: true });
   expect(trials[1]).toMatchObject({ shownAtMs: 2_000, rtMs: 1_100, correct: true });
   const last = trials.at(-1)!;
-  expect(last.shownAtMs + last.rtMs).toBeLessThanOrEqual(90_000);
+  // Completed when the time bank ran out (NFCT-60): the run length is exactly what the trials earned.
+  const bankEnd = bankEnds(trials as unknown as Parameters<typeof bankEnds>[0]).final;
+  expect(session.activeDurationMs).toBe(bankEnd);
+  expect(bankEnd).toBeGreaterThan(START_BANK_MS); // quick correct answers added time
+  expect(last.shownAtMs + last.rtMs).toBeLessThanOrEqual(bankEnd);
   expect(session.summary).toMatchObject({ trialsTotal: trials.length, score: shownScore });
   expect(await readEegRecordings(uid)).toHaveLength(0);
 
@@ -103,20 +111,20 @@ test('pausing and backgrounding freeze the run clock and discard the question, a
   await startRun(page, 1);
   await answer(page, true, 1_000);
   await page.clock.runFor(2_000);
-  await expect(hud(page, 'time')).toHaveText('1:27');
+  await expect(hud(page, 'time')).toHaveText('0:45');
   const beforePause = await questionText(page);
 
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Paused', exact: true })).toBeVisible();
   await expect(page.locator('.mm-question')).toHaveCount(0);
   await page.clock.runFor(60_000);
-  await expect(hud(page, 'time')).toHaveText('1:27');
+  await expect(hud(page, 'time')).toHaveText('0:45');
   // The pause panel takes focus, and Enter activates the focused Resume.
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   const afterPause = await waitForQuestion(page);
   expect(afterPause).not.toBe(beforePause);
-  await expect(hud(page, 'time')).toHaveText('1:27');
+  await expect(hud(page, 'time')).toHaveText('0:45');
 
   // The app goes to the background and comes back: paused, not abandoned, no time lost.
   await setHidden(page, true);
@@ -124,7 +132,7 @@ test('pausing and backgrounding freeze the run clock and discard the question, a
   await page.clock.runFor(120_000);
   await setHidden(page, false);
   await expect(page.getByRole('heading', { name: 'Paused', exact: true })).toBeVisible();
-  await expect(hud(page, 'time')).toHaveText('1:27');
+  await expect(hud(page, 'time')).toHaveText('0:45');
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
   expect(await waitForQuestion(page)).not.toBe(afterPause);
 

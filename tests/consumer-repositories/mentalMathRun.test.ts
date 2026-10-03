@@ -38,7 +38,8 @@ describe('saving a played Mental Math run', () => {
     await expect(started.save({ definition: mentalMath.definition, session })).rejects.toBeInstanceOf(GameSessionAlreadySavedError);
 
     const stored = await serverRead(`users/${device.player.uid}/gameSessions/${started.sessionId}`);
-    expect(stored).toMatchObject({ status: 'completed', seed: started.seed, activeDurationMs: 90_000, startLevel: 1 });
+    expect(stored).toMatchObject({ status: 'completed', seed: started.seed, activeDurationMs: outcome.run.endsAtMs, startLevel: 1 });
+    expect(outcome.run.endsAtMs).toBe(mentalMath.bankEnds(outcome.run.trials).final); // completed when the time bank ran out (NFCT-60)
     expect(stored?.trials).toEqual(outcome.run.trials);
     // What trusted scoring will check: the stored session is a valid v1 run from its seed.
     const parsed = gameSessionSchemaFor(mentalMath.definition, 'read').parse(stored);

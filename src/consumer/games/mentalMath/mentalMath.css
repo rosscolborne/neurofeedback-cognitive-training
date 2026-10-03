@@ -266,6 +266,45 @@
   line-height: 1.2;
 }
 
+/* The time-bank change after an answer (NFCT-60): a small "+3s" or "−5s"
+   shown over the "Time left" label, just above the time, for a moment. It is
+   out of the layout flow and the label keeps its width, so nothing shifts and
+   it never reaches the next stat, even at 320 px. */
+.mm-hud-time-item {
+  position: relative;
+}
+
+.mm-hud-time-changed .mm-hud-label {
+  color: transparent;
+}
+
+.mm-bank-change {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font: 700 14px var(--font-body);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: mm-bank-change 1.2s ease-out forwards;
+}
+
+.mm-bank-gain {
+  color: var(--status-active-text);
+}
+
+.mm-bank-loss {
+  color: var(--status-alert-text);
+}
+
+@keyframes mm-bank-change {
+  0% { opacity: 0; transform: translateY(3px); }
+  15% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-2px); }
+}
+
 .mm-pause {
   display: inline-flex;
   align-items: center;
@@ -903,5 +942,10 @@
   .mm-card,
   .mm-level {
     transition: none;
+  }
+
+  /* Shown steady for its time on screen instead of sliding and fading. */
+  .mm-bank-change {
+    animation: none;
   }
 }

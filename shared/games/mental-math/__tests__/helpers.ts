@@ -25,30 +25,28 @@ function accepted(result: mm.AnswerResult): mm.MentalMathRun {
  * (feedback does not run the clock).
  */
 export function play(seed: number, startLevel: number, steps: readonly Step[]): { run: mm.MentalMathRun; clock: number } {
-  let run = mm.startRun({ seed, startLevel });
-  let clock = 0;
-  for (const step of steps) {
-    run = mm.presentQuestion(run, clock);
-    const current = run.current!;
-    switch (step.kind) {
-      case 'pause':
-        clock += step.afterMs;
-        run = mm.discardQuestion(run);
-        break;
-      case 'timeout':
-        run = accepted(mm.timeOutQuestion(run, { questionId: current.id }));
-        clock += current.timeLimitMs;
-        break;
-      case 'correct':
-      case 'wrong': {
-        const response = step.kind === 'correct' ? current.expected : current.expected + 1;
-        run = accepted(mm.answerQuestion(run, { questionId: current.id, response, rtMs: step.rtMs }));
-        clock += Math.min(step.rtMs, current.timeLimitMs);
-        break;
-      }
+  let state = { run: mm.startRun({ seed, startLevel }), clock: 0 };
+  for (const step of steps) state = playStep(state, step);
+  return state;
+}
+
+/** Plays one step on the question presented at `clock`. */
+export function playStep({ run: before, clock }: { run: mm.MentalMathRun; clock: number }, step: Step): { run: mm.MentalMathRun; clock: number } {
+  let run = mm.presentQuestion(before, clock);
+  const current = run.current!;
+  switch (step.kind) {
+    case 'pause':
+      return { run: mm.discardQuestion(run), clock: clock + step.afterMs };
+    case 'timeout':
+      run = accepted(mm.timeOutQuestion(run, { questionId: current.id }));
+      return { run, clock: clock + current.timeLimitMs };
+    case 'correct':
+    case 'wrong': {
+      const response = step.kind === 'correct' ? current.expected : current.expected + 1;
+      run = accepted(mm.answerQuestion(run, { questionId: current.id, response, rtMs: step.rtMs }));
+      return { run, clock: clock + Math.min(step.rtMs, current.timeLimitMs) };
     }
   }
-  return { run, clock };
 }
 
 /** A checkable session for a played run, as the client would write it. */
@@ -63,7 +61,7 @@ export function sessionOf(
     startLevel: run.startLevel,
     peakLevel: mm.runPeakLevel(run),
     status: 'completed',
-    activeDurationMs: mm.RUN_DURATION_MS,
+    activeDurationMs: run.endsAtMs,
     seed,
     trials: run.trials,
     summary: {
@@ -103,14 +101,14 @@ export function storedMentalMathSession(seed: number, run: mm.MentalMathRun): Re
   };
 }
 
-/** Correct answers until the run clock is nearly spent, for a full, conforming run. */
+/**
+ * Repeats the pattern while the time bank has room for any step (a timeout at
+ * level 10), for a long, conforming run that stops before the bank runs out.
+ */
 export function fullRun(seed: number, startLevel: number, pattern: readonly Step[]): { run: mm.MentalMathRun; clock: number } {
-  const steps: Step[] = [];
-  let spent = 0;
-  for (let index = 0; spent < mm.RUN_DURATION_MS - 20_000; index += 1) {
-    const step = pattern[index % pattern.length]!;
-    steps.push(step);
-    spent += step.kind === 'timeout' ? 18_000 : step.kind === 'pause' ? step.afterMs : step.rtMs;
+  let state = { run: mm.startRun({ seed, startLevel }), clock: 0 };
+  for (let index = 0; state.run.endsAtMs - state.clock > 18_000; index += 1) {
+    state = playStep(state, pattern[index % pattern.length]!);
   }
-  return play(seed, startLevel, steps);
+  return state;
 }

@@ -57,7 +57,7 @@ describe('run reducer: seed reproduction, including discarded questions', () => 
           for (let pauseIndex = 0; pauseIndex < burst && !expired; pauseIndex += 1) {
             clock += mm.randomInt(behaviour, 0, 30);
             run = mm.discardQuestion(run);
-            expired = clock >= mm.RUN_DURATION_MS;
+            expired = clock >= run.endsAtMs;
             if (!expired) run = mm.presentQuestion(run, clock);
           }
           if (expired) break;
@@ -73,7 +73,7 @@ describe('run reducer: seed reproduction, including discarded questions', () => 
         }
         run = result.run;
         clock += result.trial.rtMs;
-        if (clock >= mm.RUN_DURATION_MS) break;
+        if (clock >= run.endsAtMs) break;
       }
       const report = mm.checkSession(sessionOf(seed, run));
       expect({ runIndex, report }).toEqual({ runIndex, report: { outcome: 'valid', reasons: [], issues: [] } });
@@ -233,35 +233,38 @@ describe('run reducer: submissions', () => {
     expect(mm.discardQuestion(answered.run)).toBe(answered.run);
   });
 
-  it('lets expiry always win: nothing is presented at or after 90 s, and no trial ends after it', () => {
+  it('lets expiry always win: nothing is presented at or after the bank runs out, and no trial ends after it', () => {
     const start = mm.startRun({ seed: SEED, startLevel: 1 });
-    expect(() => mm.presentQuestion(start, mm.RUN_DURATION_MS)).toThrow(/run ends/);
-    expect(() => mm.presentQuestion(start, 95_000)).toThrow(RangeError);
+    const end = mm.START_BANK_MS; // 45 s: no trial has moved the bank yet
+    expect(start.endsAtMs).toBe(end);
+    expect(() => mm.presentQuestion(start, end)).toThrow(/run ends/);
+    expect(() => mm.presentQuestion(start, end + 5_000)).toThrow(RangeError);
 
-    const late = mm.presentQuestion(start, 89_000); // level 1: an 8 s limit
+    const late = mm.presentQuestion(start, end - 1_000); // level 1: an 8 s limit
     const id = late.current!.id;
     expect(mm.answerQuestion(late, { questionId: id, response: late.current!.expected, rtMs: 1_000 }))
-      .toMatchObject({ accepted: true, trial: { shownAtMs: 89_000, rtMs: 1_000 } }); // ends exactly at 90 s
+      .toMatchObject({ accepted: true, trial: { shownAtMs: end - 1_000, rtMs: 1_000 } }); // ends exactly at the bank's end
     // A Submit handled 1 ms after expiry, or a timeout due after it, is refused and changes nothing.
     expect(mm.answerQuestion(late, { questionId: id, response: late.current!.expected, rtMs: 1_001 }))
       .toEqual({ accepted: false, run: late, reason: 'run-over' });
     expect(mm.timeOutQuestion(late, { questionId: id })).toEqual({ accepted: false, run: late, reason: 'run-over' });
     // The caller then discards the question at expiry.
     expect(mm.discardQuestion(late).current).toBeNull();
-    // A timeout that ends exactly at 90 s is still recorded.
-    const timed = mm.presentQuestion(start, 82_000);
+    // A timeout that ends exactly at the bank's end is still recorded.
+    const timed = mm.presentQuestion(start, end - 8_000);
     expect(mm.timeOutQuestion(timed, { questionId: timed.current!.id })).toMatchObject({ accepted: true, trial: { rtMs: 8_000 } });
   });
 
   it('judges the run end on the recorded time: a Submit after the time limit is a timeout ending at the limit', () => {
-    // Shown at 82 s on level 1 (8 s limit): a Submit at 8.5 s would end at 90.5 s, but it
-    // is recorded as a timeout ending at 90 s, so it is accepted rather than refused as run-over.
-    const run = mm.presentQuestion(mm.startRun({ seed: SEED, startLevel: 1 }), 82_000);
+    // Shown 8 s before the bank's end on level 1 (8 s limit): a Submit at 8.5 s would end 0.5 s
+    // after it, but it is recorded as a timeout ending exactly then, so it is accepted rather than refused as run-over.
+    const end = mm.START_BANK_MS;
+    const run = mm.presentQuestion(mm.startRun({ seed: SEED, startLevel: 1 }), end - 8_000);
     const result = mm.answerQuestion(run, { questionId: run.current!.id, response: run.current!.expected, rtMs: 8_500 });
 
     expect(result).toMatchObject({
       accepted: true,
-      trial: { response: null, correct: false, timedOut: true, shownAtMs: 82_000, rtMs: 8_000 },
+      trial: { response: null, correct: false, timedOut: true, shownAtMs: end - 8_000, rtMs: 8_000 },
     });
   });
 

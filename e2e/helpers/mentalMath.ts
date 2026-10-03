@@ -7,7 +7,7 @@ import { seedPlayer } from './localEmulator';
 
 // Mental Math driven through the signed-in UI (NFCT-21, NFCT-22). Time is
 // Playwright's page.clock: the game reads time only through performance.now()
-// and standard timers, so a 90-second run takes no real 90 seconds. The E2E
+// and standard timers, so a run takes no real time. The E2E
 // dev server gives every session the same fixed seed (VITE_E2E_EMULATORS
 // only), and each answer is computed from the rendered question. Every answer
 // takes at least 1 s of page time, well above the 250 ms plausibility floor.
@@ -52,7 +52,7 @@ export async function openMentalMath(page: Page): Promise<string> {
 export async function startRun(page: Page, level: number): Promise<void> {
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
   await page.getByRole('button', { name: `Start at level ${level}`, exact: true }).click();
-  await expect(hud(page, 'time')).toHaveText('1:30');
+  await expect(hud(page, 'time')).toHaveText('0:45'); // the starting time bank (NFCT-60)
   await expect(hud(page, 'level')).toHaveText(String(level));
 }
 
@@ -79,7 +79,7 @@ export async function answer(page: Page, correct: boolean, thinkMs = 1_200): Pro
 
 /**
  * Lets the remaining active time run out: unanswered questions time out, the
- * last is discarded at 90 s. Page time stops as soon as the run has ended, so
+ * last is discarded when the time bank runs out. Page time stops as soon as the run has ended, so
  * the save's own real-time bounds (the EEG consent check gives the server
  * 1.5 s) are not fast-forwarded past before the network can answer.
  */

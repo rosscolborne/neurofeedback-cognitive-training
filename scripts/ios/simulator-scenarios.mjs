@@ -7,7 +7,7 @@
 // #mm-handoff-title). Update them with the screens, as for e2e/helpers/auth.ts.
 //
 //   smoke        sign up, relaunch: the session and profile come back (plus light and Dark Mode screenshots)
-//   mental-math  sign up, play a whole 90-second run on the keypad, the session is written
+//   mental-math  sign up, play a whole time-bank run on the keypad, the session is written
 //   lifecycle    background mid-run pauses it, timed against iOS's own events; a kill mid-run writes nothing; a quit run is saved
 
 import { StepError } from './simulator-driver.mjs';
@@ -258,7 +258,7 @@ export const SCENARIOS = {
   },
 
   'mental-math': {
-    summary: 'Sign up, open Mental Math from the Train tab, play a whole 90-second run on the on-screen keypad (one answer deliberately wrong); the end-of-run screen appears and the session is written.',
+    summary: 'Sign up, open Mental Math from the Train tab, play a whole time-bank run on the on-screen keypad (one answer deliberately wrong); the end-of-run screen appears and the session is written.',
     async run(ctx) {
       const { app } = ctx;
       await ctx.launch();
@@ -272,8 +272,9 @@ export const SCENARIOS = {
       const answers = [];
       let peakLevel = 1;
       const started = Date.now();
-      // 90 s of active time, plus 0.4 s of feedback per answer off the clock: about 150 s. A safety stop only.
-      while (Date.now() - started < 300_000) {
+      // The time bank: 45 s to start, earned back by quick answers, at most 180 s of active time,
+      // plus 0.4 s of feedback per answer off the clock. A safety stop only.
+      while (Date.now() - started < 360_000) {
         const result = await answer(ctx, { correct: answers.length !== 2 });
         if (!result) break;
         if (result.feedback) answers.push(result);
@@ -288,7 +289,7 @@ export const SCENARIOS = {
       ctx.check('The deliberately wrong answer is marked wrong', answers.length > 2 && !/^Correct/.test(answers[2].feedback ?? ''), answers[2]?.feedback);
 
       const ended = await app.waitIfAny({ target: RUN_END }, { timeout: 30_000 });
-      ctx.check('The run ends after 90 s and the end-of-run screen appears', Boolean(ended), ended?.text);
+      ctx.check('The run ends when the time bank runs out and the end-of-run screen appears', Boolean(ended), ended?.text);
       await ctx.checkpoint('run-end');
 
       const sessions = await ctx.emulators.until(() => ctx.emulators.gameSessions(uid), (documents) => documents.length > 0);
@@ -296,8 +297,8 @@ export const SCENARIOS = {
       const session = sessions[0];
       if (!session) return;
       const { data } = session;
-      ctx.check('It is a completed Mental Math run of 90 s of active time, from iOS',
-        data.gameId === 'mental-math' && data.status === 'completed' && data.activeDurationMs === 90_000 && data.client?.platform === 'ios',
+      ctx.check('It is a completed Mental Math time-bank run (at most 180 s of active time), from iOS',
+        data.gameId === 'mental-math' && data.status === 'completed' && data.activeDurationMs >= 1 && data.activeDurationMs <= 180_000 && data.client?.platform === 'ios',
         `gameId ${data.gameId}, status ${data.status}, activeDurationMs ${data.activeDurationMs}, platform ${data.client?.platform}`);
       const recorded = trialsAnswered(session);
       ctx.check('Its trials hold exactly the answers typed on the keypad, in order',

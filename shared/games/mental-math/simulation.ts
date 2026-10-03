@@ -4,6 +4,7 @@ import {
   createRng,
   discardQuestion,
   formatQuestion,
+  isTrialCapReached,
   intermediateOf,
   isLegalQuestion,
   LEVELS,
@@ -13,7 +14,6 @@ import {
   presentQuestion,
   questionAt,
   randomInt,
-  RUN_DURATION_MS,
   runPeakLevel,
   sameQuestion,
   score,
@@ -36,7 +36,7 @@ import {
 export type SimulationOptions = {
   /** Simulated sessions per level for the generator report. */
   readonly generatorRuns: number;
-  /** Questions per simulated session in the generator report (about one 90 s run). */
+  /** Questions per simulated session in the generator report (about one run). */
   readonly questionsPerRun: number;
   /** Runs per player profile and start level in the scoring report. */
   readonly scoringRuns: number;
@@ -190,15 +190,17 @@ function uniform(rng: Rng): number {
 export type SimulatedRun = { readonly run: MentalMathRun; readonly pauses: number };
 
 /**
- * One completed 90 s run: questions appear back to back on the active clock
- * (feedback does not run it), a pause discards the question on screen after
- * part of its time, and the question on screen at expiry is discarded.
+ * One completed time-bank run: questions appear back to back on the active
+ * clock (feedback does not run it), a pause discards the question on screen
+ * after part of its time, and the question on screen when the bank runs out
+ * is discarded. The run lasts until run.endsAtMs.
  */
 export function simulateRun(profile: PlayerProfile, startLevel: number, seed: number, behaviour: Rng): SimulatedRun {
   let run = startRun({ seed, startLevel });
   let clock = 0;
   let pauses = 0;
   for (;;) {
+    if (isTrialCapReached(run)) break;
     run = presentQuestion(run, clock);
     const current = run.current!;
     const rt = Math.round(profile.rtFraction(current.level) * current.timeLimitMs * (0.5 + uniform(behaviour)));
@@ -206,13 +208,13 @@ export function simulateRun(profile: PlayerProfile, startLevel: number, seed: nu
     if (uniform(behaviour) < profile.pauseChance) {
       const elapsed = Math.floor(uniform(behaviour) * Math.min(rt, current.timeLimitMs));
       run = discardQuestion(run);
-      if (clock + elapsed >= RUN_DURATION_MS) break;
+      if (clock + elapsed >= run.endsAtMs) break;
       clock += elapsed;
       pauses += 1;
       continue;
     }
     const used = Math.min(rt, current.timeLimitMs);
-    if (clock + used >= RUN_DURATION_MS) {
+    if (clock + used > run.endsAtMs) {
       run = discardQuestion(run); // the clock expired with the question on screen
       break;
     }
@@ -222,6 +224,7 @@ export function simulateRun(profile: PlayerProfile, startLevel: number, seed: nu
     if (!result.accepted) throw new Error(`simulation: answer refused (${result.reason})`);
     run = result.run;
     clock += used;
+    if (clock >= run.endsAtMs) break; // a wrong answer emptied the bank
   }
   return { run, pauses };
 }
@@ -238,13 +241,15 @@ export type ScoringCell = {
   readonly finalLevel: Summary;
   readonly peakLevel: Summary;
   readonly pauses: Summary;
+  /** Active run length (when the time bank ran out), ms. */
+  readonly runLengthMs: Summary;
   /** Runs for which the plausibility checks reported anything. Expected 0 for these honest players. */
   readonly runsWithReasons: number;
   readonly reasons: readonly string[];
 };
 
 function scoringCell(profile: PlayerProfile, startLevel: number, options: SimulationOptions, rng: Rng): ScoringCell {
-  const rows: { trials: number; accuracy: number; difficulty: number; bonus: number; score: number; final: number; peak: number; pauses: number }[] = [];
+  const rows: { trials: number; accuracy: number; difficulty: number; bonus: number; score: number; final: number; peak: number; pauses: number; length: number }[] = [];
   const reasons = new Set<string>();
   let runsWithReasons = 0;
   for (let index = 0; index < options.scoringRuns; index += 1) {
@@ -257,7 +262,7 @@ function scoringCell(profile: PlayerProfile, startLevel: number, options: Simula
       startLevel,
       peakLevel: runPeakLevel(run),
       status: 'completed',
-      activeDurationMs: RUN_DURATION_MS,
+      activeDurationMs: run.endsAtMs,
       seed,
       trials,
     });
@@ -272,6 +277,7 @@ function scoringCell(profile: PlayerProfile, startLevel: number, options: Simula
       final: scored.metrics.finalLevel,
       peak: scored.peakLevel,
       pauses,
+      length: run.endsAtMs,
     });
   }
   const of = (pick: (row: (typeof rows)[number]) => number) => summarize(rows.map(pick));
@@ -287,6 +293,7 @@ function scoringCell(profile: PlayerProfile, startLevel: number, options: Simula
     finalLevel: of((row) => row.final),
     peakLevel: of((row) => row.peak),
     pauses: of((row) => row.pauses),
+    runLengthMs: of((row) => row.length),
     runsWithReasons,
     reasons: [...reasons].sort(),
   };
@@ -340,14 +347,15 @@ export function formatSimulationReport(report: SimulationReport): string {
   }
   lines.push(
     '',
-    '## Scoring: synthetic players (completed 90 s runs; medians, with p10–p90 for the score)',
+    '## Scoring: synthetic players (completed time-bank runs; medians, with p10–p90 for the score and run length)',
     '',
-    '| Profile | Start | Trials | Accuracy | Difficulty points | Speed bonus | Score median (p10–p90) | Final level | Peak level (max) | Runs with reasons |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Profile | Start | Trials | Accuracy | Difficulty points | Speed bonus | Score median (p10–p90) | Run length s (p10–p90) | Final level | Peak level (max) | Runs with reasons |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   );
   for (const cell of report.scoring) {
     lines.push(`| ${cell.profile} | ${cell.startLevel} | ${cell.trials.median} | ${percent(cell.accuracy.median)} | `
       + `${cell.difficultyPoints.median} | ${cell.speedBonusPoints.median} | ${cell.score.median} (${cell.score.p10}–${cell.score.p90}) | `
+      + `${Math.round(cell.runLengthMs.median / 1000)} (${Math.round(cell.runLengthMs.p10 / 1000)}–${Math.round(cell.runLengthMs.p90 / 1000)}) | `
       + `${cell.finalLevel.median} | ${cell.peakLevel.median} (${cell.peakLevel.max}) | `
       + `${cell.runsWithReasons}${cell.reasons.length > 0 ? ` (${cell.reasons.join(', ')})` : ''} |`);
   }

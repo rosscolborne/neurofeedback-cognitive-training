@@ -48,17 +48,24 @@ export type QuestionShape = {
 
 export type LevelParams = {
   readonly level: number;
-  /** The per-question limit. Only stops stalling; the run clock supplies the pressure. */
+  /** The per-question limit. Only stops stalling; the time bank supplies the pressure. */
   readonly timeLimitMs: number;
   readonly templates: readonly QuestionTemplate[];
   /** Used only if every bounded draw fails; a legal question of the level. */
   readonly fallback: QuestionShape;
 };
 
-/** The one v1 mode: a fixed 90 s run over levels 1-10 with a 3-up/1-down staircase. */
+/**
+ * The one v1 mode: a time-bank run (timeBank.ts) over levels 1-10 with a
+ * 3-up/1-down staircase. The id dates from the fixed 90 s run and is kept:
+ * sessions, progress and records are keyed by it.
+ */
 export const MODE_ID = 'timed-90';
-/** The timed-90 run: 90 s of active time (pauses and answer feedback excluded). */
-export const RUN_DURATION_MS = 90_000;
+/**
+ * The run length the catalogue shows, about a typical time-bank run. Not a
+ * game rule: the time bank decides when a run ends.
+ */
+export const TYPICAL_RUN_MS = 90_000;
 /** The lowest and highest levels. */
 export const MIN_LEVEL = 1;
 export const MAX_LEVEL = 10;

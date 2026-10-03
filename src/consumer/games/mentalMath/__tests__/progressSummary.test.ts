@@ -86,7 +86,7 @@ describe('per-game progress', () => {
       ...overrides,
     });
     const valid = decision.result;
-    expect(historyRow(entry({}, valid))).toMatchObject({ state: 'verified', personalBest: true, startLevel: 1, completed: true, activeMs: 90_000, score: valid.validity === 'valid' ? valid.score : -1 });
+    expect(historyRow(entry({}, valid))).toMatchObject({ state: 'verified', personalBest: true, startLevel: 1, completed: true, activeMs: document.activeDurationMs, score: valid.validity === 'valid' ? valid.score : -1 });
     expect(historyRow(entry({}, { ...valid, validity: 'flagged', reasons: ['run-overrun'] } as ServerResult))).toMatchObject({ state: 'flagged', personalBest: false });
     expect(historyRow(entry({}, { processedAt: at(1), scoringVersion: 1, validity: 'invalid', reasons: ['schema-invalid'] }))).toMatchObject({ state: 'invalid', score: null });
     expect(historyRow(entry({ hasPendingWrites: true }))).toMatchObject({ state: 'on-device', score: null });

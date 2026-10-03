@@ -4,7 +4,7 @@
 // - gameVersion 1 gameplay is everything a stored v1 session depends on: the
 //   run and levels (params.ts), the PRNG and seed derivation (rng.ts), question
 //   generation and legality (questions.ts), the staircase (staircase.ts), the
-//   trial and metrics semantics (schemas.ts), the run rules (run.ts) and the
+//   trial and metrics semantics (schemas.ts), the time bank (timeBank.ts), the run rules (run.ts) and the
 //   plausibility checks with their outcomes (plausibility.ts).
 // - After launch this module is never edited. Changing level parameters, the
 //   generator, the staircase or the trial shape or meaning makes scores
@@ -28,6 +28,7 @@ export * from './questions';
 export * from './staircase';
 export * from './schemas';
 export * from './scoring';
+export * from './timeBank';
 export * from './plausibility';
 export * from './run';
 export * from './definition';

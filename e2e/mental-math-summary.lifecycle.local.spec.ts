@@ -3,6 +3,7 @@ import { devices, type Locator, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtHome } from './helpers/auth';
 import { readGameSessions } from './helpers/localEmulator';
+import { formatPlayTime } from '../src/consumer/games/mentalMath/progressSummary';
 import { answer, openMentalMath, runOut, startRun } from './helpers/mentalMath';
 
 // NFCT-22: the post-session summary and Mental Math's per-game progress,
@@ -34,8 +35,10 @@ type Result = {
 
 /** Trusted scoring's result for the player's newest session (observation only). */
 async function newestResult(uid: string): Promise<Result> {
+  // By the server's createdAt: device endedAt does not order runs, because each run here starts
+  // from the real wall clock and time-bank runs (NFCT-60) differ in length.
   const sessions = (await readGameSessions(uid))
-    .sort((a, b) => (b.data.endedAt as { toMillis(): number }).toMillis() - (a.data.endedAt as { toMillis(): number }).toMillis());
+    .sort((a, b) => (b.data.createdAt as { toMillis(): number }).toMillis() - (a.data.createdAt as { toMillis(): number }).toMillis());
   const result = sessions[0]?.data.result as Result | undefined;
   if (!result) throw new Error('The newest session has no trusted result');
   return result;
@@ -43,7 +46,7 @@ async function newestResult(uid: string): Promise<Result> {
 
 /**
  * Back to the real wall clock before a run. Each fast-forwarded run leaves
- * page time about 90 s ahead of the emulator's clock, and the rules refuse a
+ * page time a minute or more ahead of the emulator's clock, and the rules refuse a
  * session that ends more than 5 minutes after the server's time.
  */
 async function realWallClock(page: Page): Promise<void> {
@@ -224,7 +227,7 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
   const completed = await newestResult(uid);
 
   // Ten more runs, each quit after a second of play: they count in history and time played, not as completed.
-  // Page time keeps running from the finished run (about 90 s ahead, well inside the rules' 5 minutes),
+  // Page time keeps running from the finished run (about a minute ahead, well inside the rules' 5 minutes),
   // so every quit run ends after it and the history order is the order they were played.
   for (let run = 0; run < 10; run += 1) {
     await playAgain(page);
@@ -242,7 +245,9 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
   await page.getByRole('button', { name: 'Records and history', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
   await expect(page.locator('[data-total="runs-completed"]')).toHaveText('1');
-  await expect(page.locator('[data-total="time-played"]')).toHaveText('1\u00A0min 40\u00A0s');
+  // The completed run lasted until its time bank ran out; the ten quit runs add a second each.
+  const played = (await readGameSessions(uid)).reduce((sum, session) => sum + (session.data.activeDurationMs as number), 0);
+  await expect(page.locator('[data-total="time-played"]')).toHaveText(formatPlayTime(played));
   await expect(page.locator('[data-total="unlocked"]')).toHaveText('1 of 10');
 
   // 6. History: the newest ten, then the next page from the cursor, with nothing repeated.

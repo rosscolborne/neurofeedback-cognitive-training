@@ -1,8 +1,9 @@
 import { canPresentAt, recordedTiming, trialEndsWithinRun } from './limits';
-import { MAX_RESPONSE, MAX_TRIALS, RUN_DURATION_MS, levelParams, type QuestionShape } from './params';
+import { MAX_RESPONSE, MAX_TRIALS, levelParams, type QuestionShape } from './params';
 import { QUESTION_VARIANTS, questionAt, sameQuestion, type Question } from './questions';
 import type { MentalMathTrial } from './schemas';
 import { initialStaircase, nextStaircaseState, type StaircaseState } from './staircase';
+import { nextBankEnd, START_BANK_MS, timeBankChange } from './timeBank';
 
 // Mental Math gameVersion 1: the pure state of one run, for the game screen
 // (NFCT-21) to drive. It owns the run rules that trusted scoring later checks,
@@ -12,14 +13,15 @@ import { initialStaircase, nextStaircaseState, type StaircaseState } from './sta
 // clock, timer, feedback or UI: the caller passes integer active-clock
 // readings (round clock readings, then subtract, so trials meet exactly).
 //
-// Expiry always wins. The run ends at RUN_DURATION_MS of active time. A
-// question cannot be presented at or after that time (presentQuestion
-// throws), and an answer or timeout that would end after it is refused with
-// reason 'run-over' and changes nothing: the question was still on screen at
-// expiry, so the caller discards it (discardQuestion) and ends the run. A
-// trial may end exactly at RUN_DURATION_MS. So a run the reducer accepted
-// never ends a trial after the run (run-overrun) or outside a 90 s
-// activeDurationMs (active-duration-mismatch).
+// Expiry always wins. The run ends when the time bank runs out, at
+// `endsAtMs` of active time (timeBank.ts); each recorded trial moves that end.
+// A question cannot be presented at or after it (presentQuestion throws), and
+// an answer or timeout that would end after it is refused with reason
+// 'run-over' and changes nothing: the question was still on screen at expiry,
+// so the caller discards it (discardQuestion) and ends the run. A trial may
+// end exactly at `endsAtMs`. So a run the reducer accepted never ends a trial
+// after the bank's end (run-overrun), and its activeDurationMs is the final
+// `endsAtMs` (active-duration-mismatch).
 //
 // Question order. The question at position p (the number of trials recorded
 // so far) is questionAt(seed, p, variant, level). A new position starts at
@@ -58,10 +60,18 @@ export type MentalMathRun = {
   readonly nextVariant: number;
   /** The question discarded at this position, which its replacement avoids repeating. */
   readonly discarded: QuestionShape | null;
+  /** The active time at which the time bank runs out and the run ends. */
+  readonly endsAtMs: number;
 };
 
 export type AnswerResult =
-  | { readonly accepted: true; readonly run: MentalMathRun; readonly trial: MentalMathTrial }
+  | {
+    readonly accepted: true;
+    readonly run: MentalMathRun;
+    readonly trial: MentalMathTrial;
+    /** How far the trial moved the bank's end, after the cap and run limit: what the HUD shows. */
+    readonly bankChangeMs: number;
+  }
   /**
    * Nothing changed. 'no-question': none is on screen. 'stale-question': the
    * answer quotes another question (a double submission). 'run-over': the
@@ -81,7 +91,13 @@ export function startRun({ seed, startLevel }: { readonly seed: number; readonly
     current: null,
     nextVariant: 0,
     discarded: null,
+    endsAtMs: START_BANK_MS,
   };
+}
+
+/** Active time left in the bank at active time `nowMs`. */
+export function bankRemainingMs(run: MentalMathRun, nowMs: number): number {
+  return Math.max(0, run.endsAtMs - nowMs);
 }
 
 function trialEnd(trial: MentalMathTrial): number {
@@ -106,8 +122,8 @@ export function presentQuestion(run: MentalMathRun, shownAtMs: number): MentalMa
   if (!Number.isInteger(shownAtMs) || shownAtMs < 0 || (last !== undefined && shownAtMs < trialEnd(last))) {
     throw new RangeError(`shownAtMs must be an integer at or after the previous trial's end, got ${shownAtMs}`);
   }
-  if (!canPresentAt(shownAtMs)) {
-    throw new RangeError(`The run ends at ${RUN_DURATION_MS} ms of active time; cannot present at ${shownAtMs}`);
+  if (!canPresentAt(shownAtMs, run.endsAtMs)) {
+    throw new RangeError(`The run ends at ${run.endsAtMs} ms of active time; cannot present at ${shownAtMs}`);
   }
   const position = run.trials.length;
   const level = run.staircase.level;
@@ -150,7 +166,7 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
   // An answer at or after the deadline counts as a timeout.
   const recorded = recordedTiming(response, rtMs, current.timeLimitMs);
   // Expiry always wins: a trial may not end after the run (judged on the recorded rtMs).
-  if (!trialEndsWithinRun(current.shownAtMs, recorded.rtMs)) return { accepted: false, run, reason: 'run-over' };
+  if (!trialEndsWithinRun(current.shownAtMs, recorded.rtMs, run.endsAtMs)) return { accepted: false, run, reason: 'run-over' };
   const correct = recorded.response !== null && recorded.response === current.expected;
   const trial: MentalMathTrial = {
     level: current.level,
@@ -165,9 +181,12 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
     rtMs: recorded.rtMs,
     timeLimitMs: current.timeLimitMs,
   };
+  const outcome = recorded.timedOut ? 'timeout' : correct ? 'correct' : 'wrong';
+  const endsAtMs = nextBankEnd(run.endsAtMs, current.shownAtMs + recorded.rtMs, timeBankChange(current.level, outcome, recorded.rtMs));
   return {
     accepted: true,
     trial,
+    bankChangeMs: endsAtMs - run.endsAtMs,
     run: {
       ...run,
       staircase: nextStaircaseState(run.staircase, correct),
@@ -176,6 +195,7 @@ function resolve(run: MentalMathRun, questionId: string, response: number | null
       current: null,
       nextVariant: 0,
       discarded: null,
+      endsAtMs,
     },
   };
 }

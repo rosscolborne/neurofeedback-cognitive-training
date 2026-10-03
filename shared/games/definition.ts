@@ -34,7 +34,8 @@ export interface GameModeDefinition {
   readonly adaptive: boolean;
   /**
    * The fixed run length in active time (pauses excluded), or null for an
-   * untimed mode. Mental Math timed-90: 90_000. Absent means untimed.
+   * untimed mode. Absent means untimed. Mental Math timed-90 gives a typical
+   * run length (90_000) for the catalogue: its time bank decides each run's end.
    */
   readonly runDurationMs?: number | null;
   /** The unlocked start level when there is no valid progress for this mode. */

@@ -15,20 +15,60 @@ export type RunPlan = {
   readonly targetPeak: number;
   /** Response time of each answer (varied slightly per trial). Under 250 ms flags the session. */
   readonly rtMs?: number;
-  /** Stop presenting questions at this much active time (an abandoned run). Default: play the whole 90 s. */
+  /**
+   * Stop presenting questions at this much active time (an abandoned run).
+   * Default: a completed run whose time bank runs out at exactly FIXTURE_RUN_MS.
+   */
   readonly stopAtMs?: number;
 };
 
-/** Plays a run through the reducer and returns it. */
-export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs = mm.RUN_DURATION_MS }: RunPlan): mm.MentalMathRun {
+/**
+ * The active time every completed fixture run lasts. Time-bank runs (NFCT-60)
+ * vary in length; the fixture steers its player so the bank runs out at
+ * exactly this time, which keeps progress totals in tests simple sums.
+ */
+export const FIXTURE_RUN_MS = 90_000;
+
+/**
+ * Plays a run through the reducer and returns it. A completed run is steered,
+ * within the plan (it never climbs past the target peak), so its time bank
+ * runs out at exactly FIXTURE_RUN_MS: quick right answers when the bank runs
+ * low, misses when it would outlast the run, a pause to wait, and a final miss
+ * that empties the bank as it ends. (A peak-1 plan ends earlier.)
+ */
+export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs }: RunPlan): mm.MentalMathRun {
   const peak = Math.max(startLevel, targetPeak);
+  const steer = stopAtMs === undefined;
+  const stop = stopAtMs ?? FIXTURE_RUN_MS;
   let run = mm.startRun({ seed, startLevel });
   let clock = 0;
-  for (let index = 0; clock < stopAtMs && !mm.isTrialCapReached(run); index += 1) {
+  for (let index = 0; clock < Math.min(stop, run.endsAtMs) && !mm.isTrialCapReached(run); index += 1) {
     run = mm.presentQuestion(run, clock);
     const current = run.current!;
-    const answerCorrectly = current.level < peak;
-    const rt = rtMs + (index % 5) * 37;
+    let answerCorrectly = current.level < peak;
+    let rt = rtMs + (index % 5) * 37;
+    if (steer) {
+      const over = run.endsAtMs - FIXTURE_RUN_MS;
+      const left = FIXTURE_RUN_MS - clock;
+      const canGain = current.level < peak || run.staircase.levelStreak < mm.LEVEL_UP_STREAK - 1;
+      if (over >= 0 && over <= mm.WRONG_PENALTY_MS) {
+        if (left >= current.timeLimitMs) {
+          // Wait without moving the bank: pause until 1 s before the end.
+          run = mm.discardQuestion(run);
+          clock = FIXTURE_RUN_MS - 1_000;
+          continue;
+        }
+        // The last trial: a miss ending exactly at the end empties the bank there.
+        answerCorrectly = false;
+        rt = left;
+      } else if (over > mm.WRONG_PENALTY_MS) {
+        answerCorrectly = false; // drain 5 s
+      } else if (run.endsAtMs - clock < 15_000 && canGain) {
+        answerCorrectly = true; // top up the bank
+      }
+      // A plan that keeps the player at level 1 (peak 1) cannot keep the bank
+      // up; its run is still completed, when the bank runs out.
+    }
     const answered = mm.answerQuestion(run, {
       questionId: current.id,
       response: answerCorrectly ? current.expected : current.expected + 1,
@@ -74,7 +114,7 @@ export function mentalMathSession(
   const status = plan.status ?? 'completed';
   const run = playRun(status === 'abandoned' ? { stopAtMs: 30_000, ...plan } : plan);
   const lastEnd = run.trials.reduce((end, trial) => Math.max(end, trial.shownAtMs + trial.rtMs), 0);
-  const activeDurationMs = status === 'completed' ? mm.RUN_DURATION_MS : lastEnd;
+  const activeDurationMs = status === 'completed' ? run.endsAtMs : lastEnd;
   const timezone = plan.timezone ?? 'America/Toronto';
   const scored = mm.score(run.trials, { modeId: mm.MODE_ID, startLevel: plan.startLevel });
   return {

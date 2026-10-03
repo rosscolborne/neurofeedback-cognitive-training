@@ -145,7 +145,7 @@ function harness({ state = pickerState(null), progressError, eegProvider = null,
       advance(FEEDBACK_MS);
     }
     // Long enough for every remaining question to time out, feedback flashes included.
-    advance(mentalMath.RUN_DURATION_MS * 2);
+    advance(mentalMath.MAX_RUN_MS * 2);
   };
   const flush = async () => { await act(async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve(); }); };
   const title = () => root().findAll((node) => node.props.id === 'mm-handoff-title').map((node) => textOf(node))[0] ?? null;
@@ -224,7 +224,7 @@ describe('MentalMathScreen', () => {
   it('plays a full run with the keypad, answers each question once, and saves once as completed', async () => {
     const h = harness();
     h.press('Start at level 1');
-    expect(h.hud('time')).toBe('1:30');
+    expect(h.hud('time')).toBe('0:45'); // the starting time bank
     // Submit needs an answer, and a complete answer never submits itself.
     expect(h.buttons('Submit')[0]!.props['aria-disabled']).toBe('true');
     h.advance(1_000);
@@ -236,6 +236,10 @@ describe('MentalMathScreen', () => {
     // A double tap on Submit resolves the question once.
     const submit = h.buttons('Submit')[0]!;
     act(() => { submit.props.onClick(); submit.props.onClick(); });
+    // Right in 3 s (under two thirds of level 1's 8 s): +2 s, beside the timer and in the spoken feedback.
+    expect(h.hud('bank-change')).toBe('+2s');
+    expect(h.hud('time')).toBe('0:44');
+    expect(textOf(h.root().find((node) => node.props.className === 'mm-feedback'))).toBe('Correct · +2 seconds');
     h.advance(FEEDBACK_MS);
     expect(h.hud('score')).not.toBe('0');
     expect(h.save).not.toHaveBeenCalled();
@@ -244,7 +248,9 @@ describe('MentalMathScreen', () => {
     expect(h.save).toHaveBeenCalledTimes(1);
     const input = h.saves[0]!;
     const session = input.session as MentalMathSessionDraft;
-    expect(session).toMatchObject({ gameId: 'mental-math', modeId: 'timed-90', status: 'completed', startLevel: 1, activeDurationMs: 90_000 });
+    // Completed when the time bank ran out, which the trials alone determine.
+    expect(session).toMatchObject({ gameId: 'mental-math', modeId: 'timed-90', status: 'completed', startLevel: 1 });
+    expect(session.activeDurationMs).toBe(mentalMath.bankEnds(session.trials).final);
     // Six answered questions, plus the timeouts after them; nothing for the question on screen at expiry.
     expect(session.trials.filter((trial) => !trial.timedOut)).toHaveLength(6);
     expect(session.trials[0]!.rtMs).toBe(3_000);
@@ -267,7 +273,7 @@ describe('MentalMathScreen', () => {
     h.advance(60_000);
     expect(h.save).not.toHaveBeenCalled();
     act(() => h.renderer.unmount());
-    h.advance(mentalMath.RUN_DURATION_MS * 2);
+    h.advance(mentalMath.MAX_RUN_MS * 2);
     expect(h.save).not.toHaveBeenCalled();
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(h.clock.pendingTimers).toBe(0);
@@ -309,7 +315,7 @@ describe('MentalMathScreen', () => {
     act(() => h.visibility.set(false));
     // Still paused, still the same run, clock frozen.
     expect(h.buttons('Resume')).toHaveLength(1);
-    expect(h.hud('time')).toBe('1:26');
+    expect(h.hud('time')).toBe('0:41');
     expect(h.save).not.toHaveBeenCalled();
     h.press('Resume');
     expect(h.question()).not.toBeNull();
@@ -461,10 +467,10 @@ describe('MentalMathScreen', () => {
     // Run 2 is still the screen, still running, and nothing more was saved.
     expect(h.title()).toBeNull();
     expect(h.question()).toBe(runTwoQuestion);
-    expect(h.hud('time')).toBe('1:28');
+    expect(h.hud('time')).toBe('0:43');
     expect(h.saves).toHaveLength(1);
     h.advance(1_000);
-    expect(h.hud('time')).toBe('1:27');
+    expect(h.hud('time')).toBe('0:42');
 
     h.playToEnd([]);
     await h.flush();
@@ -478,7 +484,7 @@ describe('MentalMathScreen', () => {
     h.press('Start at level 1');
     h.advance(5_000);
     act(() => h.renderer.unmount());
-    h.advance(mentalMath.RUN_DURATION_MS * 2);
+    h.advance(mentalMath.MAX_RUN_MS * 2);
     expect(h.save).not.toHaveBeenCalled();
     expect(h.clock.pendingTimers).toBe(0);
   });

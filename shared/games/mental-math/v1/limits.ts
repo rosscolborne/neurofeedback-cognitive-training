@@ -1,5 +1,3 @@
-import { RUN_DURATION_MS } from './params';
-
 // Mental Math gameVersion 1: the per-question deadline and run-end rules, as
 // pure, integer-exact predicates. FROZEN. This is the only implementation of
 // each rule: the run reducer, scoring and the plausibility checks all call
@@ -35,14 +33,14 @@ export function recordedTiming(response: number | null, rtMs: number, timeLimitM
 
 /**
  * The run-end rule, judged on the recorded rtMs: a trial must end
- * (shownAtMs + rtMs) at or before the end of the run. A trial may end exactly
- * at `runDurationMs`.
+ * (shownAtMs + rtMs) at or before the end of the run, the time bank's end
+ * when it was shown (timeBank.ts). A trial may end exactly at `runEndsAtMs`.
  */
-export function trialEndsWithinRun(shownAtMs: number, rtMs: number, runDurationMs: number = RUN_DURATION_MS): boolean {
-  return shownAtMs + rtMs <= runDurationMs;
+export function trialEndsWithinRun(shownAtMs: number, rtMs: number, runEndsAtMs: number): boolean {
+  return shownAtMs + rtMs <= runEndsAtMs;
 }
 
 /** Whether a question may be presented at `shownAtMs`: strictly before the end of the run. */
-export function canPresentAt(shownAtMs: number, runDurationMs: number = RUN_DURATION_MS): boolean {
-  return shownAtMs < runDurationMs;
+export function canPresentAt(shownAtMs: number, runEndsAtMs: number): boolean {
+  return shownAtMs < runEndsAtMs;
 }
