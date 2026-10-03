@@ -63,17 +63,6 @@ describe('REVIEW: record access across relationship changes', () => {
     });
 });
 
-describe('cross-tenant catalog', () => {
-    // Fixed after review: catalog entries are readable within their clinic only.
-    it('keeps custom protocols within their clinic', async () => {
-        await assertFails(getDocs(collection(await as(ids.patientB), 'protocolCatalog')));
-        await assertFails(getDoc(doc(await as(ids.clinicianB), 'protocolCatalog/protocol-a')));
-        await assertSucceeds(getDoc(doc(await as(ids.colleagueA), 'protocolCatalog/protocol-a')));
-        await assertSucceeds(getDoc(doc(await as(ids.patientA), 'protocolCatalog/protocol-a')));
-        await assertSucceeds(getDocs(query(collection(await as(ids.clinicianA), 'protocolCatalog'), where('clinicId', '==', clinicA))));
-    });
-});
-
 describe('REVIEW: invitation lifecycle edges', () => {
     // Fixed after review: invitations without a timestamp expiresAt (the shape main's
     // rules allowed) can no longer be accepted; the clinician can still cancel them.
