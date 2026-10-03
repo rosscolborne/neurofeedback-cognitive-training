@@ -618,6 +618,9 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-summary', 'record')).toBe('New personal best (pending)From level 1: best score, most correct answers and highest level.');
       expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlocked (pending)You can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['true', 'true']);
+      // The totals count the run before it is scored, so they are marked too (NFCT-66).
+      const totalsTitle = () => textOf(h.root().findByProps({ id: 'mm-totals-title' }));
+      expect(totalsTitle()).toBe('Mental Math so far Pending');
 
       const { decision, processed } = trustedFor(h);
       if (decision.result.validity !== 'valid') throw new Error('expected a valid result');
@@ -632,6 +635,7 @@ describe('MentalMathScreen', () => {
       expect(h.byData('data-summary', 'unlock')).toBe('Level 2 unlockedYou can now start a run at level 2.');
       expect([pending('record'), pending('unlock')]).toEqual(['false', 'false']);
       expect(h.byData('data-total', 'runs-completed')).toBe('1');
+      expect(totalsTitle()).toBe('Mental Math so far');
       expect(textOf(h.root())).not.toMatch(/EEG|µV|alpha|theta|focus/i);
 
       // The unlocked level is selectable in the picker.

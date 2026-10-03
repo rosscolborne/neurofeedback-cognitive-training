@@ -184,11 +184,15 @@ export class MentalMathRunController {
     this.presentNext();
   }
 
-  /** Ends the run early as 'abandoned'. */
+  /**
+   * Ends the run early as 'abandoned', unless its time has already run out: a
+   * wrong answer can empty the bank, and a Quit during that answer's feedback
+   * then ends a run that is already over, so it ends as 'completed'.
+   */
   quit(): void {
     if (this.phase === 'ready' || this.phase === 'ended' || this.disposed) return;
     this.run = mentalMath.discardQuestion(this.run);
-    this.end('abandoned');
+    this.end(this.stopwatch.elapsed() >= this.run.endsAtMs ? 'completed' : 'abandoned');
   }
 
   /** Stops every timer without ending the run: nothing is reported or kept. */

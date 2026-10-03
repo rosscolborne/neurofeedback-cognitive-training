@@ -55,6 +55,28 @@ describe('MentalMathRunController', () => {
     expect(mentalMath.checkSession({ modeId: mentalMath.MODE_ID, startLevel: 1, peakLevel: 1, status: 'completed', activeDurationMs: outcome.activeDurationMs, seed: SEED, trials: [...outcome.run.trials] }).outcome).toBe('valid');
   });
 
+  it('ends as completed, not abandoned, on a quit after a wrong answer has emptied the bank', () => {
+    const { clock, onEnd, controller } = setup();
+    controller.start();
+    // Five level-1 timeouts use 40 s of the 45 s bank (each with its feedback flash off the clock).
+    clock.advance(5 * LEVEL_1_LIMIT_MS + 5 * FEEDBACK_MS);
+    expect(controller.getSnapshot().remainingMs).toBe(mentalMath.START_BANK_MS - 5 * LEVEL_1_LIMIT_MS);
+    clock.advance(1_000);
+    const question = current(controller);
+    type(controller, answerOf(question.text) + 1);
+    controller.submit(question.id);
+    // The wrong answer costs more than the 4 s left, so the run is over once its feedback ends.
+    expect(controller.getSnapshot().phase).toBe('feedback');
+    expect(controller.getSnapshot().remainingMs).toBe(0);
+    expect(onEnd).not.toHaveBeenCalled();
+
+    controller.quit();
+    const outcome = outcomeOf(onEnd);
+    expect(outcome.status).toBe('completed');
+    expect(outcome.activeDurationMs).toBe(5 * LEVEL_1_LIMIT_MS + 1_000);
+    expect(mentalMath.checkSession({ modeId: mentalMath.MODE_ID, startLevel: 1, peakLevel: 1, status: 'completed', activeDurationMs: outcome.activeDurationMs, seed: SEED, trials: [...outcome.run.trials] }).outcome).toBe('valid');
+  });
+
   it('does not consume active time during the feedback flash', () => {
     const { clock, controller } = setup();
     controller.start();

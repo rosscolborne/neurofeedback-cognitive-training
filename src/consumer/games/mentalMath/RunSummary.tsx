@@ -17,6 +17,7 @@ import {
   type Verification,
 } from './runSummaryModel';
 import type { SessionEnvironment } from './sessionDraft';
+import { ProvisionalTag } from './ProvisionalTag';
 
 // The post-session summary (NFCT-22). It shows this device's provisional
 // preview at once and replaces it with trusted scoring's result when that
@@ -282,7 +283,9 @@ export const RunSummary: React.FC<RunSummaryProps> = ({ outcome, run, environmen
       </section>
 
       <section className="mm-panel mm-panel-compact" aria-labelledby="mm-totals-title">
-        <h2 id="mm-totals-title" className="mm-section-title">Mental Math so far</h2>
+        <h2 id="mm-totals-title" className="mm-section-title">
+          Mental Math so far{provisional && totals !== null && <> <ProvisionalTag /></>}
+        </h2>
         <FactGrid
           minColumnWidth={136}
           facts={[
