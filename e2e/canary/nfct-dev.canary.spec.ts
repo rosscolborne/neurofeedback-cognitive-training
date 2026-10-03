@@ -77,11 +77,11 @@ test('a fresh consumer signs up, onboards, saves a Mental Math run and signs bac
   recordFirebaseRequests(usage, page.context());
 
   try {
-    await test.step('create a fresh account from the signed-out Welcome screen', async () => {
+    await test.step('create a fresh account from the signed-out Welcome screen: the server accepts its profile', async () => {
       await signUpFreshAccountThroughUi(page, account);
     });
 
-    await test.step('Train my brain: the role is saved and the consumer arrives home', async () => {
+    await test.step('skip the optional headset setup: the consumer arrives home', async () => {
       await completeConsumerOnboarding(page);
     });
 
@@ -94,13 +94,13 @@ test('a fresh consumer signs up, onboards, saves a Mental Math run and signs bac
       await startPauseAndQuitMentalMathRun(page);
     });
 
-    await test.step('sign in again with no cache: the profile and role come back from the server', async () => {
+    await test.step('sign in again with no cache: the profile comes back from the server', async () => {
       const context = await browser.newContext({ ...canaryDevice, baseURL: testInfo.project.use.baseURL });
       recordFirebaseRequests(usage, context);
       try {
         const freshPage = await context.newPage();
         await loginThroughUi(freshPage, account);
-        await expectConsumerHome(freshPage, 'Signing in again should return home, not to role selection');
+        await expectConsumerHome(freshPage, 'Signing in again should load the profile and return home');
       } finally {
         await context.close();
       }

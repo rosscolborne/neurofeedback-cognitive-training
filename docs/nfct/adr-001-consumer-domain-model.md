@@ -19,7 +19,7 @@ The consumer model is built new alongside it. The clinical model stays in place,
 
 | Path | Holds | Written by |
 | --- | --- | --- |
-| `users/{uid}` | Profile: display name, preset avatar, preferences, onboarding, EEG consent. No role, and no email (that stays in Auth). | Client, exact key set |
+| `users/{uid}` | Profile: display name, avatar (a preset, or a profile photo stored inline as a bounded image data URL), preferences, onboarding, EEG consent. No role, and no email (that stays in Auth). | Client, exact key set; deleted by its owner |
 | `users/{uid}/gameSessions/{sessionId}` | One finished game session with its raw trials | Client, create only |
 | `users/{uid}/eegRecordings/{recordingId}` | One optional EEG summary, linked to a session | Client, create or delete |
 | `users/{uid}/progress/{gameId}` | Per-game bests, unlocks and totals | Server only |
@@ -140,6 +140,7 @@ Then:
 - **Ledger.** The ledger holds only the uid and timestamps, and a TTL removes it after 30 days.
 - **What is kept.** No game or EEG data is retained. The user can also delete any EEG recording at any time.
 - **Inherited code.** WB-97's tombstoning deletion does not carry over; only its reauthentication UI and error mapping are reused.
+- **Until NFCT-23 lands.** The app deletes the account from the client: it reauthenticates, deletes the profile document (`users/{uid}`, which the rules let only its owner delete), waits for the server to accept that, then deletes the Auth user. A deleted document keeps its subcollections, so game sessions, EEG recordings and the server-owned aggregates remain until the callable above replaces this step.
 - **Trusted scoring stops at the ledger** (NFCT-19). Every transaction that writes a session's `result` or `processing`, or progress, reads `accountDeletions/{uid}` and writes nothing once it exists (decision 12). Because that read is part of the transaction, a processing commit either precedes the ledger write or sees the ledger, so the ledger must be written before the recursive delete (step 1 before step 3, as listed) and no processing commit can recreate data after the delete has listed it.
 
 ### 8. Versioning: four integers, each with one job
@@ -462,7 +463,7 @@ Timestamps are typed structurally (`FirestoreTimestamp`), so the same schemas re
 - Adding a game means a `shared/games/<gameId>/` definition, plus its `gameId` in the rules allowlist and a rules deploy. A `gameId` with no scoring code cannot be processed.
 - Adding or retiring a game version means registering its frozen module in `shared/processing/modules.ts` before widening the rules' `supportedGameVersions()` window, and keeping it registered while any of its sessions may still need processing (decision 12). A session whose version has no module waits in `processing.state = 'unsupported'` until a deploy adds one.
 - Trusted scoring is a Cloud Functions codebase (`functions/`), built by bundling `shared/` into `functions/lib/`. Deploying it needs the Blaze plan and is a manual owner step; Stage 1 deploys nothing.
-- Clinical types, `storageEngine`, and the `clients`/`sessions` paths are not used by the consumer model and must not be extended to represent games (see AGENTS.md).
+- Clinical types, `storageEngine`, and the `clients`/`sessions` paths are not used by the consumer model and must not be extended to represent games (see AGENTS.md). They have since been removed: NeuroGambit and `sessions` with NFCT-47, and roles, `clients/{uid}` and the legacy `users/{uid}` rule branch with Phase 2. The consumer profile is now the only profile.
 - Stage 1 sequence after this ADR:
   - NFCT-17: Mental Math definition;
   - NFCT-18: rules and indexes;

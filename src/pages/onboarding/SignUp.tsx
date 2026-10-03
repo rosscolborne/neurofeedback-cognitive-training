@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { BrandLogo } from '../../components/brand/BrandLogo';
 import { ArrowLeft } from 'lucide-react';
 import { useKeepActionAboveKeyboard } from '../../components/ui/useKeepActionAboveKeyboard';
+import { DISPLAY_NAME_MAX_LENGTH } from '../../consumer/profile/newProfile';
 
 export const SignUp: React.FC = () => {
   const navigate = useNavigate();
@@ -40,7 +41,8 @@ export const SignUp: React.FC = () => {
 
     try {
       await signup(email, password, displayName);
-      navigate('/role-selection');
+      // Headset setup is optional; it offers to skip straight to the app.
+      navigate('/hardware-setup');
     } catch (err: any) {
       setError(getErrorMessage(err));
     } finally {
@@ -103,6 +105,7 @@ export const SignUp: React.FC = () => {
               onChange={e => setDisplayName(e.target.value)}
               placeholder="How should we call you?"
               required
+              maxLength={DISPLAY_NAME_MAX_LENGTH}
               autoComplete="name"
               style={{
                 width: '100%', padding: '16px', borderRadius: 'var(--radius-md)',

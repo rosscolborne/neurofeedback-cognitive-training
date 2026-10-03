@@ -5,7 +5,7 @@ import {
 import { afterAll, beforeEach, describe, it } from 'vitest';
 import { anonymous, as, closeEnvironment, past, seedDocuments } from '../fixture';
 import {
-    acceptedConsentVersion, players, recordedSessionId, recordingData, resetConsumerWorld, seededRecordingId, seededSessionId, sessionData, without,
+    acceptedConsentVersion, players, profileData, recordedSessionId, recordingData, resetConsumerWorld, seededRecordingId, seededSessionId, sessionData, without,
 } from './consumerFixture';
 
 beforeEach(resetConsumerWorld);
@@ -40,13 +40,21 @@ describe('users/{uid}/eegRecordings: create', () => {
     });
 
     it('requires EEG consent on the profile', async () => {
-        // player-b has no consent; legacy-user has no consumer profile; the last user has no profile at all.
+        // player-b has no consent; unversioned-user has no consumer profile; the last user has no profile at all.
         // Playing never needs a profile or consent; recording EEG does.
-        for (const uid of [players.b, players.legacy, players.noProfile]) {
+        for (const uid of [players.b, players.unversioned, players.noProfile]) {
             const database = await as(uid);
             await assertSucceeds(setDoc(doc(database, sessionPath(uid, newSessionId)), sessionData(uid)));
             await assertFails(setDoc(doc(database, recordingPath(uid, newSessionId)), recordingData(uid, newSessionId)));
         }
+    });
+
+    it('stops counting consent once the owner deletes their profile, until it is granted anew', async () => {
+        const database = await as(players.a);
+        await assertSucceeds(deleteDoc(doc(database, `users/${players.a}`)));
+        await assertFails(setDoc(doc(database, recordingPath(players.a, seededSessionId)), recordingData(players.a, seededSessionId)));
+        await assertSucceeds(setDoc(doc(database, `users/${players.a}`), profileData()));
+        await assertFails(setDoc(doc(database, recordingPath(players.a, seededSessionId)), recordingData(players.a, seededSessionId)));
     });
 
     it('counts consent granted in the same batch, and not consent withdrawn in it', async () => {

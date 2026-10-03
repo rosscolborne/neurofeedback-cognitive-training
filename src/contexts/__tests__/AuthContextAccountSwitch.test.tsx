@@ -7,7 +7,7 @@ const firebaseAuth = vi.hoisted(() => ({
   signIn: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
 }));
-const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), setDoc: vi.fn() }));
+const profiles = vi.hoisted(() => ({ getProfile: vi.fn(), createProfile: vi.fn() }));
 // The cache lifecycle has its own tests (firestoreCacheLifecycle.test.ts and
 // AuthContextCache.test.tsx); here it always reports the cache ready.
 const cache = vi.hoisted(() => ({
@@ -21,15 +21,12 @@ const cache = vi.hoisted(() => ({
   getEndingReason: () => null,
 }));
 
-vi.mock('../../services/firebase', () => ({ auth: { currentUser: { uid: 'real-user' } }, db: {}, firestoreCache: cache }));
+vi.mock('../../services/firebase', () => ({ auth: { currentUser: { uid: 'real-user' } }, firestoreCache: cache }));
+vi.mock('../../consumer/repositories', () => ({ profileRepository: profiles }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
   signInWithEmailAndPassword: firebaseAuth.signIn, createUserWithEmailAndPassword: vi.fn(), updateProfile: vi.fn(),
   sendPasswordResetEmail: firebaseAuth.sendPasswordResetEmail,
-}));
-vi.mock('firebase/firestore', () => ({
-  doc: (_db: unknown, collection: string, id: string) => ({ collection, id }),
-  getDoc: firestore.getDoc, setDoc: firestore.setDoc,
 }));
 
 import { AuthProvider, useAuth } from '../AuthContext';
@@ -49,6 +46,9 @@ async function mountProvider(): Promise<ReactTestRenderer> {
   return renderer;
 }
 
+type ProfileRead = { status: 'readable'; id: string; data: { displayName: string }; fromCache: boolean; hasPendingWrites: boolean };
+const profileOf = (displayName: string): ProfileRead => ({ status: 'readable', id: displayName, data: { displayName }, fromCache: false, hasPendingWrites: false });
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -56,7 +56,7 @@ function deferred<T>() {
 }
 
 // Account switches, sign-out and password reset: a late answer for one account
-// never lands on another, and the auth observer owns role hydration.
+// never lands on another, and the auth observer owns profile hydration.
 describe('mounted AuthProvider account transitions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,15 +64,15 @@ describe('mounted AuthProvider account transitions', () => {
     cache.prepareForUser.mockResolvedValue({ status: 'ready' });
     cache.hasUnsyncedWrites.mockResolvedValue(false);
     cache.endSession.mockResolvedValue(undefined);
-    firestore.getDoc.mockResolvedValue({ exists: () => true, data: () => ({ role: 'clinician' }) });
+    profiles.getProfile.mockResolvedValue(profileOf('Signed In'));
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('keeps a late account-A role lookup from overwriting account B', async () => {
-    const accountARole = deferred<{ exists: () => boolean; data: () => { role: string } }>();
-    firestore.getDoc
-      .mockImplementationOnce(() => accountARole.promise)
-      .mockResolvedValueOnce({ exists: () => true, data: () => ({ role: 'patient' }) });
+  it('keeps a late account-A profile lookup from overwriting account B', async () => {
+    const accountAProfile = deferred<ProfileRead>();
+    profiles.getProfile
+      .mockImplementationOnce(() => accountAProfile.promise)
+      .mockResolvedValueOnce(profileOf('Account B'));
     const renderer = await mountProvider();
 
     let accountA!: Promise<void>;
@@ -84,20 +84,20 @@ describe('mounted AuthProvider account transitions', () => {
       await firebaseAuth.callback?.({ uid: 'account-b', email: 'b@example.com' });
     });
     expect(observedAuth.user?.uid).toBe('account-b');
-    expect(observedAuth.role).toBe('patient');
+    expect(observedAuth.profile).toEqual({ displayName: 'Account B' });
 
     await act(async () => {
-      accountARole.resolve({ exists: () => true, data: () => ({ role: 'clinician' }) });
+      accountAProfile.resolve(profileOf('Account A'));
       await accountA;
     });
     expect(observedAuth.user?.uid).toBe('account-b');
-    expect(observedAuth.role).toBe('patient');
+    expect(observedAuth.profile).toEqual({ displayName: 'Account B' });
     renderer.unmount();
   });
 
-  it('keeps a late role lookup from reviving state after sign-out', async () => {
-    const staleRole = deferred<{ exists: () => boolean; data: () => { role: string } }>();
-    firestore.getDoc.mockImplementationOnce(() => staleRole.promise);
+  it('keeps a late profile lookup from reviving state after sign-out', async () => {
+    const staleProfile = deferred<ProfileRead>();
+    profiles.getProfile.mockImplementationOnce(() => staleProfile.promise);
     const renderer = await mountProvider();
 
     let pending!: Promise<void>;
@@ -106,26 +106,26 @@ describe('mounted AuthProvider account transitions', () => {
       await Promise.resolve();
     });
     await act(async () => { await firebaseAuth.callback?.(null); });
-    staleRole.resolve({ exists: () => true, data: () => ({ role: 'clinician' }) });
+    staleProfile.resolve(profileOf('Account A'));
     await act(async () => { await pending; });
 
     expect(observedAuth.user).toBeNull();
-    expect(observedAuth.role).toBeNull();
+    expect(observedAuth.profile).toBeNull();
     renderer.unmount();
   });
 
-  it('lets the auth observer own role hydration after login', async () => {
+  it('lets the auth observer own profile hydration after login', async () => {
     const renderer = await mountProvider();
     await act(async () => { await observedAuth.login('new@example.com', 'password'); });
 
     expect(firebaseAuth.signIn).toHaveBeenCalledOnce();
-    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(profiles.getProfile).not.toHaveBeenCalled();
 
     await act(async () => {
       await firebaseAuth.callback?.({ uid: 'signed-in-user', email: 'new@example.com' });
     });
-    expect(firestore.getDoc).toHaveBeenCalledOnce();
-    expect(observedAuth.role).toBe('clinician');
+    expect(profiles.getProfile).toHaveBeenCalledOnce();
+    expect(observedAuth.profile).toEqual({ displayName: 'Signed In' });
     renderer.unmount();
   });
 
@@ -138,8 +138,8 @@ describe('mounted AuthProvider account transitions', () => {
     expect(firebaseAuth.sendPasswordResetEmail.mock.calls[0][0]).toBe(configuredAuth);
     expect(firebaseAuth.sendPasswordResetEmail.mock.calls[0][1]).toBe('person@example.test');
     expect(firebaseAuth.signIn).not.toHaveBeenCalled();
-    expect(firestore.getDoc).not.toHaveBeenCalled();
-    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(profiles.getProfile).not.toHaveBeenCalled();
+    expect(profiles.createProfile).not.toHaveBeenCalled();
     expect(observedAuth.user).toBeNull();
     renderer.unmount();
   });
@@ -150,7 +150,7 @@ describe('mounted AuthProvider account transitions', () => {
     const renderer = await mountProvider();
     await expect(observedAuth.requestPasswordReset('person@example.test')).rejects.toBe(failure);
     expect(firebaseAuth.signIn).not.toHaveBeenCalled();
-    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(profiles.createProfile).not.toHaveBeenCalled();
     expect(observedAuth.user).toBeNull();
     renderer.unmount();
   });

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import React, { useRef, useState } from 'react';
+import { EmailAuthProvider, reauthenticateWithCredential, type User as AuthUser } from 'firebase/auth';
+import type { UserProfile } from '@nfct/shared';
 import { auth, firestoreCache } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSignOut } from '../account/useSignOut';
-import { ClientProfile } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
@@ -11,7 +11,6 @@ import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors
 import { BrandLogo } from '../brand/BrandLogo';
 import { Home, Compass, Activity, User, Camera, LogOut, Trash2, VolumeX, Volume2, ChevronRight, Headphones } from 'lucide-react';
 import { TrainTab } from './TrainTab';
-import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
@@ -20,6 +19,8 @@ import { useOpenGame } from '../../consumer/games/useOpenGame';
 import { HOME_ALL_RUNS_BUTTON_ID, HOME_PLAY_BUTTON_ID, HomeOverview } from '../../consumer/overview/HomeOverview';
 import { PROGRESS_PLAY_BUTTON_ID, ProgressOverview } from '../../consumer/overview/ProgressOverview';
 import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
+import { profileRepository } from '../../consumer/repositories';
+import { ProfilePhotoError, profilePhotoFromFile } from '../../consumer/profile/profilePhoto';
 import { APP_DISPLAY_NAME } from '../../config/appIdentity';
 
 // NFCT-21, NFCT-12: games open from the Train tab's catalogue until the
@@ -30,21 +31,27 @@ const demoModeEegProvider = createDemoModeEegProvider();
 /** Where focus goes when a closed game's opener is gone: the current tab (NFCT-52). */
 const currentTabButton = () => document.querySelector<HTMLElement>('.patient-bottom-nav [aria-current="page"]');
 
+/** Up to two initials for the profile avatar, from the player's name or else their email. */
+function initialsOf(name: string | null, email: string | null): string {
+  const words = (name ?? '').split(/\s+/).filter(Boolean);
+  if (words.length > 0) return words.slice(0, 2).map((word) => Array.from(word)[0]).join('').toUpperCase();
+  return Array.from(email ?? '')[0]?.toUpperCase() ?? '';
+}
+
 interface PatientShellProps {
-  client: ClientProfile;
-  onUpdateClient: (updated: ClientProfile) => Promise<void>;
-  /** Update local UI for data already persisted by an atomic repository operation. */
-  onClientPersistedElsewhere: (updated: ClientProfile) => void;
+  /** The signed-in player. Their email comes from Firebase Auth, not the profile. */
+  user: AuthUser;
+  profile: UserProfile;
   /** Opens headset pairing and the fit check. */
   onSetUpHeadset?: () => void;
 }
 
 export const PatientShell: React.FC<PatientShellProps> = ({
-  client,
-  onUpdateClient,
-  onClientPersistedElsewhere,
+  user,
+  profile,
   onSetUpHeadset,
 }) => {
+  const playerId = user.uid;
   const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'profile'>('home');
   // Home's "See all achievements" opens Progress at its achievements (NFCT-13). The request lasts
   // only for the Progress visit it opened: leaving Progress drops it (see below, after activeTab).
@@ -55,8 +62,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   // focus to the control that opened it (NFCT-52).
   const [openGame, setOpenGame, closeGame] = useOpenGame(currentTabButton);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
+  const photoInput = useRef<HTMLInputElement>(null);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
+  // A processed photo whose save failed, kept so Retry sends the same photo.
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
@@ -70,9 +79,45 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   }
   // Sign-out clears this device's Firestore cache and reloads the app; it asks
   // first if some activity has not uploaded yet (AuthContext.logout).
-  const { logout } = useAuth();
+  const { logout, updateProfile } = useAuth();
   const signOutFlow = useSignOut(logout);
   const handleLogout = signOutFlow.requestSignOut;
+
+  const saveProfilePhoto = async (dataUrl: string) => {
+    setIsSavingProfile(true);
+    setProfileSaveError(null);
+    try {
+      // The photo belongs to this shell's player; never save it to another signed-in account.
+      if (auth.currentUser?.uid !== playerId) throw new Error('The signed-in account changed.');
+      await updateProfile({ avatar: { kind: 'photo', dataUrl } });
+      setPendingPhoto(null);
+    } catch (error) {
+      console.warn('Could not save the profile photo:', error);
+      setPendingPhoto(dataUrl);
+      setProfileSaveError('The profile photo couldn’t be saved. Check your connection, then retry.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handlePhotoChosen = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Choosing the same file again must still fire a change.
+    event.target.value = '';
+    if (!file || isSavingProfile) return;
+    let dataUrl: string;
+    setIsSavingProfile(true);
+    setProfileSaveError(null);
+    setPendingPhoto(null);
+    try {
+      dataUrl = await profilePhotoFromFile(file);
+    } catch (error) {
+      setProfileSaveError(error instanceof ProfilePhotoError ? error.message : 'This photo couldn’t be used. Choose a different photo.');
+      setIsSavingProfile(false);
+      return;
+    }
+    await saveProfilePhoto(dataUrl);
+  };
 
   const handleDeleteAccount = async () => {
     if (isDeletingAccount || !deletePassword) return;
@@ -80,21 +125,26 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     // and drop it from state so teardown never re-renders it.
     const password = deletePassword;
     setDeletePassword('');
-    const user = auth.currentUser;
-    if (!user?.email || user.uid !== client.id) {
+    const signedIn = auth.currentUser;
+    if (!signedIn?.email || signedIn.uid !== playerId) {
       setAccountDeletionError('Your signed-in account changed. Restart account deletion.');
       return;
     }
+    const ensureSameAccount = () => {
+      if (auth.currentUser !== signedIn) throw new Error('Your signed-in account changed. Restart account deletion.');
+    };
     setIsDeletingAccount(true);
     setAccountDeletionError(null);
-    // Publishing the deactivated profile mid-teardown would swap in the resume
-    // screen just before the redirect, so it is only published if deletion fails.
-    const deactivation: { client?: ClientProfile } = {};
     try {
-      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
-      if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
-      await storageEngine.preparePatientAccountDeletion(user.uid, (deactivated) => { deactivation.client = deactivated; });
-      if (auth.currentUser !== user || auth.currentUser.uid !== client.id) throw new Error('Your signed-in account changed. Restart account deletion.');
+      await reauthenticateWithCredential(signedIn, EmailAuthProvider.credential(signedIn.email, password));
+      ensureSameAccount();
+      // The profile goes first, and the Auth account only once the server has
+      // accepted that; offline the profile deletion fails rather than waiting
+      // (see deleteProfile). If the Auth deletion then fails, trying again
+      // repeats both steps. Game sessions, EEG recordings and the server-owned
+      // aggregates under users/{uid} stay until server-driven deletion (NFCT-23).
+      await profileRepository.deleteProfile().acknowledged;
+      ensureSameAccount();
       // Deleting the Auth account runs inside the cache cleanup, so its
       // sign-out is not mistaken for an account change. Once it succeeds the
       // deleted account's cached data and queued writes are removed from this
@@ -104,11 +154,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         signOut: false,
         destination: '/welcome',
         before: async () => {
-          await user.delete();
+          await signedIn.delete();
         },
       });
     } catch (err) {
-      if (deactivation.client) onClientPersistedElsewhere(deactivation.client);
       setAccountDeletionError(getAccountDeletionErrorMessage(err));
       // Only failure leaves the pending state; success keeps it until the redirect lands.
       setIsDeletingAccount(false);
@@ -135,11 +184,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       className="account-deletion-confirmation"
       onSubmit={(event) => { event.preventDefault(); void handleDeleteAccount(); }}
     >
-      {!client.accountDeletionStartedAt && (
-        <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-          Are you sure you want to delete your account? This action cannot be undone.
-        </p>
-      )}
+      <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
+        Are you sure you want to delete your account? This action cannot be undone.
+      </p>
       <label className="account-deletion-label" htmlFor="account-deletion-password">
         Enter your password to confirm account deletion
         <input
@@ -172,19 +219,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setIsMuted(newState);
   };
 
-  if (openGame && openGame.ownerId === client.id) {
+  if (openGame && openGame.ownerId === playerId) {
     return <GameScreen gameId={openGame.gameId} initialView={openGame.initialView} eegProvider={demoModeEegProvider} onExit={closeGame} />;
-  }
-
-  if (client.accountDeletionStartedAt) {
-    return <div className="account-deletion-recovery" role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
-      <h1>Finish deleting your account</h1>
-      <p>Account deletion has started. Confirm your password to finish deleting your sign-in.</p>
-      <button className="btn btn-secondary account-deletion-trigger account-deletion-finish" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
-      {deletionPasswordForm}
-      <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={signOutFlow.busy}>{signOutFlow.busy ? 'Signing out…' : 'Log Out'}</button>
-      {signOutFlow.dialog}
-    </div>;
   }
 
   return (
@@ -230,13 +266,13 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <main style={{ flex: 1, padding: '20px' }}>
         {activeTab === 'home' && (
           <HomeScreen
-            client={client}
+            displayName={profile.displayName}
             gamesSection={(
               <HomeOverview
-                playerId={client.id}
-                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, returnFocusTo: HOME_PLAY_BUTTON_ID })}
+                playerId={playerId}
+                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: playerId, returnFocusTo: HOME_PLAY_BUTTON_ID })}
                 onOpenAchievements={() => { setProgressFocus('achievements'); setActiveTab('progress'); }}
-                onOpenGameProgress={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: HOME_ALL_RUNS_BUTTON_ID })}
+                onOpenGameProgress={() => setOpenGame({ gameId: 'mental-math', ownerId: playerId, initialView: 'progress', returnFocusTo: HOME_ALL_RUNS_BUTTON_ID })}
               />
             )}
           />
@@ -244,7 +280,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'sessions' && (
           <TrainTab
-            onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: client.id, returnFocusTo: gameCardButtonId(gameId) })}
+            onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: playerId, returnFocusTo: gameCardButtonId(gameId) })}
           />
         )}
 
@@ -252,11 +288,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           <ProgressHistory
             gamesSection={(
               <ProgressOverview
-                playerId={client.id}
-                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, returnFocusTo: PROGRESS_PLAY_BUTTON_ID })}
+                playerId={playerId}
+                onPlay={() => setOpenGame({ gameId: 'mental-math', ownerId: playerId, returnFocusTo: PROGRESS_PLAY_BUTTON_ID })}
                 focusSection={progressFocus}
                 onSectionFocused={() => setProgressFocus(null)}
-                games={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: client.id, initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
+                games={<MentalMathProgressCard onOpen={() => setOpenGame({ gameId: 'mental-math', ownerId: playerId, initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
               />
             )}
           />
@@ -267,47 +303,29 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             {/* Profile Info Card */}
             <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                {/* Avatar with upload overlay */}
-                <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.accept = 'image/*';
-                  input.onchange = (e) => {
-                    const file = (e.target as HTMLInputElement).files?.[0];
-                    if (file) {
-                      if (file.size > 2 * 1024 * 1024) {
-                        alert('Image must be under 2MB');
-                        return;
-                      }
-                      const reader = new FileReader();
-                      reader.onloadend = async () => {
-                        const base64 = reader.result as string;
-                        const updated = { ...client, avatarUrl: base64 };
-                        setIsSavingProfile(true);
-                        setProfileSaveError(null);
-                        try {
-                          await onUpdateClient(updated);
-                          setPendingAvatarUrl(null);
-                        } catch (error) {
-                          setPendingAvatarUrl(base64);
-                          setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
-                        } finally {
-                          setIsSavingProfile(false);
-                        }
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  };
-                  input.click();
-                }} role="button" aria-label="Upload profile photo" aria-disabled={isSavingProfile}>
-                  {client.avatarUrl && (client.avatarUrl.startsWith('data:') || client.avatarUrl.startsWith('blob:')) ? (
+                <input
+                  ref={photoInput}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  data-testid="profile-photo-input"
+                  onChange={(event) => { void handlePhotoChosen(event); }}
+                />
+                <button
+                  type="button"
+                  aria-label={profile.avatar?.kind === 'photo' ? 'Change profile photo' : 'Upload profile photo'}
+                  disabled={isSavingProfile}
+                  onClick={() => photoInput.current?.click()}
+                  style={{ position: 'relative', flexShrink: 0, padding: 0, border: 'none', background: 'none', borderRadius: '50%', cursor: isSavingProfile ? 'progress' : 'pointer' }}
+                >
+                  {profile.avatar?.kind === 'photo' ? (
                     <img
-                      src={client.avatarUrl}
-                      alt={client.name}
-                      style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
+                      src={profile.avatar.dataUrl}
+                      alt=""
+                      style={{ display: 'block', width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
                     />
                   ) : (
-                    <div
+                    <span
                       style={{
                         width: '56px',
                         height: '56px',
@@ -321,10 +339,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                         fontWeight: 700,
                       }}
                     >
-                      {client.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                    </div>
+                      {initialsOf(profile.displayName, user.email)}
+                    </span>
                   )}
-                  <div
+                  <span
+                    aria-hidden="true"
                     style={{
                       position: 'absolute',
                       bottom: -2,
@@ -341,36 +360,26 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                     }}
                   >
                     <Camera size={11} />
-                  </div>
-                </div>
-                <div>
-                  <h2 style={{ fontSize: '18px', fontWeight: 600 }}>{client.name}</h2>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{client.email}</div>
+                  </span>
+                </button>
+                <div style={{ minWidth: 0 }}>
+                  {profile.displayName && <h2 style={{ fontSize: '18px', fontWeight: 600, overflowWrap: 'anywhere' }}>{profile.displayName}</h2>}
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{user.email}</div>
                 </div>
               </div>
-
+              {isSavingProfile && <div role="status" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Saving your photo…</div>}
               {profileSaveError && (
                 <div role="alert" style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '12px' }}>
                   {profileSaveError}
-                  <button
-                    type="button"
-                    disabled={isSavingProfile || !pendingAvatarUrl}
-                    onClick={async () => {
-                      if (!pendingAvatarUrl) return;
-                      setIsSavingProfile(true);
-                      setProfileSaveError(null);
-                      try {
-                        await onUpdateClient({ ...client, avatarUrl: pendingAvatarUrl });
-                        setPendingAvatarUrl(null);
-                      } catch (error) {
-                        setProfileSaveError(error instanceof Error ? error.message : 'The profile photo could not be saved.');
-                      } finally {
-                        setIsSavingProfile(false);
-                      }
-                    }}
-                    className="btn btn-ghost"
-                    style={{ marginLeft: '8px' }}
-                  >Retry</button>
+                  {pendingPhoto && (
+                    <button
+                      type="button"
+                      disabled={isSavingProfile}
+                      onClick={() => { void saveProfilePhoto(pendingPhoto); }}
+                      className="btn btn-ghost"
+                      style={{ marginLeft: '8px' }}
+                    >Retry</button>
+                  )}
                 </div>
               )}
             </div>

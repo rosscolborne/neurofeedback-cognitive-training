@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { readGameSessions, readPlayerStats, seedPatient } from './helpers/localEmulator';
+import { arriveAtHome, loginThroughUi } from './helpers/auth';
+import { readGameSessions, readPlayerStats, seedPlayer } from './helpers/localEmulator';
 import { answer, runOut, startRun } from './helpers/mentalMath';
 
 // NFCT-13 part 2: Home and Progress around streaks, the week and
@@ -47,10 +47,10 @@ async function awayFromMidnight(page: Page): Promise<string> {
 test('a first run from Home shows a one-day streak, this week and the first achievement on Home and Progress', async ({ page }) => {
   test.setTimeout(150_000);
   await page.clock.install();
-  const fixture = await seedPatient();
-  const uid = fixture.patient.uid;
-  await loginThroughUi(page, fixture.patient);
-  await arriveAtPatientDashboard(page);
+  const fixture = await seedPlayer();
+  const uid = fixture.player.uid;
+  await loginThroughUi(page, fixture.player);
+  await arriveAtHome(page);
 
   // A new player: Home invites a first run instead of showing zeros.
   await expect(overview(page, 'hero-text')).toHaveText(
@@ -123,7 +123,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
 
   // It survives a reload.
   await page.reload();
-  await arriveAtPatientDashboard(page);
+  await arriveAtHome(page);
   await expect(overview(page, 'streak')).toHaveText('1');
   await expect(achievementRow(page, 'first-run')).toHaveAttribute('data-earned', 'true');
 });

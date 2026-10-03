@@ -178,11 +178,9 @@ Choose from these by risk; not every item applies to every change.
   validation; navigation, deep links and the back button.
 - **State**: empty states; state after navigating away and back, reloading,
   and signing out and in; stale state across two tabs or an account switch.
-- **Roles and access**: signed-out access to signed-in routes; a second
-  account never seeing or changing the first's data; views that differ by
-  role, including the inherited patient and clinician views while they exist
-  and assigned versus unassigned content; permission-denied errors in the
-  console.
+- **Accounts and access**: signed-out access to signed-in routes; a second
+  account never seeing or changing the first's data; permission-denied errors
+  in the console.
 - **Hand-offs between features**: data one feature writes and another reads,
   such as a saved session, its trusted result and the user's progress.
 - **Failure and repetition**: error states you can reproduce safely, such as

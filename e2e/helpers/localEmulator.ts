@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 
 const projectId = 'demo-neurasticity-protocol-e2e';
 if (process.env.GCLOUD_PROJECT !== projectId ||
@@ -14,40 +14,37 @@ const adminApp = initializeApp({ projectId }, `local-e2e-${randomUUID()}`);
 const adminAuth = getAuth(adminApp);
 const adminDb = getFirestore(adminApp);
 
-export type LocalPatientFixture = {
-  patient: { uid: string; email: string; password: string };
+export type LocalPlayerFixture = {
+  player: { uid: string; email: string; password: string };
   name: string;
 };
 
 /**
- * A patient on the current pre-Phase-2 account model: an Auth account, a
- * users/{uid} role and a clients/{uid} profile with no clinician relationship.
+ * A consumer profile (users/{uid}) as the app creates it, in the shared schema
+ * (shared/schemas/profile.ts), with server-clock timestamps.
  */
-export async function seedPatient(extra: Record<string, unknown> = {}): Promise<LocalPatientFixture> {
-  const id = randomUUID().slice(0, 12);
-  const patient = { uid: `patient-${id}`, email: `patient-${id}@example.test`, password: 'LocalEmulator!123' };
-  const name = `Protocol Patient ${id}`;
-  await adminAuth.createUser({ ...patient, displayName: name });
-  await Promise.all([
-    adminDb.doc(`users/${patient.uid}`).set({ role: 'patient' }),
-    adminDb.doc(`clients/${patient.uid}`).set({
-      id: patient.uid, name, email: patient.email, status: 'active',
-      brainMaps: [], isDemo: false, ...extra,
-    }),
-  ]);
-  return { patient, name };
+function consumerProfile(displayName: string) {
+  const now = FieldValue.serverTimestamp();
+  return {
+    schemaVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+    displayName,
+    avatar: null,
+    preferences: { timezone: 'America/Toronto', soundEnabled: true, hapticsEnabled: true, weeklyGoal: null },
+    onboarding: { version: 1, completedAt: null },
+    eeg: { enabled: false, consent: null, preferredDevice: null },
+  };
 }
 
-/**
- * An account that chose the retired practitioner role. The app shows it an
- * unsupported-account screen until Phase 2 removes the role.
- */
-export async function seedPractitionerAccount(): Promise<{ uid: string; email: string; password: string }> {
+/** A player who has signed up before: an Auth account and their consumer profile. */
+export async function seedPlayer(): Promise<LocalPlayerFixture> {
   const id = randomUUID().slice(0, 12);
-  const account = { uid: `practitioner-${id}`, email: `practitioner-${id}@example.test`, password: 'LocalEmulator!123' };
-  await adminAuth.createUser({ ...account, displayName: 'Local Practitioner' });
-  await adminDb.doc(`users/${account.uid}`).set({ role: 'clinician' });
-  return account;
+  const player = { uid: `player-${id}`, email: `player-${id}@example.test`, password: 'LocalEmulator!123' };
+  const name = `Local Player ${id}`;
+  await adminAuth.createUser({ ...player, displayName: name });
+  await adminDb.doc(`users/${player.uid}`).set(consumerProfile(name));
+  return { player, name };
 }
 
 /** A consumer player: an Auth account only. The app creates its profile (users/{uid}) itself. */
@@ -58,13 +55,13 @@ export async function seedConsumerAccount(): Promise<{ uid: string; email: strin
   return account;
 }
 
-/** The deleted and re-registered accounts' profiles, and whether the deleted Auth account still exists. */
-export async function readDeletionRecords(oldUid: string, newUid: string) {
-  const [oldClient, newClient, oldAuth] = await Promise.all([
-    adminDb.doc(`clients/${oldUid}`).get(), adminDb.doc(`clients/${newUid}`).get(),
-    adminAuth.getUser(oldUid).then(() => true, () => false),
+/** A player's profile document (users/{uid}), if it exists, and whether their Auth account still exists. */
+export async function readAccountRecords(uid: string): Promise<{ profile: Record<string, unknown> | undefined; authExists: boolean }> {
+  const [profile, authExists] = await Promise.all([
+    adminDb.doc(`users/${uid}`).get(),
+    adminAuth.getUser(uid).then(() => true, () => false),
   ]);
-  return { oldClient: oldClient.data(), newClient: newClient.data(), oldAuthExists: oldAuth };
+  return { profile: profile.data(), authExists };
 }
 
 /** NFCT-21: the consumer game sessions the app wrote for a user, read back from the emulator. */

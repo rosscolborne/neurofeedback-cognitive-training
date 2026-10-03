@@ -36,31 +36,34 @@ class MemoryAuth implements CanaryAuth {
 }
 
 const candidate = (overrides: Partial<CanaryCandidate>): CanaryCandidate => ({
-  uid: `u-${randomUUID()}`, authEmail: smokeEmail(), profileEmail: undefined, createdAtMs: 0, ...overrides,
+  uid: `u-${randomUUID()}`, authEmail: smokeEmail(), named: false, createdAtMs: 0, ...overrides,
 });
 
 describe('planCanaryCleanup', () => {
   const nowMs = 10 * HOUR;
   const olderThanMs = 2 * HOUR;
 
-  it('removes old canary accounts and orphaned canary profiles, and keeps recent ones', () => {
+  it('removes old canary accounts and the named leftovers of deleted ones, and keeps recent ones', () => {
     const old = candidate({ createdAtMs: nowMs - 3 * HOUR });
-    const orphan = candidate({ authEmail: undefined, profileEmail: smokeEmail(), createdAtMs: nowMs - 5 * HOUR });
+    const deleted = candidate({ authEmail: undefined, named: true, createdAtMs: nowMs - 5 * HOUR });
     const recent = candidate({ createdAtMs: nowMs - HOUR });
-    expect(planCanaryCleanup([old, orphan, recent], { nowMs, olderThanMs })).toEqual({ remove: [old, orphan], tooRecent: [recent], refused: [] });
+    const recentNamed = candidate({ authEmail: undefined, named: true, createdAtMs: nowMs - HOUR });
+    expect(planCanaryCleanup([old, deleted, recent, recentNamed], { nowMs, olderThanMs }))
+      .toEqual({ remove: [old, deleted], tooRecent: [recent, recentNamed], refused: [] });
   });
 
-  it('refuses anything that is not unambiguously a canary account', () => {
+  it('refuses anything that is not unambiguously canary data', () => {
     const plan = planCanaryCleanup([
-      candidate({ uid: 'real-user', authEmail: 'person@example.com', profileEmail: smokeEmail() }),
+      candidate({ uid: 'real-user', authEmail: 'person@example.com' }),
+      candidate({ uid: 'named-real-user', authEmail: 'person@example.com', named: true }),
       candidate({ uid: 'no-email', authEmail: null }),
-      candidate({ uid: 'forged-profile', authEmail: undefined, profileEmail: 'nfct-smoke+evil@example.test' }),
       candidate({ uid: 'lookalike', authEmail: 'nfct-smoke+1-1-abcdefghij@example.test.evil.com' }),
-      candidate({ uid: 'nothing', authEmail: undefined, profileEmail: undefined }),
+      candidate({ uid: 'unnamed', authEmail: undefined }),
+      candidate({ uid: 'nothing-left', authEmail: undefined, named: true, createdAtMs: Number.NaN }),
       candidate({ uid: 'no-time', createdAtMs: Number.NaN }),
     ], { nowMs, olderThanMs });
     expect(plan.remove).toEqual([]);
-    expect(plan.refused.map(({ uid }) => uid)).toEqual(['real-user', 'no-email', 'forged-profile', 'lookalike', 'nothing', 'no-time']);
+    expect(plan.refused.map(({ uid }) => uid)).toEqual(['real-user', 'named-real-user', 'no-email', 'lookalike', 'unnamed', 'nothing-left', 'no-time']);
   });
 });
 
@@ -71,37 +74,39 @@ describe('cleanup-canary-accounts', () => {
   async function seed(auth: MemoryAuth, nowMs: number) {
     const id = randomUUID();
     const canary = { uid: `canary-${id}`, email: smokeEmail() };
-    const orphan = { uid: `orphan-${id}`, email: smokeEmail() };
+    // A canary account its own cleanup deleted: only its game sessions remain, with nothing naming the canary.
+    const deleted = { uid: `deleted-${id}` };
     const recent = { uid: `recent-${id}`, email: smokeEmail() };
     const person = { uid: `person-${id}`, email: `person-${id}@example.com` };
-    const forged = { uid: `forged-${id}`, email: `real-${id}@example.com` };
+    // A deleted real account's leftovers that nobody named.
+    const unnamed = { uid: `unnamed-${id}` };
     auth.add(canary.uid, canary.email, nowMs - 3 * HOUR);
     auth.add(recent.uid, recent.email, nowMs - 10 * 60_000);
     auth.add(person.uid, person.email, nowMs - 30 * 24 * HOUR);
-    auth.add(forged.uid, forged.email, nowMs - 30 * 24 * HOUR);
     await Promise.all([
-      db.doc(`users/${canary.uid}`).set({ email: canary.email, role: 'patient' }),
+      db.doc(`users/${canary.uid}`).set({ schemaVersion: 1, displayName: 'Canary' }),
       db.doc(`users/${canary.uid}/gameSessions/s1`).set({ gameId: 'mental-math' }),
-      db.doc(`clients/${canary.uid}`).set({ id: canary.uid }),
-      db.doc(`users/${orphan.uid}`).set({ email: orphan.email, role: null }),
-      db.doc(`users/${recent.uid}`).set({ email: recent.email, role: 'patient' }),
-      db.doc(`users/${person.uid}`).set({ email: person.email, role: 'patient' }),
-      // A real user who wrote a canary-looking email into their own profile.
-      db.doc(`users/${forged.uid}`).set({ email: smokeEmail(), role: 'patient' }),
+      db.doc(`users/${deleted.uid}/gameSessions/s1`).set({ gameId: 'mental-math' }),
+      db.doc(`users/${deleted.uid}/progress/mental-math`).set({ gameId: 'mental-math' }),
+      db.doc(`users/${recent.uid}`).set({ schemaVersion: 1, displayName: 'Recent' }),
+      db.doc(`users/${person.uid}`).set({ schemaVersion: 1, displayName: 'Person' }),
+      db.doc(`users/${unnamed.uid}/gameSessions/s1`).set({ gameId: 'mental-math' }),
     ]);
-    return { canary, orphan, recent, person, forged };
+    return { canary, deleted, recent, person, unnamed };
   }
 
   const exists = async (path: string) => (await db.doc(path).get()).exists;
 
   it('is a dry run by default and never reaches a real project without --live', async () => {
     const auth = new MemoryAuth();
-    const nowMs = Date.now() + 3 * HOUR; // the orphan's profile is created now, by the emulator's clock
-    const { canary } = await seed(auth, nowMs);
-    const report = await runCanaryCleanup(['--project', CORE_PROJECT], env, out, { db, auth, nowMs });
+    const nowMs = Date.now() + 3 * HOUR; // the leftovers are created now, by the emulator's clock
+    const { canary, deleted } = await seed(auth, nowMs);
+    const report = await runCanaryCleanup(['--project', CORE_PROJECT, '--uid', deleted.uid], env, out, { db, auth, nowMs });
     expect(report.dryRun).toBe(true);
     expect(report.deleted).toEqual([]);
+    expect(report.remove.map(({ uid }) => uid)).toEqual(expect.arrayContaining([canary.uid, deleted.uid]));
     expect(await exists(`users/${canary.uid}`)).toBe(true);
+    expect(await exists(`users/${deleted.uid}/gameSessions/s1`)).toBe(true);
     expect(auth.users.has(canary.uid)).toBe(true);
 
     await expect(runCanaryCleanup(['--project', 'nfct-dev'], {}, out)).rejects.toThrow(/without --live/);
@@ -111,32 +116,43 @@ describe('cleanup-canary-accounts', () => {
     await expect(runCanaryCleanup(['--project', CORE_PROJECT, '--older-than-minutes', '5'], env, out, { db, auth })).rejects.toThrow(/older-than-minutes/);
   });
 
-  it('with --delete removes only old canary accounts and their data', async () => {
+  it('refuses a --uid that is not a single UID path segment', async () => {
+    for (const uid of ['../clients/x', 'a/b', '', '.']) {
+      await expect(runCanaryCleanup(['--project', CORE_PROJECT, '--uid', uid], env, out, { db, auth: new MemoryAuth() })).rejects.toThrow(/--uid must be a Firebase Auth UID/);
+    }
+  });
+
+  it('with --delete removes old canary accounts and the named leftovers, and nothing else', async () => {
     const auth = new MemoryAuth();
     const nowMs = Date.now() + 3 * HOUR;
-    const { canary, orphan, recent, person, forged } = await seed(auth, nowMs);
-    const report = await runCanaryCleanup(['--project', CORE_PROJECT, '--delete', '--max', '500'], env, out, { db, auth, nowMs });
+    const { canary, deleted, recent, person, unnamed } = await seed(auth, nowMs);
+    const report = await runCanaryCleanup(
+      ['--project', CORE_PROJECT, '--delete', '--max', '500', '--uid', deleted.uid, '--uid', person.uid],
+      env, out, { db, auth, nowMs },
+    );
 
-    expect(report.deleted).toEqual(expect.arrayContaining([canary.uid, orphan.uid]));
+    expect(report.deleted).toEqual(expect.arrayContaining([canary.uid, deleted.uid]));
     expect(report.deleted).not.toEqual(expect.arrayContaining([recent.uid]));
-    expect(report.refused).toEqual(expect.arrayContaining([{ uid: forged.uid, reason: 'its Auth account is not a canary account' }]));
-    for (const path of [`users/${canary.uid}`, `users/${canary.uid}/gameSessions/s1`, `clients/${canary.uid}`, `users/${orphan.uid}`]) {
+    // Naming a real account does not make it a canary account.
+    expect(report.refused).toEqual(expect.arrayContaining([{ uid: person.uid, reason: 'its Auth account is not a canary account' }]));
+    for (const path of [`users/${canary.uid}`, `users/${canary.uid}/gameSessions/s1`, `users/${deleted.uid}/gameSessions/s1`, `users/${deleted.uid}/progress/mental-math`]) {
       expect(await exists(path), path).toBe(false);
     }
     expect(auth.users.has(canary.uid)).toBe(false);
-    for (const uid of [recent.uid, person.uid, forged.uid]) expect(await exists(`users/${uid}`), uid).toBe(true);
-    expect([recent.uid, person.uid, forged.uid].every((uid) => auth.users.has(uid))).toBe(true);
+    for (const uid of [recent.uid, person.uid]) expect(await exists(`users/${uid}`), uid).toBe(true);
+    expect(await exists(`users/${unnamed.uid}/gameSessions/s1`)).toBe(true);
+    expect([recent.uid, person.uid].every((uid) => auth.users.has(uid))).toBe(true);
     // Accounts that are not canary accounts are never printed.
     expect(lines.join('\n')).not.toContain(person.email);
-    expect(lines.join('\n')).not.toContain(forged.email);
   });
 
   it('aborts before deleting anything when the plan is larger than --max', async () => {
     const auth = new MemoryAuth();
     const nowMs = Date.now() + 3 * HOUR;
-    const { canary } = await seed(auth, nowMs);
-    await expect(runCanaryCleanup(['--project', CORE_PROJECT, '--delete', '--max', '1'], env, out, { db, auth, nowMs })).rejects.toThrow(/more than --max 1/);
+    const { canary, deleted } = await seed(auth, nowMs);
+    await expect(runCanaryCleanup(['--project', CORE_PROJECT, '--delete', '--max', '1', '--uid', deleted.uid], env, out, { db, auth, nowMs })).rejects.toThrow(/more than --max 1/);
     expect(await exists(`users/${canary.uid}`)).toBe(true);
+    expect(await exists(`users/${deleted.uid}/gameSessions/s1`)).toBe(true);
     expect(auth.users.has(canary.uid)).toBe(true);
   });
 

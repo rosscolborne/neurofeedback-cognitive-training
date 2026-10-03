@@ -9,9 +9,9 @@ import type { CachePreparation } from '../../services/firestoreCacheLifecycle';
 const firebaseAuth = vi.hoisted(() => ({
   callback: null as null | ((user: unknown) => Promise<void>),
   createUser: vi.fn(),
-  currentUser: null as null | { uid: string },
+  currentUser: null as null | { uid: string; email?: string; reload?: () => Promise<void> },
 }));
-const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), setDoc: vi.fn() }));
+const profiles = vi.hoisted(() => ({ getProfile: vi.fn(), createProfile: vi.fn() }));
 const cache = vi.hoisted(() => ({
   prepareForUser: vi.fn(),
   isEnding: vi.fn(() => false),
@@ -25,20 +25,15 @@ const cache = vi.hoisted(() => ({
 
 vi.mock('../../services/firebase', () => ({
   auth: { get currentUser() { return firebaseAuth.currentUser; } },
-  db: {},
   firestoreCache: cache,
 }));
+vi.mock('../../consumer/repositories', () => ({ profileRepository: profiles }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, callback: (user: unknown) => Promise<void>) => { firebaseAuth.callback = callback; return vi.fn(); },
   signInWithEmailAndPassword: vi.fn(),
   createUserWithEmailAndPassword: firebaseAuth.createUser,
-  updateProfile: vi.fn(),
+  updateProfile: vi.fn(async () => {}),
   sendPasswordResetEmail: vi.fn(),
-}));
-vi.mock('firebase/firestore', () => ({
-  doc: (_db: unknown, collection: string, id: string) => ({ collection, id }),
-  getDoc: firestore.getDoc,
-  setDoc: firestore.setDoc,
 }));
 
 import { AuthProvider, useAuth } from '../AuthContext';
@@ -68,8 +63,9 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firebaseAuth.currentUser = null;
-    firestore.getDoc.mockResolvedValue({ exists: () => true, data: () => ({ role: 'patient' }) });
-    firestore.setDoc.mockResolvedValue(undefined);
+    profiles.getProfile.mockReset();
+    profiles.getProfile.mockResolvedValue({ status: 'readable', id: 'bob', data: { displayName: 'Bob' }, fromCache: false, hasPendingWrites: false });
+    profiles.createProfile.mockReturnValue({ acknowledged: Promise.resolve() });
     cache.prepareForUser.mockResolvedValue(ready);
     cache.isEnding.mockReturnValue(false);
     cache.hasUnsyncedWrites.mockResolvedValue(false);
@@ -77,7 +73,7 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('publishes a signed-in account, and reads its role, only once the cache is ready for it', async () => {
+  it('publishes a signed-in account, and reads its profile, only once the cache is ready for it', async () => {
     const preparation = deferred<CachePreparation>();
     cache.prepareForUser.mockReturnValueOnce(preparation.promise);
     const renderer = await mount();
@@ -87,12 +83,12 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     expect(cache.prepareForUser).toHaveBeenCalledWith('bob');
     expect(observed.user).toBeNull();
     expect(observed.loading).toBe(true);
-    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(profiles.getProfile).not.toHaveBeenCalled();
 
     await act(async () => { preparation.resolve(ready); await event; });
-    expect(firestore.getDoc).toHaveBeenCalledOnce();
+    expect(profiles.getProfile).toHaveBeenCalledOnce();
     expect(observed.user?.uid).toBe('bob');
-    expect(observed.role).toBe('patient');
+    expect(observed.profile).toEqual({ displayName: 'Bob' });
     renderer.unmount();
   });
 
@@ -104,7 +100,7 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     cache.prepareForUser.mockReturnValueOnce(new Promise(() => {}));
     await act(async () => { void firebaseAuth.callback!({ uid: 'bob', email: 'bob@example.com' }); });
     expect(observed.user).toBeNull();
-    expect(observed.role).toBeNull();
+    expect(observed.profile).toBeNull();
     expect(observed.loading).toBe(true);
     renderer.unmount();
   });
@@ -116,7 +112,7 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
 
     expect(observed.user).toBeNull();
     expect(observed.loading).toBe(true);
-    expect(firestore.getDoc).not.toHaveBeenCalled();
+    expect(profiles.getProfile).not.toHaveBeenCalled();
     renderer.unmount();
   });
 
@@ -178,19 +174,31 @@ describe('AuthContext and the Firestore cache lifecycle', () => {
     renderer.unmount();
   });
 
-  it('sign-up writes the new profile only once the cache is ready for the new account', async () => {
+  it('sign-up creates the new profile only once the cache is ready for the new account', async () => {
     const preparation = deferred<CachePreparation>();
     cache.prepareForUser.mockReturnValueOnce(preparation.promise);
-    firebaseAuth.createUser.mockResolvedValue({ user: { uid: 'new-user', email: 'new@example.com' } });
+    profiles.getProfile
+      .mockResolvedValueOnce({ status: 'missing', id: 'new-user', fromCache: false, hasPendingWrites: false })
+      .mockResolvedValueOnce({ status: 'readable', id: 'new-user', data: { displayName: 'New Player' }, fromCache: false, hasPendingWrites: false });
+    let event!: Promise<void>;
+    firebaseAuth.createUser.mockImplementation(async () => {
+      const user = { uid: 'new-user', email: 'new@example.com', reload: async () => {} };
+      firebaseAuth.currentUser = user;
+      // The SDK notifies auth listeners before the call resolves.
+      event = firebaseAuth.callback!(user);
+      return { user };
+    });
     const renderer = await mount();
 
-    let signingUp!: Promise<void>;
-    await act(async () => { signingUp = observed.signup('new@example.com', 'password'); });
+    await act(async () => { await observed.signup('new@example.com', 'password', 'New Player'); });
     expect(cache.prepareForUser).toHaveBeenCalledWith('new-user');
-    expect(firestore.setDoc).not.toHaveBeenCalled();
+    expect(profiles.getProfile).not.toHaveBeenCalled();
+    expect(profiles.createProfile).not.toHaveBeenCalled();
 
-    await act(async () => { preparation.resolve(ready); await signingUp; });
-    expect(firestore.setDoc).toHaveBeenCalledOnce();
+    await act(async () => { preparation.resolve(ready); await event; });
+    expect(profiles.createProfile).toHaveBeenCalledOnce();
+    expect(profiles.createProfile.mock.calls[0][0]).toMatchObject({ displayName: 'New Player' });
+    expect(observed.profile).toEqual({ displayName: 'New Player' });
     renderer.unmount();
   });
 

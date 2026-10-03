@@ -25,7 +25,7 @@ export async function loginThroughUi(page: Page, credentials: Credentials): Prom
     await expect(page.getByRole('heading', { name: 'Log In', exact: true })).toBeHidden({ timeout: 15_000 });
 }
 
-/** Uses the normal UI only when a newly configured patient is shown headset setup. */
+/** Uses the normal UI only when a newly signed-up player is shown headset setup. */
 export async function skipHeadsetSetupIfPresent(page: Page): Promise<void> {
   const skipToDashboard = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
   await skipToDashboard.or(consumerHome(page)).first()
@@ -35,7 +35,7 @@ export async function skipHeadsetSetupIfPresent(page: Page): Promise<void> {
     }
 }
 
-export async function arriveAtPatientDashboard(page: Page): Promise<void> {
+export async function arriveAtHome(page: Page): Promise<void> {
     await skipHeadsetSetupIfPresent(page);
     await expect(consumerHome(page)).toBeVisible({ timeout: 15_000 });
 }

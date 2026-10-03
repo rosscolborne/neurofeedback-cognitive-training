@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { E2E_FIXED_SESSION_SEED } from '../src/consumer/repositories/e2eSessionSeed';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard } from './helpers/auth';
+import { arriveAtHome } from './helpers/auth';
 import { readEegRecordings, readGameSessions } from './helpers/localEmulator';
 import {
   answer,
@@ -217,7 +217,7 @@ test('a run saved while Firestore is unreachable survives a reload and is upload
 
   // The queued write is in the persistent cache, so it survives a full reload.
   await page.reload();
-  await arriveAtPatientDashboard(page);
+  await arriveAtHome(page);
   expect(await readGameSessions(uid)).toHaveLength(0);
 
   await context.unroute(firestore);

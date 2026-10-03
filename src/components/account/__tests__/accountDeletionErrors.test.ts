@@ -29,14 +29,14 @@ describe('getAccountDeletionErrorMessage', () => {
     expectReadable(message);
   });
 
-  it('asks the patient to check their connection after a network failure', () => {
-    const message = getAccountDeletionErrorMessage(firebaseError('auth/network-request-failed'));
+  it.each(['auth/network-request-failed', 'unavailable'])('asks the player to check their connection after a network failure (%s)', (code) => {
+    const message = getAccountDeletionErrorMessage(firebaseError(code));
     expect(message).toBe('Unable to connect. Check your internet connection and try again.');
     expectReadable(message);
   });
 
   it.each(['auth/user-mismatch', 'auth/user-token-expired', 'auth/requires-recent-login'])(
-    'asks the patient to sign in again for %s',
+    'asks the player to sign in again for %s',
     (code) => {
       const message = getAccountDeletionErrorMessage(firebaseError(code));
       expect(message).toBe('Please sign in again, then restart account deletion.');
@@ -44,7 +44,7 @@ describe('getAccountDeletionErrorMessage', () => {
     },
   );
 
-  it.each(['permission-denied', 'unavailable', 'auth/internal-error'])(
+  it.each(['permission-denied', 'internal', 'auth/internal-error'])(
     'hides unexpected Firebase code %s behind a generic message and logs the original',
     (code) => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -62,12 +62,12 @@ describe('getAccountDeletionErrorMessage', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('keeps app-authored messages, which are written for the patient', () => {
+  it('keeps app-authored messages, which are written for the player', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(getAccountDeletionErrorMessage(new Error('Your signed-in account changed. Restart account deletion.')))
       .toBe('Your signed-in account changed. Restart account deletion.');
-    const appointment = 'A future appointment could not be cancelled automatically. Your clinic connection is removed; contact support to finish account deletion.';
-    expect(getAccountDeletionErrorMessage(new Error(appointment))).toBe(appointment);
+    const unavailable = 'Your profile is unavailable. Try again later.';
+    expect(getAccountDeletionErrorMessage(new Error(unavailable))).toBe(unavailable);
     expect(consoleError).not.toHaveBeenCalled();
   });
 

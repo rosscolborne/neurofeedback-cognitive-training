@@ -1,8 +1,8 @@
 import React from 'react';
-import { ClientProfile } from '../../types';
 
 interface HomeScreenProps {
-  client: ClientProfile;
+  /** The player's profile name; the greeting uses its first word. */
+  displayName: string | null;
   /** The games (NFCT-13): play, the streak, achievements and recent runs. */
   gamesSection?: React.ReactNode;
 }
@@ -15,7 +15,7 @@ function getGreeting(): string {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
-  client,
+  displayName,
   gamesSection,
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
@@ -23,9 +23,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '12px', marginBottom: '4px' }}>
       <h1
         className="font-display"
-        style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15 }}
+        style={{ fontSize: '32px', color: 'var(--text-primary)', fontWeight: 400, lineHeight: 1.15, overflowWrap: 'anywhere' }}
       >
-        {getGreeting()}{client.name ? `, ${client.name.split(' ')[0]}.` : '.'}
+        {getGreeting()}{displayName ? `, ${displayName.split(/\s+/)[0]}.` : '.'}
       </h1>
     </div>
 

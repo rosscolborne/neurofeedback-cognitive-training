@@ -16,16 +16,19 @@ export type FreshAccount = {
   readonly password: string;
 };
 
-/** The role-selection screen's title; its product name changes with branding. */
-export const roleSelectionHeading = (page: Page) => page.getByRole('heading', { name: /^How will you use /, level: 1 });
+/** Headset setup's way past it: setup is optional, and sign-up offers it first. */
+export const skipHeadsetSetupButton = (page: Page) => page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
 
 /** The signed-in consumer home: its primary action, playing a game (NFCT-13's games-first Home). */
 export const consumerHome = (page: Page) => page.getByRole('button', { name: 'Play Mental Math', exact: true });
 
 /**
  * Starts signed out at `/`, opens Create Account from the Welcome screen and
- * creates the account. Creating it is Firebase Auth only; Firestore rules do
- * not govern it, so reaching role selection proves nothing about Firestore.
+ * creates the account, arriving at the optional headset setup. The app leaves
+ * its loading screen only once the server has accepted the new player's
+ * profile (users/{uid}), the account's first Firestore write: when deployed
+ * rules denied the first write (TestFlight, 2026-10-02), the account went
+ * nowhere with no message. Here that shows as "Your account couldn’t be loaded."
  */
 export async function signUpFreshAccountThroughUi(page: Page, account: FreshAccount): Promise<void> {
   await page.goto('/');
@@ -38,35 +41,29 @@ export async function signUpFreshAccountThroughUi(page: Page, account: FreshAcco
   await page.getByPlaceholder('At least 6 characters', { exact: true }).fill(account.password);
   await page.getByRole('button', { name: 'Create Account', exact: true }).click();
 
-  await expect(roleSelectionHeading(page), 'Creating the account should reach role selection').toBeVisible({ timeout: 20_000 });
+  await expect(skipHeadsetSetupButton(page), 'Creating the account should save its profile and reach headset setup').toBeVisible({ timeout: 20_000 });
 }
 
 /**
- * From role selection, takes the consumer path ("Train my brain") and arrives
- * at the home screen. The role choice is the account's first Firestore write
- * that the user waits on: when the deployed rules denied it (TestFlight,
- * 2026-10-02), the app returned to role selection with no message.
+ * After sign-up, skips the optional headset setup and arrives at the home
+ * screen. There is one kind of account: nothing asks what it is for.
  */
 export async function completeConsumerOnboarding(page: Page): Promise<void> {
-  await expect(roleSelectionHeading(page)).toBeVisible();
-  // Training is the only choice: practitioner accounts are retired (NFCT-4).
-  await expect(page.getByRole('button', { name: /Train my brain/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /practitioner|clinician/i })).toHaveCount(0);
-  await page.getByRole('button', { name: /Train my brain/ }).click();
-  await expectConsumerHome(page, 'Choosing "Train my brain" should save the role and leave role selection');
+  await expect(skipHeadsetSetupButton(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: /practitioner|clinician|account type/i })).toHaveCount(0);
+  await skipHeadsetSetupButton(page).click();
+  await expect(consumerHome(page), 'Skipping headset setup should arrive home').toBeVisible({ timeout: 15_000 });
 }
 
 /**
  * The signed-in consumer arrives home, skipping the optional headset setup if
- * it is shown, and is not sent back to role selection.
+ * it is shown.
  */
 export async function expectConsumerHome(page: Page, message = 'The signed-in consumer should arrive home'): Promise<void> {
-  const skipHeadsetSetup = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
+  const skipHeadsetSetup = skipHeadsetSetupButton(page);
   await expect(skipHeadsetSetup.or(consumerHome(page)).first(), message).toBeVisible({ timeout: 20_000 });
   if (await skipHeadsetSetup.isVisible()) await skipHeadsetSetup.click();
   await expect(consumerHome(page), message).toBeVisible({ timeout: 15_000 });
-  await expect(roleSelectionHeading(page)).toHaveCount(0);
-  await expect(page).not.toHaveURL(/role-selection/);
 }
 
 /** Opens a game through the user-facing entry point: the Train tab, then the game. */

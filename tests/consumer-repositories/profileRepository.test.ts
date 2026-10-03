@@ -1,8 +1,10 @@
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { serverTimestamp, Timestamp } from 'firebase/firestore';
+import { deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SignInRequiredError } from '../../src/consumer/firestore/context';
 import { ConsumerWriteValidationError } from '../../src/consumer/firestore/writes';
+import { PROFILE_PHOTO_MAX_LENGTH } from '@nfct/shared';
+import { newProfileDraft } from '../../src/consumer/profile/newProfile';
 import type { UserProfileDraft, UserProfilePatch } from '../../src/consumer/repositories/profileRepository';
 import {
   acceptedConsentVersion,
@@ -15,7 +17,9 @@ import {
   resetEmulators,
   serverRead,
   serverWrite,
+  sessionDocument,
   signedInDevice,
+  withProfile,
 } from './harness';
 
 beforeEach(resetEmulators);
@@ -24,7 +28,7 @@ afterAll(closeEnvironment);
 
 const millis = (value: unknown) => (value as Timestamp).toMillis();
 
-describe('creating the profile at sign-up', () => {
+describe('creating the profile', () => {
   it('writes the exact profile with server-clock createdAt and updatedAt', async () => {
     const device = await signedInDevice();
     const before = Date.now();
@@ -145,7 +149,7 @@ describe('field-level updates', () => {
     const invalid = [
       {},
       { preferences: {} },
-      { role: 'clinician' },
+      { email: 'player@example.test' },
       { createdAt: Timestamp.now() },
       { eeg: { consent: { version: acceptedConsentVersion, grantedAt: Timestamp.now() } } },
       { preferences: { weeklyGoal: { kind: 'activeDays', target: 9 } } },
@@ -218,18 +222,18 @@ describe('reading the profile', () => {
     expect(await device.profiles.getProfile()).toMatchObject({ status: 'missing', id: device.player.uid });
   });
 
-  it('reports a legacy or newer-schema profile as unreadable instead of throwing', async () => {
-    const legacy = await signedInDevice('legacy');
+  it('reports an unversioned or newer-schema profile as unreadable instead of throwing', async () => {
+    const unversioned = await signedInDevice('unversioned');
     const newer = await signedInDevice('newer');
     await serverWrite({
-      [`users/${legacy.player.uid}`]: { email: 'legacy@example.test', displayName: 'Legacy', createdAt: '2026-01-15T12:00:00.000Z', role: 'patient' },
+      [`users/${unversioned.player.uid}`]: { displayName: 'No schema version' },
       [`users/${newer.player.uid}`]: { schemaVersion: 2, displayName: 'From the future' },
     });
 
-    const legacyRead = await legacy.profiles.getProfile();
+    const unversionedRead = await unversioned.profiles.getProfile();
     const newerRead = await newer.profiles.getProfile();
 
-    expect(legacyRead).toMatchObject({ status: 'unreadable' });
+    expect(unversionedRead).toMatchObject({ status: 'unreadable' });
     expect(newerRead).toMatchObject({ status: 'unreadable' });
     expect(newerRead.status === 'unreadable' && newerRead.error.name).toBe('DomainReadError');
   });
@@ -240,5 +244,134 @@ describe('reading the profile', () => {
     await signOut(device.auth);
 
     await expect(device.profiles.getProfile()).rejects.toThrow(SignInRequiredError);
+  });
+});
+
+describe('the profile the app creates for a new player', () => {
+  it('is accepted by the rules and reads back with the typed name, the time zone and nothing else set', async () => {
+    const device = await signedInDevice();
+
+    await device.profiles.createProfile(newProfileDraft('  Ada Lovelace  ', 'Europe/London')).acknowledged;
+
+    const read = await device.profiles.getProfile();
+    expect(read).toMatchObject({
+      status: 'readable',
+      data: {
+        displayName: 'Ada Lovelace',
+        avatar: null,
+        preferences: { timezone: 'Europe/London', weeklyGoal: null },
+        onboarding: { completedAt: null },
+        eeg: { enabled: false, consent: null, preferredDevice: null },
+      },
+    });
+  });
+
+  it('stores a blank name as null and bounds a long one to the schema', async () => {
+    const blank = await signedInDevice('blank');
+    const long = await signedInDevice('long');
+
+    await blank.profiles.createProfile(newProfileDraft('   ')).acknowledged;
+    await long.profiles.createProfile(newProfileDraft(`${'x'.repeat(39)}😀 trailing`)).acknowledged;
+
+    expect((await serverRead(`users/${blank.player.uid}`))?.displayName).toBeNull();
+    expect((await serverRead(`users/${long.player.uid}`))?.displayName).toBe('x'.repeat(39));
+  });
+});
+
+describe('deleting the profile', () => {
+  it('deletes only the profile document: the player\'s game sessions stay for server-driven deletion', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const sessionPath = `users/${device.player.uid}/gameSessions/session-kept-000000001`;
+    await serverWrite({ [sessionPath]: sessionDocument(device.player.uid) });
+
+    await device.profiles.deleteProfile().acknowledged;
+
+    expect(await serverRead(`users/${device.player.uid}`)).toBeUndefined();
+    expect(await serverRead(sessionPath)).toBeDefined();
+    expect(await device.profiles.getProfile()).toMatchObject({ status: 'missing' });
+  });
+
+  it('succeeds when there is no profile, so a retried deletion repeats cleanly', async () => {
+    const device = await signedInDevice();
+
+    await device.profiles.deleteProfile().acknowledged;
+
+    expect(await serverRead(`users/${device.player.uid}`)).toBeUndefined();
+  });
+
+  it("cannot delete another player's profile", async () => {
+    const owner = await signedInDevice('owner');
+    await withProfile(owner);
+    const other = await signedInDevice('other');
+
+    await expectDenied(deleteDoc(doc(other.firestore, `users/${owner.player.uid}`)));
+
+    expect(await serverRead(`users/${owner.player.uid}`)).toBeDefined();
+  });
+
+  it('lets the player create a fresh profile afterwards, with a new createdAt and no EEG consent', async () => {
+    const device = await signedInDevice();
+    await withProfile(device, { eegConsent: true });
+    const first = await serverRead(`users/${device.player.uid}`);
+    await device.profiles.deleteProfile().acknowledged;
+
+    await device.profiles.createProfile(profileDraft({ displayName: 'Again' })).acknowledged;
+
+    const second = await serverRead(`users/${device.player.uid}`);
+    expect(second?.displayName).toBe('Again');
+    expect(second?.eeg).toEqual({ enabled: false, consent: null, preferredDevice: null });
+    expect(millis(second?.createdAt)).toBeGreaterThanOrEqual(millis(first?.createdAt));
+  });
+
+  it('needs a signed-in player', async () => {
+    const device = await signedInDevice();
+    await signOut(device.auth);
+
+    expect(() => device.profiles.deleteProfile()).toThrow(SignInRequiredError);
+  });
+});
+
+describe('the profile photo', () => {
+  const photo = (type: string, length: number) => {
+    const prefix = `data:image/${type};base64,`;
+    return { kind: 'photo' as const, dataUrl: prefix + 'A'.repeat(length - prefix.length) };
+  };
+
+  it('sets a photo avatar and reads it back, replaces it, and clears it to null', async () => {
+    const device = await signedInDevice();
+    await withProfile(device);
+    const first = photo('png', 2_000);
+    const second = photo('jpeg', PROFILE_PHOTO_MAX_LENGTH);
+
+    await device.profiles.updateProfile({ avatar: first }).acknowledged;
+    expect(await device.profiles.getProfile()).toMatchObject({ status: 'readable', data: { avatar: first } });
+    expect((await serverRead(`users/${device.player.uid}`))?.avatar).toEqual(first);
+
+    await device.profiles.updateProfile({ avatar: second }).acknowledged;
+    expect((await serverRead(`users/${device.player.uid}`))?.avatar).toEqual(second);
+
+    await device.profiles.updateProfile({ avatar: null }).acknowledged;
+    expect((await serverRead(`users/${device.player.uid}`))?.avatar).toBeNull();
+    expect(await device.profiles.getProfile()).toMatchObject({ status: 'readable', data: { avatar: null } });
+  });
+
+  it('refuses an invalid photo on the device, before any write', async () => {
+    const device = await signedInDevice();
+    await withProfile(device);
+    const before = await serverRead(`users/${device.player.uid}`);
+    const invalid = [
+      photo('png', PROFILE_PHOTO_MAX_LENGTH + 1),
+      { kind: 'photo', dataUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' },
+      { kind: 'photo', dataUrl: 'data:text/html;base64,PGgxPmhpPC9oMT4=' },
+      { kind: 'photo', dataUrl: 'https://example.test/avatar.png' },
+      { kind: 'photo', dataUrl: photo('png', 200).dataUrl, presetId: 'fox' },
+      { kind: 'photo', presetId: 'fox' },
+    ];
+
+    for (const avatar of invalid) {
+      expect(() => device.profiles.updateProfile({ avatar } as unknown as UserProfilePatch)).toThrow(ConsumerWriteValidationError);
+    }
+    expect(await serverRead(`users/${device.player.uid}`)).toEqual(before);
   });
 });

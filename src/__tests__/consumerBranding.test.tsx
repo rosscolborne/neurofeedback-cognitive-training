@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import capacitorConfig from '../../capacitor.config';
 
@@ -13,10 +13,9 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => state.navigate }));
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { uid: 'player-1', displayName: 'Player One' },
-    role: null,
+    profile: null,
     login: vi.fn(),
     signup: vi.fn(),
-    selectRole: vi.fn(),
     requestPasswordReset: vi.fn(),
   }),
 }));
@@ -26,17 +25,15 @@ vi.mock('../services/eegEngine', () => ({
     subscribe: vi.fn(() => vi.fn()),
   },
 }));
-vi.mock('../services/storageEngine', () => ({ storageEngine: {} }));
 
 import { APP_DISPLAY_NAME } from '../config/appIdentity';
 import { BrandLogo } from '../components/brand/BrandLogo';
 import { HardwareSetup } from '../pages/onboarding/HardwareSetup';
 import { Login } from '../pages/onboarding/Login';
-import { RoleSelection } from '../pages/onboarding/RoleSelection';
 import { SignUp } from '../pages/onboarding/SignUp';
 import { Welcome } from '../pages/onboarding/Welcome';
+import { TermsOfService } from '../pages/legal/TermsOfService';
 
-const text = (node: ReactTestInstance): string => node.children.map((child) => typeof child === 'string' ? child : text(child)).join('');
 
 async function mount(element: React.ReactElement): Promise<ReactTestRenderer> {
   let renderer!: ReactTestRenderer;
@@ -48,9 +45,11 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Welcome', () => <Welcome />],
   ['Log in', () => <Login />],
   ['Sign up', () => <SignUp />],
-  ['Role selection', () => <RoleSelection />],
   ['Hardware setup', () => <HardwareSetup />],
   ['Brand logo', () => <BrandLogo />],
+  // The Privacy Policy is not listed yet: its contact address is still Waveable's
+  // support inbox until NFCT has its own (NFCT-34).
+  ['Terms of Service', () => <TermsOfService />],
 ];
 
 describe('consumer branding', () => {
@@ -76,10 +75,6 @@ describe('consumer branding', () => {
   });
 
   it('names the app by its display name where the product is named', async () => {
-    const roles = await mount(<RoleSelection />);
-    expect(text(roles.root.findByType('h1'))).toBe(`How will you use ${APP_DISPLAY_NAME}?`);
-    await act(async () => { roles.unmount(); });
-
     const logo = await mount(<BrandLogo />);
     expect(logo.root.findByType('img').props.alt).toBe(`${APP_DISPLAY_NAME} logo`);
     await act(async () => { logo.unmount(); });

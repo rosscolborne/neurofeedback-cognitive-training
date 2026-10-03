@@ -7,6 +7,7 @@ import {
   cleanUpIdentity,
   formatCleanupReport,
   newIdentity,
+  ownerCleanupCommand,
   readIdentityFile,
   resolveCanaryTarget,
   SMOKE_EMAIL_PATTERN,
@@ -95,19 +96,33 @@ describe('cleanUpIdentity', () => {
   }
   const signIn = 'POST /v1/accounts:signInWithPassword';
   const deleteAccount = 'POST /v1/accounts:delete';
-  const deleteClient = 'DELETE /v1/projects/nfct-dev/databases/(default)/documents/clients/uid-1';
+  const deleteProfile = 'DELETE /v1/projects/nfct-dev/databases/(default)/documents/users/uid-1';
   const signedIn = [200, { localId: 'uid-1', idToken }];
 
-  it('deletes clients/{uid} as the user, then the Auth account, and reports the residue', async () => {
-    const { calls, fetchImpl } = backend({ [signIn]: signedIn, [deleteClient]: [200, {}], [deleteAccount]: [200, {}] });
+  it('deletes users/{uid} as the user, then the Auth account, and reports the residue', async () => {
+    const { calls, fetchImpl } = backend({ [signIn]: signedIn, [deleteProfile]: [200, {}], [deleteAccount]: [200, {}] });
     const report = await cleanUpIdentity(target, identity, { fetchImpl });
-    expect(calls.map(({ key }) => key)).toEqual([signIn, deleteClient, deleteAccount]);
+    expect(calls.map(({ key }) => key)).toEqual([signIn, deleteProfile, deleteAccount]);
     expect(calls[0].url).toBe('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=public-web-key');
     expect(calls[1].init.headers).toEqual({ authorization: `Bearer ${idToken}` });
     expect(JSON.parse(calls[2].init.body)).toEqual({ idToken });
-    expect(report).toMatchObject({ uid: 'uid-1', account: 'deleted', deleted: ['clients/uid-1', 'Auth account'], problems: [] });
-    expect(report.residue).toEqual([expect.stringMatching(/^users\/uid-1 /)]);
+    expect(report).toMatchObject({ uid: 'uid-1', account: 'deleted', deleted: ['users/uid-1', 'Auth account'], problems: [] });
+    expect(report.residue).toEqual([expect.stringMatching(/^users\/uid-1's subcollections/)]);
     expect(cleanedCompletely(report)).toBe(true);
+  });
+
+  it('keeps the UID it read before deleting the account, and names it in the owner-run cleanup command', async () => {
+    const { fetchImpl } = backend({ [signIn]: signedIn, [deleteProfile]: [200, {}], [deleteAccount]: [200, {}] });
+    const report = await cleanUpIdentity(target, identity, { fetchImpl });
+    const printed = formatCleanupReport(target, report).join('\n');
+    // Once the Auth account is gone, nothing under users/{uid} names the canary: the UID is how the owner finds the residue.
+    expect(printed).toContain('- uid: uid-1');
+    expect(printed).toContain(`- owner-run cleanup (dry run; add --delete): ${ownerCleanupCommand(target, 'uid-1')}`);
+    expect(ownerCleanupCommand(target, 'uid-1')).toBe(
+      'npx tsx --tsconfig functions/tsconfig.json functions/scripts/cleanup-canary-accounts.ts --project nfct-dev --live --uid uid-1',
+    );
+    expect(printed).not.toContain(identity.password);
+    expect(printed).not.toContain(idToken);
   });
 
   it('never deletes anything when the API key signed in to another project', async () => {
@@ -127,11 +142,11 @@ describe('cleanUpIdentity', () => {
     }
   });
 
-  it('still deletes the Auth account when the rules refuse the Firestore delete', async () => {
-    const { fetchImpl } = backend({ [signIn]: signedIn, [deleteClient]: [403, { error: { status: 'PERMISSION_DENIED', message: 'Missing or insufficient permissions.' } }], [deleteAccount]: [200, {}] });
+  it('still deletes the Auth account when the rules refuse the profile delete', async () => {
+    const { fetchImpl } = backend({ [signIn]: signedIn, [deleteProfile]: [403, { error: { status: 'PERMISSION_DENIED', message: 'Missing or insufficient permissions.' } }], [deleteAccount]: [200, {}] });
     const report = await cleanUpIdentity(target, identity, { fetchImpl });
     expect(report).toMatchObject({ account: 'deleted', deleted: ['Auth account'], problems: [] });
-    expect(report.residue[0]).toBe('clients/uid-1 (PERMISSION_DENIED (HTTP 403))');
+    expect(report.residue[0]).toBe('users/uid-1 (PERMISSION_DENIED (HTTP 403))');
     // The rehearsal treats this as broken cleanup; against nfct-dev it is residue.
     expect(cleanedCompletely(report)).toBe(false);
   });
@@ -139,7 +154,7 @@ describe('cleanUpIdentity', () => {
   it('reports a failure it cannot finish, without the password or token', async () => {
     const failures = [
       { [signIn]: [400, { error: { message: 'TOO_MANY_ATTEMPTS_TRY_LATER : Access to this account has been temporarily disabled' } }] },
-      { [signIn]: signedIn, [deleteClient]: [200, {}], [deleteAccount]: [400, { error: { message: 'CREDENTIAL_TOO_OLD_LOGIN_AGAIN' } }] },
+      { [signIn]: signedIn, [deleteProfile]: [200, {}], [deleteAccount]: [400, { error: { message: 'CREDENTIAL_TOO_OLD_LOGIN_AGAIN' } }] },
     ];
     for (const responses of failures) {
       const { fetchImpl } = backend(responses);

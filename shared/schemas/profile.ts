@@ -15,6 +15,15 @@ import { readVersioned } from './read';
 
 export const USER_PROFILE_SCHEMA_VERSION = 1;
 
+/**
+ * A profile photo is stored inline, as a small image data URL the app has
+ * already downscaled on the device (there is no file storage), so its size
+ * counts against the profile document. The rules enforce the same bound and
+ * the same image types.
+ */
+export const PROFILE_PHOTO_MAX_LENGTH = 100_000;
+export const PROFILE_PHOTO_DATA_URL_PATTERN = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
 function userProfileSchemaFor(mode: SchemaMode) {
   const weeklyGoalSchema = objectSchema(mode, {
     kind: z.enum(['sessions', 'minutes', 'activeDays']),
@@ -29,10 +38,16 @@ function userProfileSchemaFor(mode: SchemaMode) {
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
     displayName: boundedTextSchema(40).nullable(),
-    avatar: objectSchema(mode, {
-      kind: z.literal('preset'),
-      presetId: boundedTextSchema(40),
-    }).nullable(),
+    avatar: z.discriminatedUnion('kind', [
+      objectSchema(mode, {
+        kind: z.literal('preset'),
+        presetId: boundedTextSchema(40),
+      }),
+      objectSchema(mode, {
+        kind: z.literal('photo'),
+        dataUrl: z.string().max(PROFILE_PHOTO_MAX_LENGTH).regex(PROFILE_PHOTO_DATA_URL_PATTERN),
+      }),
+    ]).nullable(),
     preferences: objectSchema(mode, {
       /** IANA zone; drives daily buckets. */
       timezone: boundedTextSchema(64),

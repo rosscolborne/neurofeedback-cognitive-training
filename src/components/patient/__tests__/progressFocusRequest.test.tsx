@@ -1,7 +1,8 @@
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBlankProfile } from '../../../services/storageEngine';
+import type { UserProfile } from '@nfct/shared';
+import type { User } from 'firebase/auth';
 
 // NFCT-13 part 2: Home's "See all achievements" opens Progress at its
 // achievements. The request lasts only for the Progress visit it opened, so
@@ -12,10 +13,7 @@ vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: 
 vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => false, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../services/storageEngine')>()),
-  storageEngine: {},
-}));
+vi.mock('../../../consumer/repositories', () => ({ profileRepository: {} }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../../../consumer/games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));
 vi.mock('../../../consumer/games/mentalMath/MentalMathProgressCard', () => ({ MentalMathProgressCard: 'mental-math-progress-card' }));
@@ -39,7 +37,10 @@ describe('the "See all achievements" request', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     await act(async () => {
       renderer = create(
-        <PatientShell client={createBlankProfile('patient-1', 'p@example.com', 'Pat')} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />,
+        <PatientShell
+          user={{ uid: 'player-1', email: 'p@example.com' } as User}
+          profile={{ displayName: 'Pat' } as UserProfile}
+        />,
       );
     });
   });

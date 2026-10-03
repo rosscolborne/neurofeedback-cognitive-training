@@ -8,13 +8,13 @@ import {
   reauthenticateWithCredential,
   sendPasswordResetEmail,
   updatePassword,
-  updateProfile,
+  updateProfile as updateAuthProfile,
 } from 'firebase/auth';
-import { auth, db, firestoreCache } from '../services/firebase';
+import type { UserProfile } from '@nfct/shared';
+import { auth, firestoreCache } from '../services/firebase';
 import type { CacheEndReason, CacheStatus } from '../services/firestoreCacheLifecycle';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-
-export type UserRole = 'patient' | 'clinician' | null;
+import { profileRepository, type UserProfilePatch } from '../consumer/repositories';
+import { newProfileDraft, profileDisplayName } from '../consumer/profile/newProfile';
 
 /**
  * `unsynced`: the signed-in user has writes the server has not accepted yet,
@@ -24,13 +24,22 @@ export type LogoutOutcome = 'signed-out' | 'unsynced';
 
 interface AuthContextType {
   user: User | null;
-  role: UserRole;
+  /**
+   * The signed-in player's profile (users/{uid}). Null while signed out and
+   * until it has been read, or created for a player who has none.
+   */
+  profile: UserProfile | null;
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, displayName?: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
-  selectRole: (role: UserRole) => Promise<void>;
+  /**
+   * Saves a change to the signed-in player's profile. Resolves once the server
+   * has accepted it, after which `profile` includes it; rejects if the write
+   * is refused.
+   */
+  updateProfile: (patch: UserProfilePatch) => Promise<void>;
   /**
    * Signs out and clears this device's Firestore cache, then reloads the app.
    * Unless `discardUnsyncedWrites` is set, it first waits briefly for queued
@@ -38,13 +47,14 @@ interface AuthContextType {
    */
   logout: (options?: { discardUnsyncedWrites?: boolean }) => Promise<LogoutOutcome>;
   /**
-   * The signed-in account's role could not be read: the read failed, or had
-   * no answer within `ROLE_LOOKUP_RETRY_AFTER_MS`. `loading` stays true,
-   * because an unknown role is not the same as having none.
+   * The signed-in player's profile could not be loaded: the read failed, had
+   * no answer within `PROFILE_LOOKUP_RETRY_AFTER_MS`, or found a document this
+   * app cannot read, or creating a missing profile failed. `loading` stays
+   * true, because an unknown profile is not the same as having none.
    */
-  roleLookupFailed: boolean;
-  /** Reads the signed-in account's role again after `roleLookupFailed`. */
-  retryRoleLookup: () => void;
+  profileLookupFailed: boolean;
+  /** Loads the signed-in player's profile again after `profileLookupFailed`. */
+  retryProfileLookup: () => void;
   /** The Firestore cache lifecycle's state, for the loading screen. */
   cacheStatus: CacheStatus;
   /** Why the session is ending, while `cacheStatus` is `ending`. */
@@ -58,66 +68,61 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  role: null,
+  profile: null,
   loading: true,
   login: async () => {},
   signup: async () => {},
   changePassword: async () => {},
   requestPasswordReset: async () => {},
-  selectRole: async () => {},
+  updateProfile: async () => {},
   logout: async () => 'signed-out',
-  roleLookupFailed: false,
-  retryRoleLookup: () => {},
+  profileLookupFailed: false,
+  retryProfileLookup: () => {},
   cacheStatus: 'idle',
   cacheEndingReason: null,
   signOutWithoutFirestore: async () => {},
 });
 
 /**
- * How long a role read may run before the loading screen offers a retry. It
- * is longer than the Firestore SDK's own offline detection (about 10 s), so a
- * device without a connection first gets the role from its persistent cache.
- * The read keeps running after it, and a late answer still opens the app.
+ * How long a profile lookup may run before the loading screen offers a retry.
+ * It is longer than the Firestore SDK's own offline detection (about 10 s), so
+ * a device without a connection first gets the profile from its persistent
+ * cache. The lookup keeps running after it, and a late answer still opens the app.
  */
-export const ROLE_LOOKUP_RETRY_AFTER_MS = 15_000;
+export const PROFILE_LOOKUP_RETRY_AFTER_MS = 15_000;
 
 /**
  * After a transient failure (offline, or only the device cache answered), the
  * lookup retries by itself, first after this delay and then backing off to
- * ROLE_LOOKUP_AUTO_RETRY_MAX_MS, so a brief loss of connection right after
- * sign-up or at launch does not leave the account waiting for a tap. Try
- * again still retries at once. A denied read does not retry by itself.
+ * PROFILE_LOOKUP_AUTO_RETRY_MAX_MS, so a brief loss of connection right after
+ * sign-up or at launch does not leave the player waiting for a tap. Try again
+ * still retries at once. Other failures do not retry by itself.
  */
-export const ROLE_LOOKUP_AUTO_RETRY_MS = 2_000;
-export const ROLE_LOOKUP_AUTO_RETRY_MAX_MS = 10_000;
-const TRANSIENT_ROLE_READ_CODES = new Set(['unavailable', 'deadline-exceeded']);
+export const PROFILE_LOOKUP_AUTO_RETRY_MS = 2_000;
+export const PROFILE_LOOKUP_AUTO_RETRY_MAX_MS = 10_000;
+const TRANSIENT_PROFILE_READ_CODES = new Set(['unavailable', 'deadline-exceeded']);
 
-/**
- * Reads the account's role from `users/{uid}`. Resolves `null` only when the
- * server confirms that the account has no role. Rejects when the role is
- * unknown: the read failed (offline with nothing cached, getDoc rejects with
- * `unavailable`), or only this device's cache answered and shows no role,
- * which may predate a role chosen since.
- */
-const readUserRole = async (uid: string): Promise<UserRole> => {
-  const snap = await getDoc(doc(db, 'users', uid));
-  const role = snap.exists() ? (snap.data()?.role as UserRole) || null : null;
-  if (role === null && snap.metadata.fromCache) {
-    throw Object.assign(new Error('Only the device cache answered, and it shows no role.'), { code: 'unavailable' });
-  }
-  return role;
-};
+const lookupError = (message: string, code: string) => Object.assign(new Error(message), { code });
+
+/** The name typed at sign-up, kept until that account's profile has been created. */
+interface SignupDraft {
+  email: string;
+  displayName: string | null;
+}
+
+const normalizedEmail = (email: string | null | undefined) => (email ?? '').trim().toLowerCase();
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<UserRole>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [roleLookupFailed, setRoleLookupFailed] = useState(false);
+  const [profileLookupFailed, setProfileLookupFailed] = useState(false);
   const authGenerationRef = useRef(0);
-  const roleLookupRef = useRef(0);
+  const profileLookupRef = useRef(0);
   const mountedRef = useRef(true);
-  // The uid of the account whose role is being read or shown.
+  // The uid of the account whose profile is being read or shown.
   const identityRef = useRef<string | null>(null);
+  const signupDraftRef = useRef<SignupDraft | null>(null);
 
   const isCurrentIdentity = (generation: number, uid: string) => (
     mountedRef.current
@@ -125,33 +130,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     && identityRef.current === uid
   );
 
-  // Only a read that establishes the role ends loading; until then the app
-  // stays on the loading screen and never routes to role selection. A failed
-  // or slow read offers a retry there instead; a transient failure also
-  // retries by itself (`attempt` counts those retries, and keeps the retry
-  // screen up between them).
-  const lookUpRole = async (generation: number, uid: string, attempt = 0, lastErrorCode?: string) => {
-    const lookup = ++roleLookupRef.current;
-    const isCurrent = () => roleLookupRef.current === lookup && isCurrentIdentity(generation, uid);
-    if (attempt === 0) setRoleLookupFailed(false);
-    setLoading(true);
-    const slow = setTimeout(() => { if (isCurrent()) setRoleLookupFailed(true); }, ROLE_LOOKUP_RETRY_AFTER_MS);
+  /**
+   * The signed-in player's profile, read through the consumer repository.
+   * Resolves only with a profile the server has confirmed, or this device's
+   * own queued write of it. When the server confirms there is none (right
+   * after sign-up, or if that write never landed), it creates one and waits
+   * for the server to accept it, so a refused write is never silent.
+   * Rejects while the profile is unknown or cannot be used. Returns null once
+   * the lookup is stale.
+   */
+  const readOrCreateProfile = async (uid: string, isCurrent: () => boolean): Promise<UserProfile | null> => {
+    const read = await profileRepository.getProfile();
+    if (!isCurrent()) return null;
+    if (read.status === 'readable') return read.data;
+    if (read.status === 'unreadable') throw lookupError('The profile document cannot be read by this app.', 'unreadable-profile');
+    // A cache-only answer may predate a profile created since on another device.
+    if (read.fromCache) throw lookupError('Only the device cache answered, and it has no profile.', 'unavailable');
+
+    const currentUser = auth.currentUser;
+    if (currentUser?.uid !== uid) return null;
+    // An account deleted elsewhere, or whose deletion stopped after its
+    // profile went, still has a valid ID token for a while. Asking Auth first
+    // makes that account fail (and Auth signs it out) instead of getting a new
+    // blank profile.
     try {
-      const userRole = await readUserRole(uid);
-      if (!isCurrent()) return;
-      setRole(userRole);
-      setRoleLookupFailed(false);
+      await currentUser.reload();
+    } catch (error) {
+      const code = String((error as { code?: unknown } | null)?.code);
+      throw code === 'auth/network-request-failed' ? lookupError('Auth could not be reached to confirm the account.', 'unavailable') : error;
+    }
+    // Checked again in the same turn as the write: Auth may have switched to
+    // another account (another tab) while the reload ran.
+    if (!isCurrent() || auth.currentUser?.uid !== uid) return null;
+    const draft = signupDraftRef.current;
+    const typedName = draft && draft.email === normalizedEmail(currentUser.email) ? draft.displayName : currentUser.displayName;
+    await profileRepository.createProfile(newProfileDraft(typedName)).acknowledged;
+    if (!isCurrent()) return null;
+    if (signupDraftRef.current === draft) signupDraftRef.current = null;
+    const created = await profileRepository.getProfile();
+    if (!isCurrent()) return null;
+    if (created.status !== 'readable') throw lookupError('The new profile could not be read back.', 'unreadable-profile');
+    return created.data;
+  };
+
+  // Only a lookup that establishes the profile ends loading; until then the
+  // app stays on the loading screen. A failed or slow lookup offers a retry
+  // there instead; a transient failure also retries by itself (`attempt`
+  // counts those retries, and keeps the retry screen up between them).
+  const lookUpProfile = async (generation: number, uid: string, attempt = 0, lastErrorCode?: string) => {
+    const lookup = ++profileLookupRef.current;
+    const isCurrent = () => profileLookupRef.current === lookup && isCurrentIdentity(generation, uid);
+    if (attempt === 0) setProfileLookupFailed(false);
+    setLoading(true);
+    const slow = setTimeout(() => { if (isCurrent()) setProfileLookupFailed(true); }, PROFILE_LOOKUP_RETRY_AFTER_MS);
+    try {
+      const loaded = await readOrCreateProfile(uid, isCurrent);
+      if (!loaded || !isCurrent()) return;
+      setProfile(loaded);
+      setProfileLookupFailed(false);
       setLoading(false);
     } catch (error) {
       if (!isCurrent()) return;
       const code = String((error as { code?: unknown } | null)?.code);
       // Once per kind of failure, not on every automatic retry.
-      if (attempt === 0 || code !== lastErrorCode) console.warn('Could not read the account role:', error);
-      setRoleLookupFailed(true);
-      if (TRANSIENT_ROLE_READ_CODES.has(code)) {
+      if (attempt === 0 || code !== lastErrorCode) console.warn('Could not load the player profile:', error);
+      setProfileLookupFailed(true);
+      if (TRANSIENT_PROFILE_READ_CODES.has(code)) {
         // A newer lookup (Try again), a sign-out or an account switch makes this stale.
-        const delay = Math.min(ROLE_LOOKUP_AUTO_RETRY_MS * 2 ** attempt, ROLE_LOOKUP_AUTO_RETRY_MAX_MS);
-        setTimeout(() => { if (isCurrent()) void lookUpRole(generation, uid, attempt + 1, code); }, delay);
+        const delay = Math.min(PROFILE_LOOKUP_AUTO_RETRY_MS * 2 ** attempt, PROFILE_LOOKUP_AUTO_RETRY_MAX_MS);
+        setTimeout(() => { if (isCurrent()) void lookUpProfile(generation, uid, attempt + 1, code); }, delay);
       }
     } finally {
       clearTimeout(slow);
@@ -177,8 +224,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // let the cache lifecycle clear another account's data first.
         identityRef.current = null;
         setUser(null);
-        setRole(null);
-        setRoleLookupFailed(false);
+        setProfile(null);
+        setProfileLookupFailed(false);
         if (currentUser) setLoading(true);
         const preparation = await firestoreCache.prepareForUser(currentUser?.uid ?? null);
         if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
@@ -192,10 +239,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         identityRef.current = currentUser?.uid ?? null;
         setUser(currentUser);
-        setRole(null);
+        setProfile(null);
 
         if (currentUser) {
-          await lookUpRole(generation, currentUser.uid);
+          await lookUpProfile(generation, currentUser.uid);
           return;
         }
 
@@ -209,7 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ++authGenerationRef.current;
           identityRef.current = null;
           setUser(null);
-          setRole(null);
+          setProfile(null);
           setLoading(false);
         }
       }
@@ -224,30 +271,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signup = async (email: string, pass: string, displayName?: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-
-    // Set displayName on the Firebase Auth profile
-    if (displayName?.trim()) {
-      await updateProfile(cred.user, { displayName: displayName.trim() }).catch((err) => {
-        console.warn('Failed to set display name:', err);
-      });
-    }
-
-    // The new account writes only once the cache is its own (a previous
-    // account's data is cleared first).
-    if ((await firestoreCache.prepareForUser(cred.user.uid)).status !== 'ready') return;
-    setUser(cred.user);
-    setRole(null);
-
+    // Creating the account fires the auth listener, which creates the profile
+    // with the typed name once this device's cache is the new account's own.
+    signupDraftRef.current = { email: normalizedEmail(email), displayName: displayName ?? null };
+    let created: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>;
     try {
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        email: cred.user.email,
-        displayName: displayName?.trim() || null,
-        createdAt: new Date().toISOString(),
-        role: null,
+      created = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+    } catch (error) {
+      signupDraftRef.current = null;
+      throw error;
+    }
+    // The draft lives only in memory. If the profile is not created before the
+    // app restarts, a later lookup creates it from the Auth account's name, so
+    // the typed name is kept there too. Best effort: the profile is the record.
+    const name = profileDisplayName(displayName);
+    if (name) {
+      await updateAuthProfile(created.user, { displayName: name }).catch((error) => {
+        console.warn('Could not keep the sign-up name on the account:', error);
       });
-    } catch (err) {
-      console.warn('Failed to initialize user document:', err);
     }
   };
 
@@ -255,10 +296,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const generation = ++authGenerationRef.current;
     identityRef.current = null;
     setUser(null);
-    setRole(null);
+    setProfile(null);
     try {
-      // onAuthStateChanged is the single owner of identity/role hydration. A
-      // second fetch here could finish after a newer account transition.
+      // onAuthStateChanged is the single owner of identity/profile hydration.
+      // A second read here could finish after a newer account transition.
       await signInWithEmailAndPassword(auth, email.trim(), pass);
     } catch (error) {
       if (mountedRef.current && authGenerationRef.current === generation) setLoading(false);
@@ -279,24 +320,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await sendPasswordResetEmail(auth, email.trim());
   };
 
-  const selectRole = async (newRole: UserRole) => {
-    if (!user) return;
+  const updateProfile = async (patch: UserProfilePatch) => {
     const generation = authGenerationRef.current;
-    const uid = user.uid;
-    setRole(newRole);
-    // Accounts created while Firestore was temporarily unavailable may not
-    // have their profile document yet. A merge write both recovers those
-    // accounts and keeps existing profile fields intact.
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        role: newRole,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-    } catch (err) {
-      console.warn('Background role update notice:', err);
-      if (isCurrentIdentity(generation, uid)) setRole(null);
-      throw err;
-    }
+    const uid = identityRef.current;
+    if (!uid || auth.currentUser?.uid !== uid) throw new Error('Sign in to change your profile.');
+    await profileRepository.updateProfile(patch).acknowledged;
+    if (!isCurrentIdentity(generation, uid)) return;
+    const read = await profileRepository.getProfile();
+    if (isCurrentIdentity(generation, uid) && read.status === 'readable') setProfile(read.data);
   };
 
   const logout = async ({ discardUnsyncedWrites = false }: { discardUnsyncedWrites?: boolean } = {}): Promise<LogoutOutcome> => {
@@ -307,8 +338,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     ++authGenerationRef.current;
     identityRef.current = null;
+    signupDraftRef.current = null;
     setUser(null);
-    setRole(null);
+    setProfile(null);
     setLoading(true);
     // Signs out (bounded), clears the cache and loads the app afresh. If the
     // cleanup cannot finish, the user is still signed out and the next start
@@ -317,10 +349,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return 'signed-out';
   };
 
-  const retryRoleLookup = () => {
+  const retryProfileLookup = () => {
     const uid = identityRef.current;
     if (!uid) return;
-    void lookUpRole(authGenerationRef.current, uid);
+    void lookUpProfile(authGenerationRef.current, uid);
   };
 
   const cacheStatus = useSyncExternalStore(firestoreCache.subscribe, firestoreCache.getStatus, firestoreCache.getStatus);
@@ -330,14 +362,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOutWithoutFirestore = async () => {
     ++authGenerationRef.current;
     identityRef.current = null;
+    signupDraftRef.current = null;
     setUser(null);
-    setRole(null);
+    setProfile(null);
     setLoading(true);
     await firestoreCache.signOutWithoutFirestore();
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, signup, changePassword, requestPasswordReset, selectRole, logout, roleLookupFailed, retryRoleLookup, cacheStatus, cacheEndingReason, signOutWithoutFirestore }}>
+    <AuthContext.Provider value={{ user, profile, loading, login, signup, changePassword, requestPasswordReset, updateProfile, logout, profileLookupFailed, retryProfileLookup, cacheStatus, cacheEndingReason, signOutWithoutFirestore }}>
       {children}
     </AuthContext.Provider>
   );

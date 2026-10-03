@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedPatient } from './helpers/localEmulator';
+import { arriveAtHome, loginThroughUi } from './helpers/auth';
+import { seedPlayer } from './helpers/localEmulator';
 
 // NFCT-33: the account forms and dialogs on a phone, and the bundled fonts. It
 // runs in the WebKit iPhone projects (playwright.webkit.config.ts) and in
@@ -62,9 +62,9 @@ test('sign-up and log-in fields offer AutoFill at 16 px, the page can zoom, and 
 });
 
 test('account fields on Profile are 16 px and a dialog keeps clear of the screen edges', async ({ page }) => {
-  const fixture = await seedPatient();
-  await loginThroughUi(page, fixture.patient);
-  await arriveAtPatientDashboard(page);
+  const fixture = await seedPlayer();
+  await loginThroughUi(page, fixture.player);
+  await arriveAtHome(page);
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
 
   await expectFieldsReadyForIos({
