@@ -96,13 +96,15 @@ higher-value work.
 
 Finishing an agent task and a PR being ready to merge are separate states:
 
-- **Agent task complete**: every [ready checkpoint](#ready-checkpoint) item
-  that applies to the PR holds, the PR is marked ready for review, and the
+- **Agent task complete**: for a task that ends in a PR, every
+  [ready checkpoint](#ready-checkpoint) item that applies holds and the
   report says what has and has not run. The review and QA gates routed for
   the PR are part of the task, not later work. Under a separate orchestrator,
   your task is your brief: routing, reviews, QA by other agents,
   native-sensitive validation, follow-up cards and marking the PR ready are
-  its items unless it delegates them to you.
+  the orchestrator's items, unless it or your role's skill
+  ([nfct-integration](.agents/skills/nfct-integration/SKILL.md) for an
+  integrator) gives them to you.
 - **Merge-ready**: the task is complete and every merge gate is satisfied on
   the PR's current head, including a green `Pre-merge validation` status.
 
@@ -125,11 +127,11 @@ each item that applies:
 4. **Independent review**, and a separate **security review** when the tier
    is STANDARD or DEEP, have finished within the [review budget](#review-budget):
    fixes verified, no BLOCKER open.
-5. **Native-sensitive validation** (remote validation, step 3 below) has
-   passed, or is named as an owner action.
+5. **Native-sensitive validation** has passed where
+   [step 3 below](#lifecycle-and-remote-validation) requires it.
 6. **Owner actions** are listed: what only the owner can do, such as a deploy
-   to `nfct-dev`, human visual or hardware checks, or a validation you could
-   not run.
+   to `nfct-dev`, human visual or hardware checks, or a required validation
+   you could not run.
 7. **Follow-up cards** are filed for FOLLOW-UP and still-open SHOULD-FIX
    findings ([out-of-scope work](#out-of-scope-work)).
 8. **PR state** matches: draft while any item above is open, ready for review
@@ -144,17 +146,19 @@ run cannot (macOS, the Simulator, the real-backend canary).
 
 1. Run every required local check, then push and open the PR as a draft
    (`gh pr create --draft`), or update it.
-2. Run the PR's routed exploratory QA and reviews, fix and revalidate within
-   the [review budget](#review-budget), and push the fixes as one batch.
+2. Have the PR's routed exploratory QA and reviews run
+   ([bounded review](#bounded-review) says who starts them), fix and
+   revalidate within the [review budget](#review-budget), and push the fixes
+   as one batch.
 3. Do not start remote validation yourself unless the user asks for it, or
    the task needs what only a remote run gives. A native-sensitive change
-   does: one that changes what the native app builds or calls, such as
-   `ios/` (including `Package.swift`), Capacitor plugin dependencies, native
-   API integrations or native build configuration
-   ([full list](docs/nfct/ios.md#the-macos-job-iosyml-native)). Run `ios.yml`
-   on its pushed head
-   ([how](docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal))
-   and wait for it, or, if you cannot, name it as an owner action. Otherwise
+   does: one to native code or build configuration (`ios/`, including
+   `Package.swift`), to Capacitor plugin dependencies, or to how app code
+   calls a native API. Run the `ios.yml` scenarios it can affect, `smoke` at
+   minimum, on its pushed head
+   ([how](docs/nfct/ios.md#running-scenarios-from-an-agent-or-a-terminal)),
+   or Pre-merge validation on its final head, which includes them; wait for
+   that run, or, if you cannot run it, name it as an owner action. Otherwise
    run only the workflow that gives what you need, on a pushed head that has
    passed the local checks. Other remote validation, Pre-merge validation
    included, stays manual and risk-based.
@@ -163,10 +167,10 @@ run cannot (macOS, the Simulator, the real-backend canary).
 5. Report the PR URL, the review and QA results, and the remote validation
    state of the head, and finish. Usually that is "Pre-merge validation not
    run", with the command to run it: `gh workflow run ci.yml --ref <branch>`.
-   Report any other run you started as *pending*; do not poll or `--watch` it.
+   Report a run you started but did not need to wait for as *pending*; do
+   not poll or `--watch` it.
 
-Keep the PR draft while implementation, review, QA and local testing
-continue. Before substantial rework of a ready PR, such as merging its
+Before substantial rework of a ready PR, such as merging its
 base with conflicts or a review fix pass, convert it back to draft
 (`gh pr ready --undo <n>`), cancel any validation run of the head being
 replaced (`gh run cancel <id>`), and mark it ready again once the reworked
@@ -213,8 +217,10 @@ If a separate orchestrator started you, it routes and starts the reviews; do
 not start duplicates. Otherwise the agent handling the user's task is the
 orchestrator, even when it also implemented the change: before reporting the
 task complete, it routes the PR and starts the routed reviewers as separate
-agents, never reviewing its own work. If its tooling cannot start agents, it
-asks the user to start them and keeps the PR draft.
+agents, never reviewing its own work. It may run exploratory QA itself under
+[nfct-exploratory-qa](.agents/skills/nfct-exploratory-qa/SKILL.md) and says
+so in the report. If its tooling cannot start agents, it asks the user to
+start the reviewers and keeps the PR draft.
 
 ### Finding severity
 
@@ -243,7 +249,8 @@ Firestore rules, a Function or a native dependency is routed like adding one;
   [routed tier](.agents/skills/nfct-orchestration/SKILL.md#security-tier).
 - A docs-only or genuinely test-only PR may skip review. A test change that
   weakens a guard (such as the e2e permission guard or the isolation check)
-  or changes what CI runs is not test-only.
+  or changes what CI runs is not test-only, and a change to the hard rules or
+  to review, security or CI policy, here or in a skill, is not docs-only.
 - Record the decision in the PR body either way.
 
 ### Review budget

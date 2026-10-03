@@ -19,7 +19,10 @@ A solo agent whose task ends in a PR holds this role for that PR
 [review routing](#review-routing), the [security tier](#security-tier) and
 [agent topology](#agent-topology) to it, and skip stream planning and
 integration. You implemented the change, so start a separate reviewer; never
-review it yourself.
+review it yourself. Exploratory QA may be your own recorded pass. Your
+completion is the AGENTS.md
+[ready checkpoint](../../../AGENTS.md#ready-checkpoint), not
+[Completion](#completion) below.
 
 ## Read first
 
