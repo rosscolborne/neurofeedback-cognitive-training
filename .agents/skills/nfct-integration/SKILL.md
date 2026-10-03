@@ -1,6 +1,6 @@
 ---
 name: nfct-integration
-description: Converge completed NFCT streams (parallel branches, worktrees or PRs serving one objective) into one validated integration PR that is merge-ready once its Pre-merge validation is green. Use when parallel implementation has finished, when related branches or PRs must become one coherent result, when asked to combine or integrate related work, or when parallel work is done but has not been validated together.
+description: Converge completed NFCT streams (parallel branches, worktrees or PRs serving one objective) into one locally validated, reviewed integration PR. Use when parallel implementation has finished, when related branches or PRs must become one coherent result, when asked to combine or integrate related work, or when parallel work is done but has not been validated together.
 ---
 
 # NFCT integration
@@ -8,15 +8,14 @@ description: Converge completed NFCT streams (parallel branches, worktrees or PR
 Finishing every stream does not finish the objective. The integration's
 agent work is complete only when the streams are combined in one integration
 PR, every applicable gate below has passed with no BLOCKER open, and the
-final head is pushed and ready for review. The objective is merge-ready once
-Pre-merge validation is green on that head too (see [completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)).
+final head is pushed and ready for review
+([completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)).
 If the user explicitly asked for independent PRs, see
 [Independent PRs](#independent-prs).
 
 The integrator owns the combined result: the merge order, the integration
 branch and PR, conflict and semantic resolutions, defects that exist only in
-the combination, the combined validation, remote validation of the integration PR, and the
-integration report. Everything else keeps its owner:
+the combination, the combined validation, and the integration report. Everything else keeps its owner:
 
 | Responsibility | Owner |
 | --- | --- |
@@ -168,7 +167,10 @@ one.
    integration worktree every command in the *merged* AGENTS.md
    [Checks](../../../AGENTS.md#checks) and every Linux job the merged
    workflows run ([docs/nfct/ci.md](../../../docs/nfct/ci.md)), with the
-   installs each needs. Confirm CI
+   installs each needs, locally: build `functions/lib` once, then run the
+   independent suites in parallel
+   [QA lanes](../../../AGENTS.md#parallel-agents-qa-lanes) on the same
+   commit, each Playwright run with its own `--output`. Confirm CI
    discovers every new Playwright spec (the `--list` check in
    [Stage 1 test coverage](../../../AGENTS.md#stage-1-test-coverage)). Where
    behavior crosses streams and no stream's tests cover it, add a
@@ -196,18 +198,16 @@ one.
 4. **Final validation.** If anything was committed after gate 1's run, rerun
    the full deterministic suite once on the final head. This is the one
    combined validation pass the report cites; do not rerun it after each fix.
-5. **Remote validation.** Push the final head. For a native-sensitive
-   change, run `ios.yml` on it first
-   ([AGENTS.md](../../../AGENTS.md#lifecycle-and-remote-validation), step 3).
-   Mark the PR ready for review, and report that Pre-merge validation has
-   not run on it yet, with the command (`gh workflow run ci.yml --ref
-   <branch>`); start it only if the user asked you to, and do not wait for it
-   ([completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)).
-   It is a merge gate: the PR is merge-ready only with a green `Pre-merge
-   validation` status on that head. If it has failed, the PR is not
-   merge-ready. Investigate rather than re-running until green (a flaky test
-   is a finding), fix it on the integration branch, repeat the affected local
-   gates, and push again.
+   Reviewers and QA reuse it for that commit
+   ([proportional validation](../../../AGENTS.md#proportional-validation)).
+5. **Hand-off.** Push the final head and mark the PR ready for review. Do not
+   dispatch hosted CI ([hosted CI](../../../AGENTS.md#hosted-ci)): report it
+   as not run, with the exact owner actions: `gh workflow run ci.yml --ref
+   <branch>`, and for a native-sensitive change the `ios.yml` scenarios it
+   can affect (`gh workflow run ios.yml --ref <branch> -f webkit=false -f
+   scenarios='<names>'`). If the owner's run fails, investigate rather than
+   re-running until green (a flaky test is a finding), fix it on the
+   integration branch, repeat the affected local gates, and push again.
 
 Whoever started you holds the orchestrator role
 ([agent topology](../../../AGENTS.md#agent-topology)): it chooses the tier
@@ -232,7 +232,7 @@ for review only at step 5, when its final head is ready for validation.
 ## Hand off and clean up
 
 - Do not merge the integration PR: you implemented it. The owner does the
-  remaining human checks, confirms Pre-merge validation is green on the head
+  remaining human checks, runs the hosted validation they want on the head
   being merged, and merges. Recommend a merge commit rather than a
   squash; it keeps each stream's commits and SHAs, so the stream branches pass
   the merged check in
@@ -256,16 +256,16 @@ Only when the user explicitly asks for separate PRs:
   [integration check](../nfct-worktrees/SKILL.md#integration-worktrees),
   merging the streams in their intended merge order. Never push it.
 - On the check, run the deterministic suite and, for user-facing work,
-  exploratory QA at the check's local SHA. Review and Pre-merge validation
-  run on each stream's own PR instead.
+  exploratory QA at the check's local SHA. Review runs on each stream's own
+  PR instead.
 - Conflicts and defects go back to each stream's owner as findings. They fix
   and push their own branches, and you re-check in a fresh integration check.
 - Each PR merges on its own, in the recorded order. Before merging a stacked
   PR, retarget it to `development` once its base has merged
   (`gh pr edit <n> --base development`); otherwise it merges into its base branch.
 - The integration work is complete when the combined check has passed at
-  the heads that will merge. Each PR is merge-ready once its own review and
-  Pre-merge validation pass.
+  the heads that will merge. Each PR is merge-ready once its own local
+  checks and review pass.
 
 ## Report
 
@@ -285,9 +285,8 @@ Give one concise report, in the PR body and in your final message:
 - **Follow-ups**: cards filed or proposed, and anything unresolved.
 - **Status**, as three lines:
   - Agent work: *complete*, or what remains.
-  - Remote validation: Pre-merge validation *not run*, *pending*, *passing*
-    or *failing* at `<sha>`, with the run URL or the command to run it.
-  - Merge readiness: *MERGE-READY* (every gate passed with no BLOCKER open
-    and Pre-merge validation is green at `<sha>`; only the listed human
-    checks and carded findings remain), *NOT YET — needs Pre-merge
-    validation*, or *NOT READY*, with what blocks it.
+  - Hosted CI: *not run* (with the exact owner commands), or the state and
+    run URL of a run the owner started, at `<sha>`.
+  - Merge readiness: *MERGE-READY* (every gate passed locally and in review
+    with no BLOCKER open at `<sha>`; only the listed owner actions, human
+    checks and carded findings remain), or *NOT READY*, with what blocks it.

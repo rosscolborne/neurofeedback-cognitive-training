@@ -137,6 +137,13 @@ You decide which agents exist, what each does and when each stops
   letting the integrator start its QA and reviewers.
 - More reviewers is not more safety. Add an agent only for a distinct risk
   that no planned gate covers, and count it against the plan.
+- Size the plan to the blast radius
+  ([proportional validation](../../../AGENTS.md#proportional-validation)): a
+  trivial, isolated change gets one reviewer and no separate tester or QA
+  agent; deep-validation boundaries keep their full gates.
+- Brief reviewers, security reviewers and QA with the green local validation
+  already run on their commit (commands and SHA), so they reuse it instead of
+  rerunning the matrix.
 
 ## Phases
 
@@ -151,7 +158,7 @@ changes only where dependencies require it.
 | 4. Run the combined deterministic suite | Integrator, per the [testing skill](../neurasticity-development-testing/SKILL.md) |
 | 5. Exploratory QA, where the work is user-facing | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
 | 6. Independent review, and security review at the [routed tier](#security-tier) | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
-| 7. Pre-merge validation green on the integration PR's final head: a merge gate, run by hand ([CI](../../../docs/nfct/ci.md)) and reported rather than waited for | Integrator reports whether it has run; whoever merges confirms it |
+| 7. Hosted CI (Pre-merge validation, and `ios.yml` scenarios for native-sensitive work) on the final head: owner-dispatched ([hosted CI](../../../AGENTS.md#hosted-ci)) | Integrator names the exact owner commands; whoever merges confirms any run is green |
 | 8. Targeted human visual and hardware checks | Owner, from the QA report's HUMAN CHECK items |
 | 9. Merge | Owner |
 
@@ -194,21 +201,23 @@ agent work is complete when:
 - the requested functionality is implemented and integrated: the integration
   report says its agent work is complete or, for independent PRs, the
   combined check has passed at the heads that will merge;
-- the applicable tests pass, and the final head's CI (7) state is reported;
+- the applicable local tests pass on the final head, and its hosted CI (7)
+  state and owner commands are reported;
 - phases 4–6 have passed, with QA and the selected reviews finished within
   their budget and no BLOCKER open;
 - open SHOULD-FIX and FOLLOW-UP findings are carded, and the remaining human
   checks are listed.
 
 Report merge readiness separately, as
-[completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness) defines it: with CI pending, the
-objective is *not yet* merge-ready, and you do not wait for CI. Until the agent
+[completion and merge readiness](../../../AGENTS.md#completion-and-merge-readiness)
+defines it. Do not dispatch or wait for hosted CI unless the user authorized
+it ([hosted CI](../../../AGENTS.md#hosted-ci)). Until the agent
 work is complete, report the objective as in progress, naming the current
 phase and what blocks it.
 
 Merging into `development` is the owner's decision. The orchestrator merges only when
 explicitly delegated, never a PR it implemented or integrated, and only after
-confirming Pre-merge validation is green on the head being merged.
+confirming that any hosted run on the head being merged is green.
 
 ## Reshape when contracts change
 

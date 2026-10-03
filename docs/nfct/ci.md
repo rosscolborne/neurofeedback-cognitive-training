@@ -1,11 +1,14 @@
 # CI: what runs where
 
 No push or pull request update starts a validation suite. Linux validation
-runs locally first ([AGENTS.md "Checks"](../../AGENTS.md#checks)). GitHub-hosted
-runs are started by hand, in two cases: where a clean machine, macOS or the
-real backend adds something a local run cannot, and once on a pull request's
-final head before it merges. The only automatic runs are a development →
-main promotion's release checks and the weekly minimum-iOS run.
+runs locally, and is the default ([AGENTS.md "Checks"](../../AGENTS.md#checks)).
+GitHub-hosted runs are started by hand by the owner, where a clean machine,
+macOS or the real backend adds something a local run cannot, such as on a
+pull request's final head before it merges. Agents do not dispatch them
+unless the user explicitly authorizes it; they name the exact command
+instead ([AGENTS.md "Hosted CI"](../../AGENTS.md#hosted-ci)). The only
+automatic runs are a development → main promotion's release checks and the
+weekly minimum-iOS run.
 
 ## Workflows
 
@@ -40,21 +43,22 @@ it.
 
 ## Before a pull request into development merges
 
-1. Run the local checks, and the journeys the change can affect
+1. The agent runs the local checks and the journeys the change can affect,
+   and reports the hosted runs the change calls for
    ([AGENTS.md](../../AGENTS.md#completion-and-merge-readiness)).
 2. Push the final head. If `development` has moved on, merge it into the branch
    first. The run tests the head alone, not the merge GitHub will make, so
    `Pre-merge result` fails a head that does not contain `development`'s
    latest commit at the time of the run.
-3. Start **Pre-merge validation** on the branch. In the web UI: Actions >
+3. The owner starts **Pre-merge validation** on the branch. In the web UI: Actions >
    Pre-merge validation > Run workflow, then choose the branch. From a
    terminal: `gh workflow run ci.yml --ref <branch>`.
 4. The pull request shows the `Pre-merge validation` status on that commit. It
    is pending while the run works, then success or failure, and links to the
    run. A later push leaves the new head without the status, so run it again
    on the new head.
-5. Merge only with a green `Pre-merge validation` status on the exact head.
-   `gh pr checks <n>` lists it.
+5. Once it has run, merge only a head whose `Pre-merge validation` status
+   is green. `gh pr checks <n>` lists it.
 
 The checks of a manually started run do not appear on the pull request:
 GitHub leaves `workflow_dispatch` runs out of a commit's status rollup. On
@@ -134,6 +138,9 @@ chosen branch's copy.
   Release workflow still runs on the first promotion pull request.
 
 ## Running one suite by hand
+
+These are owner actions; an agent gives the exact line, with its inputs and
+ref, rather than running it, unless explicitly authorized.
 
 ```bash
 branch=$(git branch --show-current)
