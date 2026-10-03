@@ -65,6 +65,17 @@ screen, open each main navigation area once, complete the changed feature's
 primary flow once, reload, confirm its result persisted, then sign out and
 back in. Watch the console throughout.
 
+A fresh account only ever has the current profile shape. When the diff
+touches how the profile document (`users/{uid}`) is shaped, read or allowed
+(`shared/schemas`, `src/consumer/repositories/profileRepository.ts`,
+`src/contexts/AuthContext.tsx` or the rules for `users/{uid}`), also sign in,
+reload, sign out and sign in again with one seeded account of each shape in
+`shared/__tests__/profileShapes.ts` (`seedAccountWithProfileShape` in
+`e2e/helpers/localEmulator.ts`), and check each behaves as its `appReads`
+says. Report the shapes covered, and list the read-only
+[profile shape audit](../../../docs/nfct/nfct-dev-canary.md#existing-profile-shapes)
+of nfct-dev as an owner action.
+
 ## Set up
 
 1. Run the exact commit under test and record its SHA: in the branch's own

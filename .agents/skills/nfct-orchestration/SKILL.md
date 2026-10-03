@@ -1,6 +1,6 @@
 ---
 name: nfct-orchestration
-description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR, owning agent topology, review and security-tier routing, and bounded convergence. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, choosing review depth, or tracking parallel work to completion or a checkpoint. Also use as a solo agent with no separate orchestrator whose task ends in a PR that needs review or security routing, including cleanup or removal PRs: you route that PR and start its reviewers.
+description: Plan, coordinate and track multi-stream NFCT work across several cards or agents through integration into one validated PR, owning agent topology, review and security-tier routing, and bounded convergence. Use when splitting an epic, objective or set of cards into parallel streams, assigning implementation, integration, testing, QA, review and security roles, choosing review depth, or tracking parallel work to completion or a checkpoint. Use only when the work has genuinely independent streams that can progress in parallel. A single cohesive task, even with several subtasks, files or acceptance criteria, stays one stream with no stream planning or integration; a solo agent whose task ends in a PR still uses this skill's Review routing, Security tier and Agent topology sections to route that PR and start its reviewers.
 ---
 
 # NFCT orchestration
@@ -17,8 +17,8 @@ its procedure rather than restating it.
 A solo agent whose task ends in a PR holds this role for that PR
 ([bounded review](../../../AGENTS.md#bounded-review)): apply
 [review routing](#review-routing), the [security tier](#security-tier) and
-[agent topology](#agent-topology) to it, and skip stream planning and
-integration. You implemented the change, so start a separate reviewer; never
+[agent topology](#agent-topology) to it, start only the gates it routes,
+and skip stream planning and integration. You implemented the change, so start a separate reviewer; never
 review it yourself. Exploratory QA may be your own recorded pass. Your
 completion is the AGENTS.md
 [ready checkpoint](../../../AGENTS.md#ready-checkpoint), not
@@ -38,6 +38,11 @@ completion is the AGENTS.md
 - Decide the deliverable before starting. Streams that serve one objective
   converge into one integration PR; plan independent PRs only when the user
   explicitly asks for them. Record the choice in the plan.
+- Default to one stream. Several related subtasks, files or acceptance
+  criteria are not a reason to split: work that will be implemented, tested,
+  reviewed and merged as one tightly coupled PR stays one stream. Split only
+  for clearly separable subsystems or PRs, or when parallel work materially
+  shortens completion.
 - Separate what is actually blocked from what can safely run in parallel. Do
   not maximize parallelism for its own sake.
 - Run at most about 3–4 concurrent implementation streams, unless the tasks

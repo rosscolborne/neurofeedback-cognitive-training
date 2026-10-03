@@ -21,7 +21,11 @@ you never review your own change.
    supposed to guarantee before judging how it does it.
 3. Identify the intended base (normally `origin/development`, or the PR it stacks on)
    and fetch it. Review the complete diff against that base
-   (`git diff <base>...<head>`), not only the latest commit.
+   (`git diff <base>...<head>`), not only the latest commit. When you are
+   asked for a review scoped to new work after an earlier review
+   ([review budget](../../../AGENTS.md#review-budget)), review only that range
+   (`git diff <reviewed-sha>..<head>`) and the code it relies on; your verdict
+   covers that range.
 
 ## Integration PRs
 

@@ -391,6 +391,8 @@ checks:
    - Deploy only once the pull request's security review (DEEP tier for rules)
      has passed, and only from the reviewed head commit. A rules bypass would
      otherwise be live on a project that holds testers' data.
+   - Run the read-only [profile shape audit](#existing-profile-shapes) from
+     the branch, to see which existing accounts the new rules and client meet.
    - Deploy the candidate rules and indexes:
      `npx firebase deploy --only firestore --project dev`. Answer **No** to
      deleting indexes, and never pass `--force`.
@@ -426,6 +428,39 @@ leaves the profile as residue.
 Introduce a separate `nfct-staging` project when this stops being safe:
 external TestFlight testers, deployed Functions or scoring, or frequent
 backend changes. That is an owner decision.
+
+## Existing profile shapes
+
+The canary and every emulator test sign in to accounts the code under test
+just created, so their profile document (`users/{uid}`) is always in the
+current shape. Real accounts keep whatever shape they were written in. On
+2026-10-03 every `users/{uid}` on nfct-dev was still the inherited pre-Phase 2
+sign-up document, which this app cannot read, and all tests had passed.
+
+Two things cover existing accounts:
+
+- **Historical shapes in the tests.** `shared/__tests__/profileShapes.ts`
+  lists each profile shape with what the app does with it.
+  `e2e/profile-shapes.auth-handoffs.local.spec.ts` seeds an account in each
+  one and signs in, relaunches, signs out and signs in again; exploratory QA
+  seeds them with `seedAccountWithProfileShape`.
+- **A read-only audit of the real documents.** It counts `users/*` by
+  `schemaVersion` and set of top-level keys, and says which this build can
+  read. It prints no field values, and document IDs only with `--examples`.
+
+  ```bash
+  npm run functions:audit-profile-shapes -- --project nfct-dev --live
+  # As a gate: fails on any unreadable document or a truncated scan.
+  npm run functions:audit-profile-shapes -- --project nfct-dev --live --fail-on-unreadable
+  ```
+
+  It runs from the owner's machine with Application Default Credentials; a
+  read-only identity (Cloud Datastore Viewer) is enough. Run it from the
+  branch under test, because it reads with that branch's profile reader,
+  before merging or deploying a change to `shared/schemas`, profile reads,
+  `AuthContext` or the Firestore rules. When it reports a shape that
+  `profileShapes.ts` does not cover, add the shape there (the tests then
+  cover it), or plan a migration or wipe with the owner.
 
 ## Rules and index parity (planned)
 
