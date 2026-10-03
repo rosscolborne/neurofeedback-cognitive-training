@@ -53,6 +53,12 @@ interface AuthContextType {
    * true, because an unknown profile is not the same as having none.
    */
   profileLookupFailed: boolean;
+  /**
+   * With `profileLookupFailed`: the profile document exists but this app
+   * cannot read it (a legacy or newer-schema document). Unlike a failed read,
+   * trying again cannot help, and the app never overwrites the document.
+   */
+  profileUnreadable: boolean;
   /** Loads the signed-in player's profile again after `profileLookupFailed`. */
   retryProfileLookup: () => void;
   /** The Firestore cache lifecycle's state, for the loading screen. */
@@ -77,6 +83,7 @@ const AuthContext = createContext<AuthContextType>({
   updateProfile: async () => {},
   logout: async () => 'signed-out',
   profileLookupFailed: false,
+  profileUnreadable: false,
   retryProfileLookup: () => {},
   cacheStatus: 'idle',
   cacheEndingReason: null,
@@ -101,6 +108,7 @@ export const PROFILE_LOOKUP_RETRY_AFTER_MS = 15_000;
 export const PROFILE_LOOKUP_AUTO_RETRY_MS = 2_000;
 export const PROFILE_LOOKUP_AUTO_RETRY_MAX_MS = 10_000;
 const TRANSIENT_PROFILE_READ_CODES = new Set(['unavailable', 'deadline-exceeded']);
+const UNREADABLE_PROFILE_CODE = 'unreadable-profile';
 
 const lookupError = (message: string, code: string) => Object.assign(new Error(message), { code });
 
@@ -117,6 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLookupFailed, setProfileLookupFailed] = useState(false);
+  const [profileUnreadable, setProfileUnreadable] = useState(false);
   const authGenerationRef = useRef(0);
   const profileLookupRef = useRef(0);
   const mountedRef = useRef(true);
@@ -143,7 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const read = await profileRepository.getProfile();
     if (!isCurrent()) return null;
     if (read.status === 'readable') return read.data;
-    if (read.status === 'unreadable') throw lookupError('The profile document cannot be read by this app.', 'unreadable-profile');
+    if (read.status === 'unreadable') throw lookupError('The profile document cannot be read by this app.', UNREADABLE_PROFILE_CODE);
     // A cache-only answer may predate a profile created since on another device.
     if (read.fromCache) throw lookupError('Only the device cache answered, and it has no profile.', 'unavailable');
 
@@ -169,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (signupDraftRef.current === draft) signupDraftRef.current = null;
     const created = await profileRepository.getProfile();
     if (!isCurrent()) return null;
-    if (created.status !== 'readable') throw lookupError('The new profile could not be read back.', 'unreadable-profile');
+    if (created.status !== 'readable') throw lookupError('The new profile could not be read back.', UNREADABLE_PROFILE_CODE);
     return created.data;
   };
 
@@ -180,7 +189,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const lookUpProfile = async (generation: number, uid: string, attempt = 0, lastErrorCode?: string) => {
     const lookup = ++profileLookupRef.current;
     const isCurrent = () => profileLookupRef.current === lookup && isCurrentIdentity(generation, uid);
-    if (attempt === 0) setProfileLookupFailed(false);
+    if (attempt === 0) {
+      setProfileLookupFailed(false);
+      setProfileUnreadable(false);
+    }
     setLoading(true);
     const slow = setTimeout(() => { if (isCurrent()) setProfileLookupFailed(true); }, PROFILE_LOOKUP_RETRY_AFTER_MS);
     try {
@@ -188,6 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!loaded || !isCurrent()) return;
       setProfile(loaded);
       setProfileLookupFailed(false);
+      setProfileUnreadable(false);
       setLoading(false);
     } catch (error) {
       if (!isCurrent()) return;
@@ -195,6 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Once per kind of failure, not on every automatic retry.
       if (attempt === 0 || code !== lastErrorCode) console.warn('Could not load the player profile:', error);
       setProfileLookupFailed(true);
+      setProfileUnreadable(code === UNREADABLE_PROFILE_CODE);
       if (TRANSIENT_PROFILE_READ_CODES.has(code)) {
         // A newer lookup (Try again), a sign-out or an account switch makes this stale.
         const delay = Math.min(PROFILE_LOOKUP_AUTO_RETRY_MS * 2 ** attempt, PROFILE_LOOKUP_AUTO_RETRY_MAX_MS);
@@ -226,6 +240,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
         setProfile(null);
         setProfileLookupFailed(false);
+        setProfileUnreadable(false);
         if (currentUser) setLoading(true);
         const preparation = await firestoreCache.prepareForUser(currentUser?.uid ?? null);
         if (!isMounted || !mountedRef.current || authGenerationRef.current !== generation) return;
@@ -370,7 +385,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, signup, changePassword, requestPasswordReset, updateProfile, logout, profileLookupFailed, retryProfileLookup, cacheStatus, cacheEndingReason, signOutWithoutFirestore }}>
+    <AuthContext.Provider value={{ user, profile, loading, login, signup, changePassword, requestPasswordReset, updateProfile, logout, profileLookupFailed, profileUnreadable, retryProfileLookup, cacheStatus, cacheEndingReason, signOutWithoutFirestore }}>
       {children}
     </AuthContext.Provider>
   );

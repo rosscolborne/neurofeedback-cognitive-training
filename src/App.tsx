@@ -13,7 +13,7 @@ import { TermsOfService } from './pages/legal/TermsOfService';
 import { useSignOut } from './components/account/useSignOut';
 
 export function App() {
-  const { user, profile, loading, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, profileLookupFailed, retryProfileLookup } = useAuth();
+  const { user, profile, loading, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, profileLookupFailed, profileUnreadable, retryProfileLookup } = useAuth();
   // Sign-out from the profile lookup's error screen, which asks before
   // discarding writes that have not uploaded, as Profile's Log Out does.
   const profileLookupSignOut = useSignOut(logout);
@@ -44,6 +44,12 @@ export function App() {
           detail: 'Close any other tabs or windows with this app open, then try again.',
           retry: true,
         }
+          // Not a connection problem: the profile is there, in a form this
+          // version cannot read, so trying again cannot help.
+          : profileUnavailable && profileUnreadable ? {
+            title: 'This version of the app can’t open your account.',
+            detail: 'Your profile was saved in a format this version doesn’t support, so trying again won’t help. You can sign out and use another account.',
+          }
           : profileUnavailable ? {
             title: 'Your account couldn’t be loaded.',
             detail: 'Check your internet connection, then try again.',
@@ -54,7 +60,7 @@ export function App() {
       <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', textAlign: 'center', background: 'var(--surface-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
         <BrandLogo size={72} variant="terracotta" glow />
         {notice && (
-          <div role={notice.retry ? 'alert' : 'status'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', maxWidth: '360px' }}>
+          <div role={notice.retry || profileUnavailable ? 'alert' : 'status'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', maxWidth: '360px' }}>
             <strong style={{ color: 'var(--text-primary)' }}>{notice.title}</strong>
             {notice.detail && <span>{notice.detail}</span>}
           </div>
@@ -69,8 +75,8 @@ export function App() {
         {profileUnavailable && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
             {/* Not while sign-out runs or asks about unsynced writes: a lookup that succeeds would close that step. */}
-            <button type="button" className="btn btn-primary" disabled={profileLookupSignOut.busy || profileLookupSignOut.phase === 'unsynced'} onClick={retryProfileLookup}>Try again</button>
-            <button type="button" className="btn btn-secondary" disabled={profileLookupSignOut.busy} onClick={profileLookupSignOut.requestSignOut}>Sign out</button>
+            {!profileUnreadable && <button type="button" className="btn btn-primary" disabled={profileLookupSignOut.busy || profileLookupSignOut.phase === 'unsynced'} onClick={retryProfileLookup}>Try again</button>}
+            <button type="button" className={profileUnreadable ? 'btn btn-primary' : 'btn btn-secondary'} disabled={profileLookupSignOut.busy} onClick={profileLookupSignOut.requestSignOut}>Sign out</button>
           </div>
         )}
         {profileUnavailable && profileLookupSignOut.dialog}
