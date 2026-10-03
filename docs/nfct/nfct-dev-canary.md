@@ -171,7 +171,7 @@ Measured on the emulators (2026-10-02). Real-backend timings are larger.
 
 | Item | Per run |
 | --- | --- |
-| Auth | 1 account creation; about 7 operations, including the second sign-in and cleanup's sign-in and delete |
+| Auth | 1 account creation; about 9 operations, including saving the sign-up name, the account check before the profile is created, the second sign-in and cleanup's sign-in and delete |
 | Firestore reads | about 30 client requests; about 15 to 30 billed document reads |
 | Firestore writes | 2: the profile (`users/{uid}`) create, one `gameSessions` create |
 | Firestore deletes | 1 user-level delete (the profile, `users/{uid}`) |

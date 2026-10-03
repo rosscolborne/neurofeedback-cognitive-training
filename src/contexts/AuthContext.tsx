@@ -159,7 +159,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const code = String((error as { code?: unknown } | null)?.code);
       throw code === 'auth/network-request-failed' ? lookupError('Auth could not be reached to confirm the account.', 'unavailable') : error;
     }
-    if (!isCurrent()) return null;
+    // Checked again in the same turn as the write: Auth may have switched to
+    // another account (another tab) while the reload ran.
+    if (!isCurrent() || auth.currentUser?.uid !== uid) return null;
     const draft = signupDraftRef.current;
     const typedName = draft && draft.email === normalizedEmail(currentUser.email) ? draft.displayName : currentUser.displayName;
     await profileRepository.createProfile(newProfileDraft(typedName)).acknowledged;

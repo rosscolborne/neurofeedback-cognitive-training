@@ -32,6 +32,7 @@ import { HardwareSetup } from '../pages/onboarding/HardwareSetup';
 import { Login } from '../pages/onboarding/Login';
 import { SignUp } from '../pages/onboarding/SignUp';
 import { Welcome } from '../pages/onboarding/Welcome';
+import { TermsOfService } from '../pages/legal/TermsOfService';
 
 
 async function mount(element: React.ReactElement): Promise<ReactTestRenderer> {
@@ -46,6 +47,9 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Sign up', () => <SignUp />],
   ['Hardware setup', () => <HardwareSetup />],
   ['Brand logo', () => <BrandLogo />],
+  // The Privacy Policy is not listed yet: its contact address is still Waveable's
+  // support inbox until NFCT has its own (NFCT-34).
+  ['Terms of Service', () => <TermsOfService />],
 ];
 
 describe('consumer branding', () => {

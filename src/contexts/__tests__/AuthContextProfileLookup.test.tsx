@@ -233,6 +233,20 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     renderer.unmount();
   });
 
+  it('creates no profile when Auth switches to another account while it confirms this one', async () => {
+    profiles.getProfile.mockResolvedValueOnce(missing());
+    const reload = deferred<void>();
+    firebaseAuth.reload.mockReturnValueOnce(reload.promise);
+    const renderer = await signIn();
+    expect(firebaseAuth.reload).toHaveBeenCalledOnce();
+
+    // Another tab signs this browser in as Bob before this tab's auth listener runs.
+    firebaseAuth.currentUser = { uid: 'bob', email: 'bob@example.com', displayName: null };
+    await act(async () => { reload.resolve(); });
+    expect(profiles.createProfile).not.toHaveBeenCalled();
+    renderer.unmount();
+  });
+
   it('retries by itself when Auth cannot be reached to confirm the account, then creates the profile', async () => {
     profiles.getProfile.mockResolvedValueOnce(missing()).mockResolvedValueOnce(missing()).mockResolvedValueOnce(readable());
     firebaseAuth.reload.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'auth/network-request-failed' }));
