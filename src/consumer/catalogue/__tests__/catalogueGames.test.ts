@@ -26,9 +26,9 @@ describe('catalogue games', () => {
       summary: GAME_CATALOGUE[0]!.summary,
       icon: 'calculator',
       domains: [
-        { id: 'math', label: 'Math', weight: 0.7 },
-        { id: 'processing-speed', label: 'Processing speed', weight: 0.2 },
-        { id: 'memory', label: 'Memory', weight: 0.1 },
+        { id: 'math', label: 'Math', weight: 0.7, percent: 70 },
+        { id: 'processing-speed', label: 'Processing speed', weight: 0.2, percent: 20 },
+        { id: 'memory', label: 'Memory', weight: 0.1, percent: 10 },
       ],
       runLengthMs: { min: 90_000, max: 90_000 },
       levels: 10,
@@ -45,6 +45,15 @@ describe('catalogue games', () => {
     const game = toCatalogueGame(listing({ domainWeights: { verbal: 0.2, spatial: 0.4, memory: 0, reasoning: 0.4 } }));
     expect(game.domains.map((domain) => domain.id)).toEqual(['reasoning', 'spatial', 'verbal']);
     expect(game.domains.map((domain) => domain.label)).toEqual(['Reasoning', 'Spatial', 'Verbal']);
+    expect(game.domains.map((domain) => domain.percent)).toEqual([40, 40, 20]);
+  });
+
+  it('shows each game\'s weights as whole percentages that sum to 100, the leftover point to the heavier domain on a tie', () => {
+    const game = toCatalogueGame(listing({ domainWeights: { memory: 1 / 3, verbal: 1 / 3, reasoning: 1 / 3 } }));
+    expect(game.domains.map(({ id, percent }) => [id, percent])).toEqual([['reasoning', 34], ['memory', 33], ['verbal', 33]]);
+    for (const catalogueGame of catalogueGames()) {
+      expect(catalogueGame.domains.reduce((total, domain) => total + domain.percent, 0)).toBe(100);
+    }
   });
 
   it('reads the run length from timed modes only, and the level count from the longest mode', () => {

@@ -4,8 +4,8 @@ import { expect, test } from './fixtures';
 import { arriveAtHome } from './helpers/auth';
 
 // NFCT-12: the Train tab is a game catalogue built from the code-owned shared
-// catalogue, each game filed under its domains. Also runs in WebKit as an
-// iPhone SE and an iPhone 17 (playwright.webkit.config.ts), where the card
+// catalogue, each game showing what it trains as percentages of its domain
+// weights (NFCT-65). Also runs in WebKit as an iPhone SE and an iPhone 17 (playwright.webkit.config.ts), where the card
 // layout matters most.
 
 async function signUpAndOpenTrain(page: Page): Promise<void> {
@@ -35,7 +35,7 @@ async function expectRowCard(button: Locator): Promise<void> {
   expect(box!.height).toBeGreaterThanOrEqual(44);
 }
 
-test('Train lists the games, filed under their domains, and nothing else', async ({ page }) => {
+test('Train lists the games, with what each trains, and nothing else', async ({ page }) => {
   await signUpAndOpenTrain(page);
   const games = gamesSection(page);
 
@@ -43,10 +43,22 @@ test('Train lists the games, filed under their domains, and nothing else', async
   const mentalMath = games.getByRole('button', { name: 'Mental Math', exact: true });
   await expect(mentalMath).toBeVisible();
   await expect(mentalMath).toHaveAccessibleDescription(
-    /^Quick arithmetic that adapts to you as you play\.\s+Domains:\s*Math\s*,\s*Processing speed\s*,\s*Memory\s+90 seconds\s*,\s*10 levels$/,
+    /^Quick arithmetic that adapts to you as you play\.\s+Trains\s*:\s*Math 70%\s*,\s*Processing speed 20%\s*,\s*Memory 10%\s+90 seconds\s*,\s*10 levels$/,
   );
-  // Each chip but the last also holds a visually hidden comma for screen readers.
-  await expect(games.locator('.train-card-tag')).toHaveText([/^Math,?$/, /^Processing speed,?$/, /^Memory$/]);
+  // Mental Math's real mix, as text (each item but the last also holds a
+  // visually hidden comma for screen readers), beside a bar split the same way.
+  const mix = games.locator('.train-card-mix');
+  // The title also holds a visually hidden colon.
+  await expect(mix.locator('.train-card-mix-title')).toBeVisible();
+  await expect(mix.locator('.train-card-mix-title')).toHaveText(/^Trains:?\s*$/);
+  await expect(mix.locator('.train-card-mix-item')).toHaveText([/^Math 70%,?$/, /^Processing speed 20%,?$/, /^Memory 10%$/]);
+  const segments = await mix.locator('.train-card-mix-segment').evaluateAll(
+    (nodes) => nodes.map((node) => node.getBoundingClientRect().width),
+  );
+  expect(segments).toHaveLength(3);
+  expect(segments[0]!).toBeGreaterThan(segments[1]!);
+  expect(segments[1]!).toBeGreaterThan(segments[2]!);
+  await expect(games.locator('.train-card-tag')).toHaveCount(0);
   await expect(games.getByText(/^90 seconds,?$/)).toBeVisible();
   await expect(games.getByText(/^10 levels,?$/)).toBeVisible();
   // The Games section is the whole catalogue: no headset training section or experience.

@@ -5,6 +5,8 @@ import { GAME_CATALOGUE } from '@nfct/shared';
 
 vi.mock('../../games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));
 
+import { Calculator } from 'lucide-react';
+import { CatalogueCard } from '../CatalogueCard';
 import { GameCatalogue } from '../GameCatalogue';
 import { GameScreen } from '../../games/GameScreen';
 import { GAME_SCREENS } from '../../games/gameScreens';
@@ -37,28 +39,56 @@ describe('GameCatalogue', () => {
     expect(items.map((item) => textOf(item.findByType('button')))).toEqual(GAME_CATALOGUE.map((listing) => listing.name));
   });
 
-  it('shows Mental Math with its summary, its domains heaviest first, run length and levels', () => {
+  it('shows Mental Math with its summary, what it trains as percentages heaviest first, run length and levels', () => {
     const [card] = renderer.root.findAllByType('li');
     expect(textOf(card!.findByType('button'))).toBe('Mental Math');
     expect(textOf(card!.findByProps({ className: 'train-card-desc' }))).toBe('Quick arithmetic that adapts to you as you play.');
-    const tags = card!.findAll((node) => node.type === 'span' && String(node.props.className).includes('train-card-tag'));
-    expect(tags.map(visibleTextOf)).toEqual(['Math', 'Processing speed', 'Memory']);
-    // Screen readers hear a label and a pause between chips; browsers add the spaces between the chip boxes.
-    expect(textOf(card!.findByProps({ className: 'train-card-tags' }))).toBe('Domains: Math,Processing speed,Memory');
+    const mix = card!.findByProps({ className: 'train-card-mix' });
+    expect(visibleTextOf(mix.findByProps({ className: 'train-card-mix-title' }))).toBe('Trains');
+    const items = mix.findAllByProps({ className: 'train-card-mix-item' });
+    expect(items.map(visibleTextOf)).toEqual(['Math 70%', 'Processing speed 20%', 'Memory 10%']);
+    // Screen readers hear a label and a pause between items; the bar is decoration.
+    expect(textOf(mix)).toBe('Trains: Math 70%,Processing speed 20%,Memory 10%');
+    const bar = mix.findByProps({ className: 'train-card-mix-bar' });
+    expect(bar.props['aria-hidden']).toBe('true');
+    expect((bar.children as ReactTestInstance[]).map((segment) => segment.props.style)).toEqual([{ flexGrow: 70 }, { flexGrow: 20 }, { flexGrow: 10 }]);
+    // The mix replaces the domain chips.
+    expect(card!.findAll((node) => String(node.props.className).includes('train-card-tag'))).toHaveLength(0);
     expect(visibleTextOf(card!.findByProps({ className: 'train-card-facts' }))).toBe('90 seconds10 levels');
   });
 
   it('describes the button with the card text, by ids that exist', () => {
     const button = renderer.root.findByType('li').findByType('button');
     const ids = String(button.props['aria-describedby']).split(' ');
-    expect(ids).toEqual(['game-mental-math-desc', 'game-mental-math-tags', 'game-mental-math-facts']);
-    for (const id of ids) expect(renderer.root.findAllByProps({ id })).toHaveLength(1);
+    expect(ids).toEqual(['game-mental-math-desc', 'game-mental-math-emphasis', 'game-mental-math-facts']);
+    for (const id of ids) expect(renderer.root.findAll((node) => typeof node.type === 'string' && node.props.id === id)).toHaveLength(1);
     expect(button.props.type).toBe('button');
   });
 
   it('opens the game by its ID from the card button', () => {
     act(() => renderer.root.findByType('li').findByType('button').props.onClick());
     expect(onOpenGame).toHaveBeenCalledExactlyOnceWith('mental-math');
+  });
+});
+
+describe('CatalogueCard emphasis', () => {
+  it('names a share that rounds to 0% as under 1% and leaves it out of the bar', () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(
+        <CatalogueCard
+          id="game-fixture" name="Fixture" description="A fixture." icon={Calculator}
+          emphasis={[{ label: 'Math', percent: 100 }, { label: 'Memory', percent: 0 }]}
+          facts={[]} action="Play" onSelect={() => {}}
+        />,
+      );
+    });
+    const items = renderer.root.findAllByProps({ className: 'train-card-mix-item' });
+    expect(items.map(visibleTextOf)).toEqual(['Math 100%', 'Memory <1%']);
+    expect(renderer.root.findByProps({ className: 'train-card-mix-bar' }).children).toHaveLength(1);
+    expect(renderer.root.findAll((node) => String(node.props.className).includes('train-card-tags'))).toHaveLength(0);
+    act(() => renderer.unmount());
   });
 });
 

@@ -538,6 +538,81 @@ a, button, input, label, select, textarea {
   font-size: 11px;
 }
 
+/* What a game trains (NFCT-65): "Trains" beside a thin bar split by the
+   game's domain weights, then the percentages in words. One brand hue in
+   falling tones, heaviest first; the words carry the mix, not the colour. */
+.train-card-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.train-card-mix-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.train-card-mix-title {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.train-card-mix-bar {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  height: 6px;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.train-card-mix-segment {
+  flex-basis: 0;
+  min-width: 4px;
+}
+
+.train-card-mix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.train-card-mix-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.train-card-mix-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.train-card-mix-segment,
+.train-card-mix-dot {
+  background: var(--brand-primary);
+}
+
+.train-card-mix-tone-1 { opacity: 0.6; }
+.train-card-mix-tone-2 { opacity: 0.38; }
+.train-card-mix-tone-3 { opacity: 0.22; }
+
 .train-card-foot {
   display: flex;
   align-items: center;

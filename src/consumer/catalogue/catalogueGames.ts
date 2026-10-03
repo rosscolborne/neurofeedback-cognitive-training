@@ -7,6 +7,7 @@ import {
   type GameIconKey,
   type GameListing,
 } from '@nfct/shared';
+import { largestRemainderPercentages } from './percentages';
 
 // What a catalogue card shows for each game (NFCT-12), derived from the
 // code-owned listings and game definitions in @nfct/shared and the v1 domain
@@ -17,6 +18,8 @@ export interface CatalogueDomain {
   readonly label: string;
   /** Product taxonomy, not a measurement: how prominently the game is filed here. */
   readonly weight: number;
+  /** The weight as a whole percentage; a game's percentages sum to 100. */
+  readonly percent: number;
 }
 
 export interface CatalogueGame {
@@ -35,10 +38,12 @@ export interface CatalogueGame {
 const DOMAIN_ORDER: ReadonlyMap<string, number> = new Map(DOMAIN_CATALOG.domains.map((id, index) => [id, index]));
 
 function domainsOf(listing: GameListing): CatalogueDomain[] {
-  return Object.entries(listing.definition.domainWeights)
+  const weighted = Object.entries(listing.definition.domainWeights)
     .filter((entry): entry is [DomainId, number] => DOMAIN_ORDER.has(entry[0]) && (entry[1] ?? 0) > 0)
-    .sort(([a, weightA], [b, weightB]) => weightB - weightA || DOMAIN_ORDER.get(a)! - DOMAIN_ORDER.get(b)!)
-    .map(([id, weight]) => ({ id, label: DOMAIN_LABELS[id], weight }));
+    .sort(([a, weightA], [b, weightB]) => weightB - weightA || DOMAIN_ORDER.get(a)! - DOMAIN_ORDER.get(b)!);
+  // Heaviest first, so a leftover rounding point goes to the heavier domain on a tie.
+  const percents = largestRemainderPercentages(weighted.map(([, weight]) => weight));
+  return weighted.map(([id, weight], index) => ({ id, label: DOMAIN_LABELS[id], weight, percent: percents[index]! }));
 }
 
 function runLengthOf(listing: GameListing): CatalogueGame['runLengthMs'] {
