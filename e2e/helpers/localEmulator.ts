@@ -110,24 +110,6 @@ export async function seedSelfDirectedHistory(patientUid: string) {
   return { sessionId, garden };
 }
 
-export async function readPatientTrainingRecord(patientUid: string) {
-  const snapshot = await adminDb.doc(`clients/${patientUid}`).get();
-  const data = snapshot.data() ?? {};
-  return {
-    assignedProtocol: data.assignedProtocol as string | undefined,
-    allowedExperiences: data.allowedExperiences as string[] | undefined,
-    hasCustomProtocolConfig: data.customProtocolConfig !== undefined,
-    tidalGardenState: data.tidalGardenState as Record<string, unknown> | undefined,
-    completedSessionsCount: data.completedSessionsCount as number | undefined,
-    badges: data.badges as string[] | undefined,
-  };
-}
-
-/** Change a patient's stored profile fields directly, such as a legacy saved protocol configuration. */
-export async function setPatientFields(patientUid: string, fields: Record<string, unknown>) {
-  await adminDb.doc(`clients/${patientUid}`).update(fields);
-}
-
 /** Recreate a legacy profile written before these fields existed. */
 export async function removePatientFields(patientUid: string, fields: string[]) {
   await adminDb.doc(`clients/${patientUid}`).update(Object.fromEntries(fields.map((field) => [field, FieldValue.delete()])));
