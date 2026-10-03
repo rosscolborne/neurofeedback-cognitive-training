@@ -20,9 +20,9 @@ import { AchievementRow, GoalMeter, StreakStrip } from './OverviewParts';
 import {
   browserOverviewClock,
   runRows,
-  statsPhase,
   useRecentRuns,
   usePlayerOverview,
+  useStatsPhase,
   type OverviewClock,
   type OverviewSources,
   type PlayerOverview,
@@ -93,8 +93,9 @@ const StreakCard: React.FC<{
   ) ?? null, [weekDays]);
 
   let caption: string;
-  // A run whose result is still pending counts as loading: the streak updates by itself when it lands.
+  // A run whose result has only just become pending counts as loading: the streak updates by itself when it lands.
   if (phase === 'loading' || phase === 'checking') caption = 'Loading your streak…';
+  else if (phase === 'delayed') caption = 'Your streak updates once pending scores are final.';
   else if (phase === 'unavailable') caption = 'Your streak couldn’t be loaded right now.';
   else if (phase === 'offline') caption = 'Your streak will show when you’re back online.';
   else if (phase === 'catching-up') caption = 'Your streak and achievements catch up after your next finished run.';
@@ -144,7 +145,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
   const overview = usePlayerOverview(playerId, sources, 'week', clock);
   const recent = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, HOME_RECENT_RUNS);
   const rows = useMemo(() => runRows(recent), [recent]);
-  const phase = statsPhase(overview, recent, clock.isOnline());
+  const phase = useStatsPhase(overview, recent, clock);
   const summary = overview.summary.status === 'ready' && overview.summary.value.status === 'readable' ? overview.summary.value.data : null;
   const view = summary ? streakView(summary.streak, overview.today) : null;
   const nudge = view ? streakNudge(view) : null;

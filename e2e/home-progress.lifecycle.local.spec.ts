@@ -147,3 +147,75 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(historyRow).not.toContainText('Pending');
   await expect(page.locator('.mm-progress')).not.toContainText(noBackendCopy);
 });
+
+/**
+ * Runs `body` with the Functions emulator's background triggers off, so a saved run gets no result,
+ * progress or stats: a backend without trusted scoring, such as nfct-dev before Functions are deployed.
+ */
+async function withoutTrustedScoring(body: () => Promise<void>): Promise<void> {
+  const hub = `http://${process.env.FIREBASE_EMULATOR_HUB ?? '127.0.0.1:4400'}/functions`;
+  const toggle = async (state: 'disable' | 'enable') => {
+    const response = await fetch(`${hub}/${state}BackgroundTriggers`, { method: 'PUT' });
+    expect(response.ok, `${state} background triggers`).toBe(true);
+  };
+  await toggle('disable');
+  try {
+    await body();
+  } finally {
+    await toggle('enable');
+  }
+}
+
+test('a run that never gets its result leaves Home and Progress on "not ready", not loading forever (NFCT-83)', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.clock.install();
+  const fixture = await seedPlayer();
+  await withoutTrustedScoring(async () => {
+    await loginThroughUi(page, fixture.player);
+    await arriveAtHome(page);
+    await page.getByRole('button', { name: 'Play Mental Math', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Mental Math', exact: true })).toBeVisible();
+    // The picker has read the player's progress before startRun pauses page time.
+    await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
+    await awayFromMidnight(page);
+    await startRun(page, 1);
+    for (const correct of CLIMB) await answer(page, correct);
+    await runOut(page);
+    await page.clock.resume();
+    await expect(page.locator('.mm-save')).toHaveText('Run saved to your account.', { timeout: 15_000 });
+    await expect(page.locator('[data-summary="verification"]')).toHaveText('Pending');
+
+    // Just finished: Home's streak loads, as it would for the few seconds trusted scoring takes.
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(overview(page, 'recent-runs').locator('li[data-history-row]')).toHaveCount(1);
+    await expect(overview(page, 'recent-runs')).toContainText('Pending');
+    const caption = overview(page, 'streak-caption');
+    await expect(caption).toHaveText('Loading your streak…');
+
+    // Past the grace (PENDING_RESULT_GRACE_MS, 20 s) with no result, Home stops loading and says so plainly.
+    await page.clock.fastForward(20_000);
+    const notReady = 'Your streak updates once pending scores are final.';
+    await expect(caption).toHaveText(notReady);
+    await expect(overview(page, 'streak')).toHaveText('—');
+
+    // Progress likewise: no loading line, no zeros or "not earned yet", nothing about how runs are scored.
+    await page.getByRole('button', { name: 'Progress', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
+    await expect(overview(page, 'all-time-note')).toHaveText('Your streak and all-time figures update once pending scores are final.');
+    await expect(overview(page, 'activity-note')).toHaveText('Your activity updates once pending scores are final.');
+    await expect(overview(page, 'achievements-note')).toHaveText('Your achievements update once pending scores are final.');
+    await expect(overview(page, 'progress-empty')).toHaveCount(0);
+    await expect(overview(page, 'achievement-count')).toHaveCount(0);
+    await expect(overview(page, 'progress')).not.toContainText('Loading');
+    const noBackendCopy = /server|being checked|confirm|verif|provisional|processing/i;
+    await expect(overview(page, 'progress')).not.toContainText(noBackendCopy);
+    // The game's own figures come from the saved run and need no result.
+    await expect(page.locator('[data-progress-card="summary"]')).toContainText('1 run completed');
+
+    // A refresh does not start the wait again: the run has been pending past the grace.
+    await page.reload();
+    await arriveAtHome(page, { afterReload: true });
+    await expect(caption).toHaveText(notReady);
+    await expect(overview(page, 'home')).not.toContainText(noBackendCopy);
+  });
+});

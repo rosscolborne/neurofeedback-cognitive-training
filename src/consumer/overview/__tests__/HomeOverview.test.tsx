@@ -12,6 +12,8 @@ import {
   day,
   fakeSources,
   missing,
+  movableClock,
+  NOW_MS,
   offlineClock,
   readable,
   runEntry,
@@ -141,10 +143,17 @@ describe('Home', () => {
   });
 
   it('shows a run whose result is pending as loading, never narrating how it is scored (NFCT-66)', async () => {
-    const { r } = await renderHome({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
+    const entry = runEntry('sessionAAAAAAAAAAAA2', { verified: false, wallStartMs: NOW_MS - 600_000 });
+    const { r } = await renderHome({ summary: missing(), runs: [entry] }, movableClock(entry.session.endedAt.toMillis() + 1_000));
     expect(one(r, 'streak-caption')).toBe('Loading your streak…');
     const banned = /server|being checked|confirm|verif|provisional|processing/i;
     expect(visibleText(r)).not.toMatch(banned);
+    // Pending past the grace (NFCT-83): not loading any more, and still nothing about how it is scored.
+    const stale = await renderHome({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
+    expect(one(stale.r, 'streak-caption')).toBe('Your streak updates once pending scores are final.');
+    expect(one(stale.r, 'streak')).toBe('—');
+    expect(byData(stale.r, 'recent-runs')).toHaveLength(1);
+    expect(visibleText(stale.r)).not.toMatch(banned);
     const withStats = await renderHome({ summary: readable(summaryWith([TODAY])), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
     expect(visibleText(withStats.r)).not.toMatch(banned);
   });

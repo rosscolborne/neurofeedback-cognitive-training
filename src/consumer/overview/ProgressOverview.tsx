@@ -17,9 +17,9 @@ import {
 import { AchievementRow, GoalMeter } from './OverviewParts';
 import {
   browserOverviewClock,
-  statsPhase,
   usePlayerOverview,
   useRecentRuns,
+  useStatsPhase,
   type OverviewClock,
   type OverviewSources,
   type StatsPhase,
@@ -64,8 +64,9 @@ function pendingNote(phase: StatsPhase, section: 'figures' | 'activity' | 'achie
   switch (phase) {
     case 'loading': return null;
     case 'offline': return `${subject} will show when you’re back online.`;
-    // A run whose result is still pending: the section shows its loading line and updates when the result lands.
+    // A run whose result has only just become pending: the section shows its loading line and updates when the result lands.
     case 'checking': return null;
+    case 'delayed': return `${subject} ${section === 'figures' || section === 'achievements' ? 'update' : 'updates'} once pending scores are final.`;
     case 'catching-up': return `${subject} ${section === 'activity' ? 'catches' : 'catch'} up after your next finished run.`;
     case 'unavailable': return `${subject} couldn’t be loaded right now.`;
     default: return null;
@@ -112,7 +113,7 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
   // Whether the player has played at all: a missing summary alone does not say (runs scored before the
   // aggregates existed have none until the next run rebuilds it, and offline it may just not be cached).
   const newest = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, NEWEST_RUNS);
-  const phase = statsPhase(overview, newest, clock.isOnline());
+  const phase = useStatsPhase(overview, newest, clock);
   const noRunsYet = phase === 'new';
   // The activity and achievements show their own data only once the stats are known to include every
   // run; until then each says why it has nothing to show.
