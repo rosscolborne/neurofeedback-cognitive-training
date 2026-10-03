@@ -111,21 +111,13 @@ describe('clients/{patientId}/brainMaps (QEEG)', () => {
     });
 });
 
-describe('deviceAssignments/{patientId}', () => {
-    it('lets the patient or canonical clinician manage the assignment', async () => {
-        await assertSucceeds(getDoc(doc(await as(ids.clinicianA), `deviceAssignments/${ids.patientA}`)));
-        await assertSucceeds(updateDoc(doc(await as(ids.patientA), `deviceAssignments/${ids.patientA}`), { deviceId: 'muse-2' }));
-        await assertSucceeds(setDoc(doc(await as(ids.clinicianB), `deviceAssignments/${ids.patientB}`), {
-            patientId: ids.patientB, assignedByUserId: ids.clinicianB, assignedAt: past, deviceId: 'muse-3',
+describe('deviceAssignments/{patientId} (retired, no client)', () => {
+    it('falls under the default deny, even for the patient', async () => {
+        await assertFails(getDoc(doc(await as(ids.patientA), `deviceAssignments/${ids.patientA}`)));
+        await assertFails(getDoc(doc(await as(ids.clinicianA), `deviceAssignments/${ids.patientA}`)));
+        await assertFails(updateDoc(doc(await as(ids.patientA), `deviceAssignments/${ids.patientA}`), { deviceId: 'muse-2' }));
+        await assertFails(setDoc(doc(await as(ids.patientB), `deviceAssignments/${ids.patientB}`), {
+            patientId: ids.patientB, assignedByUserId: ids.patientB, assignedAt: past, deviceId: 'muse-3',
         }));
-    });
-
-    it('denies outsiders and freezes attribution fields', async () => {
-        await assertFails(getDoc(doc(await as(ids.clinicianB), `deviceAssignments/${ids.patientA}`)));
-        await assertFails(setDoc(doc(await as(ids.patientB), `deviceAssignments/${ids.patientA}`), {
-            patientId: ids.patientA, assignedByUserId: ids.patientB, assignedAt: past,
-        }));
-        await assertFails(updateDoc(doc(await as(ids.patientA), `deviceAssignments/${ids.patientA}`), { assignedByUserId: ids.clinicianA }));
-        await assertFails(deleteDoc(doc(await as(ids.clinicianB), `deviceAssignments/${ids.patientA}`)));
     });
 });

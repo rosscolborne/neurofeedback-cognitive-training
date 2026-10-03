@@ -95,7 +95,7 @@ describe('messaging Firestore rule contract', () => {
 describe('appointment Firestore rule contract', () => {
   const block = () => between(
     'match /appointments/{appointmentId}',
-    '// Clinic Brand Configurations',
+    '// Production tenant records.',
   );
 
   it('separates canonical and explicit-null legacy reads with current relationship checks', () => {
