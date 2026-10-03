@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ACHIEVEMENT_CATALOGUE } from '@nfct/shared';
 import { ProgressOverview } from '../ProgressOverview';
 import { formatLocalDate } from '../overviewModel';
-import type { OverviewClock } from '../usePlayerOverview';
+import { PENDING_RESULT_GRACE_MS, type OverviewClock } from '../usePlayerOverview';
 import {
   achievement,
   buttonNamed,
@@ -13,6 +13,8 @@ import {
   day,
   fakeSources,
   missing,
+  movableClock,
+  NOW_MS,
   offlineClock,
   readable,
   runEntry,
@@ -148,11 +150,43 @@ describe('Progress', () => {
   });
 
   it('shows the figures, the activity and the achievements as loading while a run’s result is pending (NFCT-66)', async () => {
-    const { r } = await renderProgress({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
+    const entry = runEntry('sessionAAAAAAAAAAAA2', { verified: false, wallStartMs: NOW_MS - 600_000 });
+    const { r } = await renderProgress({ summary: missing(), runs: [entry] }, movableClock(entry.session.endedAt.toMillis() + 1_000));
     expect(one(r, 'all-time-note')).toBe('Loading your progress…');
     expect(one(r, 'activity-note')).toBe('Loading your activity…');
     expect(one(r, 'achievements-note')).toBe('Loading your achievements…');
     expect(achievementRows(r)).toHaveLength(0);
+  });
+
+  it('stops loading once a run’s result has been pending past the grace, and says the figures are not ready (NFCT-83)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const entry = runEntry('sessionAAAAAAAAAAAA2', { verified: false, wallStartMs: NOW_MS - 600_000 });
+      const clock = movableClock(entry.session.endedAt.toMillis() + 1_000);
+      const { r } = await renderProgress({ summary: missing(), runs: [entry] }, clock);
+      expect(one(r, 'all-time-note')).toBe('Loading your progress…');
+      clock.nowMs += PENDING_RESULT_GRACE_MS - 1_000;
+      await act(async () => { vi.advanceTimersByTime(PENDING_RESULT_GRACE_MS - 1_000); });
+      expect(one(r, 'all-time-note')).toBe('Your streak and all-time figures update once pending scores are final.');
+      expect(one(r, 'activity-note')).toBe('Your activity updates once pending scores are final.');
+      expect(one(r, 'achievements-note')).toBe('Your achievements update once pending scores are final.');
+      expect(visibleText(r)).not.toContain('Loading');
+      // Still no zeros or "not earned yet" for a player whose run is not counted yet, and nothing about how it is scored.
+      expect(byData(r, 'progress-empty')).toHaveLength(0);
+      expect(achievementRows(r)).toHaveLength(0);
+      expect(byData(r, 'activity-totals')).toHaveLength(0);
+      expect(visibleText(r)).not.toMatch(/server|being checked|confirm|verif|provisional|processing/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('opens straight to "not ready" for a run that was pending past the grace before the screen opened (NFCT-83)', async () => {
+    // The run ended an hour ago: a refresh does not start the wait again.
+    const { r } = await renderProgress({ summary: missing(), runs: [runEntry('sessionAAAAAAAAAAAA2', { verified: false })] });
+    expect(one(r, 'all-time-note')).toBe('Your streak and all-time figures update once pending scores are final.');
+    expect(one(r, 'activity-note')).toBe('Your activity updates once pending scores are final.');
+    expect(one(r, 'achievements-note')).toBe('Your achievements update once pending scores are final.');
   });
 
   it('waits for the connection rather than calling an offline player new', async () => {

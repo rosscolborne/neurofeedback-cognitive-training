@@ -28,6 +28,11 @@ export const at = (ms: number) => Timestamp.fromMillis(ms);
 export const NOW_MS = Date.UTC(2026, 9, 1, 12);
 export const TODAY = '2026-10-01';
 export const utcClock: OverviewClock = { now: () => NOW_MS, deviceZone: () => 'UTC', onForeground: () => () => {}, isOnline: () => true };
+/** A clock at `nowMs`, which a test moves forward by setting `nowMs`. */
+export function movableClock(nowMs: number): OverviewClock & { nowMs: number } {
+  const clock = { ...utcClock, nowMs, now: () => clock.nowMs };
+  return clock;
+}
 /** The same clock on a device with no connection. */
 export const offlineClock: OverviewClock = { ...utcClock, isOnline: () => false };
 
@@ -84,9 +89,9 @@ export const unreadableProfile: DocumentRead<UserProfile> = {
   status: 'unreadable', id: 'player-1', fromCache: false, hasPendingWrites: false, error: new Error('unreadable profile') as never,
 };
 
-/** One finished Mental Math run as a history row: verified by the server, or still on this device. */
-export function runEntry(id: string, { verified = true }: { verified?: boolean } = {}): GameSessionHistoryEntry {
-  const outcome = playRun({ seed: 4242, startLevel: 1, correct: 7, wallStartMs: NOW_MS - 3_600_000 });
+/** One finished Mental Math run as a history row: verified by the server, or still on this device. Started an hour before NOW_MS unless `wallStartMs` says otherwise. */
+export function runEntry(id: string, { verified = true, wallStartMs = NOW_MS - 3_600_000 }: { verified?: boolean; wallStartMs?: number } = {}): GameSessionHistoryEntry {
+  const outcome = playRun({ seed: 4242, startLevel: 1, correct: 7, wallStartMs });
   const document = clientSessionDocument(outcome, { timezone: 'UTC', appVersion: '0.0.0', platform: 'web' }, { sessionId: id, userId: 'player-1', seed: 4242 });
   const result = verified ? previewDecision(null, id, document)!.result : undefined;
   return {

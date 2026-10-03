@@ -195,18 +195,39 @@ export function useRecentRuns(
  * What the screens can say about the player's stats, before any figure is shown:
  * - 'stats': a readable summary;
  * - 'new': the server has no summary and the player has no runs;
- * - 'checking': no summary yet, and a run trusted scoring has not confirmed (on this device, uploading or delayed);
+ * - 'checking': no summary yet, and a run trusted scoring has not confirmed, briefly (see PENDING_RESULT_GRACE_MS);
+ * - 'delayed': no summary yet, and a run has waited for its result past that grace, or scoring has recorded a delay:
+ *   the result may be a long way off (on a backend without trusted scoring, it never comes), so this is not loading;
  * - 'catching-up': no summary, though every run is confirmed: none counted (only invalid runs), so the next counted run starts them;
  * - 'offline': no summary in this device's cache and no connection, so nothing can be said yet;
  * - 'unavailable': the summary or the runs could not be read.
  * A summary missing from the cache while the device reports a connection is still loading: the
  * server's answer usually follows at once, and a player is never told they are offline, or new, in between.
  */
-export type StatsPhase = 'loading' | 'stats' | 'new' | 'checking' | 'catching-up' | 'offline' | 'unavailable';
+export type StatsPhase = 'loading' | 'stats' | 'new' | 'checking' | 'delayed' | 'catching-up' | 'offline' | 'unavailable';
+
+/**
+ * How long the stats show as loading while a run waits for its result (NFCT-83).
+ * Trusted scoring usually answers within seconds; past this the screens say the
+ * figures are not ready instead of loading indefinitely.
+ */
+export const PENDING_RESULT_GRACE_MS = 20_000;
 
 /** A run trusted scoring has not confirmed yet: the stats may be about to change. */
-export function hasUncheckedRun(rows: readonly HistoryRow[]): boolean {
-  return rows.some((row) => row.state === 'on-device' || row.state === 'checking' || row.state === 'delayed');
+function awaitsResult(row: HistoryRow): boolean {
+  return row.state === 'on-device' || row.state === 'checking' || row.state === 'delayed';
+}
+
+/**
+ * When the stats stop showing as loading for the runs still waiting for a
+ * result: the grace after the oldest of them ended, or after the screen opened
+ * if that is sooner, so a device clock behind the run's never holds the wait
+ * open. Null when no run is waiting.
+ */
+export function pendingDeadline(rows: readonly HistoryRow[], openedAtMs: number): number | null {
+  const waiting = rows.filter(awaitsResult);
+  if (waiting.length === 0) return null;
+  return Math.min(openedAtMs, ...waiting.map((row) => row.endedAtMs)) + PENDING_RESULT_GRACE_MS;
 }
 
 /** The Mental Math rows of a page of runs, or null while it loads; a page that failed is null too (see statsPhase). */
@@ -218,6 +239,8 @@ export function statsPhase(
   overview: Pick<PlayerOverview, 'summary' | 'todayState'>,
   runs: Loaded<GameSessionHistoryPage>,
   online: boolean,
+  nowMs: number,
+  openedAtMs: number,
 ): StatsPhase {
   const { summary, todayState } = overview;
   if (summary.status === 'loading' || todayState === 'loading') return 'loading';
@@ -231,5 +254,26 @@ export function statsPhase(
   if (runs.status === 'unavailable') return 'unavailable';
   const rows = runRows(runs)!;
   if (rows.length === 0) return 'new';
-  return hasUncheckedRun(rows) ? 'checking' : 'catching-up';
+  if (rows.some((row) => row.state === 'delayed')) return 'delayed';
+  const deadline = pendingDeadline(rows, openedAtMs);
+  if (deadline === null) return 'catching-up';
+  return nowMs >= deadline ? 'delayed' : 'checking';
+}
+
+/** statsPhase for a screen, which moves from 'checking' to 'delayed' by itself when the grace runs out. */
+export function useStatsPhase(
+  overview: Pick<PlayerOverview, 'summary' | 'todayState'>,
+  runs: Loaded<GameSessionHistoryPage>,
+  clock: OverviewClock,
+): StatsPhase {
+  const [openedAtMs] = useState(() => clock.now());
+  const [nowMs, setNowMs] = useState(openedAtMs);
+  const rows = runRows(runs);
+  const deadline = rows === null ? null : pendingDeadline(rows, openedAtMs);
+  useEffect(() => {
+    if (deadline === null) return undefined;
+    const timer = setTimeout(() => setNowMs(Math.max(clock.now(), deadline)), Math.max(0, deadline - clock.now()));
+    return () => clearTimeout(timer);
+  }, [deadline, clock]);
+  return statsPhase(overview, runs, clock.isOnline(), nowMs, openedAtMs);
 }
