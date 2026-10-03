@@ -48,8 +48,10 @@ export type ShapedAccount = { uid: string; email: string; password: string; disp
 export async function seedAccountWithProfileShape(shape: ProfileShapeName): Promise<ShapedAccount> {
   const id = randomUUID().slice(0, 12);
   const account = { uid: `${shape}-${id}`, email: `${shape}-${id}@example.test`, password: 'LocalEmulator!123' };
-  const displayName = `Returning ${id}`;
-  await adminAuth.createUser({ ...account, displayName });
+  // Run-unique first word (Home greets by it); the Auth account's name differs,
+  // so a greeting with it shows the profile was read.
+  const displayName = `R${id} Returning`;
+  await adminAuth.createUser({ ...account, displayName: 'Returning Player' });
   await adminDb.doc(`users/${account.uid}`).set(PROFILE_SHAPES[shape].build({ displayName, email: account.email, now: FieldValue.serverTimestamp() }));
   return { ...account, displayName };
 }

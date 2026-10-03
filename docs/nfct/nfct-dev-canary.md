@@ -391,6 +391,8 @@ checks:
    - Deploy only once the pull request's security review (DEEP tier for rules)
      has passed, and only from the reviewed head commit. A rules bypass would
      otherwise be live on a project that holds testers' data.
+   - Run the read-only [profile shape audit](#existing-profile-shapes) from
+     the branch, to see which existing accounts the new rules and client meet.
    - Deploy the candidate rules and indexes:
      `npx firebase deploy --only firestore --project dev`. Answer **No** to
      deleting indexes, and never pass `--force`.
