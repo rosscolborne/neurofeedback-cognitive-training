@@ -16,7 +16,8 @@ service-account credentials; `npm run check:isolation` and
   TypeScript/build and clinical-isolation checks.
 - `npm run test:rules` runs the Firestore rules suite on the emulator (below).
 - `npm run test:e2e:protocol` runs the local emulator browser suite (below).
-- The nfct-dev canary (`playwright.canary.config.ts`) runs in CI. Rehearse it
+- The nfct-dev canary (`playwright.canary.config.ts`) runs in GitHub Actions
+  (`backend.yml`). Rehearse it
   on the emulators with `NFCT_CANARY_TARGET=emulators npx firebase
   emulators:exec --only auth,firestore --project demo-neurasticity-protocol-e2e
   "node scripts/canary/canary.mjs run"`.

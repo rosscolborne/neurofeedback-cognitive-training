@@ -136,7 +136,7 @@ changes only where dependencies require it.
 | 4. Run the combined deterministic suite | Integrator, per the [testing skill](../neurasticity-development-testing/SKILL.md) |
 | 5. Exploratory QA, where the work is user-facing | [nfct-exploratory-qa](../nfct-exploratory-qa/SKILL.md) |
 | 6. Independent review, and security review at the [routed tier](#security-tier) | [nfct-pr-review](../nfct-pr-review/SKILL.md), [nfct-security-review](../nfct-security-review/SKILL.md) |
-| 7. CI green on the integration PR's final head: a merge gate, started and reported rather than waited for | Integrator starts it; whoever merges confirms it |
+| 7. Pre-merge validation green on the integration PR's final head: a merge gate, run by hand ([CI](../../../docs/nfct/ci.md)) and reported rather than waited for | Integrator reports whether it has run; whoever merges confirms it |
 | 8. Targeted human visual and hardware checks | Owner, from the QA report's HUMAN CHECK items |
 | 9. Merge | Owner |
 
@@ -193,7 +193,7 @@ phase and what blocks it.
 
 Merging to `main` is the owner's decision. The orchestrator merges only when
 explicitly delegated, never a PR it implemented or integrated, and only after
-confirming required CI is green on the head being merged.
+confirming Pre-merge validation is green on the head being merged.
 
 ## Reshape when contracts change
 

@@ -84,13 +84,13 @@ higher-value work.
   does not finish the objective. Its agent work is complete only when
   [nfct-integration](.agents/skills/nfct-integration/SKILL.md) has combined
   and validated them in one pushed integration PR, unless the user explicitly
-  asked for independent PRs. It is merge-ready once required CI is green too
+  asked for independent PRs. It is merge-ready once Pre-merge validation is green too
   (see [completion and merge readiness](#completion-and-merge-readiness)).
 - Do not merge your own PR. Merging is the owner's decision; an agent merges
   only when explicitly delegated, and never a PR it implemented or
   integrated.
 - Finish with a report giving, where applicable: branch and worktree, commit
-  SHA, PR URL, current CI state, files and scope changed, checks and tests run
+  SHA, PR URL, remote validation state, files and scope changed, checks and tests run
   with results, and unresolved risks, blockers or follow-ups.
 
 ## Completion and merge readiness
@@ -99,53 +99,59 @@ Finishing an agent task and a PR being ready to merge are separate states:
 
 - **Agent task complete**: the implementation or integration work is
   finished, the required local checks have passed, the PR is pushed and
-  marked ready for review, its CI has started, and known findings are
-  reported.
+  marked ready for review, and known findings are reported.
 - **Merge-ready**: every required merge gate is satisfied on the PR's current
-  head, including green remote CI and any required review and QA.
+  head, including a green `Pre-merge validation` status and any required
+  review and QA.
 
-Do not hold your final response waiting for GitHub CI:
+No push or pull request update starts CI ([docs/nfct/ci.md](docs/nfct/ci.md)).
+Remote validation is started by hand: the full suite once on a PR's final
+head before it merges, and single workflows where they add something a local
+run cannot (macOS, the Simulator, the real-backend canary).
 
 1. Run every required local check before pushing.
 2. Push, or open or update the PR, and mark it ready for review
    (`gh pr ready <n>`) if it is still a draft.
-3. Once a ready PR targeting `development` is opened or updated, confirm CI
-   has started for the pushed commit with
-   `gh run list --branch <branch> --commit <sha>`; a new run can take up to
-   a minute to appear. A branch without a ready PR targeting `development`
-   gets no automatic CI run. Do not start full CI by hand merely because no run
-   exists; use `gh workflow run` only for a specific reason to validate
-   outside the normal PR flow.
-4. Report the PR URL and the current CI state, including *pending*, and
-   finish. Do not poll or `--watch` the run.
+3. Do not start remote validation yourself unless the user asks for it, or
+   the task needs what only a remote run gives (for example Simulator
+   evidence). Then run only the workflow that gives it, on a pushed head that
+   has passed the local checks.
+4. Report the PR URL and the remote validation state of the head, and finish.
+   Usually that is "Pre-merge validation not run", with the command to run
+   it: `gh workflow run ci.yml --ref <branch>`. If you started a run, report
+   it as *pending*; do not poll or `--watch` it.
 
-Plain branch pushes and draft PRs do not run CI. Open a PR targeting
-`development` as a draft (`gh pr create --draft`) once a remote PR is useful,
-and keep it draft while implementation, review and local testing continue.
-Mark it ready for review only when the branch is ready to consume CI, never
-just for an early CI signal. Before substantial rework of a ready PR, such as
-merging its base with conflicts or a review fix pass, convert it back to draft
-(`gh pr ready --undo <n>`, which also cancels its running CI) and mark it
-ready again once the reworked batch passes locally. Once a PR is ready, each
-push to it reruns the full suite: test locally, batch related changes, and
-push when a coherent batch is ready, not after each small edit. After a CI
-failure, diagnose and fix it locally and batch the next push where practical.
+Open a PR targeting `development` as a draft (`gh pr create --draft`) once a
+remote PR is useful, and keep it draft while implementation, review and local
+testing continue. Mark it ready for review once the branch is ready for its
+final validation. Before substantial rework of a ready PR, such as merging its
+base with conflicts or a review fix pass, convert it back to draft
+(`gh pr ready --undo <n>`), cancel any validation run of the head being
+replaced (`gh run cancel <id>`), and mark it ready again once the reworked
+batch passes locally. Test locally, batch related changes, and push when a
+coherent batch is ready, not after each small edit: each new head needs its
+own Pre-merge validation. After a remote failure, diagnose and fix it locally
+and batch the next push where practical.
 
-With CI pending, the report says so plainly, for example:
+The report says plainly what has and has not run, for example:
 
 - Agent work: complete
-- Remote CI: pending
-- Merge readiness: NOT YET — awaiting required CI
+- Remote validation: Pre-merge validation not run on `<sha>`
+  (`gh workflow run ci.yml --ref <branch>`)
+- Merge readiness: NOT YET — needs a green Pre-merge validation on this head
 
-CI remains a merge gate. Whoever merges, and any later integration or merge
-check, first confirms that required CI is green on the exact head being
-merged (`gh pr checks <n>`). A PR whose CI failed is not merge-ready; the
-branch owner fixes the failure before it merges.
+Pre-merge validation is a merge gate. Whoever merges, and any later
+integration or merge check, first confirms a green `Pre-merge validation`
+status on the exact head being merged (`gh pr checks <n>`). A PR whose
+validation failed is not merge-ready; the branch owner fixes the failure
+before it merges. A development → main promotion instead needs its Release
+checks and `Require development source`
+([promotion](docs/nfct/ci.md#promotion-development--main)).
 
 Wait for CI only when the user explicitly asks you to wait, or when the task
 is to diagnose a CI failure or to change CI itself and only a run can verify
 it. Asking for a PR to be merge-ready or safe to merge, or for its CI status,
-is not a request to wait: report CI as pending and finish. While you do wait,
+is not a request to wait: report what has run and finish. While you do wait,
 stop as soon as a required job fails and act on that job's log; do not wait
 for the other jobs first.
 
@@ -334,6 +340,7 @@ npm run functions:typecheck && npm run functions:build
 npm run test:rules            # needs Java 21
 npm run test:repositories     # consumer repositories on the emulators; needs Java 21
 npm run test:functions        # Cloud Functions on the emulators; needs Java 21
+npx playwright test --project=permission-guard   # the e2e permission guard's own tests
 npm run test:e2e:protocol     # local emulator browser suite; needs Java 21
 ```
 
@@ -344,32 +351,36 @@ More detail: [.agents/skills/neurasticity-development-testing](.agents/skills/ne
 
 iOS ([docs/nfct/ios.md](docs/nfct/ios.md)): `npm test` includes the iOS
 project contract tests, and `npm run sync:ios` builds, syncs and runs the
-release check (`npm run verify:ios-release`). `.github/workflows/ios.yml` runs
-on PRs targeting `development` and skips its jobs while the PR is a draft.
-Once the PR is ready for review, it runs the WebKit iPhone suite unless only
-documentation or agent instructions changed (`npm run test:e2e:webkit`
-locally, after `npx playwright install webkit` and `npm ci --prefix functions`;
-it starts the Functions emulator; needs Java 21) and, when native-relevant
-files change, an unsigned Xcode build and the iOS Simulator scenarios on
-GitHub-hosted macOS, which agents can also run on any branch
+release check (`npm run verify:ios-release`). Run the WebKit iPhone suite
+locally: `npm run test:e2e:webkit`, after `npx playwright install webkit` and
+`npm ci --prefix functions`; it starts the Functions emulator and needs Java
+21. The unsigned Xcode build and the iOS Simulator scenarios need GitHub-hosted
+macOS: `.github/workflows/ios.yml`, run by hand on any branch or from
+Pre-merge validation when native-relevant files change
 ([Simulator scenarios](docs/nfct/ios.md#simulator-scenarios)). On a Mac,
 `npm run sync:ios && npm run ios:build` runs the same Xcode build.
 
+Remote runs ([docs/nfct/ci.md](docs/nfct/ci.md)) are all manual, apart from
+a promotion's release checks and the weekly minimum-iOS run: Pre-merge
+validation (`ci.yml`) calls Web
+(`web.yml`), Backend (`backend.yml`) and iOS (`ios.yml`), skipping what a
+branch's changes cannot affect.
+
 nfct-dev canary ([docs/nfct/nfct-dev-canary.md](docs/nfct/nfct-dev-canary.md)):
-`ci.yml`'s `nfct-dev canary` job builds the PR's production bundle with
-`nfct-dev`'s web config and runs the critical consumer journey (sign-up,
+`backend.yml`'s `nfct-dev canary` job builds the branch's production bundle
+with `nfct-dev`'s web config and runs the critical consumer journey (sign-up,
 Train my brain, Mental Math, a saved run, signing in again) against the real
-backend TestFlight uses. It runs on ready PRs unless every changed file is
-clearly non-runtime (`scripts/ci/classify-changes.sh`). The `emulators` job
-rehearses the same journey on the emulators; run that rehearsal locally
-(needs Java 21):
+backend TestFlight uses. Pre-merge validation runs it unless every changed
+file is clearly non-runtime (`scripts/ci/classify-changes.sh`). The
+`emulators` job rehearses the same journey on the emulators; run that
+rehearsal locally (needs Java 21):
 
 ```bash
 NFCT_CANARY_TARGET=emulators npx firebase emulators:exec --only auth,firestore \
   --project demo-neurasticity-protocol-e2e "node scripts/canary/canary.mjs run"
 ```
 
-Agents do not run the canary against `nfct-dev` themselves; CI does. A red
+Agents do not run the canary against `nfct-dev` themselves; GitHub Actions does. A red
 canary with a green rehearsal means the deployed backend or its configuration
 does not match the branch: report it as a blocker with the failing step, and
 never work around it in the app. Deploying rules or indexes to `nfct-dev` is

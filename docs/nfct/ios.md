@@ -151,20 +151,25 @@ a higher one.
 
 | # | Layer | Proves | Runs | Needs |
 | --- | --- | --- | --- | --- |
-| 1 | Desktop Chromium Playwright | Normal browser regressions | `ci.yml`, every PR | Linux |
+| 1 | Desktop Chromium Playwright | Normal browser regressions | Locally; Backend (`backend.yml`) in [Pre-merge validation](ci.md) | Linux |
 | 2 | Interactive Chromium at iPhone sizes (iPhone SE (3rd gen) and iPhone 17 profiles) | Layout, overflow, clipping and touch targets at phone sizes, operated by an agent in real Chrome. Chromium mobile emulation: not iOS or Safari evidence | [Exploratory QA](../../.agents/skills/nfct-exploratory-qa/SKILL.md) of every user-facing change | Linux |
-| 3 | Playwright WebKit, iPhone SE (3rd gen) and iPhone 17 profiles | WebKit engine differences; small-screen, touch and mobile layout | `ios.yml` `webkit`, every PR; `npm run test:e2e:webkit` | Linux |
-| 4 | Native build and iOS Simulator | The project compiles; Release is safe; in WKWebView at `capacitor://localhost`, the [Simulator scenarios](#simulator-scenarios) pass through the real UI: sign-up and relaunch, a whole Mental Math run saved, backgrounding pauses a run, a kill mid-run saves nothing; weekly on the [oldest supported iOS](#the-minimum-ios-runtime) | `ios.yml` `native`, GitHub-hosted macOS | Nothing local |
+| 3 | Playwright WebKit, iPhone SE (3rd gen) and iPhone 17 profiles | WebKit engine differences; small-screen, touch and mobile layout | `npm run test:e2e:webkit`; `ios.yml` `webkit` in [Pre-merge validation](ci.md) | Linux |
+| 4 | Native build and iOS Simulator | The project compiles; Release is safe; in WKWebView at `capacitor://localhost`, the [Simulator scenarios](#simulator-scenarios) pass through the real UI: sign-up and relaunch, a whole Mental Math run saved, backgrounding pauses a run, a kill mid-run saves nothing; weekly on the [oldest supported iOS](#the-minimum-ios-runtime) | `ios.yml` `native`, GitHub-hosted macOS, by hand or in [Pre-merge validation](ci.md); Release build only on promotions to `main` | Nothing local |
 | 5 | Physical iPhone | Interruptions that never hide the page, the software keyboard, IndexedDB durability, real performance | NFCT-32 checklist | The owner's iPhone and signing |
 | 6 | Physical iPhone with a Muse headset | Bluetooth, acquisition and signal quality on the device | NFCT-15 | The iPhone and a headset |
 
-Alongside these, `ios.yml` `release-bundle` runs on every PR. It builds and
-syncs the production bundle, runs `verify:ios-release`, and shows that the
-check fails on the emulator bundle.
+Alongside these, `ios.yml` `release-bundle` runs in Pre-merge validation and
+on every promotion to `main`. It builds and syncs the production bundle, runs
+`verify:ios-release`, and shows that the check fails on the emulator bundle.
 
 A signed-in account whose role has not been read yet stays on the loading
 screen; a failed read, or none within 15 s, shows a retryable error, never role
-selection (NFCT-44). A failure there is a product bug, so it is not retried away.
+selection (NFCT-44). After a transient failure (offline, or only the device
+cache answered) the app also retries by itself, after 2 s and then backing off
+to every 10 s, so a brief outage after sign-up recovers without a tap. The
+relaunch checks give that screen 25 s to move on and report how long it
+showed; one still showing it then has found a product bug, and no scenario
+taps Try again.
 
 Playwright WebKit is current WebKit on Linux, not iOS WKWebView. It does not
 prove older iOS versions, the `capacitor://` origin, suspension, the software
@@ -199,28 +204,29 @@ Xcode version and Simulator runtimes. In order:
    checkpoint), and overall `summary.md` and `results.json`. The summary is
    also on the run page.
 
-`ios.yml` runs on ready (non-draft) pull requests into `development`, on
-manual runs and weekly; `main` is the TestFlight release branch and gets no
-CI of its own (AGENTS.md "Checks"). A pull request that changes only
-documentation or agent instructions skips the release-bundle, WebKit and
-native jobs. Otherwise it runs the native job only when it changes native-relevant paths (unit tests in
-`__tests__/` do not count), or when change detection fails:
+`ios.yml` runs by hand, from [Pre-merge validation](ci.md), from Release on
+development → main promotions (stopping after step 4), and weekly; nothing
+runs it on a push. Pre-merge validation skips the release-bundle, WebKit and
+native jobs for a branch that changes only documentation or agent
+instructions. Otherwise it runs the native job only when the branch changes
+native-relevant paths (unit tests in `__tests__/` do not count), or when
+change detection fails (`scripts/ci/classify-changes.sh`):
 
 - `ios/`, `capacitor.config.*`, `package.json`, `package-lock.json`,
   `.nvmrc`, `vite.config.ts`;
-- the iOS scripts and the workflow;
+- the iOS scripts, `ios.yml` and `ci.yml`;
 - what the scenarios drive: the Firebase setup, `src/App.tsx` and
   `AuthContext.tsx`, the onboarding screens and Mental Math
   (`src/consumer/games/mentalMath/`).
 
-A pull request runs every scenario when it changes Mental Math, the iOS
-scripts or the workflow, and only `smoke` otherwise. Manual runs run every
-scenario unless told otherwise; the weekly run runs `smoke` on the oldest
-supported iOS, against `development`. A skipped job reports success, so a
-required check must be required together with `Native changes`.
+Pre-merge validation runs every scenario when the branch changes Mental Math,
+the iOS scripts or `ios.yml`, and only `smoke` otherwise. A manual run of
+`ios.yml` runs every scenario unless told otherwise; the weekly run runs
+`smoke` on the oldest supported iOS, against `development`.
 
 Changing the Train tab or navigation (for example `PatientShell.tsx`) does
-not start the macOS job: dispatch `-f scenarios=mental-math` for that branch
+not start the macOS job in Pre-merge validation: dispatch
+`-f webkit=false -f scenarios=mental-math` for that branch
 ([below](#running-scenarios-from-an-agent-or-a-terminal)).
 
 To move to a newer Xcode, change `XCODE_APP` and the Swift package cache key
@@ -271,13 +277,14 @@ Simulator evidence.
 
 #### Running scenarios from an agent or a terminal
 
-Any branch, any scenarios, no Mac. A manual run always runs the native job,
-on GitHub-hosted macOS, whose minutes cost ten times Linux minutes: run only
-the scenarios you need.
+Any branch, any scenarios, no Mac. A manual run runs the native job (unless
+`-f native=false`), on GitHub-hosted macOS, whose minutes cost ten times Linux
+minutes: run only the scenarios you need. `-f webkit=false` leaves out the
+WebKit suite when you run it locally instead.
 
 ```bash
 branch=$(git branch --show-current)
-gh workflow run ios.yml --ref "$branch" -f scenarios='mental-math'   # or: smoke lifecycle; empty runs all
+gh workflow run ios.yml --ref "$branch" -f webkit=false -f scenarios='mental-math'   # or: smoke lifecycle; empty runs all
 sleep 10
 run=$(gh run list --workflow ios.yml --branch "$branch" --event workflow_dispatch --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch "$run" --exit-status > /dev/null                         # about 10 minutes for all three
@@ -313,11 +320,11 @@ downloads the runtime (`xcodebuild -downloadPlatform iOS -buildVersion`),
 creates an iPhone SE (3rd generation), the smallest supported screen, and
 boots it. If a runtime cannot be installed or booted, it tries the next one
 listed (17.5, then 18.6), and the run summary and a warning say which runtime
-was used instead. The runtime is several gigabytes, so this never runs on
-pull requests. On demand, for any branch:
+was used instead. The runtime is several gigabytes, so only this run and an
+explicit `ios_runtimes` use it. On demand, for any branch:
 
 ```bash
-gh workflow run ios.yml --ref "$branch" -f ios_runtimes='16.4 17.5 18.6' -f scenarios=smoke
+gh workflow run ios.yml --ref "$branch" -f webkit=false -f ios_runtimes='16.4 17.5 18.6' -f scenarios=smoke
 ```
 
 The first run (1 October 2026, run 36837500419) installed iOS 16.4 (20E247)
@@ -392,8 +399,8 @@ What the repository provides, and CI proves on every native run:
   refuses to start Firebase at launch (`firebaseConfig.ts` fails closed), and
   the hook prints a warning. They are not secret. Until NFCT-24 deploys the
   consumer rules, `nfct-dev` denies all reads and writes, so a TestFlight
-  build can launch but cannot sign in or sync. CI's
-  [nfct-dev canary](nfct-dev-canary.md) builds every runtime PR with the same
+  build can launch but cannot sign in or sync. The
+  [nfct-dev canary](nfct-dev-canary.md) builds a runtime PR with the same
   values from repository variables (`NFCT_DEV_FIREBASE_*`), and runs the
   consumer journey against `nfct-dev`; keep the two sets identical.
 - Optional `NFCT_DEVELOPMENT_TEAM` workflow variable: the hook writes it to
@@ -405,7 +412,8 @@ What the repository provides, and CI proves on every native run:
 
 The release model has no long-lived release or beta branch:
 
-- feature PRs merge to `main`;
+- pull requests merge to `development`, which is promoted to `main` through a
+  pull request that runs the [release checks](ci.md#promotion-development--main);
 - a TestFlight build is started deliberately from a specific `main` commit or
   release tag: an Xcode Cloud workflow with a manual or tag start condition
   (for example tags `ios/v*`), so nothing is merged or squashed only for a
