@@ -148,21 +148,30 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(page.locator('.mm-progress')).not.toContainText(noBackendCopy);
 });
 
+const triggersHub = `http://${process.env.FIREBASE_EMULATOR_HUB ?? '127.0.0.1:4400'}/functions`;
+let triggersDisabled = false;
+
+async function setBackgroundTriggers(state: 'disable' | 'enable'): Promise<void> {
+  const response = await fetch(`${triggersHub}/${state}BackgroundTriggers`, { method: 'PUT' });
+  expect(response.ok, `${state} background triggers`).toBe(true);
+  triggersDisabled = state === 'disable';
+}
+
+// Also after a timeout, which abandons the test body: later specs need trusted scoring.
+test.afterEach(async () => {
+  if (triggersDisabled) await setBackgroundTriggers('enable');
+});
+
 /**
  * Runs `body` with the Functions emulator's background triggers off, so a saved run gets no result,
  * progress or stats: a backend without trusted scoring, such as nfct-dev before Functions are deployed.
  */
 async function withoutTrustedScoring(body: () => Promise<void>): Promise<void> {
-  const hub = `http://${process.env.FIREBASE_EMULATOR_HUB ?? '127.0.0.1:4400'}/functions`;
-  const toggle = async (state: 'disable' | 'enable') => {
-    const response = await fetch(`${hub}/${state}BackgroundTriggers`, { method: 'PUT' });
-    expect(response.ok, `${state} background triggers`).toBe(true);
-  };
-  await toggle('disable');
+  await setBackgroundTriggers('disable');
   try {
     await body();
   } finally {
-    await toggle('enable');
+    await setBackgroundTriggers('enable');
   }
 }
 

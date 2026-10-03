@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameSessionHistoryEntry, GameSessionHistoryPage } from '../../repositories/gameSessionRepository';
 import { PENDING_RESULT_GRACE_MS, pendingDeadline, runRows, statsPhase, type Loaded, type PlayerOverview } from '../usePlayerOverview';
-import { missing, NOW_MS, runEntry } from './overviewFixtures';
+import { missing, NOW_MS, readable, runEntry, summaryWith } from './overviewFixtures';
 
 // NFCT-83: how long the stats show as loading for a run waiting for its result.
 
@@ -39,5 +39,10 @@ describe('statsPhase', () => {
     const scored = runEntry('sessionAAAAAAAAAAAA1');
     expect(pendingDeadline(runRows(page(scored))!, NOW_MS)).toBeNull();
     expect(statsPhase(noSummary, page(scored), true, NOW_MS, NOW_MS)).toBe('catching-up');
+  });
+
+  it('shows the stats as soon as a summary lands, however long the run waited', () => {
+    const withSummary: Pick<PlayerOverview, 'summary' | 'todayState'> = { summary: { status: 'ready', value: readable(summaryWith(['2026-10-01'])) }, todayState: 'known' };
+    expect(statsPhase(withSummary, page(fresh), true, endedAt + 10 * PENDING_RESULT_GRACE_MS, endedAt)).toBe('stats');
   });
 });
