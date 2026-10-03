@@ -136,7 +136,7 @@ Account deletion (NFCT-23) runs through a callable that checks the login is rece
 
 Then:
 
-- **Sweeps.** An hourly sweep resumes failed runs, and a final sweep 24 hours later catches late offline writes.
+- **Sweeps.** A sweep every 15 minutes resumes failed runs, and a final sweep 24 hours later catches late offline writes.
 - **Ledger.** The ledger holds only the uid and timestamps, and a TTL removes it after 30 days.
 - **What is kept.** No game or EEG data is retained. The user can also delete any EEG recording at any time.
 - **Inherited code.** WB-97's tombstoning deletion does not carry over; only its reauthentication UI and error mapping are reused.
@@ -369,9 +369,9 @@ Then one transaction:
 
 An invalid session needs none of this: it is written whatever state progress is in. The rebuild reads every processed session of the game in one transaction (about 1 KB each, no trials). That only happens after an `aggregateVersion` bump or an admin rebuild; a very long history would need a paged rebuild (follow-up).
 
-**The sweep.** `sweepUnprocessedSessions` (scheduled hourly; exported but not deployed by this repository) calls the same re-drive core as the admin script, bounded per run:
+**The sweep.** `sweepUnprocessedSessions` (scheduled every 15 minutes; exported but not deployed by this repository) calls the same re-drive core as the admin script, bounded per run:
 
-- pending sessions created more than 60 minutes ago, which missed their trigger (a delivery stops retrying after 30 minutes and records `failed`, so only a delivery that never ran leaves a session pending);
+- pending sessions created more than 45 minutes ago, which missed their trigger (a delivery stops retrying after 30 minutes and records `failed`, so only a delivery that never ran leaves a session pending);
 - failed sessions with fewer than 5 recorded attempts;
 - unsupported sessions this build now has a module for, under the same cap;
 - at most 100 sessions per run, scanning at most 2,000 projected documents per state, within the last 7 days.

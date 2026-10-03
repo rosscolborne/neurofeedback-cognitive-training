@@ -286,7 +286,7 @@ Nothing else in the repository blocks it (NFCT-66 traced the whole path):
 | Piece | State |
 | --- | --- |
 | Trigger | `onGameSessionCreated` (Firestore `onDocumentCreated`, 2nd gen, retries on) writes `result`, `progress/{gameId}`, `stats/summary`, `dailyStats/*` and `achievements/*` in one transaction |
-| Sweep | `sweepUnprocessedSessions` (every 60 minutes, Cloud Scheduler) re-drives `pending`, `failed` and `unsupported` sessions 1 hour to 7 days old, 100 per run |
+| Sweep | `sweepUnprocessedSessions` (every 15 minutes, Cloud Scheduler) re-drives `pending`, `failed` and `unsupported` sessions 45 minutes to 7 days old, 100 per run |
 | Region | `northamerica-northeast2`, the same as nfct-dev's Firestore (`functions/src/index.ts`) |
 | Runtime and build | Node 22 (`firebase.json`, `functions/package.json`); the predeploy step bundles `src/` and `shared/` into `lib/index.js`, which is all that is uploaded; the CLI disables the buildpack's own build |
 | Parameters and secrets | None |
@@ -301,7 +301,8 @@ Run these from a clean checkout of the commit to deploy (normally
 
 1. **Upgrade nfct-dev to Blaze** (Firebase console > Usage and billing >
    Modify plan) and set a budget alert. `maxInstances: 10` bounds the trigger;
-   the sweep runs 24 times a day.
+   the sweep runs 96 times a day, and each run reads up to 2,000 projected session
+   documents, so sweep reads are small but scale with the cadence.
 2. **Confirm the database location** is `northamerica-northeast2`
    (Firebase console > Firestore > the `(default)` database). If it is not,
    stop: `REGION` in `functions/src/index.ts` must match it.
@@ -342,7 +343,7 @@ Run these from a clean checkout of the commit to deploy (normally
    `npx firebase functions:log --project dev`.
 7. **Score the runs saved before the deploy.** A trigger fires only for new
    documents, so earlier sessions stay pending until something re-drives them.
-   The sweep takes those from the last 7 days, 100 an hour. To do all of them
+   The sweep takes those from the last 7 days, 100 every 15 minutes. To do all of them
    at once, with your Application Default Credentials
    (`gcloud auth application-default login`):
 

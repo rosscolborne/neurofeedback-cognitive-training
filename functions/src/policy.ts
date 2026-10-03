@@ -80,6 +80,12 @@ export interface SweepPolicy {
    * delivery that has already ended; should a redelivery still be running,
    * the processing transaction serialises the two and the second finds the
    * session processed, so the sweep needs no cutoff on the state's own time.
+   *
+   * 45 minutes: the trigger's 30-minute retry window, plus the platform's
+   * largest redelivery backoff (10 minutes), plus a delivery's timeout
+   * (about a minute), is about 41 minutes, with a small margin. Exactly-once
+   * processing rests on the transaction, not on this delay; the delay only
+   * avoids wasted overlap with a live redelivery.
    */
   readonly settleAfterMs: number;
   /** Only sessions created this recently (bounds the pending scan). */
@@ -97,7 +103,7 @@ export interface SweepPolicy {
 }
 
 export const SWEEP_POLICY: SweepPolicy = Object.freeze({
-  settleAfterMs: 60 * 60_000,
+  settleAfterMs: 45 * 60_000,
   lookbackMs: 7 * 24 * 60 * 60_000,
   maxSessions: 100,
   scanBudget: 2_000,
