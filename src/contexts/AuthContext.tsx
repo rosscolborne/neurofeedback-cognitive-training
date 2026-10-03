@@ -178,7 +178,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (signupDraftRef.current === draft) signupDraftRef.current = null;
     const created = await profileRepository.getProfile();
     if (!isCurrent()) return null;
-    if (created.status !== 'readable') throw lookupError('The new profile could not be read back.', UNREADABLE_PROFILE_CODE);
+    if (created.status === 'unreadable') throw lookupError('The new profile could not be read back.', UNREADABLE_PROFILE_CODE);
+    // Gone again (deleted meanwhile elsewhere): not a format problem, so Try again stays.
+    if (created.status !== 'readable') throw lookupError('The new profile was not found when read back.', 'missing-after-create');
     return created.data;
   };
 
