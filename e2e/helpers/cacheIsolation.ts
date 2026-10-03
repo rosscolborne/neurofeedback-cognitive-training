@@ -62,7 +62,7 @@ function sessionDraft() {
     });
     return {
         gameId: 'mental-math',
-        gameVersion: 1,
+        gameVersion: mentalMath.definition.gameVersion,
         modeId: 'timed-90',
         startLevel: 1,
         peakLevel: 2,
