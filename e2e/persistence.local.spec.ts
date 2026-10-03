@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
 import { seedPatient } from './helpers/localEmulator';
 import type { AuthorizedRead } from './helpers/authorizedFirestore';
-import { expectRolePersisted } from './helpers/persistenceAssertions';
+import { expectProfileReadable, expectRolePersisted } from './helpers/persistenceAssertions';
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
@@ -22,6 +22,7 @@ test('persistence assertions read as the patient; outsider reads are denied', as
     await arriveAtPatientDashboard(outsider);
 
     await expectRolePersisted(owner.patient, 'patient', patient);
+    await expectProfileReadable(owner.patient, patient);
 
     const identityGuards = await patient.evaluate(async ({ patientId }) => {
       const { authorizedFirestoreRead } = await import('/e2e/helpers/authorizedFirestore.ts');

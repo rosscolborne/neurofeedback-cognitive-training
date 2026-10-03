@@ -503,7 +503,8 @@ service cloud.firestore {
 
     // Everything not matched above is denied, including the retired clinician
     // collections (invitations, messages, appointments, clinics, practitioners
-    // and brain maps) and the retired neurofeedback session records (sessions). Rules OR together, so this grants nothing; it makes the
+    // and brain maps) and the retired neurofeedback session records
+    // (sessions). Rules OR together, so this grants nothing; it makes the
     // default explicit.
     match /{document=**} {
       allow read, write: if false;

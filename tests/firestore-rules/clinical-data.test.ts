@@ -1,9 +1,9 @@
-import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
+import { assertFails } from '@firebase/rules-unit-testing';
 import {
     collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, it } from 'vitest';
-import { anonymous, as, clinicA, closeEnvironment, ids, past, resetWorld } from './fixture';
+import { anonymous, as, closeEnvironment, ids, past, resetWorld } from './fixture';
 
 beforeEach(resetWorld);
 afterAll(closeEnvironment);

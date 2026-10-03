@@ -21,8 +21,9 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   backend changes go to `brainflow-service`.
 - **The clinical data model is transitional.** Do not add fields to
   `clients/{uid}` / `ClientProfile`, and do not bring back the retired
-  `sessions/{id}` records, protocols or experiences to represent games. The consumer model (user profile, game session,
-  separate EEG recording) is built new in `shared/` (`@nfct/shared`); see
+  `sessions/{id}` records, protocols or experiences to represent games. The
+  consumer model (user profile, game session, separate EEG recording) is built
+  new in `shared/` (`@nfct/shared`); see
   [ADR-001](docs/nfct/adr-001-consumer-domain-model.md). `shared/` imports
   only `zod` and its own modules.
 - **EEG is optional.** It must never be required to play and must never drive

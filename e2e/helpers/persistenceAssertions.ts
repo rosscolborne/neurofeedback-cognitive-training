@@ -27,3 +27,11 @@ export async function expectRolePersisted(account: { uid: string }, role: 'patie
         return field(user, 'role');
     }, persistenceTimeout).toBe(role);
 }
+
+/** A patient reads their own clients/{uid} profile through its own rules grant. */
+export async function expectProfileReadable(account: { uid: string }, accountPage: Page): Promise<void> {
+    await expect.poll(async () => {
+        const profile = await documentAs(accountPage, account.uid, `clients/${account.uid}`);
+        return field(profile, 'id');
+    }, persistenceTimeout).toBe(account.uid);
+}

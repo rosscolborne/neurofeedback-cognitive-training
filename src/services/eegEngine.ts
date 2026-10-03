@@ -16,18 +16,18 @@ import eegWasmUrl from '@elata-biosciences/eeg-web/wasm/eeg_wasm_bg.wasm?url';
 // characteristics. It is also the service advertised during device discovery.
 const MUSE_EEG_SERVICE_UUID = '0000fe8d-0000-1000-8000-00805f9b34fb';
 
-export type DemoState = 'auto' | 'focus' | 'calm' | 'drift' | 'recovery';
+type DemoPreset = 'focus' | 'calm' | 'drift' | 'recovery';
 
 /** Demo Mode's simulated mind-state presets: the centres its scores drift around. */
-const DEMO_PRESETS: Record<Exclude<DemoState, 'auto'>, { focus: number; calm: number; name: string }> = {
-  focus: { focus: 92, calm: 65, name: 'Focused' },
-  calm: { focus: 70, calm: 96, name: 'Calm' },
-  drift: { focus: 25, calm: 30, name: 'Drifting' },
-  recovery: { focus: 96, calm: 88, name: 'Recovering' },
+const DEMO_PRESETS: Record<DemoPreset, { focus: number; calm: number }> = {
+  focus: { focus: 92, calm: 65 },
+  calm: { focus: 70, calm: 96 },
+  drift: { focus: 25, calm: 30 },
+  recovery: { focus: 96, calm: 88 },
 };
 
 /** The auto cycle visits each preset for three seconds. */
-const DEMO_AUTO_CYCLE: Array<Exclude<DemoState, 'auto'>> = ['focus', 'calm', 'drift', 'recovery'];
+const DEMO_AUTO_CYCLE: DemoPreset[] = ['focus', 'calm', 'drift', 'recovery'];
 const DEMO_AUTO_PHASE_SECONDS = 3;
 
 export class EEGEngine {
@@ -87,20 +87,6 @@ export class EEGEngine {
   public isDemoMode = false;
   public demoTimeElapsed = 0;
   public demoCycleTime = 0;
-  public demoState: DemoState = 'auto';
-  public currentSimulatedStateName = 'Auto cycle';
-
-  public setSimulatedState(state: DemoState) {
-    this.demoState = state;
-    if (state === 'auto') {
-      this.currentSimulatedStateName = 'Auto cycle';
-      return;
-    }
-    const preset = DEMO_PRESETS[state];
-    this.userFocus = preset.focus;
-    this.userCalm = preset.calm;
-    this.currentSimulatedStateName = preset.name;
-  }
 
   /** Monotonic evidence from the acquisition transport, never from the UI publish timer. */
   public getHardwareSourceState(): { sequence: number; lastFrameAtMs: number } {
@@ -899,14 +885,11 @@ export class EEGEngine {
         tp10: 'good',
       };
 
-      if (this.demoState === 'auto') {
-        this.demoCycleTime = (this.demoCycleTime + dt) % (DEMO_AUTO_CYCLE.length * DEMO_AUTO_PHASE_SECONDS);
-        const preset = DEMO_PRESETS[DEMO_AUTO_CYCLE[Math.floor(this.demoCycleTime / DEMO_AUTO_PHASE_SECONDS)]];
-        this.currentSimulatedStateName = preset.name;
-        // Smooth interpolation between presets
-        this.userFocus += (preset.focus - this.userFocus) * (dt * 1.8);
-        this.userCalm += (preset.calm - this.userCalm) * (dt * 1.8);
-      }
+      this.demoCycleTime = (this.demoCycleTime + dt) % (DEMO_AUTO_CYCLE.length * DEMO_AUTO_PHASE_SECONDS);
+      const preset = DEMO_PRESETS[DEMO_AUTO_CYCLE[Math.floor(this.demoCycleTime / DEMO_AUTO_PHASE_SECONDS)]];
+      // Smooth interpolation between presets
+      this.userFocus += (preset.focus - this.userFocus) * (dt * 1.8);
+      this.userCalm += (preset.calm - this.userCalm) * (dt * 1.8);
 
       // Presets are centres, not frozen readings. Demo scores are deliberately
       // sample-local: never written into the fields a connected headset uses,

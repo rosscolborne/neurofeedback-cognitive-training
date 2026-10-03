@@ -137,18 +137,21 @@ describe('consumer EEG pipeline', () => {
     expect(sample.brainflowScores).toBeUndefined();
   });
 
-  it('moves the simulated scores with the Demo state', () => {
+  it('moves the simulated scores through the Demo auto cycle', () => {
     const engine = new EEGEngine();
     engine.isDemoMode = true;
-    engine.setSimulatedState('focus');
-    const focus = internals(engine).generateSample(0.1).brainflowScores!;
-    engine.setSimulatedState('drift');
-    const drift = internals(engine).generateSample(0.1).brainflowScores!;
+    const sampleFor = (seconds: number) => {
+      let sample = internals(engine).generateSample(0.1);
+      for (let step = 1; step < seconds * 10; step += 1) sample = internals(engine).generateSample(0.1);
+      return sample.brainflowScores!;
+    };
+    const focus = sampleFor(2.9); // the end of the focus phase (0–3 s)
+    sampleFor(3); // the calm phase
+    const drift = sampleFor(3); // the end of the drift phase (6–9 s)
     expect(focus.method).toBe('demo');
     expect(focus.mindfulnessScore!).toBeGreaterThan(65);
     expect(drift.mindfulnessScore!).toBeLessThan(40);
     expect(drift.restfulnessScore!).toBeLessThan(focus.restfulnessScore!);
-    expect(engine.currentSimulatedStateName).toBe('Drifting');
   });
 
   it('exposes monotonic source-frame evidence independently of the UI publish timer', () => {
