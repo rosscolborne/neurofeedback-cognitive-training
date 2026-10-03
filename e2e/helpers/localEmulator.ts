@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { PROFILE_SHAPES, type ProfileShapeName } from '../../shared/__tests__/profileShapes';
 
 const projectId = 'demo-neurasticity-protocol-e2e';
 if (process.env.GCLOUD_PROJECT !== projectId ||
@@ -24,17 +25,7 @@ export type LocalPlayerFixture = {
  * (shared/schemas/profile.ts), with server-clock timestamps.
  */
 function consumerProfile(displayName: string) {
-  const now = FieldValue.serverTimestamp();
-  return {
-    schemaVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-    displayName,
-    avatar: null,
-    preferences: { timezone: 'America/Toronto', soundEnabled: true, hapticsEnabled: true, weeklyGoal: null },
-    onboarding: { version: 1, completedAt: null },
-    eeg: { enabled: false, consent: null, preferredDevice: null },
-  };
+  return PROFILE_SHAPES.current.build({ displayName, email: '', now: FieldValue.serverTimestamp() });
 }
 
 /** A player who has signed up before: an Auth account and their consumer profile. */
@@ -47,18 +38,20 @@ export async function seedPlayer(): Promise<LocalPlayerFixture> {
   return { player, name };
 }
 
+export type ShapedAccount = { uid: string; email: string; password: string; displayName: string };
+
 /**
- * An account made before the consumer profile (Phase 2): its users/{uid} is
- * the inherited sign-up document, with no schemaVersion, as every account on
- * nfct-dev had when Phase 2 merged. This app cannot read it.
+ * An account that signed up before, whose profile (users/{uid}) has one of the
+ * historical shapes in shared/__tests__/profileShapes.ts, such as the
+ * pre-Phase 2 sign-up document every nfct-dev account had when Phase 2 merged.
  */
-export async function seedLegacyAccount(): Promise<{ uid: string; email: string; password: string }> {
+export async function seedAccountWithProfileShape(shape: ProfileShapeName): Promise<ShapedAccount> {
   const id = randomUUID().slice(0, 12);
-  const account = { uid: `legacy-${id}`, email: `legacy-${id}@example.test`, password: 'LocalEmulator!123' };
-  const createdAt = new Date().toISOString();
-  await adminAuth.createUser({ ...account, displayName: 'Legacy Player' });
-  await adminDb.doc(`users/${account.uid}`).set({ email: account.email, displayName: 'Legacy Player', createdAt, role: 'patient', updatedAt: createdAt });
-  return account;
+  const account = { uid: `${shape}-${id}`, email: `${shape}-${id}@example.test`, password: 'LocalEmulator!123' };
+  const displayName = `Returning ${id}`;
+  await adminAuth.createUser({ ...account, displayName });
+  await adminDb.doc(`users/${account.uid}`).set(PROFILE_SHAPES[shape].build({ displayName, email: account.email, now: FieldValue.serverTimestamp() }));
+  return { ...account, displayName };
 }
 
 /** A consumer player: an Auth account only. The app creates its profile (users/{uid}) itself. */

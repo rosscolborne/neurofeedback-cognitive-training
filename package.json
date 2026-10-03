@@ -26,6 +26,7 @@
     "functions:typecheck": "tsc -p functions/tsconfig.json",
     "functions:rebuild-progress": "tsx --tsconfig functions/tsconfig.json functions/scripts/rebuild-progress.ts",
     "functions:redrive-sessions": "tsx --tsconfig functions/tsconfig.json functions/scripts/redrive-sessions.ts",
+    "functions:audit-profile-shapes": "tsx --tsconfig functions/tsconfig.json functions/scripts/audit-profile-shapes.ts",
     "test:functions": "npm run functions:build && npm run test:functions:core && npm run test:functions:triggers",
     "test:functions:core": "firebase emulators:exec --only firestore --project demo-nfct-functions-core \"vitest run --config functions/vitest.config.mts test/core\"",
     "test:functions:triggers": "firebase emulators:exec --only functions,firestore --project demo-nfct-functions \"vitest run --config functions/vitest.config.mts test/triggers\"",

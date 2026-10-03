@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtHome, loginThroughUi } from './helpers/auth';
 import { completeConsumerOnboarding, consumerHome, signUpFreshAccountThroughUi } from './helpers/journeys';
-import { readAccountRecords, seedLegacyAccount, seedPlayer } from './helpers/localEmulator';
+import { readAccountRecords, seedPlayer } from './helpers/localEmulator';
 
 // Phase 2 account flows when the connection to Firestore drops, and long
 // names on a small phone. Firestore is cut off by aborting the page's
@@ -13,8 +13,6 @@ const FIRESTORE = 'http://127.0.0.1:8080/**';
 const cutFirestore = (page: Page) => page.route(FIRESTORE, (route) => route.abort());
 const restoreFirestore = (page: Page) => page.unroute(FIRESTORE);
 const accountUnavailable = (page: Page) => page.getByRole('alert').filter({ hasText: 'Your account couldn’t be loaded.' });
-
-const accountUnreadable = (page: Page) => page.getByRole('alert').filter({ hasText: 'This version of the app can’t open your account.' });
 
 async function openProfile(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
@@ -65,28 +63,6 @@ test('the name typed at sign-up survives a relaunch before the profile could be 
   await expect(page.getByRole('button', { name: 'Skip to Dashboard' }).or(consumerHome(page)).first()).toBeVisible({ timeout: 60_000 });
   await arriveAtHome(page);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Dorothy');
-});
-
-test('an account this version cannot read says so on every launch, never overwrites it, and can sign out', async ({ page }) => {
-  // The account is signed in from a persisted session, as when the app opens
-  // on a device that signed in before: the error must not blame the connection.
-  const account = await seedLegacyAccount();
-  await loginThroughUi(page, account);
-  await expect(accountUnreadable(page)).toBeVisible({ timeout: 30_000 });
-  await page.reload();
-  await expect(accountUnreadable(page)).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText('Check your internet connection', { exact: false })).toHaveCount(0);
-  // Trying again cannot help, so it is not offered.
-  await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
-
-  const records = await readAccountRecords(account.uid);
-  expect(records.profile).toMatchObject({ role: 'patient', email: account.email });
-  expect(records.profile).not.toHaveProperty('schemaVersion');
-
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Begin Journey' })).toBeVisible({ timeout: 30_000 });
-  await page.reload();
-  await expect(page.getByRole('button', { name: 'Begin Journey' })).toBeVisible({ timeout: 30_000 });
 });
 
 test.describe('a long one-word name on a small phone', () => {
