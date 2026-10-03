@@ -38,21 +38,6 @@ npm run brainflow  # backend only
 npm run dev:web    # frontend only
 ```
 
-## EEG acquisition console
-
-The development-only EEG Acquisition Console is a separate page for raw EEG
-acquisition, hardware-provider validation, recording, replay, live plots, and
-signal-quality debugging. It uses the same local BrainFlow service as
-Neurasticity, but does not form part of the patient or clinician UI.
-
-```bash
-npm run debug_console
-```
-
-This opens the console at `http://127.0.0.1:5174/debug-console.html`. It
-uses a healthy local service on port 8000 when one is already running;
-otherwise it starts one. Stop it with `Ctrl+C`.
-
 Local development defaults to `http://127.0.0.1:8000`. To use another address
 or port, set `VITE_BRAINFLOW_SERVICE_URL` in `.env.local`. When that variable
 is set, `npm run dev` health-checks the configured service, prints its URL, and
@@ -67,9 +52,10 @@ using the public HTTPS URL of that Render service, and redeploy the frontend.
 The URL is included when Vite builds the app, so setting it without a new
 deployment does not update an already-published site.
 
-The app verifies the Render service before opening the Chrome Bluetooth chooser.
-If Render is unavailable, the headset connection does not start and no local or
-browser-derived metrics are substituted.
+The app reads two EEG metrics from that service: BrainFlow's mindfulness and
+restfulness. Without a configured service a headset still connects and its fit
+is checked in the browser, but no metrics are shown: none are ever estimated
+outside BrainFlow.
 
 ## Checks
 

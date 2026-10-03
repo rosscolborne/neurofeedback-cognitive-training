@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { deleteField, doc, getDoc, runTransaction, serverTimestamp, setDoc, type Firestore } from 'firebase/firestore';
+import { doc, getDoc, runTransaction, serverTimestamp, setDoc, type Firestore } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, it } from 'vitest';
 import { as, closeEnvironment, emailOf, ids, resetWorld } from './fixture';
 
@@ -17,26 +17,6 @@ describe('profile transactions', () => {
         await assertSucceeds(getDoc(doc(database, `clients/${fresh}`)));
         await assertSucceeds(setDoc(doc(database, `clients/${fresh}`), { id: fresh, email: emailOf(fresh), name: 'New', badges: [], brainMaps: [] }));
     });
-
-    /** storageEngine.saveSelfDirectedTrainingSetup: only the assignment fields change. */
-    function saveTrainingSetup(database: Firestore, patientId: string) {
-        return runTransaction(database, async (transaction) => {
-            const reference = doc(database, `clients/${patientId}`);
-            await transaction.get(reference);
-            transaction.update(reference, {
-                assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'],
-                customProtocolConfig: deleteField(), updatedAt: serverTimestamp(),
-            });
-        });
-    }
-
-    it('storageEngine.saveSelfDirectedTrainingSetup works for every patient, including one linked under the retired clinician product', async () => {
-        await assertSucceeds(saveTrainingSetup(await as(ids.unlinked), ids.unlinked));
-        await assertSucceeds(saveTrainingSetup(await as(ids.patientA), ids.patientA));
-        await assertSucceeds(saveTrainingSetup(await as(ids.legacyPatient), ids.legacyPatient));
-        await assertFails(saveTrainingSetup(await as(ids.clinicianA), ids.patientA));
-        await assertFails(saveTrainingSetup(await as(ids.patientB), ids.patientA));
-    });
 });
 
 /** storageEngine.createSession: session plus aggregate merge onto the patient profile. */
@@ -44,7 +24,7 @@ function createSession(database: Firestore, sessionId: string, patientId: string
     return runTransaction(database, async (transaction) => {
         const client = await transaction.get(doc(database, `clients/${patientId}`));
         transaction.set(doc(database, `sessions/${sessionId}`), {
-            id: sessionId, patientId, clinicId: 'self-guided', isDemo: true, timeInZonePercent: 50,
+            id: sessionId, patientId, clinicId: 'self-guided', isDemo: true, durationSeconds: 60, averageMindfulness: 70,
             createdAt: serverTimestamp(), updatedAt: serverTimestamp(), completedAt: serverTimestamp(), ...extra,
         });
         if (client.exists()) {

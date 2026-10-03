@@ -31,7 +31,6 @@ vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
-vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 
 import { PatientShell } from '../PatientShell';
@@ -433,35 +432,26 @@ describe('PatientShell persisted profile writes', () => {
     }
   });
 
-  it('shows only saved Neural Imprint values and routes recalibration without a profile write', async () => {
-    const onRecalibrate = vi.fn();
+  it('offers headset setup without a profile write, and shows no calibration or protocol, even for a legacy saved baseline', async () => {
+    const onSetUpHeadset = vi.fn();
     const onUpdateClient = vi.fn();
-    const model = { alphaPeakHz: 9.8, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z' };
+    const legacyBaseline = { alphaPeakHz: 9.8, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z' };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell client={{ ...client, individualBaselineModel: model }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onRecalibrate={onRecalibrate} />);
+      renderer = create(<PatientShell client={{ ...client, assignedProtocol: 'theta-beta-ratio', individualBaselineModel: legacyBaseline } as ClientProfile} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onSetUpHeadset={onSetUpHeadset} />);
     });
     act(() => renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
     )!.props.onClick());
     const textContent = (node: ReactTestInstance | string): string =>
       typeof node === 'string' ? node : node.children.map(textContent).join('');
-    const summary = () => textContent(renderer.root.findByProps({ 'aria-label': 'Neural Imprint' }));
-    expect(summary()).toContain('Current');
-    expect(summary()).toContain('9.8 Hz');
-    expect(summary()).not.toContain('Reactivity');
-    expect(summary()).not.toContain('Purity');
-    act(() => renderer.root.findAllByType('button').find((button) => button.children.join('') === 'Recalibrate')!.props.onClick());
-    expect(onRecalibrate).toHaveBeenCalledTimes(1);
+    const main = textContent(renderer.root.findByType('main'));
+    expect(renderer.root.findAllByProps({ 'aria-label': 'Neural Imprint' })).toHaveLength(0);
+    expect(main).not.toMatch(/protocol|calibrat|imprint|9\.8 Hz|training setup/i);
+    const setUp = renderer.root.findAllByType('button').find((button) => textContent(button).includes('Set Up Headset'))!;
+    act(() => setUp.props.onClick());
+    expect(onSetUpHeadset).toHaveBeenCalledTimes(1);
     expect(onUpdateClient).not.toHaveBeenCalled();
-
-    await act(async () => { renderer.update(<PatientShell client={{ ...client, individualBaselineModel: { ...model, algorithmVersion: 'neurogambit-15s-v1', thetaMean: 2, betaMean: 4, alphaMean: 6 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
-    expect(summary()).toContain('Current');
-    expect(summary()).not.toContain('9.8 Hz');
-    await act(async () => { renderer.update(<PatientShell client={{ ...client, individualBaselineModel: { ...model, expiresAt: 0 } }} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
-    expect(summary()).toContain('Expired');
-    await act(async () => { renderer.update(<PatientShell client={client} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />); });
-    expect(summary()).toContain('Not calibrated');
     renderer.unmount();
   });
 });

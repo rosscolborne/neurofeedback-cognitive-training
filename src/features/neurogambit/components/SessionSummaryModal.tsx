@@ -81,8 +81,8 @@ export const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
 
     const metrics = [
       ['Tactical Accuracy', `${score.tacticalAccuracyPercent}%`, 'Percentage of correct candidate moves on first attempt'],
-      ['High-Beta Panic Duration', `${score.timeInHighBetaPanicSeconds}s`, 'Time spent in sympathetic tension / time scramble stress'],
-      ['Autonomic Recovery Latency (t_recover)', `${score.recoveryLatencySeconds}s`, 'Speed to restore baseline Alpha/Beta post-blunder (15s benchmark)'],
+      ['Time Panic Duration', `${score.timeInPanicSeconds}s`, 'Time spent with low composure under clock pressure'],
+      ['Autonomic Recovery Latency (t_recover)', `${score.recoveryLatencySeconds}s`, 'Speed to restore composure after a blunder (15s benchmark)'],
       ['Total Session Pacing', `${score.totalSessionTimeSeconds}s`, 'Total elapsed duration of tactical match sequence'],
       ['Puzzles Completed', `${score.puzzlesCompleted} / ${score.totalPuzzlesAttempted}`, 'Full tactical combinations or swindle resources resolved'],
     ];

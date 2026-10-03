@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ClientProfile } from './types';
 import { storageEngine } from './services/storageEngine';
-import { eegEngine } from './services/eegEngine';
-import { getReusableBaselineModel } from './services/dataMappers';
 import { PatientShell } from './components/patient/PatientShell';
 import { BrandLogo } from './components/brand/BrandLogo';
 
@@ -43,7 +41,6 @@ export function App() {
     const generation = ++loadGeneration.current;
     let active = true;
     const isCurrent = () => active && loadGeneration.current === generation && accountIdentityRef.current === accountIdentity;
-    eegEngine.individualBaselineModel = null;
     setDataIdentity(profileDataIdentity);
     setCurrentClient(null);
     setPatientProfileError(null);
@@ -54,9 +51,6 @@ export function App() {
       void storageEngine.getCurrentClient(user)
         .then((client) => {
           if (!isCurrent()) return;
-          if (profileRoutePhase !== 'hardware-setup') {
-            eegEngine.individualBaselineModel = getReusableBaselineModel(client?.individualBaselineModel);
-          }
           setCurrentClient(client);
         })
         .catch((error) => {
@@ -67,7 +61,6 @@ export function App() {
     }
     return () => {
       active = false;
-      eegEngine.individualBaselineModel = null;
     };
   }, [accountIdentity, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
 
@@ -141,10 +134,6 @@ export function App() {
     if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
   };
 
-  const handleBaselinePersisted = (patientId: string, model: ClientProfile['individualBaselineModel']) => {
-    if (accountIdentityRef.current !== accountIdentity || !model) return;
-    setCurrentClient((current) => current?.id === patientId ? { ...current, individualBaselineModel: model } : current);
-  };
 
   const renderPrimaryApp = () => {
     if (!role) return <Navigate to="/role-selection" replace />;
@@ -172,8 +161,7 @@ export function App() {
           client={visibleCurrentClient}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}
-          onBaselinePersisted={handleBaselinePersisted}
-          onRecalibrate={() => navigate('/hardware-setup')}
+          onSetUpHeadset={() => navigate('/hardware-setup')}
         />
       );
     }

@@ -3,34 +3,21 @@ import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth, firestoreCache } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSignOut } from '../account/useSignOut';
-import { ClientProfile, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
-import { getCalibrationDisplayState } from '../../services/dataMappers';
+import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
-import { OnboardingFlow } from './OnboardingFlow';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
-import { ProtocolDetailsModal } from './ProtocolDetailsModal';
-import { SelfDirectedSetupModal } from './SelfDirectedSetupModal';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, ChevronRight, ClipboardList, RotateCcw, SlidersHorizontal } from 'lucide-react';
-import { FactGrid, type Fact } from '../ui/FactGrid';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, ChevronRight, Headphones } from 'lucide-react';
+import { FactGrid } from '../ui/FactGrid';
 import { canStartAssignedExperience } from './experienceCatalogue';
 import { TrainTab } from './TrainTab';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
-import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
-import {
-  buildSelfDirectedTrainingSetup,
-  type SelfDirectedTrainingSetup,
-} from '../../services/patientTrainingAuthority';
 import { exportPatientSessionCsv } from './patientSessionCsv';
-import {
-  getClinicalProtocolTemplate,
-  getProtocolAssignmentAlias,
-} from '../../services/clinicalProtocolTemplates';
 import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
 import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
@@ -48,31 +35,20 @@ const demoModeEegProvider = createDemoModeEegProvider();
 /** Where focus goes when a closed game's opener is gone: the current tab (NFCT-52). */
 const currentTabButton = () => document.querySelector<HTMLElement>('.patient-bottom-nav [aria-current="page"]');
 
-// Same day-month-year style as session history, so dates read alike across Profile and Progress.
-const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-
-const IMPRINT_TAG: Record<'valid' | 'expired' | 'invalid' | 'not-calibrated', string> = {
-  valid: 'status-tag-active',
-  expired: 'status-tag-paused',
-  invalid: 'status-tag-alert',
-  'not-calibrated': 'status-tag-neutral',
-};
-
 interface PatientShellProps {
   client: ClientProfile;
   onUpdateClient: (updated: ClientProfile) => Promise<void>;
   /** Update local UI for data already persisted by an atomic repository operation. */
   onClientPersistedElsewhere: (updated: ClientProfile) => void;
-  onBaselinePersisted?: (patientId: string, model: IndividualBaselineModel) => void;
-  onRecalibrate?: () => void;
+  /** Opens headset pairing and the fit check. */
+  onSetUpHeadset?: () => void;
 }
 
 export const PatientShell: React.FC<PatientShellProps> = ({
   client,
   onUpdateClient,
   onClientPersistedElsewhere,
-  onBaselinePersisted,
-  onRecalibrate,
+  onSetUpHeadset,
 }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'profile'>('home');
   // Home's "See all achievements" opens Progress at its achievements (NFCT-13). The request lasts
@@ -92,11 +68,8 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     currentClientId.current = client.id;
   }, [client.id]);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
-  const [showProtocolDetails, setShowProtocolDetails] = useState(false);
-  const [showTrainingSetup, setShowTrainingSetup] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -104,25 +77,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
-  const resolvedProtocol = resolvePatientProtocol(client);
-  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
-  const protocolAlias = client.customProtocolConfig
-    ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
-    : undefined;
-  const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
-  const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString(undefined, SHORT_DATE);
-  const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
-  const imprintLabel = imprintState.status === 'valid' ? 'Current'
-    : imprintState.status === 'expired' ? 'Expired'
-      : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
-  const measuredAlphaPeakHz = client.individualBaselineModel?.algorithmVersion === 'neurogambit-15s-v1'
-    ? undefined : client.individualBaselineModel?.alphaPeakHz;
-  const imprintFacts: Fact[] = [
-    ...(imprintDate ? [{ label: 'Calibrated', value: <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time> }] : []),
-    ...(imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
-      ? [{ label: 'Alpha peak', value: `${measuredAlphaPeakHz.toFixed(1)} Hz` }] : []),
-    ...(imprintState.expiresAt != null ? [{ label: 'Expires', value: <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString(undefined, SHORT_DATE)}</time> }] : []),
-  ];
   // Any change to a tab other than Progress drops a pending "See all achievements" request, so a later,
   // ordinary visit to Progress opens at the top (state adjusted while rendering, not in an effect).
   if (progressFocusTab !== activeTab) {
@@ -134,11 +88,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const { logout } = useAuth();
   const signOutFlow = useSignOut(logout);
   const handleLogout = signOutFlow.requestSignOut;
-
-  const handleSaveTrainingSetup = async (setup: SelfDirectedTrainingSetup) => {
-    onClientPersistedElsewhere(await storageEngine.saveSelfDirectedTrainingSetup(client.id, setup));
-    setShowTrainingSetup(false);
-  };
 
   const handleDeleteAccount = async () => {
     if (isDeletingAccount || !deletePassword) return;
@@ -276,7 +225,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     return (
       <SessionRunner
         client={client}
-        onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
         onCancel={() => setActiveSessionExp(null)}
@@ -302,23 +250,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         onViewProgress={() => {
           setCompletedSession(null);
           setActiveTab('progress');
-        }}
-      />
-    );
-  }
-
-  if (showOnboarding) {
-    return (
-      <OnboardingFlow
-        onFinish={async updated => {
-          const nextProtocol = updated.assignedProtocol;
-          if (nextProtocol) {
-            // Re-running setup only to re-pair a headband must not discard a customized experience list.
-            if (nextProtocol !== resolvedProtocol) await handleSaveTrainingSetup(buildSelfDirectedTrainingSetup(nextProtocol));
-          } else {
-            await onUpdateClient({ ...client, ...updated });
-          }
-          setShowOnboarding(false);
         }}
       />
     );
@@ -369,8 +300,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           <HomeScreen
             client={client}
             onStartSession={handleStartSession}
-            onOpenProtocolDetails={() => setShowProtocolDetails(true)}
-            onOpenTrainingSetup={() => setShowTrainingSetup(true)}
             gamesSection={(
               <HomeOverview
                 playerId={client.id}
@@ -520,48 +449,18 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <FactGrid
                 style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}
                 facts={[
-                  { label: 'Protocol', value: protocolAlias ? `${protocolAlias} · ${protocolName}` : protocolName },
                   { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
                 ]}
               />
             </div>
-            <section className="card-patient" aria-label="Neural Imprint" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px 12px' }}>
-                <h2 style={{ fontSize: '17px', fontWeight: 600, margin: 0, whiteSpace: 'nowrap' }}>Neural Imprint</h2>
-                <span className={`status-tag ${IMPRINT_TAG[imprintState.status]}`} style={{ flexShrink: 0, padding: '3px 10px' }}>{imprintLabel}</span>
-              </div>
-              {imprintState.status === 'not-calibrated' && (
-                <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
-                  Calibrate with your headset to set your personal training baseline.
-                </p>
-              )}
-              {imprintFacts.length > 0 && <FactGrid facts={imprintFacts} />}
-              <button type="button" className="btn btn-secondary" style={{ alignSelf: 'flex-start', padding: '9px 20px', fontSize: '14px' }} onClick={onRecalibrate}>
-                {imprintState.status === 'not-calibrated' ? 'Calibrate' : 'Recalibrate'}
-              </button>
-            </section>
-
             <div>
               <h2 className="section-label">Training</h2>
               <div className="list-group">
-                <button type="button" className="list-row" onClick={() => setShowTrainingSetup(true)} aria-label="Change Training Setup">
-                  <SlidersHorizontal size={18} className="list-row-icon" aria-hidden="true" />
+                <button type="button" className="list-row" onClick={onSetUpHeadset} disabled={!onSetUpHeadset}>
+                  <Headphones size={18} className="list-row-icon" aria-hidden="true" />
                   <span className="list-row-label">
-                    Change Training Setup
-                    <span className="list-row-hint">Protocol and experiences</span>
-                  </span>
-                  <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
-                </button>
-                <button type="button" className="list-row" onClick={() => setShowProtocolDetails(true)} aria-label="View Protocol Details">
-                  <ClipboardList size={18} className="list-row-icon" aria-hidden="true" />
-                  <span className="list-row-label">Protocol Details</span>
-                  <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
-                </button>
-                <button type="button" className="list-row" onClick={() => setShowOnboarding(true)}>
-                  <RotateCcw size={18} className="list-row-icon" aria-hidden="true" />
-                  <span className="list-row-label">
-                    Redo Setup
-                    <span className="list-row-hint">Training goal and headband</span>
+                    Set Up Headset
+                    <span className="list-row-hint">Pair a Muse and check its fit</span>
                   </span>
                   <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
                 </button>
@@ -605,13 +504,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         )}
       </main>
 
-      {showProtocolDetails && (
-        <ProtocolDetailsModal client={client} onClose={() => setShowProtocolDetails(false)} />
-      )}
-
-      {showTrainingSetup && (
-        <SelfDirectedSetupModal client={client} onSave={handleSaveTrainingSetup} onClose={() => setShowTrainingSetup(false)} />
-      )}
 
       {/* Patient Mobile Bottom Tab Bar */}
       <nav

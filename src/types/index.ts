@@ -11,8 +11,6 @@ export type ProtocolType =
 // shared/ (@nfct/shared), not here (ADR-001).
 export type ExperienceType = 'neuro-gambit';
 
-export type SessionPhase = 'calibration' | 'warmup' | 'training' | 'cooldown' | 'debrief';
-
 /**
  * Firestore timestamps are intentionally represented structurally here so the
  * domain layer can read persisted documents without depending on the Firebase
@@ -59,13 +57,15 @@ export interface MuseChannelQuality {
   tp10: 'good' | 'fair' | 'poor';
 }
 
+/**
+ * The consumer EEG metrics: BrainFlow's mindfulness and restfulness
+ * classifiers, smoothed by the analysis service (0–100), or simulated in Demo
+ * Mode. Nothing else derived from EEG reaches the app.
+ */
 export interface BrainFlowScores {
   mindfulnessScore: number | null;
   restfulnessScore: number | null;
-  valence?: number | null;       // -1 (negative) to +1 (positive)
-  arousal?: number | null;       // 0 (calm) to 1 (activated)
-  emotionLabel?: string | null;  // e.g. "calm", "excited", "stressed"
-  method?: 'brainflow_welch_psd' | 'browser_dsp' | 'demo';
+  method: 'brainflow' | 'demo';
 }
 
 export type ServerFitChannelState = 'good' | 'adjusting' | 'poor';
@@ -90,72 +90,13 @@ export interface ServerFitState {
   channels: ServerFitChannel[];
 }
 
-export interface TrainingMetricSample {
-  score: number | null;    // 0 – 100 baseline-relative, when available
-  baselineReady: boolean;
-}
-
+/** One published EEG frame: headset fit and the consumer metrics, nothing more. */
 export interface EEGDataPoint {
   timestamp: number;
-  rawSignal: number;
-  bands: BandPowers;
-  /** Which server band-power values were actually supplied for this frame. */
-  bandAvailability: Partial<Record<keyof BandPowers, boolean>>;
-  /** Server-computed ratios, all derived from the same smoothed band snapshot. */
-  bandRatios: Record<string, number>;
-  calibrationStatus?: 'off' | 'collecting' | 'active';
-  calibrationProgress?: number;
-  calibrationRequired?: number;
-  rawMetrics?: Record<string, number>;
-  baselineRelativeMetrics?: Record<string, number>;
-  thetaBetaRatio: number;
-  thetaBetaRatioAvailable: boolean;
-  /** The exact measurement selected for this frame's protocol feedback decision. */
-  activeRewardMetric?: {
-    value: number | null;
-    source: 'brainflow' | 'browser-dsp' | 'demo' | 'custom-raw';
-  };
-  /** 0–100 measured coherence percentage; null when the service could not compute it. */
-  coherence: number | null;
-  coherenceAvailable: boolean;
-  inZone: boolean;
-  inZoneAvailable: boolean;
-  zoneScore: number; // 0.0 - 1.0 continuous feedback score
   signalQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected';
   channelQuality: MuseChannelQuality;
   batteryLevel?: number;
-  artifacts: {
-    blink: boolean;
-    clench: boolean;
-  };
   brainflowScores?: BrainFlowScores;
-  trainingMetric?: TrainingMetricSample;
-  isCalibrating?: boolean;
-}
-
-export interface IndividualBaselineModel {
-  /** Present only when this calibration measured a peak alpha frequency. */
-  alphaPeakHz?: number;
-  /** Present only when this calibration measured a spectral slope. */
-  oneOverFSlope?: number;
-  lastCalibratedAt: string;
-  thetaMean?: number;
-  thetaStd?: number;
-  betaMean?: number;
-  betaStd?: number;
-  alphaMean?: number;
-  alphaStd?: number;
-  /** Optional on legacy baselines; required for newly validated calibration records. */
-  schemaVersion?: number;
-  status?: 'collecting' | 'valid' | 'invalid' | 'expired';
-  sampleCount?: number;
-  cleanSampleCount?: number;
-  durationSeconds?: number;
-  sourceDeviceId?: string;
-  sampleRateHz?: number;
-  algorithmVersion?: string;
-  expiresAt?: PersistedTimestamp;
-  invalidReason?: DataUnavailableReason | 'cancelled' | 'processing-error';
 }
 
 export interface ProtocolTemplate {
@@ -246,19 +187,24 @@ export interface SessionRecord {
   clinicianId?: string;
   date: string;
   timestamp: number;
-  protocol: ProtocolType;
+  /**
+   * Legacy protocol-session fields. Sessions saved since the EEG
+   * simplification carry none of these: no protocol, in-zone, band, coherence,
+   * threshold or time-series data is measured any more.
+   */
+  protocol?: ProtocolType;
   experience: ExperienceType;
   durationSeconds: number;
-  timeInZonePercent: number;
+  timeInZonePercent?: number;
   /** Successful measured seconds; optional on sessions saved before time-based Garden XP. */
   inZoneSeconds?: number;
   /** Prescribed runtime used to normalize Garden XP, including early completions. */
   configuredDurationSeconds?: number;
   /** Mean measured interhemispheric coherence, or null when no valid pair/window was available. */
-  averageCoherence: number | null;
+  averageCoherence?: number | null;
   peakFocusScore?: number;
   averageBands?: BandPowers;
-  timeSeries: Array<{
+  timeSeries?: Array<{
     t: number;
     thetaBetaRatio: number;
     alpha: number;
@@ -266,8 +212,8 @@ export interface SessionRecord {
     beta: number;
     inZone: boolean;
   }>;
-  adaptiveAdjustmentsCount: number;
-  finalThreshold: number;
+  adaptiveAdjustmentsCount?: number;
+  finalThreshold?: number;
   averageTrainingScore?: number | null;
   averageMindfulness?: number;          // brainflow_service mindfulness metric (0 – 100)
   averageValence?: number;              // brainflow_service valence (-1 to +1)
@@ -304,7 +250,6 @@ export interface ClientProfile {
   status: 'active' | 'paused' | 'completed';
   assignedProtocol?: ProtocolType;
   customProtocolConfig?: ProtocolTemplate;
-  individualBaselineModel?: IndividualBaselineModel;
   brainMaps: QEEGBrainMap[];
   allowedExperiences: ExperienceType[];
   prescribedSessionsPerWeek?: number;

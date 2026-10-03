@@ -1,104 +1,41 @@
 /**
- * BrainFlow Service Client — v0.5.0
+ * BrainFlow Service Client
  * Connects to the configured FastAPI brainflow_service. Local development
  * defaults to http://127.0.0.1:8000; deployed builds must set
- * VITE_BRAINFLOW_SERVICE_URL to the hosted service (for example, Render).
+ * VITE_BRAINFLOW_SERVICE_URL to the hosted service.
  *
- * Primary flow for Web Bluetooth front-ends:
+ * The app uses one flow, for a headset connected over Bluetooth:
  *   1. POST /headset-fit/sessions → fitSessionId
- *   2. POST /headset-fit/sessions/{id}/analyze-window (per-window scoring + fit)
+ *   2. POST /headset-fit/sessions/{id}/analyze-window (per-window fit + scores)
  *   3. DELETE /headset-fit/sessions/{id} on disconnect
  *
- * All scoring (mindfulness, restfulness, focus, relax, valence/arousal,
- * headset fit) runs server-side through the same analyze_window()
- * pipeline that BrainFlow-direct sessions use — smoothing can't drift.
+ * Of the service's outputs the app reads only the headset fit and BrainFlow's
+ * smoothed mindfulness and restfulness. It sends no protocol, threshold or
+ * reward rule; whatever the service computes from its defaults is ignored.
  */
 
-import { ServerFitState, TrainingMetricSample } from '../types';
-
-export type BrainflowRewardRule = {
-  kind: 'amplitude'; condition: 'above' | 'below';
-  band: { freqMin: number; freqMax: number };
-} | {
-  kind: 'ratio'; condition: 'above' | 'below';
-  numerator: { freqMin: number; freqMax: number };
-  denominator: { freqMin: number; freqMax: number };
-};
+import { ServerFitState } from '../types';
 
 // ─── Response Interfaces ────────────────────────────────────────────────────
 
-export interface BrainFlowBandPowers {
-  absolute: {
-    delta?: number;
-    theta?: number;
-    alpha?: number;
-    smr?: number;
-    beta?: number;
-    gamma?: number;
-  };
-  relative: Record<string, number>;
-  ratios: Record<string, number>;
-  windowSeconds: number;
-  method: 'brainflow_welch_psd';
-}
-
+/** The service's per-window features, narrowed to what the app reads. */
 export interface BrainFlowFeatures {
-  bandPowers?: BrainFlowBandPowers;
-  brainflowConcentration?: number | null;
-  brainflowRestfulness?: number | null;
   mindfulnessScore?: number | null;
   restfulnessScore?: number | null;
-  valence?: number | null;
-  arousal?: number | null;
-  interhemisphericCoherence?: number | null;
-  primaryMetricName?: string | null;
-  primaryMetricValue?: number | null;
-  inZone?: boolean | null;
-  zoneScore?: number | null;
-  stateLabel?: string | null;
-  emotionLabel?: string | null;
-  calibrationStatus?: 'off' | 'collecting' | 'active';
-  calibrationProgress?: number;
-  calibrationRequired?: number;
-  rawMetrics?: Record<string, number>;
-  baselineRelativeMetrics?: Record<string, number>;
 }
 
 export interface FitWindowResponse {
   features?: BrainFlowFeatures | null;
   quality?: ServerFitState | null;
-  training?: TrainingMetricSample | null;
 }
 
-export interface FitAssessResponse {
-  state: string;
-  ready: boolean;
-  worn: boolean;
-  blockers: string[];
-  channels: Array<{ id: string; state: string; rms?: number }>;
-}
-
-export interface BrainFlowDeviceItem {
-  id: string;
-  label: string;
-  mode: string;
-  boardId: string;
-}
-
-// Only scalp electrodes — never AUX channels (per Ross's guidance)
+// Only scalp electrodes — never AUX channels
 const SCALP_CHANNEL_IDS = ['TP9', 'AF7', 'AF8', 'TP10'];
-// Render's free instances can take several seconds to wake after idling. A
-// short health-check timeout incorrectly reports a healthy configured service
-// as unavailable before it has had a chance to start.
-const HEALTH_CHECK_TIMEOUT_MS = 60_000;
 
 // ─── Service Class ──────────────────────────────────────────────────────────
 
 class BrainFlowService {
   private baseUrl: string;
-  private isOnline = false;
-  private lastHealthCheck = 0;
-  private activeEventSource: EventSource | null = null;
 
   constructor() {
     const configuredUrl = typeof import.meta !== 'undefined'
@@ -116,7 +53,7 @@ class BrainFlowService {
 
   /**
    * A production bundle has no implicit backend URL. This prevents a deployed
-   * app from accidentally treating its own Vercel origin as the EEG service.
+   * app from accidentally treating its own origin as the EEG service.
    */
   public hasConfiguredService(): boolean {
     return this.baseUrl.length > 0;
@@ -126,71 +63,8 @@ class BrainFlowService {
     this.baseUrl = url.replace(/\/+$/, '');
   }
 
-  public isServiceOnline(): boolean {
-    return this.isOnline;
-  }
-
-  public async startMetricCalibration(sessionId: string, fitSession = false, metrics?: string[]): Promise<void> {
-    const base = fitSession ? `/headset-fit/sessions/${sessionId}` : `/sessions/${sessionId}`;
-    const response = await fetch(`${this.baseUrl}${base}/metrics/calibration`, metrics === undefined ? { method: 'POST' } : {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metrics }),
-    });
-    if (!response.ok) throw new Error('Unable to start metric calibration.');
-  }
-
-  public async resetMetricCalibration(sessionId: string, fitSession = false): Promise<void> {
-    const base = fitSession ? `/headset-fit/sessions/${sessionId}` : `/sessions/${sessionId}`;
-    const response = await fetch(`${this.baseUrl}${base}/metrics/calibration`, { method: 'DELETE' });
-    if (!response.ok) throw new Error('Unable to reset metric calibration.');
-  }
-
-  /** Health-check the configured BrainFlow service before starting a session. */
-  public async checkHealth(): Promise<boolean> {
-    const now = Date.now();
-    if (now - this.lastHealthCheck < 2000 && this.isOnline) {
-      return this.isOnline;
-    }
-    this.lastHealthCheck = now;
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-      let res: Response;
-      try {
-        res = await fetch(`${this.baseUrl}/health`, {
-          method: 'GET',
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      this.isOnline = res.ok;
-      return this.isOnline;
-    } catch {
-      this.isOnline = false;
-      return false;
-    }
-  }
-
   /**
-   * List available BrainFlow device configurations
-   */
-  public async getDevices(): Promise<BrainFlowDeviceItem[]> {
-    try {
-      const res = await fetch(`${this.baseUrl}/devices`);
-      if (!res.ok) throw new Error(`Failed to fetch devices: ${res.statusText}`);
-      return await res.json();
-    } catch (err) {
-      console.warn('BrainFlow getDevices failed:', err);
-      return [];
-    }
-  }
-
-  // ─── Headset Fit Sessions (Bluetooth front-end path) ────────────────────
-
-  /**
-   * Start a stateful analysis session for Bluetooth-connected Muse.
+   * Start a stateful analysis session for a Bluetooth-connected Muse.
    * Returns a fitSessionId used for all subsequent calls.
    */
   public async startFitSession(): Promise<string> {
@@ -205,13 +79,12 @@ class BrainFlowService {
     }
 
     const data = await res.json();
-    this.isOnline = true;
     return data.fitSessionId;
   }
 
   /**
-   * Send a raw EEG window to the server for full scoring and fit assessment.
-   * This is the primary per-window endpoint — returns smoothed metrics and channel quality.
+   * Send a raw EEG window to the server for scoring and fit assessment.
+   * Returns the smoothed scores and channel quality.
    *
    * Only sends scalp electrode data (TP9, AF7, AF8, TP10) — AUX channels excluded.
    *
@@ -223,9 +96,6 @@ class BrainFlowService {
     fitSessionId: string,
     samples: number[][],
     sampleRateHz = 256,
-    protocol = 'theta-beta-ratio',
-    threshold = 1.85,
-    reward?: BrainflowRewardRule,
   ): Promise<FitWindowResponse | null> {
     if (!samples || samples.length === 0) return null;
 
@@ -244,9 +114,6 @@ class BrainFlowService {
               sampleRateHz,
               samples,
               channelIds: SCALP_CHANNEL_IDS,
-              protocol,
-              threshold,
-              reward,
             }),
             signal: controller.signal,
           },
@@ -264,49 +131,9 @@ class BrainFlowService {
         return null;
       }
 
-      const data: FitWindowResponse = await res.json();
-      this.isOnline = true;
-      return data;
+      return await res.json() as FitWindowResponse;
     } catch (error) {
       console.error('[EEG analysis] request failed', error);
-      return null;
-    }
-  }
-
-  /**
-   * Fit-only assessment (no smoothing) — used during the headset fit modal
-   * before the session starts.
-   */
-  public async assessFitOnly(
-    fitSessionId: string,
-    samples: number[][],
-  ): Promise<FitAssessResponse | null> {
-    if (!samples || samples.length === 0) return null;
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
-
-      const res = await fetch(
-        `${this.baseUrl}/headset-fit/sessions/${fitSessionId}/assess`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            samples,
-            channelIds: SCALP_CHANNEL_IDS,
-          }),
-          signal: controller.signal,
-        },
-      );
-      clearTimeout(timeoutId);
-
-      if (!res.ok) return null;
-
-      const data: FitAssessResponse = await res.json();
-      this.isOnline = true;
-      return data;
-    } catch {
       return null;
     }
   }
@@ -322,103 +149,6 @@ class BrainFlowService {
     } catch {
       // Best-effort cleanup
     }
-  }
-
-  // ─── BrainFlow-Direct Sessions (native board path) ──────────────────────
-
-  /**
-   * Start a native BrainFlow board session (e.g. Muse Athena or Synthetic Board)
-   */
-  public async startSession(deviceId: string, macAddress?: string, serialNumber?: string, protocol = 'theta-beta-ratio', threshold = 1.85, reward?: BrainflowRewardRule): Promise<{ sessionId: string; deviceInfo: any }> {
-    const res = await fetch(`${this.baseUrl}/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deviceId,
-        macAddress: macAddress || null,
-        serialNumber: serialNumber || null,
-        protocol, threshold, reward,
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`BrainFlow session start failed: ${errText}`);
-    }
-
-    return await res.json();
-  }
-
-  public async updateSessionProtocol(sessionId: string, protocol: string, threshold: number, reward?: BrainflowRewardRule): Promise<number> {
-    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/protocol`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ protocol, threshold, reward }),
-    });
-    if (!res.ok) throw new Error(`BrainFlow protocol update failed: ${await res.text()}`);
-    const updated = await res.json();
-    if (!Number.isInteger(updated.protocolRevision)) throw new Error('BrainFlow protocol update response has no revision.');
-    return updated.protocolRevision;
-  }
-
-  /**
-   * Open SSE stream from an active BrainFlow session
-   */
-  public streamSession(
-    sessionId: string,
-    onSignalFrame: (frame: any) => void,
-    onError?: (err: any) => void,
-    onDisconnect?: () => void
-  ): () => void {
-    if (this.activeEventSource) {
-      this.activeEventSource.close();
-    }
-
-    const es = new EventSource(`${this.baseUrl}/sessions/${sessionId}/stream`);
-    this.activeEventSource = es;
-
-    es.addEventListener('signalFrame', (e: MessageEvent) => {
-      try {
-        const frame = JSON.parse(e.data);
-        onSignalFrame(frame);
-      } catch (err) {
-        console.error('Failed to parse SSE signalFrame:', err);
-      }
-    });
-
-    es.addEventListener('error', (e) => {
-      console.warn('BrainFlow SSE stream error:', e);
-      onError?.(e);
-    });
-
-    es.addEventListener('state', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.state === 'disconnected') {
-          onDisconnect?.();
-        }
-      } catch {}
-    });
-
-    return () => {
-      es.close();
-      if (this.activeEventSource === es) {
-        this.activeEventSource = null;
-      }
-    };
-  }
-
-  /**
-   * Stop an active BrainFlow session
-   */
-  public async stopSession(sessionId: string): Promise<void> {
-    if (this.activeEventSource) {
-      this.activeEventSource.close();
-      this.activeEventSource = null;
-    }
-    try {
-      await fetch(`${this.baseUrl}/sessions/${sessionId}`, { method: 'DELETE' });
-    } catch {}
   }
 }
 

@@ -1,6 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { EEGEngine } from '../eegEngine';
-import { brainflowService } from '../brainflowService';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -110,28 +109,20 @@ describe('EEGEngine Muse Packet Bit-Unpacker (decodeChannelPacket)', () => {
     });
   });
 
-  it('computes theta/beta feedback in demo mode without leaking mock metrics into headset mode', () => {
+  it('simulates mindfulness and restfulness in demo mode without leaking them into headset mode', () => {
     const engine = new EEGEngine();
     engine.isDemoMode = true;
 
     const demoSample = (engine as any).generateSample(0.1);
-    expect(demoSample.thetaBetaRatioAvailable).toBe(true);
-    expect(demoSample.thetaBetaRatio).toBeCloseTo(
-      demoSample.bands.theta / demoSample.bands.beta,
-      10,
-    );
-    expect(demoSample.brainflowScores).toBeDefined();
-    expect(demoSample.trainingMetric).toBeDefined();
+    expect(demoSample.brainflowScores).toMatchObject({ method: 'demo' });
+    expect(demoSample.brainflowScores.mindfulnessScore).toEqual(expect.any(Number));
+    expect(demoSample.brainflowScores.restfulnessScore).toEqual(expect.any(Number));
     expect(demoSample.batteryLevel).toBe(92);
 
-    engine.jawClenched = true;
     engine.isHardwareConnected = true;
     const headsetSample = (engine as any).generateSample(0.1);
-    expect(headsetSample.thetaBetaRatioAvailable).toBe(false);
     expect(headsetSample.brainflowScores).toBeUndefined();
-    expect(headsetSample.trainingMetric).toBeUndefined();
     expect(headsetSample.batteryLevel).toBeUndefined();
-    expect(headsetSample.artifacts.clench).toBe(false);
   });
 
   it('advances browser Muse source freshness only after usable decoded EEG samples are ingested', () => {
@@ -153,28 +144,5 @@ describe('EEGEngine Muse Packet Bit-Unpacker (decodeChannelPacket)', () => {
 
     ingest({ eeg: { channelNames: ['TP9'], samples: [[9]] } });
     expect(engine.getHardwareSourceState().sequence).toBe(2);
-  });
-
-  it('does not treat empty BrainFlow service heartbeats as source EEG frames', async () => {
-    let onFrame: ((frame: unknown) => void) | null = null;
-    vi.spyOn(brainflowService, 'startSession').mockResolvedValue({
-      sessionId: 'session-1', deviceInfo: { label: 'Muse Athena' },
-    });
-    vi.spyOn(brainflowService, 'streamSession').mockImplementation((_id, callback) => {
-      onFrame = callback;
-      return vi.fn();
-    });
-    vi.spyOn(brainflowService, 'stopSession').mockResolvedValue();
-
-    const engine = new EEGEngine();
-    await expect(engine.connectBrainflowSession('brainflow-muse-athena')).resolves.toMatchObject({ success: true });
-    const emit = onFrame as unknown as (frame: unknown) => void;
-    emit({ features: { stateLabel: 'heartbeat' } });
-    emit({ samples: [] });
-    expect(engine.getHardwareSourceState()).toEqual({ sequence: 0, lastFrameAtMs: 0 });
-
-    emit({ samples: [[1, 2, 3, 4]] });
-    expect(engine.getHardwareSourceState().sequence).toBe(1);
-    engine.disconnectHardware();
   });
 });

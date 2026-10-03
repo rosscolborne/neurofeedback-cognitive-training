@@ -25,7 +25,7 @@ export const VagalBreathingPacer: React.FC<VagalBreathingPacerProps> = ({
     : 1.2 - pacerProgress * 0.45;
 
   const isFloorPassed = elapsedSeconds >= minDuration;
-  const isRecoveredNow = brainState.normalizedComposure >= 1.0 && !brainState.isClenching;
+  const isRecoveredNow = brainState.normalizedComposure >= 1.0;
 
   return (
     <div
@@ -56,7 +56,7 @@ export const VagalBreathingPacer: React.FC<VagalBreathingPacerProps> = ({
         Post-Blunder Resilience Reset
       </h3>
       <p style={{ fontSize: '13px', color: '#D1D5DB', maxWidth: '340px', lineHeight: 1.4, margin: '0 0 24px 0' }}>
-        Down-regulate sympathetic high-beta arousal. Extended exhalation stimulates vagal tone to break tilt cascades.
+        Slow your breathing. A long exhale helps you settle and break a tilt cascade.
       </p>
 
       {/* Breathing Pacer Circle */}
@@ -115,7 +115,7 @@ export const VagalBreathingPacer: React.FC<VagalBreathingPacerProps> = ({
       {/* 1.5s Sustained Recovery Meter */}
       <div style={{ width: '100%', maxWidth: '300px', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '12px', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '6px' }}>
-          <span style={{ color: '#9CA3AF' }}>Alpha/Beta Recovery Hold (1.5s):</span>
+          <span style={{ color: '#9CA3AF' }}>Composure Recovery Hold (1.5s):</span>
           <span style={{ fontWeight: 700, color: isRecoveredNow ? '#10B981' : '#F59E0B' }}>
             {Math.round(recoveryProgress * 100)}%
           </span>

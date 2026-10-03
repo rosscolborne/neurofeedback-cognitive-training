@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SessionRecord } from '../../types';
 import { storageEngine } from '../../services/storageEngine';
-import { protocolDisplayName } from '../../services/protocols';
 import { MOODS } from './sessionMoods';
 import { FactGrid, type Fact } from '../ui/FactGrid';
 import { CheckCircle, ArrowRight, Heart } from 'lucide-react';
@@ -65,29 +64,10 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const timeSeries = session.timeSeries || [];
-  const zoneTimeline = timeSeries.map((point) => point.inZone === true);
-  const inZonePointCount = zoneTimeline.filter(Boolean).length;
-  const secondaryFacts: Fact[] = [
-    ...(session.averageTrainingScore != null ? [{ label: 'Training score', value: `${session.averageTrainingScore}/100` }] : []),
-    ...(session.averageMindfulness != null ? [{ label: 'Mindfulness', value: `${session.averageMindfulness}/100` }] : []),
-    ...(session.averageCoherence != null ? [{ label: 'Coherence', value: `${session.averageCoherence}%` }] : []),
-  ];
-  const detailFacts: Fact[] = [
-    { label: 'Protocol', value: protocolDisplayName(session.protocol), wide: true },
-    ...(session.isDemo
-      ? [{ label: 'Band power', value: 'Not measured in Demo' }]
-      : session.averageBands
-        ? [
-            { label: 'Theta', value: `${session.averageBands.theta.toFixed(1)} µV` },
-            { label: 'Alpha', value: `${session.averageBands.alpha.toFixed(1)} µV` },
-            { label: 'SMR', value: `${session.averageBands.smr.toFixed(1)} µV` },
-            { label: 'Beta', value: `${session.averageBands.beta.toFixed(1)} µV` },
-          ]
-        : [{ label: 'Band power', value: 'Unavailable' }]),
-    { label: 'Target adjustments', value: String(session.adaptiveAdjustmentsCount) },
-    { label: 'Recorded points', value: String(timeSeries.length) },
-  ];
+  // The session's one EEG metric: average BrainFlow mindfulness (simulated in Demo).
+  const metricFacts: Fact[] = session.averageMindfulness != null
+    ? [{ label: session.isDemo ? 'Simulated mindfulness' : 'Mindfulness', value: `${session.averageMindfulness}/100` }]
+    : [];
 
   return (
     <div
@@ -133,62 +113,20 @@ const PostSessionSummaryContent: React.FC<PostSessionSummaryProps> = ({
         )}
       </div>
 
-      {/* Primary result: time in zone, with duration and any measured scores as secondary figures. */}
+      {/* Primary result: the session's duration, with average mindfulness when it was measured or simulated. */}
       <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
-          <div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {session.isDemo ? 'Simulated time in target zone' : 'Time in target zone'}
-            </div>
-            <div style={{ fontSize: '40px', fontWeight: 700, lineHeight: 1.1, color: 'var(--brand-primary)' }}>
-              {session.timeInZonePercent}%
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Duration</div>
-            <div className="font-mono" style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {formatDuration(session.durationSeconds)}
-            </div>
+        <div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Duration</div>
+          <div className="font-mono" style={{ fontSize: '40px', fontWeight: 700, lineHeight: 1.1, color: 'var(--brand-primary)' }}>
+            {formatDuration(session.durationSeconds)}
           </div>
         </div>
-        {secondaryFacts.length > 0 && (
-          <FactGrid facts={secondaryFacts} minColumnWidth={110} style={{ paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }} />
+        {metricFacts.length > 0 && (
+          <FactGrid facts={metricFacts} minColumnWidth={110} style={{ paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }} />
         )}
       </div>
 
-      {/* When the session was in zone, from the recorded points (protocol-independent). */}
-      <div className="card-patient" style={{ padding: '16px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
-          {session.isDemo ? 'Simulated time in zone' : 'In zone over time'}
-        </div>
-        {zoneTimeline.length >= 2 ? (
-          <>
-            <div role="img" aria-label={`In zone for ${inZonePointCount} of ${zoneTimeline.length} recorded moments`} style={{ display: 'flex', gap: '1px', height: '28px', borderRadius: '6px', overflow: 'hidden' }}>
-              {zoneTimeline.map((inZone, index) => (
-                <span key={index} style={{ flex: 1, background: inZone ? 'var(--brand-primary)' : 'var(--surface-patient-recessed)' }} />
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              <span>Start</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <span aria-hidden="true" style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--brand-primary)' }} /> In zone
-              </span>
-              <span>End</span>
-            </div>
-          </>
-        ) : (
-          <p role="status" style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Not enough session data to show a timeline.
-          </p>
-        )}
-      </div>
-
-      <details className="card-patient" style={{ padding: '14px 16px' }}>
-        <summary style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Session details</summary>
-        <FactGrid facts={detailFacts} minColumnWidth={110} style={{ marginTop: '14px' }} />
-      </details>
-
-      {/* Clinical Subjective Mood Check-in */}
+      {/* Mood check-in */}
       <div className="card-patient" style={{ padding: '16px' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Heart size={15} color="var(--brand-primary)" />

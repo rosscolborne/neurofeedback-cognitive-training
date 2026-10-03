@@ -298,9 +298,6 @@ export function getEarnedBadgeIds(sessions: SessionRecord[], timeZone?: string):
   const earned = new Set<string>();
   if (sessions.some(session => getSessionTimestamp(session) != null)) earned.add('first-light');
   if (hasSevenDayRun(sessions, timeZone)) earned.add('steady-state');
-  if (sessions.some(session => session.protocol === 'theta-beta-ratio' && (getTimeInZonePercent(session) ?? -1) >= 80)) {
-    earned.add('deep-focus');
-  }
-  // Alpha-dominance duration is not persisted, so Still Waters is never recomputed here.
+  // No badge comes from EEG: the former in-zone badges were retired with the protocol stack.
   return earned;
 }

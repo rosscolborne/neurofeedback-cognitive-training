@@ -70,8 +70,8 @@ export function useVagalRecoveryGate(
       const totalElapsed = (now - (startTimeRef.current || now)) / 1000;
       setElapsedSeconds(totalElapsed);
 
-      // Check if current brain state meets recovery criteria (normalized composure >= 1.0 without EMG clench)
-      const isRecoveredNow = brainState.normalizedComposure >= 1.0 && !brainState.isClenching;
+      // Recovered once composure is back to neutral or better
+      const isRecoveredNow = brainState.normalizedComposure >= 1.0;
 
       let newConsecutive = 0;
       if (isRecoveredNow) {
@@ -103,7 +103,6 @@ export function useVagalRecoveryGate(
   }, [
     isActive,
     brainState.normalizedComposure,
-    brainState.isClenching,
     consecutiveRecovery,
     minDuration,
     maxDuration,

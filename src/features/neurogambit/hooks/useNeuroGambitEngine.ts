@@ -118,8 +118,8 @@ export function useNeuroGambitEngine({
       lastClockTickRef.current = now;
 
       // Rate scaling:
-      // In-zone (normalizedComposure >= 1.1): 0.7x (time dilation)
-      // High-beta panic (normalizedComposure <= 0.7 or highBeta > 7.0): 1.2x (time leaks faster)
+      // Composed (normalizedComposure >= 1.1): 0.7x (time dilation)
+      // Panic (normalizedComposure <= 0.7): 1.2x (time leaks faster)
       let rate = 1.0;
       if (brainState.normalizedComposure >= 1.1) {
         rate = 0.7;
@@ -140,7 +140,7 @@ export function useNeuroGambitEngine({
     }, 250);
 
     return () => clearInterval(interval);
-  }, [isClockRunning, brainState.normalizedComposure, brainState.frontalHighBeta]);
+  }, [isClockRunning, brainState.normalizedComposure]);
 
   // Cancel charging immediately if user taps away or changes mind
   const cancelCharge = useCallback(() => {
@@ -249,8 +249,8 @@ export function useNeuroGambitEngine({
           const start = chargeStartTimeRef.current || now;
           const elapsed = now - start;
 
-          // Charge fills only if composure is solid and no jaw clench
-          const isComposed = brainState.normalizedComposure >= 0.9 && !brainState.isClenching;
+          // Charge fills only while composure is solid
+          const isComposed = brainState.normalizedComposure >= 0.9;
           if (!isComposed) {
             // Slight lag in charge filling when tense
             chargeStartTimeRef.current = start + 20;
@@ -362,7 +362,6 @@ export function useNeuroGambitEngine({
     selectedSquare,
     legalMoves,
     brainState.normalizedComposure,
-    brainState.isClenching,
     cancelCharge,
     handlePuzzleCompleted,
   ]);

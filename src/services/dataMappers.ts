@@ -1,6 +1,5 @@
 import type {
   ClientProfile,
-  IndividualBaselineModel,
   PersistedTimestamp,
   SessionRecord,
 } from '../types';
@@ -23,47 +22,6 @@ export function timestampToMillis(value: PersistedTimestamp | null | undefined):
     return Number.isFinite(millis) ? millis : null;
   }
   return Number.isFinite(value.seconds) ? value.seconds * 1000 + (value.nanoseconds ?? 0) / 1e6 : null;
-}
-
-export type CalibrationDisplayState = {
-  status: 'valid' | 'expired' | 'invalid' | 'not-calibrated';
-  calibratedAt: number | null;
-  expiresAt: number | null;
-};
-
-/** Inspect legacy and current records without changing the saved calibration. */
-export function getCalibrationDisplayState(model: unknown, now = Date.now()): CalibrationDisplayState {
-  if (model == null) return { status: 'not-calibrated', calibratedAt: null, expiresAt: null };
-  if (typeof model !== 'object' || Array.isArray(model)) return { status: 'invalid', calibratedAt: null, expiresAt: null };
-  const value = model as Record<string, unknown>;
-  const calibratedAt = typeof value.lastCalibratedAt === 'string'
-    ? timestampToMillis(value.lastCalibratedAt) : null;
-  let expiresAt: number | null = null;
-  if (value.expiresAt != null) {
-    try { expiresAt = timestampToMillis(value.expiresAt as PersistedTimestamp); } catch { /* Malformed legacy timestamp. */ }
-  }
-  const isNeuroGambitCalibration = value.algorithmVersion === 'neurogambit-15s-v1';
-  const numericValuesAreValid = isNeuroGambitCalibration
-    ? Number.isFinite(value.thetaMean) && Number.isFinite(value.betaMean) && Number.isFinite(value.alphaMean)
-      && (value.thetaStd == null || Number.isFinite(value.thetaStd))
-      && (value.betaStd == null || Number.isFinite(value.betaStd))
-      && (value.alphaStd == null || Number.isFinite(value.alphaStd))
-    : Number.isFinite(value.alphaPeakHz)
-      && Number.isFinite(value.oneOverFSlope)
-      && (value.alphaPeakHz as number) > 0
-      && (value.oneOverFSlope as number) > 0;
-  const validStatus = value.status == null || value.status === 'valid';
-  if (value.status === 'expired' || (expiresAt != null && expiresAt <= now)) {
-    return { status: 'expired', calibratedAt, expiresAt };
-  }
-  if (!validStatus || !numericValuesAreValid || calibratedAt == null || (value.expiresAt != null && expiresAt == null)) {
-    return { status: 'invalid', calibratedAt, expiresAt };
-  }
-  return { status: 'valid', calibratedAt, expiresAt };
-}
-
-export function getReusableBaselineModel(model: unknown, now = Date.now()): IndividualBaselineModel | null {
-  return getCalibrationDisplayState(model, now).status === 'valid' ? model as IndividualBaselineModel : null;
 }
 
 /** Read both current and legacy client documents without mutating Firestore data. */
@@ -116,8 +74,8 @@ export function readSessionRecord(data: unknown, documentId?: string): SessionRe
     ...raw,
     id: raw.id || documentId || '',
     timestamp: completedAtMillis ?? legacyTimestamp ?? createdAtMillis ?? 0,
-    averageCoherence: raw.averageCoherence ?? null,
-    timeSeries: Array.isArray(raw.timeSeries) ? raw.timeSeries : [],
+    // Legacy protocol-session fields stay as stored; newer sessions have none.
+    ...(raw.timeSeries !== undefined ? { timeSeries: Array.isArray(raw.timeSeries) ? raw.timeSeries : [] } : {}),
     schemaVersion: raw.schemaVersion ?? 1,
   };
 }
@@ -141,18 +99,6 @@ export function removeUndefined<T>(value: T): T {
       .filter(([, entry]) => entry !== undefined)
       .map(([key, entry]) => [key, removeUndefined(entry)])
   ) as T;
-}
-
-/** Whole Garden XP earned from verified time against the prescribed runtime. */
-export function getTidalGardenSessionXp(
-  inZoneSeconds: number,
-  configuredDurationSeconds: number,
-  elapsedSeconds: number,
-): number {
-  if (!Number.isFinite(inZoneSeconds) || !Number.isFinite(configuredDurationSeconds)
-    || !Number.isFinite(elapsedSeconds) || configuredDurationSeconds <= 0) return 0;
-  const rewardableSeconds = Math.max(0, Math.min(inZoneSeconds, configuredDurationSeconds, elapsedSeconds));
-  return Math.floor((150 * rewardableSeconds) / configuredDurationSeconds);
 }
 
 /** Legacy aggregate behavior, made pure so it can be applied atomically and tested. */
@@ -186,32 +132,8 @@ export function applySessionCompletionToClient(
   };
 
   if (client.completedSessionsCount >= 1) addBadge('first-light');
-  if (session.protocol === 'theta-beta-ratio' && session.timeInZonePercent >= 80) addBadge('deep-focus');
-  if (
-    session.protocol === 'alpha-enhancement' &&
-    session.durationSeconds >= 900 &&
-    session.timeInZonePercent >= 60
-  ) addBadge('still-waters');
-
-  if (client.tidalGardenState && session.protocol === 'alpha-enhancement') {
-    const earnedXp = session.inZoneSeconds !== undefined && session.configuredDurationSeconds !== undefined
-      ? getTidalGardenSessionXp(session.inZoneSeconds, session.configuredDurationSeconds, session.durationSeconds)
-      : session.inZoneSeconds === undefined && session.configuredDurationSeconds === undefined
-        ? Math.round((typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent)
-          ? Math.max(0, Math.min(100, session.timeInZonePercent)) : 0) * 1.5)
-        : 0;
-    client.tidalGardenState.growthPoints += earnedXp;
-    if (client.tidalGardenState.growthPoints > 300 && client.tidalGardenState.stage < 2) {
-      client.tidalGardenState.stage = 2;
-    }
-    if (client.tidalGardenState.growthPoints > 500 && client.tidalGardenState.stage < 3) {
-      client.tidalGardenState.stage = 3;
-    }
-    if (client.tidalGardenState.growthPoints > 800 && client.tidalGardenState.stage < 4) {
-      client.tidalGardenState.stage = 4;
-    }
-    if (client.tidalGardenState.stage >= 3) addBadge('garden-keeper');
-  }
+  // Achievements never come from EEG: the former in-zone badges and Garden
+  // growth were retired with the protocol stack.
 
   return client;
 }

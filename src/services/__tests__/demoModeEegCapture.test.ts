@@ -30,7 +30,7 @@ describe('Demo Mode EEG provider', () => {
     expect(engine.isDemoMode).toBe(true);
     expect(engine.start).toHaveBeenCalledWith(100);
     for (let i = 0; i < 25; i += 1) {
-      engine.emit({ signalQuality: 'excellent', brainflowScores: { mindfulnessScore: 70, restfulnessScore: 40 } });
+      engine.emit({ signalQuality: 'excellent', brainflowScores: { mindfulnessScore: 70, restfulnessScore: 40, method: 'demo' } });
     }
     now += 90_000;
     const draft = capture.finish();
@@ -56,16 +56,16 @@ describe('Demo Mode EEG provider', () => {
   it('drops the whole recording if a headset connects during the capture, so measured data is never labelled simulated', () => {
     const engine = fakeEngine();
     const capture = createDemoModeEegProvider(engine).start();
-    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50 } });
+    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50, method: 'demo' } });
     engine.isHardwareConnected = true;
-    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 90, restfulnessScore: 90 } });
+    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 90, restfulnessScore: 90, method: 'demo' } });
     engine.isHardwareConnected = false;
     expect(capture.finish()).toBeNull();
     expect(engine.isDemoMode).toBe(false);
 
     // A headset still connected at the end voids it too, even with no sample in between.
     const second = createDemoModeEegProvider(engine).start();
-    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50 } });
+    for (let i = 0; i < 10; i += 1) engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50, method: 'demo' } });
     engine.isHardwareConnected = true;
     expect(second.finish()).toBeNull();
   });
@@ -73,7 +73,7 @@ describe('Demo Mode EEG provider', () => {
   it('cancel discards everything', () => {
     const engine = fakeEngine();
     const capture = createDemoModeEegProvider(engine).start();
-    engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50 } });
+    engine.emit({ signalQuality: 'good', brainflowScores: { mindfulnessScore: 50, restfulnessScore: 50, method: 'demo' } });
     capture.cancel();
     expect(engine.isDemoMode).toBe(false);
     expect(capture.finish()).toBeNull();

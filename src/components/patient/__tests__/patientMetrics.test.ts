@@ -86,7 +86,8 @@ describe('patient metrics', () => {
       timestamp: Date.parse(`2026-09-${String(10 + index).padStart(2, '0')}T12:00:00Z`),
       timeInZonePercent: index === 6 ? 80 : 40,
     }));
-    expect(getEarnedBadgeIds(sessions, 'UTC')).toEqual(new Set(['first-light', 'steady-state', 'deep-focus']));
+    // An 80% in-zone session no longer earns Deep Focus: no badge comes from EEG.
+    expect(getEarnedBadgeIds(sessions, 'UTC')).toEqual(new Set(['first-light', 'steady-state']));
     expect(getEarnedBadgeIds([], 'UTC').size).toBe(0);
   });
 
@@ -181,7 +182,7 @@ describe('patient metrics', () => {
       period: 'all', nowMs: Date.parse('2026-09-20T12:00:00Z'), timeZone: 'UTC',
       chartWidth: 360, chartHeight: 120,
     });
-    expect(model.earnedBadgeIds).toEqual(new Set(['first-light', 'steady-state', 'deep-focus']));
+    expect(model.earnedBadgeIds).toEqual(new Set(['first-light', 'steady-state']));
   });
 
   it('enables export only for resolved validated session data', () => {

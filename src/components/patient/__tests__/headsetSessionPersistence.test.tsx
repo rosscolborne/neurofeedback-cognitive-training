@@ -8,11 +8,10 @@ const authState = vi.hoisted(() => ({ currentUser: { uid: 'patient-1' } }));
 const stream = vi.hoisted(() => ({ callback: null as null | ((frame: unknown) => void), sequence: 0, lastFrameAtMs: 0 }));
 const engine = vi.hoisted(() => ({
   isHardwareConnected: true, isDemoMode: false, demoState: 'auto', deviceName: 'Mock source',
-  configureProtocol: vi.fn(), start: vi.fn(), stop: vi.fn(),
+  start: vi.fn(), stop: vi.fn(),
   subscribe: vi.fn((callback: (frame: unknown) => void) => { stream.callback = callback; return vi.fn(); }),
-  getBandPowerProvenance: vi.fn(() => ({ algorithm: 'welch-psd', version: 'test', source: 'brainflow' })),
   getHardwareSourceState: vi.fn(() => ({ sequence: stream.sequence, lastFrameAtMs: stream.lastFrameAtMs })),
-  setThreshold: vi.fn(), setSimulatedState: vi.fn(), connectMuseBluetooth: vi.fn(),
+  setSimulatedState: vi.fn(), connectMuseBluetooth: vi.fn(),
 }));
 const firestore = vi.hoisted(() => ({
   runTransaction: vi.fn(), getDoc: vi.fn(), getDocs: vi.fn(), setDoc: vi.fn(), updateDoc: vi.fn(),
@@ -32,7 +31,7 @@ vi.mock('../HeadsetFitModal', () => ({ HeadsetFitModal: 'headset-fit' }));
 
 import { createBlankProfile, storageEngine } from '../../../services/storageEngine';
 import { SessionRunner } from '../SessionRunner';
-import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
+import { NEUROGAMBIT_SESSION_SECONDS } from '../../../services/trainingSession';
 
 const snapshot = () => ({ id: 'patient-1', exists: () => memory.client != null, data: () => structuredClone(memory.client) });
 const button = (view: ReactTestRenderer, label: string) => {
@@ -41,26 +40,27 @@ const button = (view: ReactTestRenderer, label: string) => {
   if (!match) throw new Error(`Missing button ${label}`);
   return match;
 };
-const frame = (inZone = true) => ({
-  timestamp: Date.now(), rawSignal: 1,
-  bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
-  bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
-  bandRatios: {}, thetaBetaRatio: 0.4, thetaBetaRatioAvailable: true,
-  coherence: 40, coherenceAvailable: true, inZone, inZoneAvailable: true, zoneScore: inZone ? 1 : 0,
+/** A measured frame: fit plus BrainFlow's mindfulness and restfulness. */
+const frame = (mindfulnessScore = 60) => ({
+  timestamp: Date.now(),
   signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-  artifacts: { blink: false, clench: false }, trainingMetric: { score: 70, baselineReady: true },
+  brainflowScores: { mindfulnessScore, restfulnessScore: 50, method: 'brainflow' },
 });
+const garden = { stage: 2, growthPoints: 420, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-it('completes verified non-Demo alpha training through the real transaction path and reloads garden growth once', async () => {
+it('saves a measured headset session through the real transaction path once, with mindfulness and no EEG-driven growth', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   memory.client = { ...createBlankProfile('patient-1', 'patient@example.test'),
     name: 'Patient One', assignedProtocol: 'alpha-enhancement', notes: 'concurrent care note',
-    customProtocolConfig: { ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1 } } as ClientProfile;
+    tidalGardenState: { ...garden } } as ClientProfile;
   memory.sessions = [];
+  engine.isHardwareConnected = true;
+  stream.sequence = 0;
+  stream.lastFrameAtMs = 0;
   firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
     get: async () => snapshot(),
     update: (_ref: unknown, payload: Partial<ClientProfile>) => { Object.assign(memory.client!, payload); },
@@ -70,7 +70,6 @@ it('completes verified non-Demo alpha training through the real transaction path
     },
   }));
   firestore.getDoc.mockImplementation(async () => snapshot());
-  expect(memory.client.tidalGardenState).toMatchObject({ stage: 1, growthPoints: 0 });
   const persisted: { client: ClientProfile | null } = { client: null };
   let view!: ReactTestRenderer;
   await act(async () => { view = create(<SessionRunner client={memory.client!} selectedExperience="neuro-gambit"
@@ -78,40 +77,34 @@ it('completes verified non-Demo alpha training through the real transaction path
     onCancel={vi.fn()} />); });
   await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
   await act(async () => { button(view, 'Begin Training').props.onClick(); });
-  for (let i = 0; i < 4; i++) {
+  for (const score of [50, 60, 70, 80, 90]) {
     await act(async () => {
       stream.sequence++;
       stream.lastFrameAtMs = Date.now();
-      stream.callback?.(frame());
+      stream.callback?.(frame(score));
       vi.advanceTimersByTime(1000);
     });
   }
-  await act(async () => {
-    stream.sequence++;
-    stream.lastFrameAtMs = Date.now();
-    stream.callback?.(frame(false));
-    vi.advanceTimersByTime(1_000);
-  });
   await act(async () => { button(view, 'End Session & Save').props.onClick(); });
   await act(async () => { await button(view, 'Save & View Summary').props.onClick(); });
   expect(memory.sessions).toHaveLength(1);
   expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false, experience: 'neuro-gambit',
-    durationSeconds: 5, configuredDurationSeconds: 60, inZoneSeconds: 4, timeInZonePercent: 80 });
-  expect(persisted.client?.tidalGardenState).toMatchObject({ stage: 1, growthPoints: 10 });
+    durationSeconds: 5, configuredDurationSeconds: NEUROGAMBIT_SESSION_SECONDS, averageMindfulness: 70 });
+  for (const legacyField of ['protocol', 'timeInZonePercent', 'inZoneSeconds', 'averageBands', 'averageCoherence', 'timeSeries', 'finalThreshold', 'adaptiveAdjustmentsCount']) {
+    expect(memory.sessions[0]).not.toHaveProperty(legacyField);
+  }
+  expect(persisted.client).toMatchObject({ completedSessionsCount: 1, badges: ['first-light'], tidalGardenState: garden });
   expect(memory.client?.notes).toBe('concurrent care note');
   expect(await storageEngine.createSession(memory.sessions[0])).toMatchObject({ created: false });
-  expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(10);
+  expect((await storageEngine.getClient('patient-1'))?.completedSessionsCount).toBe(1);
   await act(async () => { view.unmount(); });
 });
 
-it('caps a short completed session at 150 XP despite later in-zone frames and a replayed save', async () => {
+it('ends a full session on its last tick, ignores later frames, and counts a replayed save once', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  memory.client = { ...createBlankProfile('patient-1', 'patient@example.test'),
-    assignedProtocol: 'alpha-enhancement',
-    customProtocolConfig: { ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1 },
-  };
+  memory.client = { ...createBlankProfile('patient-1', 'patient@example.test'), tidalGardenState: { ...garden } };
   memory.sessions = [];
   engine.isHardwareConnected = true;
   stream.sequence = 0;
@@ -130,35 +123,71 @@ it('caps a short completed session at 150 XP despite later in-zone frames and a 
     onComplete={async (session) => { await storageEngine.createSession(session); }} onCancel={vi.fn()} />); });
   await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
   await act(async () => { button(view, 'Begin Training').props.onClick(); });
-  for (let second = 0; second < 60; second++) {
+  for (let second = 0; second < NEUROGAMBIT_SESSION_SECONDS; second++) {
     await act(async () => {
       stream.sequence++;
       stream.lastFrameAtMs = Date.now();
-      stream.callback?.(frame(true));
+      stream.callback?.(frame());
       vi.advanceTimersByTime(1_000);
     });
   }
   expect(memory.sessions).toHaveLength(1);
   expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false,
-    durationSeconds: 60, configuredDurationSeconds: 60, inZoneSeconds: 60 });
-  expect(memory.client?.tidalGardenState?.growthPoints).toBe(150);
+    durationSeconds: NEUROGAMBIT_SESSION_SECONDS, configuredDurationSeconds: NEUROGAMBIT_SESSION_SECONDS, averageMindfulness: 60 });
+  expect(memory.client?.completedSessionsCount).toBe(1);
 
-  // Valid fresh hardware frames after completion cannot extend the award.
+  // Valid fresh hardware frames after completion cannot extend the session.
   for (let second = 0; second < 15; second++) {
     await act(async () => {
       stream.sequence++;
       stream.lastFrameAtMs = Date.now();
-      stream.callback?.(frame(true));
+      stream.callback?.(frame(95));
       vi.advanceTimersByTime(1_000);
     });
   }
-  expect(memory.sessions[0]).toMatchObject({ durationSeconds: 60, inZoneSeconds: 60 });
-  expect(memory.client?.tidalGardenState?.growthPoints).toBe(150);
+  expect(memory.sessions[0]).toMatchObject({ durationSeconds: NEUROGAMBIT_SESSION_SECONDS, averageMindfulness: 60 });
 
-  // Replaying the same ID with over-duration evidence cannot award it twice.
-  await expect(storageEngine.createSession({ ...memory.sessions[0], durationSeconds: 75, inZoneSeconds: 75 }))
+  // Replaying the same ID cannot count it twice.
+  await expect(storageEngine.createSession({ ...memory.sessions[0], durationSeconds: NEUROGAMBIT_SESSION_SECONDS + 15 }))
     .resolves.toMatchObject({ created: false });
   expect(memory.sessions).toHaveLength(1);
-  expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(150);
+  const reloaded = await storageEngine.getClient('patient-1');
+  expect(reloaded).toMatchObject({ completedSessionsCount: 1, tidalGardenState: garden });
+  await act(async () => { view.unmount(); });
+});
+
+it('averages mindfulness only from the session itself, not the fit check or briefing before Begin Training', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  engine.isHardwareConnected = true;
+  stream.sequence = 0;
+  stream.lastFrameAtMs = 0;
+  const onComplete = vi.fn(async (_session: SessionRecord) => undefined);
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(<SessionRunner client={createBlankProfile('patient-1', 'patient@example.test')} selectedExperience="neuro-gambit"
+    onComplete={onComplete} onCancel={vi.fn()} />); });
+  await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
+  // Fit accepted, briefing still open: these frames are not session time.
+  for (let frameIndex = 0; frameIndex < 20; frameIndex++) {
+    await act(async () => {
+      stream.sequence++;
+      stream.lastFrameAtMs = Date.now();
+      stream.callback?.(frame(10));
+    });
+  }
+  await act(async () => { button(view, 'Begin Training').props.onClick(); });
+  for (let second = 0; second < 5; second++) {
+    await act(async () => {
+      stream.sequence++;
+      stream.lastFrameAtMs = Date.now();
+      stream.callback?.(frame(90));
+      vi.advanceTimersByTime(1_000);
+    });
+  }
+  await act(async () => { button(view, 'End Session & Save').props.onClick(); });
+  await act(async () => { await button(view, 'Save & View Summary').props.onClick(); });
+  expect(onComplete).toHaveBeenCalledOnce();
+  expect(onComplete.mock.calls[0][0]).toMatchObject({ durationSeconds: 5, averageMindfulness: 90 });
   await act(async () => { view.unmount(); });
 });

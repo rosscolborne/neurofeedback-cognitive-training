@@ -1,6 +1,5 @@
 import {
   ClientProfile,
-  IndividualBaselineModel,
   MilestoneBadge,
   SessionRecord,
   SessionCreateResult,
@@ -9,10 +8,6 @@ import {
 import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
 import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
 import { DEFAULT_PROTOCOL } from './protocols';
-import {
-  buildSelfDirectedTrainingSetup,
-  type SelfDirectedTrainingSetup,
-} from './patientTrainingAuthority';
 import { auth, db } from './firebase';
 import {
   collection,
@@ -49,22 +44,6 @@ export const INITIAL_BADGES: MilestoneBadge[] = [
     description: 'Maintained a 7-day training consistency streak.',
     category: 'consistency',
     iconName: 'Waves',
-    unlockedAt: undefined,
-  },
-  {
-    id: 'deep-focus',
-    title: 'Deep Focus Master',
-    description: 'Achieved 80%+ time-in-zone in a Theta/Beta session.',
-    category: 'focus',
-    iconName: 'Target',
-    unlockedAt: undefined,
-  },
-  {
-    id: 'still-waters',
-    title: 'Still Waters',
-    description: 'Sustained calm Alpha wave dominance for over 15 minutes.',
-    category: 'calm',
-    iconName: 'Wind',
     unlockedAt: undefined,
   },
 ];
@@ -160,38 +139,6 @@ class StorageEngine {
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
   }
 
-  /**
-   * Replace the patient's own training assignment. The transaction re-reads the
-   * profile so a deletion started elsewhere is respected, and it writes only the
-   * assignment fields so concurrent progress and history stay intact.
-   */
-  public async saveSelfDirectedTrainingSetup(patientId: string, setup: SelfDirectedTrainingSetup): Promise<ClientProfile> {
-    const { assignedProtocol, allowedExperiences } = buildSelfDirectedTrainingSetup(setup.assignedProtocol, setup.allowedExperiences);
-    const apply = (current: ClientProfile): ClientProfile => {
-      if (current.accountDeletionStartedAt) throw new Error('Training setup is unavailable while account deletion is in progress.');
-      return { ...current, assignedProtocol, allowedExperiences: [...allowedExperiences], customProtocolConfig: undefined };
-    };
-    if (!auth.currentUser || auth.currentUser.uid !== patientId) throw new Error('Sign in as this patient to change your training setup.');
-    const clientRef = doc(db, 'clients', patientId);
-    return runTransaction(db, async (transaction) => {
-      const snapshot = await transaction.get(clientRef);
-      if (!snapshot.exists()) throw new Error('Your patient profile is unavailable. Try again.');
-      const updated = apply(readClientProfile(snapshot.data(), snapshot.id));
-      transaction.update(clientRef, {
-        assignedProtocol,
-        allowedExperiences,
-        customProtocolConfig: deleteField(),
-        updatedAt: serverTimestamp(),
-      });
-      return updated;
-    });
-  }
-
-  public async saveIndividualBaselineModel(patientId: string, baselineModel: IndividualBaselineModel): Promise<void> {
-    if (!auth.currentUser) throw new Error('Sign in to save a patient record');
-    await updateDoc(doc(db, 'clients', patientId), { individualBaselineModel: baselineModel });
-  }
-
   public async getCurrentClient(user?: { uid: string; email?: string | null; displayName?: string | null } | null): Promise<ClientProfile | null> {
     if (user?.uid) {
       const clientRef = doc(db, 'clients', user.uid);
@@ -220,14 +167,6 @@ class StorageEngine {
     }
 
     return null;
-  }
-
-  /** Read an existing patient for calibration without creating or enriching its profile. */
-  public async getExistingCurrentClient(user?: { uid: string } | null): Promise<ClientProfile | null> {
-    if (!user?.uid) return null;
-
-    const snapshot = await getDoc(doc(db, 'clients', user.uid));
-    return snapshot.exists() ? readClientProfile(snapshot.data(), snapshot.id) : null;
   }
 
   /** The signed-in patient's own sessions, newest first. */
