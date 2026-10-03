@@ -191,7 +191,7 @@ objective is *not yet* merge-ready, and you do not wait for CI. Until the agent
 work is complete, report the objective as in progress, naming the current
 phase and what blocks it.
 
-Merging to `main` is the owner's decision. The orchestrator merges only when
+Merging into `development` is the owner's decision. The orchestrator merges only when
 explicitly delegated, never a PR it implemented or integrated, and only after
 confirming Pre-merge validation is green on the head being merged.
 

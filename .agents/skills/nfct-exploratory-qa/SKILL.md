@@ -42,7 +42,7 @@ change.
 
 1. Read the card; for an integration branch, read the integration report and
    every stream's card. List the acceptance criteria and the flows they name.
-2. Read the diff against its target: the PR's base, or `origin/main` for an
+2. Read the diff against its target: the PR's base, or `origin/development` for an
    integration branch (`git diff origin/<base>...HEAD`).
    Note the routes, components, state, data paths, rules and Functions it
    touches.
@@ -220,7 +220,7 @@ Choose from these by risk; not every item applies to every change.
 
 1. Reproduce it from a clean start (a fresh account or tab) before treating
    it as real, and reduce it to exact steps.
-2. Where the flow exists on `origin/main` (or the change's base), repeat it
+2. Where the flow exists on `origin/development` (or the change's base), repeat it
    there, and label the defect a *regression*, *pre-existing* or *unknown*.
 3. Decide scope. In scope means within the card or, on an integration branch,
    within the combined objective. A pre-existing defect is out of scope unless
