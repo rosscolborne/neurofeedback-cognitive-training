@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient } from './helpers/localEmulator';
+import { seedPatient } from './helpers/localEmulator';
 
 // NFCT-33: the account forms and dialogs on a phone, and the bundled fonts. It
 // runs in the WebKit iPhone projects (playwright.webkit.config.ts) and in
@@ -62,7 +62,7 @@ test('sign-up and log-in fields offer AutoFill at 16 px, the page can zoom, and 
 });
 
 test('account fields on Profile are 16 px and a dialog keeps clear of the screen edges', async ({ page }) => {
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   await loginThroughUi(page, fixture.patient);
   await arriveAtPatientDashboard(page);
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
@@ -79,8 +79,14 @@ test('account fields on Profile are 16 px and a dialog keeps clear of the screen
   await page.locator('form').filter({ has: deletionPassword }).getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(deletionPassword).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Disconnect from Clinician', exact: true }).click();
-  const dialog = page.getByRole('alertdialog', { name: 'Disconnect from your clinician?' });
+  // A game saved while Firestore is offline stays queued, so Log Out asks first.
+  await page.evaluate(async () => {
+    const helper = await import('/e2e/helpers/cacheIsolation.ts');
+    await helper.setNetwork(false);
+    await helper.saveGameSession({ withEeg: false, waitForServer: false });
+  });
+  await page.getByRole('button', { name: 'Log Out', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: 'Some activity hasn’t uploaded yet' });
   await expect(dialog).toBeVisible();
   // The overlay covers the visible screen and pads at least 16 px (more under a
   // notch or the home indicator), and the whole dialog stays inside the padding,
@@ -105,8 +111,9 @@ test('account fields on Profile are 16 px and a dialog keeps clear of the screen
     for (const margin of layout.margins) expect(margin, at).toBeGreaterThanOrEqual(16);
   }
   await page.setViewportSize(screen);
-  await expect(dialog.getByRole('button', { name: 'Disconnect', exact: true })).toBeInViewport();
+  await expect(dialog.getByRole('button', { name: 'Sign out anyway', exact: true })).toBeInViewport();
   await expectNoHorizontalScroll(page);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Stay signed in', exact: true }).click();
   await expect(dialog).toHaveCount(0);
+  await page.evaluate(async () => (await import('/e2e/helpers/cacheIsolation.ts')).setNetwork(true));
 });

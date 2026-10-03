@@ -1,16 +1,16 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { as, clinicA, closeEnvironment, emailOf, future, ids, past, resetWorld, seedDocuments, seededAppointmentId } from './fixture';
+import { as, clinicA, closeEnvironment, emailOf, ids, resetWorld, seedDocuments } from './fixture';
 
 beforeEach(resetWorld);
 afterAll(closeEnvironment);
 
 const newUid = 'patient-new';
-const invitationId = 'DELE-REEN-ROLL';
 const email = emailOf(ids.patientA);
-const claimPath = `patientInvitationClaims/${ids.clinicianA}/emails/${email}`;
 
+// patient-a was linked to clinician-a under the retired clinician product, so
+// starting deletion must also clear the stored relationship fields.
 async function deactivateOldPatient() {
   await assertSucceeds(updateDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`), {
     accountDeletionStartedAt: serverTimestamp(), clinicianId: null, linkedClinicianCode: null,
@@ -19,16 +19,27 @@ async function deactivateOldPatient() {
 }
 
 describe('bounded patient account deletion', () => {
-  it('removes the old UID from the active roster and prevents clinician action or relationship replay', async () => {
+  it('starts deletion only together with clearing the stored relationship, and carries no other edit', async () => {
+    await assertFails(updateDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`), {
+      accountDeletionStartedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`), {
+      accountDeletionStartedAt: serverTimestamp(), clinicianId: null, linkedClinicianCode: null,
+      clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(), name: 'Changed on the way out',
+    }));
+    // A profile with no stored relationship starts deletion the same way the app writes it.
+    await assertSucceeds(updateDoc(doc(await as(ids.unlinked), `clients/${ids.unlinked}`), {
+      accountDeletionStartedAt: serverTimestamp(), clinicianId: null, linkedClinicianCode: null,
+      clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
+    }));
+  });
+
+  it('freezes the marked profile against revival, relinking, edits and deletion, and keeps it from the former clinician', async () => {
     await deactivateOldPatient();
-    const clinician = await as(ids.clinicianA);
-    const roster = await assertSucceeds(getDocs(query(collection(clinician, 'clients'), where('clinicianId', '==', ids.clinicianA))));
-    expect(roster.docs.map((entry) => entry.id)).not.toContain(ids.patientA);
-    await assertFails(getDoc(doc(clinician, `clients/${ids.patientA}`)));
-    await assertFails(getDoc(doc(clinician, 'sessions/session-a')));
-    await assertFails(getDoc(doc(clinician, `messageThreads/${ids.patientA}/relationships/${ids.clinicianA}`)));
-    await assertFails(getDoc(doc(clinician, `appointments/${seededAppointmentId}`)));
-    await assertFails(updateDoc(doc(clinician, `clients/${ids.patientA}`), { notes: 'new care' }));
+    const formerClinician = await as(ids.clinicianA);
+    await assertFails(getDoc(doc(formerClinician, `clients/${ids.patientA}`)));
+    await assertFails(getDoc(doc(formerClinician, 'sessions/session-a')));
+    await assertFails(updateDoc(doc(formerClinician, `clients/${ids.patientA}`), { notes: 'new care' }));
     await assertFails(updateDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`), {
       accountDeletionStartedAt: null, clinicianId: ids.clinicianA, clinicId: clinicA,
     }));
@@ -37,80 +48,24 @@ describe('bounded patient account deletion', () => {
     await assertFails(setDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`), {
       id: ids.patientA, name: 'Revived', clinicianId: ids.clinicianA, clinicId: clinicA,
     }));
-  });
-
-  it('allows a fresh invitation for the same email after the old relationship is removed', async () => {
-    await deactivateOldPatient();
-    const clinician = await as(ids.clinicianA);
-    const code = 'FRES-HINV-ITEE';
-    const expiresAt = future();
-    const batch = writeBatch(clinician);
-    batch.set(doc(clinician, `patientInvitations/${code}`), {
-      id: code, clinicianId: ids.clinicianA, clinicId: clinicA, clinicianName: 'Dr A',
-      patientEmail: email, patientName: 'Patient New', condition: 'ADHD',
-      assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
-      status: 'pending', uniquenessClaimId: email, schemaVersion: 1,
-      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), expiresAt,
-    });
-    batch.set(doc(clinician, claimPath), {
-      clinicianId: ids.clinicianA, clinicId: clinicA, patientEmail: email,
-      invitationId: code, status: 'pending', expiresAt, createdAt: serverTimestamp(),
-    });
-    await assertSucceeds(batch.commit());
-  });
-
-  it('allows only deletion cleanup of future canonical appointments and retains historical rows', async () => {
-    const patient = await as(ids.patientA);
-    const appointmentRef = doc(patient, `appointments/${seededAppointmentId}`);
-    await assertFails(updateDoc(appointmentRef, {
-      status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: ids.patientA,
-      cancellationRequestId: 'cancel_aaaaaaaaaaaaaaaaaaaaaaaa', updatedAt: serverTimestamp(), revision: 2,
-    }));
-    await deactivateOldPatient();
-    await assertSucceeds(updateDoc(appointmentRef, {
-      status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: ids.patientA,
-      cancellationRequestId: 'cancel_aaaaaaaaaaaaaaaaaaaaaaaa', updatedAt: serverTimestamp(), revision: 2,
-    }));
-    await assertFails(updateDoc(appointmentRef, { notes: 'altered', updatedAt: serverTimestamp(), revision: 3 }));
-    const retained = await assertSucceeds(getDoc(doc(patient, `clients/${ids.patientA}`)));
+    const retained = await assertSucceeds(getDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`)));
     expect(retained.data()?.accountDeletionStartedAt).toBeDefined();
+    expect(retained.data()?.clinicianId).toBeNull();
   });
 
-  it('lets a new UID with the same email accept a valid pending invitation without reviving the old UID', async () => {
+  it("gives a new UID with the same email no access to the old UID's profile or sessions", async () => {
     await seedDocuments({
-      [`patientInvitations/${invitationId}`]: {
-        id: invitationId, clinicianId: ids.clinicianA, clinicId: clinicA, clinicianName: 'Dr A',
-        patientEmail: email, patientName: 'Patient New', condition: 'ADHD',
-        assignedProtocol: 'theta-beta-ratio', prescribedSessionsPerWeek: 3,
-        status: 'pending', uniquenessClaimId: email, schemaVersion: 1,
-        createdAt: past, updatedAt: past, expiresAt: future(),
-      },
-      [claimPath]: {
-        clinicianId: ids.clinicianA, clinicId: clinicA, patientEmail: email,
-        invitationId, status: 'pending', expiresAt: future(), createdAt: past,
-      },
       [`users/${newUid}`]: { role: 'patient', email },
-      [`clients/${newUid}`]: { id: newUid, email, name: 'Patient New', clinicianId: null, clinicId: null },
+      [`clients/${newUid}`]: { id: newUid, email, name: 'Patient New' },
     });
     await deactivateOldPatient();
     const patient = await as(newUid, { email });
-    const batch = writeBatch(patient);
-    batch.update(doc(patient, `patientInvitations/${invitationId}`), {
-      status: 'accepted', patientId: newUid, acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    });
-    batch.set(doc(patient, `clients/${newUid}`), {
-      clinicianId: ids.clinicianA, clinicId: clinicA, acceptedInvitationId: invitationId,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    batch.delete(doc(patient, claimPath));
-    await assertSucceeds(batch.commit());
-    const roster = await assertSucceeds(getDocs(query(collection(await as(ids.clinicianA), 'clients'), where('clinicianId', '==', ids.clinicianA))));
-    expect(roster.docs.map((entry) => entry.id)).toEqual([newUid]);
-    const old = await getDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`));
-    expect(old.data()?.clinicianId).toBeNull();
-    expect(old.data()?.accountDeletionStartedAt).toBeDefined();
+    await assertSucceeds(getDoc(doc(patient, `clients/${newUid}`)));
     await assertFails(getDoc(doc(patient, `clients/${ids.patientA}`)));
     await assertFails(getDoc(doc(patient, 'sessions/session-a')));
-    await assertFails(getDoc(doc(patient, `messageThreads/${ids.patientA}/relationships/${ids.clinicianA}`)));
+    // Nor can it claim the old relationship on its own profile.
+    await assertFails(updateDoc(doc(patient, `clients/${newUid}`), {
+      clinicianId: ids.clinicianA, clinicId: clinicA, acceptedInvitationId: 'INVA-AAAA-AAAA',
+    }));
   });
 });

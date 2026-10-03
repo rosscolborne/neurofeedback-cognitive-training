@@ -1,7 +1,6 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { ClientProfile, ExperienceType } from '../../types';
 import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
-import { resolveTrainingAuthority, TRAINING_AUTHORITY_LABEL } from '../../services/patientTrainingAuthority';
 import {
   getClinicalProtocolTemplate,
   getProtocolAssignmentAlias,
@@ -14,7 +13,7 @@ interface HomeScreenProps {
   client: ClientProfile;
   onStartSession: (exp: ExperienceType) => void;
   onOpenProtocolDetails?: () => void;
-  /** Present only while the patient owns their training setup (no active clinician). */
+  /** Opens the patient's training setup. */
   onOpenTrainingSetup?: () => void;
   /**
    * The games (NFCT-13): play, the streak, achievements and recent runs. Shown
@@ -74,7 +73,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {onOpenProtocolDetails && <ChevronRight size={14} color="var(--text-tertiary)" aria-hidden="true" style={{ flexShrink: 0 }} />}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-        <span>{TRAINING_AUTHORITY_LABEL[resolveTrainingAuthority(client)]} protocol</span>
+        <span>Your protocol</span>
         {onOpenTrainingSetup && <>
           <span aria-hidden="true">·</span>
           <button

@@ -15,7 +15,6 @@ import {
 } from '../../services/adaptiveEngine';
 import { audioEngine } from '../../services/audioEngine';
 import { calculateRecentInZonePercent, type InZoneObservation } from '../../services/inZoneMetric';
-import { resolveTrainingAuthority } from '../../services/patientTrainingAuthority';
 import { describeActiveReward, describeBrainFlowScore } from './trainingTelemetry';
 import { NeuroGambitExperience } from '../experiences/NeuroGambitExperience';
 import { HeadsetFitModal } from './HeadsetFitModal';
@@ -57,16 +56,6 @@ interface SessionRunnerProps {
   onComplete: (summary: SessionRecord) => Promise<void>;
   onCancel: () => void;
 }
-
-export const resolveSessionCareProvenance = (client: ClientProfile): Pick<SessionRecord, 'clinicId' | 'clinicianId'> => {
-  const clinicianId = client.clinicianId || client.linkedClinicianCode || undefined;
-  return {
-    // Legacy linked profiles can lack clinicId. Keep that provenance explicitly
-    // unavailable instead of misclassifying a clinician-linked session as self-guided.
-    clinicId: client.clinicId || (clinicianId ? '' : 'self-guided'),
-    clinicianId,
-  };
-};
 
 export const SessionRunner: React.FC<SessionRunnerProps> = ({
   client,
@@ -199,7 +188,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       return;
     }
     if (!runtimeConfig || !adaptiveEngine) {
-      setSaveError(`A valid ${resolveTrainingAuthority(client) === 'clinician' ? 'clinician-assigned' : 'training'} protocol is required before this session can be saved.`);
+      setSaveError('A valid training protocol is required before this session can be saved.');
       return;
     }
 
@@ -233,14 +222,13 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
     const timeInZonePercent = completedMeasuredSeconds > 0
       ? Math.min(100, Math.round((inZoneSecondsRef.current / totalTrainTime) * 100)) : 0;
     const bandSummary = summarizeVerifiedBands(bandAccumulatorRef.current);
-    const careProvenance = resolveSessionCareProvenance(client);
 
     const bfAcc = brainflowAccRef.current;
     const summary: SessionRecord = {
       id: completionIdentity.id,
       patientId: client.id,
       patientName: client.name,
-      ...careProvenance,
+      clinicId: 'self-guided',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: Date.now(),
       protocol: runtimeConfig.protocol,
@@ -515,7 +503,7 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       <div style={{ padding: '32px', maxWidth: '520px', margin: '0 auto', textAlign: 'center' }} role="alert">
         <h1 style={{ fontSize: '22px' }}>Protocol unavailable</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
-          Your training settings can’t be used right now. {resolveTrainingAuthority(client) === 'clinician' ? 'Please ask your clinician to review your protocol.' : 'Choose a protocol again in your training setup.'}
+          Your training settings can’t be used right now. Choose a protocol again in your training setup.
         </p>
         <button className="btn btn-primary" onClick={cancelSession}>Return to dashboard</button>
       </div>

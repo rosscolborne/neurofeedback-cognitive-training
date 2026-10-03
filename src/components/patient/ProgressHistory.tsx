@@ -440,13 +440,6 @@ export const ProgressHistory: React.FC<ProgressHistoryProps> = ({ client, gamesS
 
                 {isExpanded && (
                   <div style={{ paddingTop: '14px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {s.clinicianNotes && (
-                      <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--brand-primary-subtle)' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--brand-primary)' }}>From your clinician</div>
-                        <p style={{ margin: '4px 0 0', fontSize: '14px', lineHeight: 1.5, color: 'var(--text-primary)' }}>{s.clinicianNotes}</p>
-                      </div>
-                    )}
-
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                         <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Your journal</div>

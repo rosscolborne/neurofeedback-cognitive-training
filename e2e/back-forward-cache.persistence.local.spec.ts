@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
+import { seedPatient, type LocalPatientFixture } from './helpers/localEmulator';
 
 // NFCT-20: a page the browser keeps in its back/forward cache must not bring
 // a signed-out or deleted account back. Playwright's Chrome runs with the
@@ -32,7 +32,7 @@ async function recordRestores(page: Page): Promise<string[]> {
     return restores;
 }
 
-const accountText = (fixture: LocalPatientFixture) => [fixture.name, fixture.patient.email, 'ADHD (Inattentive)'];
+const accountText = (fixture: LocalPatientFixture) => [fixture.name, fixture.patient.email];
 
 async function openProfile(page: Page, fixture: LocalPatientFixture): Promise<void> {
     await loginThroughUi(page, fixture.patient);
@@ -40,7 +40,7 @@ async function openProfile(page: Page, fixture: LocalPatientFixture): Promise<vo
     await page.getByRole('button', { name: 'Profile', exact: true }).click();
     // The control: the account's details are on screen before it goes.
     await expect(page.getByText(fixture.patient.email)).toBeVisible();
-    await expect(page.getByText('ADHD (Inattentive)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: fixture.name })).toBeVisible();
 }
 
 async function expectNoAccountAfterBack(page: Page, fixture: LocalPatientFixture, restores: string[]): Promise<void> {
@@ -55,7 +55,7 @@ async function expectNoAccountAfterBack(page: Page, fixture: LocalPatientFixture
 
 test('Back after account deletion shows none of the deleted account', async ({ page }) => {
     const restores = await recordRestores(page);
-    const fixture = await seedLinkedPatient();
+    const fixture = await seedPatient();
     await openProfile(page, fixture);
 
     await page.getByRole('button', { name: 'Delete Account' }).click();
@@ -70,7 +70,7 @@ test('Back after account deletion shows none of the deleted account', async ({ p
 
 test('Back after sign-out shows none of the signed-out account', async ({ page }) => {
     const restores = await recordRestores(page);
-    const fixture = await seedLinkedPatient();
+    const fixture = await seedPatient();
     await openProfile(page, fixture);
 
     await page.getByRole('button', { name: 'Log Out' }).click();

@@ -3,9 +3,8 @@ import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi, startPatientTrainingInDemoMode } from './helpers/auth';
-import { seedLinkedPatient, setPatientFields, type LocalPatientFixture } from './helpers/localEmulator';
+import { seedPatient, setPatientFields, type LocalPatientFixture } from './helpers/localEmulator';
 
-const seedPatient = seedLinkedPatient;
 type Fixture = LocalPatientFixture;
 
 // Clinician-defined rewards as the retired protocol builder saved them on the patient's profile.

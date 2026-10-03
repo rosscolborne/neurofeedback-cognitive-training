@@ -19,7 +19,7 @@ const click = async (r: ReactTestRenderer, label: string) => {
 describe('historical patient journal', () => {
   beforeEach(() => { vi.resetAllMocks(); storage.getSessions.mockResolvedValue([session()]); storage.patchSessionNotes.mockResolvedValue(undefined); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 
-  it('edits only patient fields and retains immutable feedback and measurements after save and reload', async () => {
+  it('edits only patient fields after save and reload, and never shows a stored clinician note', async () => {
     let r!: ReactTestRenderer;
     await act(async () => { r = create(<ProgressHistory client={client('p')} />); });
     await click(r, 'All Time');
@@ -30,7 +30,7 @@ describe('historical patient journal', () => {
     await act(async () => { r.root.findByType('textarea').props.onChange({ target: { value: 'Updated' } }); });
     await click(r, 'Save journal');
     expect(storage.patchSessionNotes).toHaveBeenLastCalledWith('historical', { patientNotes: 'Updated', moodRating: 2 });
-    expect(text(r)).toContain('Clinician feedback');
+    expect(text(r)).not.toContain('Clinician feedback');
     expect(text(r)).toContain('Updated');
     storage.getSessions.mockResolvedValueOnce([{ ...session(), patientNotes: 'Updated' }]);
     await act(async () => { r.unmount(); r = create(<ProgressHistory client={client('p')} />); });

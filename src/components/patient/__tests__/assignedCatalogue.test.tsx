@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientProfile, ClinicBrandConfig, ExperienceType } from '../../../types';
+import type { ClientProfile, ExperienceType } from '../../../types';
 import { readClientProfile } from '../../../services/dataMappers';
 import { createBlankProfile } from '../../../services/storageEngine';
 
@@ -10,14 +10,12 @@ vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: 
 vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../../services/storageEngine')>()), storageEngine: { getSessions: state.getSessions, saveSelfDirectedTrainingSetup: state.saveSelfDirectedTrainingSetup, hasPendingInvitationNotice: async () => false } }));
+vi.mock('../../../services/storageEngine', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../../services/storageEngine')>()), storageEngine: { getSessions: state.getSessions, saveSelfDirectedTrainingSetup: state.saveSelfDirectedTrainingSetup } }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
-vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
-vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 
 import { HomeScreen } from '../HomeScreen';
@@ -26,12 +24,11 @@ import { EXPERIENCE_CATALOGUE, EXPERIENCE_IDS } from '../experienceCatalogue';
 import { canStartAssignedExperience, getAssignedExperienceIds } from '../experienceCatalogue';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 
-const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 const profile = (allowedExperiences: ExperienceType[]): ClientProfile => ({
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', status: 'active',
-  clinicianId: 'clinician-1', allowedExperiences, brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
+  allowedExperiences, brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
 });
-const shell = (client: ClientProfile) => <PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />;
+const shell = (client: ClientProfile) => <PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />;
 const text = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
 const train = (renderer: ReactTestRenderer) => {
   const button = renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Train');
@@ -124,7 +121,7 @@ describe('patient assigned catalogue', () => {
       allowedExperiences: [...getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences] };
     state.saveSelfDirectedTrainingSetup.mockResolvedValueOnce(saved);
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={unlinked} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} />); });
+    await act(async () => { renderer = create(<PatientShell client={unlinked} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} />); });
     act(() => renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Profile')!.props.onClick());
     act(() => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes('Redo Setup')).length > 0 || node.children.includes('Redo Setup'))!.props.onClick());
     await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'alpha-enhancement' }); });

@@ -34,10 +34,11 @@ vi.mock('../../../services/storageEngine', () => ({ storageEngine: repository, I
 vi.mock('../../experiences/NeuroGambitExperience', () => ({ NeuroGambitExperience: 'experience-view' }));
 vi.mock('../HeadsetFitModal', () => ({ HeadsetFitModal: 'headset-fit' }));
 
-import { resolveSessionCareProvenance, SessionRunner } from '../SessionRunner';
+import { SessionRunner } from '../SessionRunner';
 import { ProgressHistory } from '../ProgressHistory';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 
+// A profile linked under the retired clinician product, which still stores relationship fields.
 const client = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', avatarUrl: '',
   condition: 'Generalized Anxiety', status: 'active', assignedProtocol: 'alpha-enhancement',
@@ -80,15 +81,6 @@ describe('mounted patient Demo session lifecycle', () => {
     stream.sourceState = { sequence: 0, lastFrameAtMs: 0 };
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
-  });
-
-  it('uses self-guided provenance only for an unlinked patient', () => {
-    expect(resolveSessionCareProvenance({ ...client, clinicId: undefined, clinicianId: undefined, linkedClinicianCode: undefined }))
-      .toEqual({ clinicId: 'self-guided', clinicianId: undefined });
-    expect(resolveSessionCareProvenance({ ...client, clinicId: undefined, clinicianId: undefined, linkedClinicianCode: 'legacy-clinician' }))
-      .toEqual({ clinicId: '', clinicianId: 'legacy-clinician' });
-    expect(resolveSessionCareProvenance({ ...client, clinicId: 'clinic-1', clinicianId: 'canonical', linkedClinicianCode: 'legacy' }))
-      .toEqual({ clinicId: 'clinic-1', clinicianId: 'canonical' });
   });
 
   it('passes the actual patient Demo session mode into NeuroGambit without changing session progress behavior', async () => {
@@ -183,12 +175,13 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { button(runner, 'End Session & Save').props.onClick(); });
     await act(async () => { await button(runner, 'Save & View Summary').props.onClick(); });
     expect(repository.createSession).toHaveBeenCalledOnce();
+    // Every new session is self-guided, whatever relationship fields the profile still stores.
     expect(saved.sessions[0]).toMatchObject({
       patientId: client.id,
-      clinicId: 'clinic-1',
-      clinicianId: 'clinician-1',
+      clinicId: 'self-guided',
       isDemo: true,
     });
+    expect(saved.sessions[0]).not.toHaveProperty('clinicianId');
     expect(engine.isDemoMode).toBe(false);
     await act(async () => { runner.unmount(); });
 

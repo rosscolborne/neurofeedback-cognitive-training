@@ -1,46 +1,13 @@
-import type { ClientProfile, ExperienceType, ProtocolType } from '../types';
+import type { ExperienceType, ProtocolType } from '../types';
 import { CLINICAL_PROTOCOL_TEMPLATES, getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
-import { getPatientClinicianId } from './dataMappers';
 import { EXPERIENCE_IDS } from './experienceIds';
 
 /**
  * A patient profile stores exactly one active training assignment
- * (assignedProtocol + allowedExperiences, optionally customProtocolConfig).
- * Who may change it depends only on the live relationship fields:
- *
- * - clinician: an active clinician relationship exists. The clinician's
- *   assignment is authoritative and the patient cannot edit it.
- * - self-directed: no active relationship. The stored assignment is the
- *   patient's own training setup and the patient may change it.
- *
- * Invitation acceptance overwrites the whole assignment with the clinician's
- * values in the same transaction that links the account, so no self-directed
- * choice survives linking. Unlinking clears only the relationship fields, so
- * the last clinician assignment remains as the self-directed starting point.
+ * (assignedProtocol + allowedExperiences, optionally a legacy
+ * customProtocolConfig). It is the patient's own training setup, and the
+ * patient may change it.
  */
-export type TrainingAuthority = 'clinician' | 'self-directed';
-
-type RelationshipFields = Pick<ClientProfile, 'clinicianId' | 'linkedClinicianCode'>;
-
-export function hasActiveClinicianRelationship(client: RelationshipFields): boolean {
-  return Boolean(getPatientClinicianId(client));
-}
-
-export function resolveTrainingAuthority(client: RelationshipFields): TrainingAuthority {
-  return hasActiveClinicianRelationship(client) ? 'clinician' : 'self-directed';
-}
-
-export const TRAINING_AUTHORITY_LABEL: Record<TrainingAuthority, string> = {
-  clinician: 'Clinician-managed',
-  'self-directed': 'Self-directed',
-};
-
-/** Patient destinations that cannot function without an active clinician relationship. */
-const CLINICIAN_DEPENDENT_TABS: ReadonlySet<string> = new Set(['messages', 'appointments']);
-
-export function isPatientTabAvailable(tab: string, authority: TrainingAuthority): boolean {
-  return authority === 'clinician' || !CLINICIAN_DEPENDENT_TABS.has(tab);
-}
 
 export interface SelfDirectedProtocolChoice {
   protocol: ProtocolType;
@@ -134,12 +101,4 @@ export function buildSelfDirectedTrainingSetup(
     return { assignedProtocol: protocol, allowedExperiences: [...choice.defaultExperiences] };
   }
   return { assignedProtocol: protocol, allowedExperiences };
-}
-
-/** Raised when a self-directed save finds the profile is now clinician-managed. */
-export class ClinicianManagedTrainingError extends Error {
-  constructor(readonly current: ClientProfile) {
-    super('Your training plan is now managed by your clinician, so self-directed changes were not saved.');
-    this.name = 'ClinicianManagedTrainingError';
-  }
 }

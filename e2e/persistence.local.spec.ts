@@ -1,14 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient, seedPersistenceRecords } from './helpers/localEmulator';
+import { seedPatient, seedPersistedSession } from './helpers/localEmulator';
 import type { AuthorizedRead } from './helpers/authorizedFirestore';
 import {
-  expectAppointmentPersisted,
-  expectClinicBrandPersisted,
   expectDemoSessionPersisted,
-  expectInvitationAcceptedPersisted,
-  expectMessagesPersisted,
   expectRolePersisted,
   type PersistenceRun,
 } from './helpers/persistenceAssertions';
@@ -16,17 +12,16 @@ import {
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 test('persistence assertions read as the patient; outsider reads are denied', async ({ browser, permissionErrorGuard }) => {
-  const linked = await seedLinkedPatient();
-  const unrelated = await seedLinkedPatient();
+  const owner = await seedPatient();
+  const unrelated = await seedPatient();
   const marker = randomUUID();
   const runStartMs = Date.now() - 1_000;
-  const invitationCode = await seedPersistenceRecords(linked, marker);
+  await seedPersistedSession(owner, marker);
   // This local run has no privileged cleanup; the emulators discard all data.
   const run: PersistenceRun = {
     runStartMs,
     runMarker: marker,
-    clinicId: linked.clinician.uid,
-    scope: { patientId: linked.patient.uid, clinicianId: linked.clinician.uid },
+    scope: { patientId: owner.patient.uid },
   };
   const patientContext = await browser.newContext();
   const outsiderContext = await browser.newContext();
@@ -34,17 +29,13 @@ test('persistence assertions read as the patient; outsider reads are denied', as
   try {
     const patient = await patientContext.newPage();
     const outsider = await outsiderContext.newPage();
-    await loginThroughUi(patient, linked.patient);
+    await loginThroughUi(patient, owner.patient);
     await arriveAtPatientDashboard(patient);
     await loginThroughUi(outsider, unrelated.patient);
     await arriveAtPatientDashboard(outsider);
 
     expect(await expectDemoSessionPersisted(run, patient)).toBe(`session-${marker}`);
-    await expectAppointmentPersisted(run, patient, { notes: marker, status: 'scheduled', durationMinutes: 45, type: 'remote-training' });
-    await expectMessagesPersisted(run, patient, [{ text: marker, senderRole: 'patient' }]);
-    await expectInvitationAcceptedPersisted(run, patient, invitationCode);
-    await expectClinicBrandPersisted(run, patient, `Brand ${marker}`);
-    await expectRolePersisted(linked.patient, 'patient', patient);
+    await expectRolePersisted(owner.patient, 'patient', patient);
 
     const identityGuards = await patient.evaluate(async ({ patientId }) => {
       const { authorizedFirestoreRead } = await import('/e2e/helpers/authorizedFirestore.ts');
@@ -61,20 +52,15 @@ test('persistence assertions read as the patient; outsider reads are denied', as
         wrongUid: await outcome('another-user', 'demo-neurasticity-protocol-e2e'),
         wrongProject: await outcome(patientId, 'another-project'),
       };
-    }, { patientId: linked.patient.uid });
+    }, { patientId: owner.patient.uid });
     expect(identityGuards.wrongUid).toContain('expected test account');
     expect(identityGuards.wrongProject).toContain('wrong Firebase project');
 
     const forbidden: AuthorizedRead[] = [
-      { kind: 'document', path: `clients/${linked.patient.uid}` },
-      { kind: 'document', path: `patientInvitations/${invitationCode}` },
-      { kind: 'document', path: `patientInvitationClaims/${linked.clinician.uid}/emails/${linked.patient.email}` },
-      { kind: 'document', path: `clinics/${linked.clinician.uid}` },
-      { kind: 'document', path: `users/${linked.patient.uid}` },
-      { kind: 'collection', path: 'sessions', where: { field: 'patientId', equals: linked.patient.uid } },
-      { kind: 'collection', path: 'appointments', where: { field: 'patientId', equals: linked.patient.uid } },
-      { kind: 'collection', path: `messageThreads/${linked.patient.uid}/relationships/${linked.clinician.uid}/messages` },
-      { kind: 'document', path: `messageThreads/${linked.patient.uid}/relationships/${linked.clinician.uid}/reads/${linked.patient.uid}` },
+      { kind: 'document', path: `clients/${owner.patient.uid}` },
+      { kind: 'document', path: `users/${owner.patient.uid}` },
+      { kind: 'document', path: `sessions/session-${marker}` },
+      { kind: 'collection', path: 'sessions', where: { field: 'patientId', equals: owner.patient.uid } },
     ];
     for (const read of forbidden) {
       const outcome = await outsider.evaluate(async ({ uid, read }) => {

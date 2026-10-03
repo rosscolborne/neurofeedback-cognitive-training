@@ -10,7 +10,6 @@ import {
 } from '../../services/clinicalProtocolTemplates';
 import { getProtocolTypeForTemplate, resolvePatientProtocol } from '../../services/protocols';
 import { resolveProtocolRuntime } from '../../services/adaptiveEngine';
-import { resolveTrainingAuthority } from '../../services/patientTrainingAuthority';
 
 interface ProtocolDetailsModalProps {
   client: ClientProfile;
@@ -35,18 +34,6 @@ function getDisplayedProtocol(client: ClientProfile): ProtocolTemplate | null {
   ) ?? null;
 }
 
-/**
- * Only notes a clinician saved with this assignment are theirs. Template rationale (also used to
- * prefill the builder) is reference text, not a note from the patient's clinician.
- */
-function getClinicianAuthoredNotes(client: ClientProfile, protocol: ProtocolTemplate | null): string | null {
-  const saved = client.customProtocolConfig;
-  const notes = saved && protocol === saved ? saved.clinicalNotes?.trim() : undefined;
-  if (!notes) return null;
-  const templateNotes = getClinicalProtocolTemplate(resolvePatientProtocol(client))?.clinicalNotes?.trim();
-  return notes === templateNotes ? null : notes;
-}
-
 export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ client, onClose }) => {
   const protocol = getDisplayedProtocol(client);
   const resolvedProtocol = resolvePatientProtocol(client);
@@ -56,9 +43,6 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
     : undefined;
   const evidenceProtocolName = evidenceProtocol?.name ?? protocol?.name ?? formatIdentifier(resolvedProtocol);
   const runtime = resolveProtocolRuntime(client);
-  const isSelfDirected = resolveTrainingAuthority(client) === 'self-directed';
-  // Without a clinician there are no clinician notes to show.
-  const clinicianNotes = isSelfDirected ? null : getClinicianAuthoredNotes(client, protocol);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -116,7 +100,7 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
         >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--brand-primary)', fontSize: '12px', fontWeight: 700 }}>
-              <Brain size={16} /> {isSelfDirected ? 'Your self-directed protocol' : 'Your assigned protocol'}
+              <Brain size={16} /> Your protocol
             </div>
             <h2 id="protocol-details-title" className="font-display" style={{ margin: '5px 0 0', fontSize: '25px', lineHeight: 1.15 }}>
               Protocol details
@@ -150,18 +134,10 @@ export const ProtocolDetailsModal: React.FC<ProtocolDetailsModalProps> = ({ clie
             </div>
           ) : (
             <div role="alert" style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-alert-bg)', color: 'var(--status-alert)', fontSize: '13px', lineHeight: 1.5 }}>
-              <strong>Training unavailable.</strong> This protocol can’t run as configured. {isSelfDirected ? 'Choose a protocol again in your training setup.' : 'Please contact your clinician.'}
+              <strong>Training unavailable.</strong> This protocol can’t run as configured. Choose a protocol again in your training setup.
             </div>
           )}
 
-          {clinicianNotes && (
-            <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--surface-patient-recessed)' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Note from your clinician</div>
-              <p style={{ margin: '6px 0 0', color: 'var(--text-primary)', fontSize: '14px', lineHeight: 1.55, maxWidth: '60ch', whiteSpace: 'pre-line' }}>
-                {clinicianNotes}
-              </p>
-            </div>
-          )}
         </div>
       </section>
     </div>
