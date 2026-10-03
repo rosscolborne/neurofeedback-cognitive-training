@@ -34,8 +34,8 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
   savedBaselineModel,
   onBaselinePersisted,
 }) => {
-  const { user, role, isDemoWorkspace } = useAuth();
-  const identity = `${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}:${patientId}:${isDemoSession ? 'demo-session' : 'measured-session'}`;
+  const { user, role } = useAuth();
+  const identity = `${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}:${patientId}:${isDemoSession ? 'demo-session' : 'measured-session'}`;
   const identityRef = useRef(identity);
   useLayoutEffect(() => { identityRef.current = identity; }, [identity]);
   const mountedRef = useRef(false);

@@ -1,4 +1,4 @@
-import type { AppointmentRecord, ProductionAppointment } from './appointmentTypes';
+import type { AppointmentRecord } from './appointmentTypes';
 
 export type AppointmentSurfaceState =
   | { kind: 'loading' }
@@ -16,18 +16,6 @@ export function resolveAppointmentSurfaceState(
   if (appointments.length === 0) return { kind: 'empty' };
   return { kind: 'content', appointments };
 }
-export function applyConfirmedAppointment(
-  appointments: AppointmentRecord[],
-  confirmed: ProductionAppointment,
-): AppointmentRecord[] {
-  return [...appointments.filter((item) => item.id !== confirmed.id), confirmed]
-    .sort((a, b) => {
-      const aKey = a.dataKind === 'canonical' ? new Date(a.startsAtMillis).toISOString() : `${a.legacyDate}T${a.legacyTime}`;
-      const bKey = b.dataKind === 'canonical' ? new Date(b.startsAtMillis).toISOString() : `${b.legacyDate}T${b.legacyTime}`;
-      return aKey.localeCompare(bKey) || a.id.localeCompare(b.id);
-    });
-}
-
 export interface AppointmentDisplayGroup {
   key: 'upcoming' | 'past' | 'cancelled';
   title: string;

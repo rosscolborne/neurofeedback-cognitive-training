@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   navigate: vi.fn(),
-  auth: { user: { uid: 'patient-1', displayName: 'Patient One' }, role: 'patient', isDemoWorkspace: false } as { user: { uid: string; displayName?: string } | null; role: string | null; isDemoWorkspace: boolean },
+  auth: { user: { uid: 'patient-1', displayName: 'Patient One' }, role: 'patient' } as { user: { uid: string; displayName?: string } | null; role: string | null },
   saveClient: vi.fn(),
   saveIndividualBaselineModel: vi.fn(),
   getCurrentClient: vi.fn(),
@@ -36,7 +36,7 @@ const card = (renderer: ReactTestRenderer): ReactTestInstance =>
 describe('HardwareSetup baseline persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.auth = { user: { uid: 'patient-1', displayName: 'Patient One' }, role: 'patient', isDemoWorkspace: false };
+    state.auth = { user: { uid: 'patient-1', displayName: 'Patient One' }, role: 'patient' };
     eegEngine.individualBaselineModel = null;
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     state.getExistingCurrentClient.mockResolvedValue({ id: 'patient-1', name: 'Patient One' });
@@ -96,7 +96,7 @@ describe('HardwareSetup baseline persistence', () => {
     await act(async () => { renderer = create(<HardwareSetup initialStep="reveal" />); });
     let pending!: Promise<void>;
     act(() => { pending = card(renderer).props.onSave(); });
-    state.auth = { user: { uid: 'patient-2' }, role: 'patient', isDemoWorkspace: false };
+    state.auth = { user: { uid: 'patient-2' }, role: 'patient' };
     await act(async () => { renderer.update(<HardwareSetup initialStep="reveal" />); });
     await act(async () => { resolveLookup({ id: 'patient-1' }); await pending; });
     expect(state.saveIndividualBaselineModel).not.toHaveBeenCalled();
@@ -104,17 +104,14 @@ describe('HardwareSetup baseline persistence', () => {
     renderer.unmount();
   });
 
-  it.each([
-    { role: 'clinician', isDemoWorkspace: false },
-    { role: 'patient', isDemoWorkspace: true },
-  ])('does not write after a late lookup when role/workspace changes to $role/$isDemoWorkspace', async (nextIdentity) => {
+  it('does not write after a late lookup when the role changes', async () => {
     let resolveLookup!: (value: unknown) => void;
     state.getExistingCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveLookup = resolve; }));
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<HardwareSetup initialStep="reveal" />); });
     let pending!: Promise<void>;
     act(() => { pending = card(renderer).props.onSave(); });
-    state.auth = { ...state.auth, ...nextIdentity };
+    state.auth = { ...state.auth, role: 'clinician' };
     await act(async () => { renderer.update(<HardwareSetup initialStep="reveal" />); });
     await act(async () => { resolveLookup({ id: 'patient-1' }); await pending; });
     expect(state.saveIndividualBaselineModel).not.toHaveBeenCalled();
@@ -130,7 +127,7 @@ describe('HardwareSetup baseline persistence', () => {
     let pending!: Promise<void>;
     act(() => { pending = card(renderer).props.onSave(); });
     await act(async () => { await Promise.resolve(); });
-    state.auth = { user: { uid: 'patient-2' }, role: 'patient', isDemoWorkspace: false };
+    state.auth = { user: { uid: 'patient-2' }, role: 'patient' };
     await act(async () => { renderer.update(<HardwareSetup initialStep="reveal" />); });
     const patientTwoModel = { alphaPeakHz: 11, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T09:00:00Z' };
     eegEngine.individualBaselineModel = patientTwoModel;
@@ -139,7 +136,7 @@ describe('HardwareSetup baseline persistence', () => {
     expect(state.navigate).not.toHaveBeenCalled();
     renderer.unmount();
 
-    state.auth = { user: { uid: 'patient-1' }, role: 'patient', isDemoWorkspace: false };
+    state.auth = { user: { uid: 'patient-1' }, role: 'patient' };
     state.saveIndividualBaselineModel.mockReturnValueOnce(new Promise<void>((resolve) => { resolveSave = resolve; }));
     await act(async () => { renderer = create(<HardwareSetup initialStep="reveal" />); });
     act(() => { pending = card(renderer).props.onSave(); });

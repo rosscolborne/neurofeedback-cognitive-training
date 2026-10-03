@@ -77,7 +77,7 @@ describe('classify-changes', () => {
     ['ci_scripts/ci_post_clone.sh', SMOKE], ['capacitor.config.ts', SMOKE], ['package.json', SMOKE], ['package-lock.json', SMOKE],
     ['.nvmrc', SMOKE], ['vite.config.ts', SMOKE], ['scripts/verify-ios-release.mjs', SMOKE],
     // So does app code that calls native APIs through Capacitor.
-    ['src/consumer/games/mentalMath/MentalMathGame.tsx', SMOKE], ['src/services/eegEngine.ts', SMOKE], ['src/services/pdfReportGenerator.ts', SMOKE],
+    ['src/consumer/games/mentalMath/MentalMathGame.tsx', SMOKE], ['src/services/eegEngine.ts', SMOKE],
     // The scenario driver and the iOS workflow run every scenario.
     ['scripts/ios/simulator-smoke.mjs', ALL_SCENARIOS], ['scripts/ios/simulator-scenarios.mjs', ALL_SCENARIOS], ['.github/workflows/ios.yml', ALL_SCENARIOS],
     // Ordinary feature work does not, even on screens the scenarios drive.
@@ -107,7 +107,7 @@ describe('classify-changes', () => {
     const tracked = spawnSync('git', ['ls-files', 'src'], { encoding: 'utf8' }).stdout.trim().split('\n')
       .filter((path) => /\.(ts|tsx)$/.test(path) && !/(^|\/)__tests__\/|\.test\.tsx?$/.test(path));
     const native = tracked.filter((path) => /@capacitor\/|@capacitor-community\/|\bCapacitor\./.test(readFileSync(path, 'utf8')));
-    expect(native).toEqual(expect.arrayContaining(['src/services/eegEngine.ts', 'src/services/pdfReportGenerator.ts']));
+    expect(native).toEqual(expect.arrayContaining(['src/consumer/games/mentalMath/MentalMathGame.tsx', 'src/services/eegEngine.ts']));
     for (const path of native) expect(classify([path]).native, path).toBe('true');
   });
 

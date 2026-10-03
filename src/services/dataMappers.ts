@@ -26,11 +26,6 @@ export function timestampToMillis(value: PersistedTimestamp | null | undefined):
   return Number.isFinite(value.seconds) ? value.seconds * 1000 + (value.nanoseconds ?? 0) / 1e6 : null;
 }
 
-export function timestampToIso(value: PersistedTimestamp | null | undefined): string | null {
-  const millis = timestampToMillis(value);
-  return millis == null ? null : new Date(millis).toISOString();
-}
-
 export type CalibrationDisplayState = {
   status: 'valid' | 'expired' | 'invalid' | 'not-calibrated';
   calibratedAt: number | null;

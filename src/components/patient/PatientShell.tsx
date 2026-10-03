@@ -76,7 +76,6 @@ interface PatientShellProps {
   onClientPersistedElsewhere: (updated: ClientProfile) => void;
   onBaselinePersisted?: (patientId: string, model: IndividualBaselineModel) => void;
   onRecalibrate?: () => void;
-  onOpenRebrand: () => void;
   initialInvitationCode?: string;
   invitationRouteCode?: string;
   onInvitationAccepted?: () => void;
@@ -769,7 +768,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               </div>
             </div>
 
-            <ChangePasswordForm variant="patient" />
+            <ChangePasswordForm />
 
             {/* Destructive action last, after routine account settings. */}
             <div className="list-group">

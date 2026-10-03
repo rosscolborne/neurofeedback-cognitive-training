@@ -20,8 +20,8 @@ interface HardwareSetupProps {
 
 export const HardwareSetup: React.FC<HardwareSetupProps> = ({ initialStep = 'pair' }) => {
   const navigate = useNavigate();
-  const { user, role, isDemoWorkspace } = useAuth();
-  const identity = `${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
+  const { user, role } = useAuth();
+  const identity = `${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
   const identityRef = useRef(identity);
   useLayoutEffect(() => { identityRef.current = identity; }, [identity]);
   const mountedRef = useRef(false);

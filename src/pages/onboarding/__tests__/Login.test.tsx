@@ -3,7 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({
-  login: vi.fn(), loginAsDemoClinician: vi.fn(), requestPasswordReset: vi.fn(), navigate: vi.fn(),
+  login: vi.fn(), requestPasswordReset: vi.fn(), navigate: vi.fn(),
 }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => auth.navigate }));
 vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => auth }));
@@ -43,7 +43,6 @@ describe('Login password reset', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.requestPasswordReset.mockResolvedValue(undefined);
-    auth.loginAsDemoClinician.mockResolvedValue(undefined);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
@@ -53,15 +52,6 @@ describe('Login password reset', () => {
     const password = renderer.root.findByProps({ type: 'password' });
     expect(password.props.autoComplete).toBe('current-password');
     expect(password.props.enterKeyHint).toBe('go');
-    renderer.unmount();
-  });
-
-  it('keeps the sample clinician workspace entry usable', async () => {
-    const renderer = await mount();
-    expect(text(renderer.root)).toContain('Fictional sample records for demonstration only');
-    await act(async () => { await button(renderer, 'Open Sample Clinician Workspace').props.onClick(); });
-    expect(auth.loginAsDemoClinician).toHaveBeenCalledOnce();
-    expect(auth.navigate).toHaveBeenCalledWith('/');
     renderer.unmount();
   });
 

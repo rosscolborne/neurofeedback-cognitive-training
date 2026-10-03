@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import appSource from '../../App.tsx?raw';
-import rosterSource from '../../components/clinician/ClientRosterView.tsx?raw';
 import patientSource from '../../components/patient/PatientShell.tsx?raw';
 
 describe('relationship enrollment UI wiring', () => {
@@ -19,20 +18,5 @@ describe('relationship enrollment UI wiring', () => {
     expect(patientSource).toContain('Accept Invitation');
     expect(patientSource).toContain('role="alert"');
     expect(patientSource).toContain('client.clinicianId || client.linkedClinicianCode');
-  });
-
-  it('gives clinicians an expiring shareable invitation link', () => {
-    expect(rosterSource).toContain('/#/connect/${id}');
-    expect(rosterSource).toContain('invitationUrl(createdInvitation.id)');
-    expect(rosterSource).toContain('The invitation expires after 14 days.');
-    expect(rosterSource).toContain('Copy invitation link');
-  });
-
-  it('shows progress and errors for cancel and unlink operations', () => {
-    expect(rosterSource).toContain('pendingActionId');
-    expect(rosterSource).toContain('Cancelling…');
-    expect(rosterSource).toContain('Removing…');
-    expect(rosterSource).toContain('setActionError');
-    expect(rosterSource).toContain('role="alert"');
   });
 });

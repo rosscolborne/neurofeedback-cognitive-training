@@ -29,8 +29,7 @@ service-account credentials; `npm run check:isolation` and
 - `npm run test:e2e` runs the Playwright projects that need no Firebase at all:
   `public` (smoke; needs an app on `E2E_BASE_URL`, default
   `http://localhost:5173`) and `permission-guard` (offline self-test of the
-  permission-denied guard). `npm run test:e2e:messaging` runs the messaging
-  layout harness.
+  permission-denied guard).
 - The embedded `brainflow_service/` and its pytest suite are inherited from the
   shared `brainflow-service` repository and are not owned by this repo. Do not
   change them here. `npm run test:brainflow:integration` (with a service on
