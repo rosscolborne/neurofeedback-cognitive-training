@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { bankEnds, START_BANK_MS } from '../shared/games/mental-math/v1/timeBank';
+import { bankEnds, START_BANK_MS } from '../shared/games/mental-math/v2/timeBank';
 import { E2E_FIXED_SESSION_SEED } from '../src/consumer/repositories/e2eSessionSeed';
 import { expect, test } from './fixtures';
 import { arriveAtHome } from './helpers/auth';
@@ -86,7 +86,7 @@ test('a signed-in player enters Mental Math, answers on the keypad and a complet
   const sessions = await readGameSessions(uid);
   expect(sessions).toHaveLength(1);
   const session = sessions[0]!.data;
-  expect(session).toMatchObject({ gameId: 'mental-math', gameVersion: 1, modeId: 'timed-90', status: 'completed', startLevel: 1, seed: E2E_FIXED_SESSION_SEED });
+  expect(session).toMatchObject({ gameId: 'mental-math', gameVersion: 2, modeId: 'timed-90', status: 'completed', startLevel: 1, seed: E2E_FIXED_SESSION_SEED });
   const trials = session.trials as Trial[];
   // One trial per question answered (the double submissions included once), plus the ones left to time out.
   expect(trials.filter((trial) => !trial.timedOut).map((trial) => trial.response)).toEqual(typed);

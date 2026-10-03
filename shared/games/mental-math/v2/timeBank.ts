@@ -1,8 +1,9 @@
-import { levelParams } from './params';
-import type { MentalMathTrial } from './schemas';
-import { isCorrectTrial, isTimeoutTrial } from './scoring';
+import { levelParams } from '../v1/params';
+import type { MentalMathTrial } from '../v1/schemas';
+import { isCorrectTrial, isTimeoutTrial } from '../v1/scoring';
 
-// Mental Math gameVersion 1: the time bank (NFCT-60). Pure and integer-exact.
+// Mental Math gameVersion 2: the time bank (NFCT-60). Pure and integer-exact.
+// FROZEN with gameVersion 2. gameVersion 1 is the fixed 90 s run (v1/).
 //
 // A run no longer lasts a fixed 90 s. It starts with a small bank of active
 // time that drains while a question is on screen, and each recorded trial
@@ -39,7 +40,7 @@ import { isCorrectTrial, isTimeoutTrial } from './scoring';
 // meaningfully higher scores than starting at level 1.
 //
 // Everything here is replayed from the trials alone, so trusted scoring checks
-// a run's length exactly (plausibility.ts) and the client cannot drift.
+// a run's length exactly (v2/plausibility.ts) and the client cannot drift.
 
 /** The bank every run starts with, whatever its start level. */
 export const START_BANK_MS = 45_000;

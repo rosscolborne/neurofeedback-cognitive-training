@@ -57,7 +57,7 @@ export interface HomeOverviewProps {
   readonly clock?: OverviewClock;
 }
 
-const INTRO = 'A 90-second arithmetic run that adapts as you play.';
+const INTRO = 'Quick arithmetic against the clock that adapts as you play.';
 
 function heroText(phase: StatsPhase, nudge: StreakNudge, view: StreakView | null): string {
   if (phase === 'new') return `${INTRO} Finish your first run to start a streak and earn your first achievement.`;

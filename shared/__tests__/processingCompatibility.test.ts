@@ -34,7 +34,7 @@ describe('classifyProgress', () => {
 
   it('never applies to progress written by newer code, even in a shape it cannot read', () => {
     expect(kind(progress({ aggregateVersion: 3 }))).toBe('newer');
-    expect(kind(progress({ gameVersion: 2 }))).toBe('newer');
+    expect(kind(progress({ gameVersion: 3 }))).toBe('newer');
     expect(kind(progress({ schemaVersion: 2 }))).toBe('newer');
     expect(kind({ schemaVersion: 1, aggregateVersion: 3, gameId: 'mental-math' })).toBe('newer');
   });

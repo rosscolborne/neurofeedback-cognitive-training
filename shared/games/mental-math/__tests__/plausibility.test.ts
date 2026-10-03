@@ -59,14 +59,11 @@ describe('Mental Math v1 plausibility: outcomes', () => {
     const empty = { modeId: mm.MODE_ID, startLevel: 4, peakLevel: 4, seed: 9, trials: [] };
 
     expect(mm.checkSession({ ...empty, status: 'abandoned', activeDurationMs: 0 }).outcome).toBe('valid');
-    // With no trials the bank never moved: the run ends when the starting bank runs out.
-    expect(mm.checkSession({ ...empty, status: 'completed', activeDurationMs: mm.START_BANK_MS }).outcome).toBe('valid');
-    expect(mm.checkSession({ ...empty, status: 'completed', activeDurationMs: 90_000 }).outcome).toBe('flagged');
+    expect(mm.checkSession({ ...empty, status: 'completed', activeDurationMs: 90_000 }).outcome).toBe('valid');
     // A conforming client can produce the completed one: the clock only runs with a question on screen.
-    const { run, clock } = play(9, 4, Array.from({ length: 6 }, () => pause(7_500)));
+    const { run, clock } = play(9, 4, Array.from({ length: 12 }, () => pause(7_500)));
     expect(run.trials).toEqual([]);
-    expect(clock).toBe(mm.START_BANK_MS);
-    expect(run.endsAtMs).toBe(mm.START_BANK_MS);
+    expect(clock).toBe(90_000);
   });
 
   it('combines outcomes: invalid beats flagged, and diagnostics never change validity', () => {
@@ -219,39 +216,32 @@ describe('Mental Math v1 plausibility: one failing case per check', () => {
       .toEqual([{ code: 'trial-overlap', outcome: 'flagged', trialIndex: 1 }]);
   });
 
-  it('run-overrun: a trial that ends after the time bank in force when it was shown', () => {
+  it('run-overrun: a trial that ends after the 90 s run', () => {
     const { session } = conforming();
     const last = session.trials.length - 1;
     const lastTrial = session.trials[last]!;
-    const bankEnd = mm.bankEnds(session.trials).before[last]!;
-    const within = withTrial(session.trials, last, { shownAtMs: bankEnd + mm.TIMING_TOLERANCE_MS - lastTrial.rtMs });
-    const trials = withTrial(session.trials, last, { shownAtMs: bankEnd + mm.TIMING_TOLERANCE_MS + 1 - lastTrial.rtMs });
-    const final = (list: typeof trials) => mm.bankEnds(list).final;
+    const shownAtMs = mm.RUN_DURATION_MS + mm.TIMING_TOLERANCE_MS + 1 - lastTrial.rtMs;
+    const trials = withTrial(session.trials, last, { shownAtMs });
 
-    expect(mm.checkTiming(within, { status: 'completed', activeDurationMs: final(within) })).toEqual([]);
-    expect(mm.checkTiming(trials, { status: 'completed', activeDurationMs: final(trials) })).toEqual([
+    expect(mm.checkTiming(trials, { status: 'completed', activeDurationMs: 91_000 })).toEqual([
       { code: 'run-overrun', outcome: 'flagged', trialIndex: last },
     ]);
-    expect(mm.checkSession({ ...session, trials, activeDurationMs: final(trials) })).toMatchObject({ outcome: 'flagged', reasons: ['run-overrun'] });
+    expect(mm.checkSession({ ...session, trials, activeDurationMs: 91_000 })).toMatchObject({ outcome: 'flagged', reasons: ['run-overrun'] });
   });
 
-  it('active-duration-mismatch: a completed run far from when its time bank ran out, or trials outside the active time', () => {
+  it('active-duration-mismatch: a completed run far from 90 s, or trials outside the active time', () => {
     const { session } = conforming();
-    const end = mm.bankEnds(session.trials).final;
-    expect(session.activeDurationMs).toBe(end);
     const timing = (status: 'completed' | 'abandoned', activeDurationMs: number) =>
       mm.checkTiming(session.trials, { status, activeDurationMs }).map(({ code }) => code);
     const lastEnd = Math.max(...session.trials.map((trial) => trial.shownAtMs + trial.rtMs));
 
-    expect(timing('completed', end - 1_000)).toEqual([]);
-    expect(timing('completed', end + 1_000)).toEqual([]);
-    expect(timing('completed', end - 1_001)).toEqual(['active-duration-mismatch']);
-    expect(timing('completed', end + 1_001)).toEqual(['active-duration-mismatch']);
-    // A fixed 90 s run is no longer what "completed" means: the bank decides.
-    if (Math.abs(end - 90_000) > 1_000) expect(timing('completed', 90_000)).toEqual(['active-duration-mismatch']);
+    expect(timing('completed', 89_000)).toEqual([]);
+    expect(timing('completed', 91_000)).toEqual([]);
+    expect(timing('completed', 88_999)).toEqual(['active-duration-mismatch']);
+    expect(timing('completed', 91_001)).toEqual(['active-duration-mismatch']);
     expect(timing('abandoned', lastEnd)).toEqual([]);
     expect(timing('abandoned', lastEnd - mm.TIMING_TOLERANCE_MS - 1)).toEqual(['active-duration-mismatch']);
-    expect(timing('abandoned', end + 1_001)).toEqual(['active-duration-mismatch']);
+    expect(timing('abandoned', 91_001)).toEqual(['active-duration-mismatch']);
     expect(mm.checkSession({ ...session, status: 'abandoned', activeDurationMs: 10_000 }).reasons).toEqual(['active-duration-mismatch']);
   });
 

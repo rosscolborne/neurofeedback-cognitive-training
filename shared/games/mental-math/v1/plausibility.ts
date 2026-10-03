@@ -1,11 +1,10 @@
 import type { ScoreContext, ScoredResult } from '../../definition';
 import { isAnswerTimedOut, trialEndsWithinRun } from './limits';
-import { levelParams, MIN_PLAUSIBLE_RT_MS, MODE_ID } from './params';
+import { levelParams, MIN_PLAUSIBLE_RT_MS, MODE_ID, RUN_DURATION_MS } from './params';
 import { evaluate, isLegalQuestion, QUESTION_VARIANTS, questionAt, sameQuestion } from './questions';
 import type { MentalMathMetrics, MentalMathTrial } from './schemas';
 import { isCorrectTrial, score } from './scoring';
 import { initialStaircase, nextStaircaseState } from './staircase';
-import { bankEnds } from './timeBank';
 
 // Mental Math gameVersion 1: plausibility checks, as pure functions for
 // trusted scoring (NFCT-19) to apply after the session passes
@@ -52,13 +51,12 @@ export const REASON_OUTCOMES = Object.freeze({
   'rt-below-floor': 'flagged',
   /** A trial starts before the previous one ended, beyond TIMING_TOLERANCE_MS. */
   'trial-overlap': 'flagged',
-  /** A trial ends after the time bank's end in force when it was shown, beyond TIMING_TOLERANCE_MS. */
+  /** A trial ends after the 90 s run, beyond TIMING_TOLERANCE_MS. */
   'run-overrun': 'flagged',
   /**
    * A completed session's activeDurationMs is not within
-   * ACTIVE_DURATION_TOLERANCE_MS of the time bank's final end (replayed from
-   * the trials), or any session's trials end after its activeDurationMs
-   * (beyond TIMING_TOLERANCE_MS), or it exceeds the bank's final end.
+   * ACTIVE_DURATION_TOLERANCE_MS of the run, or any session's trials end after
+   * its activeDurationMs (beyond TIMING_TOLERANCE_MS), or it exceeds the run.
    */
   'active-duration-mismatch': 'flagged',
   /** The client-reported peakLevel is not the highest trial level. */
@@ -79,7 +77,7 @@ export const MAX_FAST_RESPONSE_PERCENT = 20;
  * not run the clock).
  */
 export const TIMING_TOLERANCE_MS = 50;
-/** How far a completed session's activeDurationMs may be from the time bank's final end. */
+/** How far a completed session's activeDurationMs may be from RUN_DURATION_MS. */
 export const ACTIVE_DURATION_TOLERANCE_MS = 1_000;
 
 export type PlausibilityIssue = {
@@ -156,10 +154,9 @@ export type TimingContext = {
 };
 
 /**
- * shownAtMs increases with no overlap between trials, each trial ends within
- * the time bank in force when it was shown, and the session's activeDurationMs
- * fits its trials (a completed session's is within tolerance of the bank's
- * final end: a run that ran out of time, as opposed to one the player quit).
+ * shownAtMs increases with no overlap between trials, the last trial ends
+ * within the run, and the session's activeDurationMs fits its trials (a
+ * completed session's is within tolerance of 90 s).
  */
 export function checkTiming(trials: readonly MentalMathTrial[], { status, activeDurationMs }: TimingContext): PlausibilityIssue[] {
   const issues: PlausibilityIssue[] = [];
@@ -170,15 +167,13 @@ export function checkTiming(trials: readonly MentalMathTrial[], { status, active
   });
   if (overlap !== -1) issues.push(issue('trial-overlap', overlap));
 
-  const bank = bankEnds(trials);
-  const overrun = trials.findIndex((trial, index) =>
-    !trialEndsWithinRun(trial.shownAtMs, trial.rtMs, bank.before[index]! + TIMING_TOLERANCE_MS));
+  const overrun = trials.findIndex((trial) => !trialEndsWithinRun(trial.shownAtMs, trial.rtMs, RUN_DURATION_MS + TIMING_TOLERANCE_MS));
   if (overrun !== -1) issues.push(issue('run-overrun', overrun));
 
   const lastEnd = trials.reduce((end, trial) => Math.max(end, trial.shownAtMs + trial.rtMs), 0);
   const durationMismatch = status === 'completed'
-    ? Math.abs(activeDurationMs - bank.final) > ACTIVE_DURATION_TOLERANCE_MS
-    : activeDurationMs > bank.final + ACTIVE_DURATION_TOLERANCE_MS;
+    ? Math.abs(activeDurationMs - RUN_DURATION_MS) > ACTIVE_DURATION_TOLERANCE_MS
+    : activeDurationMs > RUN_DURATION_MS + ACTIVE_DURATION_TOLERANCE_MS;
   if (durationMismatch || lastEnd > activeDurationMs + TIMING_TOLERANCE_MS) {
     issues.push(issue('active-duration-mismatch', null));
   }

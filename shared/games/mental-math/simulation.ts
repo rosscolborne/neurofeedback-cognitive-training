@@ -24,9 +24,10 @@ import {
   type MentalMathTrial,
   type Question,
   type Rng,
-} from './v1/index';
+} from './v2/index';
 
-// The Mental Math v1 generator and scoring simulation (card NFCT-17), run
+// The Mental Math generator and scoring simulation (card NFCT-17), for the
+// current version (gameVersion 2, the time bank, NFCT-60), run
 // before the provisional parameters are locked. Pure and deterministic: the
 // same options always give the same report. Run it with
 // `npm run simulate:mental-math`; the tests run a small version.
@@ -325,7 +326,7 @@ const span = (summary: Summary) => `${summary.min}–${summary.max}`;
 export function formatSimulationReport(report: SimulationReport): string {
   const { options } = report;
   const lines: string[] = [
-    '# Mental Math v1 simulation',
+    '# Mental Math simulation (gameVersion 2, the time bank)',
     '',
     `Options: ${options.generatorRuns} sessions × ${options.questionsPerRun} questions per level; `
       + `${options.scoringRuns} runs per profile and start level; simulation seed ${options.seed}.`,

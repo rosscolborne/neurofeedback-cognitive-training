@@ -358,7 +358,7 @@ const StartLevelPicker: React.FC<{
       <div className="mm-panel">
         <div>
           <h1 ref={headingRef} tabIndex={-1} className="mm-title font-display">Mental Math</h1>
-          <p className="mm-muted">Arithmetic against the clock: you start with 45 seconds, quick right answers add time and misses cost some. Questions get harder as you answer correctly and easier after a miss.</p>
+          <p className="mm-muted">Arithmetic against the clock: you start with {mentalMath.START_BANK_MS / 1000} seconds, quick right answers add time and misses cost some. Questions get harder as you answer correctly and easier after a miss.</p>
         </div>
 
         <fieldset className="mm-levels" disabled={choices === null} aria-describedby="mm-levels-help">

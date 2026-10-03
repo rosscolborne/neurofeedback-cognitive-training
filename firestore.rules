@@ -73,9 +73,12 @@ service cloud.firestore {
       // version in a window. Raising `min` retires a version; `max` stops a
       // fabricated future version from sitting unprocessed. Adding a game or a
       // version needs a rules deploy.
+      // Mental Math: 1 is the fixed 90 s run, 2 the time bank (NFCT-60). 1 stays
+      // writable while older app builds are in use; its runs only ever compete
+      // in their own archived record set once a player has a version 2 run.
       function supportedGameVersions() {
         return {
-          'mental-math': { 'min': 1, 'max': 1 }
+          'mental-math': { 'min': 1, 'max': 2 }
         };
       }
 

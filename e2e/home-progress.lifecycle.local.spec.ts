@@ -55,7 +55,7 @@ test('a first run from Home shows a one-day streak, this week and the first achi
 
   // A new player: Home invites a first run instead of showing zeros.
   await expect(overview(page, 'hero-text')).toHaveText(
-    'A 90-second arithmetic run that adapts as you play. Finish your first run to start a streak and earn your first achievement.',
+    'Quick arithmetic against the clock that adapts as you play. Finish your first run to start a streak and earn your first achievement.',
   );
   await expect(overview(page, 'streak-card')).toHaveCount(0);
   await expect(overview(page, 'home-achievements')).toHaveCount(0);

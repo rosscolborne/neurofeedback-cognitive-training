@@ -247,7 +247,7 @@ export function sessionDraft(
 ): GameSessionDraft<TestTrial, TestMetrics> {
   return {
     gameId: 'mental-math',
-    gameVersion: 1,
+    gameVersion: mentalMath.GAME_VERSION,
     modeId: 'timed-90',
     startLevel: 1,
     peakLevel: 2,

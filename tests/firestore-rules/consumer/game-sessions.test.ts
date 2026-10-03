@@ -103,10 +103,12 @@ describe('users/{uid}/gameSessions: create', () => {
         }
     });
 
-    it("accepts only gameVersions inside the game's supported window (mental-math: 1 to 1)", async () => {
+    it("accepts only gameVersions inside the game's supported window (mental-math: 1 to 2)", async () => {
         const database = await as(players.a);
         await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 0 })));
-        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 2 })));
+        await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion: 3 })));
+        // gameVersion 2: the time-bank run (NFCT-60).
+        await assertSucceeds(setDoc(doc(database, sessionPath(players.a, 'session-version-2-0001')), sessionData(players.a, { gameVersion: 2 })));
         for (const gameVersion of [-1, 1.5, '1', null, 1_000_000]) {
             await assertFails(setDoc(doc(database, sessionPath(players.a)), sessionData(players.a, { gameVersion })));
         }

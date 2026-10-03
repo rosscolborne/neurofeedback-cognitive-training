@@ -47,7 +47,7 @@ const weekDays = (r: ReactTestRenderer) => r.root.findAll((node) => node.type ==
 describe('Home', () => {
   it('invites a new player to play, without a streak, zeros or achievements', async () => {
     const { r, handlers } = await renderHome({ summary: missing(), runs: [] });
-    expect(one(r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play. Finish your first run to start a streak and earn your first achievement.');
+    expect(one(r, 'hero-text')).toBe('Quick arithmetic against the clock that adapts as you play. Finish your first run to start a streak and earn your first achievement.');
     expect(byData(r, 'streak-card')).toHaveLength(0);
     expect(byData(r, 'home-achievements')).toHaveLength(0);
     expect(byData(r, 'recent-runs')).toHaveLength(0);
@@ -130,7 +130,7 @@ describe('Home', () => {
     expect(one(r, 'streak-caption')).toBe('Longest: 2 days. Your current streak can’t be shown because your profile’s time zone (Mars/Olympus_Mons) isn’t recognised.');
     expect(weekDays(r)).toHaveLength(0);
     expect(byData(r, 'week-summary')).toHaveLength(0);
-    expect(one(r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play.');
+    expect(one(r, 'hero-text')).toBe('Quick arithmetic against the clock that adapts as you play.');
   });
 
   it('tells a player whose runs predate streaks that the next run brings them up to date', async () => {
@@ -172,7 +172,7 @@ describe('Home', () => {
   it('never calls a player new while offline with nothing cached, or when the runs cannot be read', async () => {
     // No connection and nothing cached: no runs in the cache says nothing about the account.
     const offline = await renderHome({ summary: missing(true), runs: [] }, offlineClock);
-    expect(one(offline.r, 'hero-text')).toBe('A 90-second arithmetic run that adapts as you play.');
+    expect(one(offline.r, 'hero-text')).toBe('Quick arithmetic against the clock that adapts as you play.');
     expect(visibleText(offline.r)).not.toContain('Start here');
     expect(one(offline.r, 'streak-caption')).toBe('Your streak will show when you’re back online.');
 

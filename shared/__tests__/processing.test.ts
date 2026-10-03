@@ -11,7 +11,9 @@ import {
   GAME_MODULE_REGISTRY,
   MAX_RESULT_REASONS,
   mentalMathV1 as mm,
+  mentalMathV2,
   mentalMathV1Module,
+  mentalMathV2Module,
   mergeReasons,
   processingRecord,
   readSessionProgressFields,
@@ -64,6 +66,28 @@ describe('evaluateSession', () => {
     expect(evaluation.scored.peakLevel).toBe(5);
   });
 
+  it('judges each gameVersion by its own run rules: a saved fixed 90 s v1 run and a time-bank v2 run are both valid (NFCT-60)', () => {
+    const legacy = scored(session({ startLevel: 2, targetPeak: 5 }));
+    expect(legacy.module).toBe(mentalMathV1Module);
+    expect(legacy.session).toMatchObject({ gameVersion: 1, status: 'completed', activeDurationMs: 90_000 });
+    expect(legacy.entries).toEqual([]);
+
+    const raw = session({ startLevel: 2, targetPeak: 5, gameVersion: 2 });
+    const timeBank = scored(raw);
+    expect(timeBank.module).toBe(mentalMathV2Module);
+    expect(timeBank.session).toMatchObject({ gameVersion: 2, status: 'completed' });
+    expect(raw.activeDurationMs).toBe(mentalMathV2.bankEnds(raw.trials as mentalMathV2.MentalMathTrial[]).final);
+    expect(raw.activeDurationMs).not.toBe(90_000);
+    expect(timeBank.entries).toEqual([]);
+    expect(timeBank.scored.peakLevel).toBe(5);
+  });
+
+  it('never judges a run by the other version\'s clock: each one claiming the other version is flagged (NFCT-60)', () => {
+    const timeBank = session({ startLevel: 2, targetPeak: 5, gameVersion: 2 });
+    expect(codes(evaluate({ ...timeBank, gameVersion: 1 }))).toContain('active-duration-mismatch');
+    expect(codes(evaluate({ ...session({ startLevel: 2, targetPeak: 5 }), gameVersion: 2 }))).toContain('active-duration-mismatch');
+  });
+
   it('ignores server fields: a stale result or processing state never changes the evaluation', () => {
     const raw = session();
     const withServerFields = { ...raw, result: { validity: 'valid' }, processing: { state: 'failed' } };
@@ -72,7 +96,7 @@ describe('evaluateSession', () => {
   });
 
   it('marks what no registered module can process as unsupported, never invalid', () => {
-    expect(evaluate({ ...session(), gameVersion: 2 })).toEqual({ kind: 'unsupported', reason: 'unknown-game-version' });
+    expect(evaluate({ ...session(), gameVersion: 3 })).toEqual({ kind: 'unsupported', reason: 'unknown-game-version' });
     expect(evaluate({ ...session(), gameVersion: '1' })).toEqual({ kind: 'unsupported', reason: 'unknown-game-version' });
     expect(evaluate({ ...session(), gameId: 'chess' })).toEqual({ kind: 'unsupported', reason: 'unknown-game' });
     expect(evaluate({ ...session(), schemaVersion: 2 })).toEqual({ kind: 'unsupported', reason: 'unsupported-schema-version' });
@@ -298,12 +322,15 @@ describe('mergeReasons', () => {
 });
 
 describe('registry', () => {
-  it('registers Mental Math v1 with its frozen definition and reason table', () => {
+  it('registers Mental Math v1 (fixed 90 s) and v2 (time bank), each with its frozen definition and reason table', () => {
     expect(GAME_MODULE_REGISTRY.find('mental-math', 1)).toBe(mentalMathV1Module);
-    expect(GAME_MODULE_REGISTRY.current('mental-math')).toBe(mentalMathV1Module);
-    expect(GAME_MODULE_REGISTRY.find('mental-math', 2)).toBeUndefined();
+    expect(GAME_MODULE_REGISTRY.find('mental-math', 2)).toBe(mentalMathV2Module);
+    expect(GAME_MODULE_REGISTRY.current('mental-math')).toBe(mentalMathV2Module);
+    expect(GAME_MODULE_REGISTRY.find('mental-math', 3)).toBeUndefined();
     expect(mentalMathV1Module.definition).toBe(mm.definition);
     expect(mentalMathV1Module.reasonOutcomes).toBe(mm.REASON_OUTCOMES);
+    expect(mentalMathV2Module.definition).toBe(mentalMathV2.definition);
+    expect(mentalMathV2Module.reasonOutcomes).toBe(mentalMathV2.REASON_OUTCOMES);
   });
 
   it("covers every version the rules let a client write (supportedGameVersions)", () => {
@@ -357,13 +384,37 @@ describe('decideSession', () => {
     expect(decision.unlockRaised).toBe(true);
   });
 
+  it('processes a time-bank (gameVersion 2) run like a v1 run: records, unlocks and time played (NFCT-60)', () => {
+    const legacy = decide(session({ startLevel: 1, targetPeak: 4 }), null, 'session-00000001', T0 + MINUTE);
+    const raw = session({ startLevel: 1, targetPeak: 4, gameVersion: 2, endedAtMs: T0 + 10 * MINUTE });
+    const decision = decide(raw, legacy.progress, 'session-00000002', T0 + 11 * MINUTE);
+
+    expect(decision.result).toMatchObject({ validity: 'valid', reasons: [], peakLevel: 4, recordKey: 'timed-90:1' });
+    // Unlocks earned by the v1 run carry over: the same mode, the same start levels.
+    expect(decision.progress).toMatchObject({
+      sessionsCompleted: 2,
+      activeMs: 90_000 + (raw.activeDurationMs as number),
+      bestPeakLevel: { 'timed-90': 4 },
+      unlocked: { 'timed-90': 3 },
+    });
+    // The fixed 90 s run's records were archived when the first time-bank run arrived.
+    expect(decision.progress!.gameVersion).toBe(2);
+    expect(decision.progress!.bestsArchive['1']).toEqual(legacy.progress!.bests);
+
+    // A later fixed 90 s run (an older build, or a client claiming v1) is judged by v1's rules and
+    // competes only in v1's archived record set: the current (time-bank) records never see it.
+    const late = decide(session({ seed: 12, startLevel: 1, targetPeak: 6, endedAtMs: T0 + 20 * MINUTE }), decision.progress, 'session-00000003', T0 + 21 * MINUTE);
+    expect(late.result).toMatchObject({ validity: 'valid' });
+    expect(late.progress!.bests).toEqual(decision.progress!.bests);
+    expect(late.progress!.bestsArchive['1']).not.toEqual(decision.progress!.bestsArchive['1']);
+  });
+
   it("flags a new user's first session at level 2 start-level-locked, counting only its totals", () => {
-    const locked = session({ startLevel: 2, targetPeak: 4 });
-    const decision = decide(locked, null, 'session-00000001', T0 + MINUTE);
+    const decision = decide(session({ startLevel: 2, targetPeak: 4 }), null, 'session-00000001', T0 + MINUTE);
 
     expect(decision.result).toMatchObject({ validity: 'flagged', reasons: ['start-level-locked'], peakLevel: 4, performanceIndex: null });
     expect(decision.result).not.toHaveProperty('recordKey');
-    expect(decision.progress).toMatchObject({ sessionsCompleted: 1, activeMs: locked.activeDurationMs as number, bestPeakLevel: {}, bests: {} });
+    expect(decision.progress).toMatchObject({ sessionsCompleted: 1, activeMs: 90_000, bestPeakLevel: {}, bests: {} });
     expect(decision.unlockRaised).toBe(false);
   });
 
@@ -448,7 +499,7 @@ describe('flagged -> valid upgrade', () => {
     expect(blocker({ ...flagged, reasons: ['rt-below-floor'] })).toBe('not-start-level-locked');
     expect(blocker({ ...flagged, scoringVersion: 2 })).toBe('scoring-version-changed');
     expect(blocker(unlocking.result)).toBe('not-flagged');
-    expect(upgradeBlocker({ ...stored(lockedRaw, flagged), gameVersion: 2 }, unlocking.progress, GAME_MODULE_REGISTRY))
+    expect(upgradeBlocker({ ...stored(lockedRaw, flagged), gameVersion: 3 }, unlocking.progress, GAME_MODULE_REGISTRY))
       .toBe('unknown-game-version');
     expect(upgradeSession(stored(lockedRaw, flagged), locked.progress!, {
       sessionId: 'session-locked-0001', upgradedAt: ts(T0), registry: GAME_MODULE_REGISTRY,

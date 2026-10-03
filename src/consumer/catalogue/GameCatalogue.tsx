@@ -3,7 +3,7 @@ import { Calculator, ChartNoAxesColumnIncreasing, Timer, type LucideIcon } from 
 import type { GameIconKey } from '@nfct/shared';
 import { gameCardId } from './cardIds';
 import { CatalogueCard, type CatalogueCardFact } from './CatalogueCard';
-import { catalogueGames, runLengthLabel, type CatalogueGame } from './catalogueGames';
+import { catalogueGames, maxRunLengthLabel, runLengthLabel, type CatalogueGame } from './catalogueGames';
 
 // The Games section of the Train tab (NFCT-12): one card per game in the
 // code-owned catalogue, in catalogue order, each showing the domains it trains
@@ -16,6 +16,7 @@ const GAME_ICONS: Readonly<Record<GameIconKey, LucideIcon>> = {
 function factsOf(game: CatalogueGame): CatalogueCardFact[] {
   const facts: CatalogueCardFact[] = [];
   if (game.runLengthMs) facts.push({ icon: Timer, text: runLengthLabel(game.runLengthMs) });
+  else if (game.maxRunLengthMs) facts.push({ icon: Timer, text: maxRunLengthLabel(game.maxRunLengthMs) });
   facts.push({ icon: ChartNoAxesColumnIncreasing, text: game.levels === 1 ? '1 level' : `${game.levels} levels` });
   return facts;
 }

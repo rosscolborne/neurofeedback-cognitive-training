@@ -43,7 +43,7 @@ test('Train lists the games, with what each trains, and nothing else', async ({ 
   const mentalMath = games.getByRole('button', { name: 'Mental Math', exact: true });
   await expect(mentalMath).toBeVisible();
   await expect(mentalMath).toHaveAccessibleDescription(
-    /^Quick arithmetic that adapts to you as you play\.\s+Trains\s*:\s*Math 70%\s*,\s*Processing speed 20%\s*,\s*Memory 10%\s+90 seconds\s*,\s*10 levels$/,
+    /^Quick arithmetic that adapts to you as you play\.\s+Trains\s*:\s*Math 70%\s*,\s*Processing speed 20%\s*,\s*Memory 10%\s+Up to 3 minutes\s*,\s*10 levels$/,
   );
   // Mental Math's real mix, as text (each item but the last also holds a
   // visually hidden comma for screen readers), beside a bar split the same way.
@@ -58,9 +58,12 @@ test('Train lists the games, with what each trains, and nothing else', async ({ 
   expect(segments).toHaveLength(3);
   expect(segments[0]!).toBeGreaterThan(segments[1]!);
   expect(segments[1]!).toBeGreaterThan(segments[2]!);
-  await expect(games.locator('.train-card-tag')).toHaveCount(0);
-  await expect(games.getByText(/^90 seconds,?$/)).toBeVisible();
-  await expect(games.getByText(/^10 levels,?$/)).toBeVisible();
+  const mentalMathCard = mentalMath.locator('xpath=ancestor::li[1]');
+  await expect(mentalMathCard.locator('.train-card-tag')).toHaveCount(0);
+  await expect(mentalMathCard.getByText(/^Up to 3 minutes,?$/)).toBeVisible();
+  await expect(mentalMathCard.getByText(/^10 levels,?$/)).toBeVisible();
+  // Mental Math never needs a headset, so its card says nothing about one.
+  await expect(mentalMathCard.getByText(/headset/i)).toHaveCount(0);
   // The Games section is the whole catalogue: no headset training section or experience.
   await expect(page.getByRole('main').getByRole('region')).toHaveCount(1);
   await expect(page.getByRole('main')).not.toContainText(/NeuroGambit|Headset training/);

@@ -1,4 +1,4 @@
-import { localDateIn, mentalMathV1 as mm, type FirestoreTimestamp } from '@nfct/shared';
+import { localDateIn, mentalMathV1 as mm, mentalMathV2, type FirestoreTimestamp } from '@nfct/shared';
 
 // Realistic Mental Math v1 sessions for trusted-scoring tests (NFCT-19), played
 // through NFCT-17's pure run reducer exactly as the game screen drives it:
@@ -15,60 +15,20 @@ export type RunPlan = {
   readonly targetPeak: number;
   /** Response time of each answer (varied slightly per trial). Under 250 ms flags the session. */
   readonly rtMs?: number;
-  /**
-   * Stop presenting questions at this much active time (an abandoned run).
-   * Default: a completed run whose time bank runs out at exactly FIXTURE_RUN_MS.
-   */
+  /** Stop presenting questions at this much active time (an abandoned run). Default: play the whole 90 s. */
   readonly stopAtMs?: number;
 };
 
-/**
- * The active time every completed fixture run lasts. Time-bank runs (NFCT-60)
- * vary in length; the fixture steers its player so the bank runs out at
- * exactly this time, which keeps progress totals in tests simple sums.
- */
-export const FIXTURE_RUN_MS = 90_000;
-
-/**
- * Plays a run through the reducer and returns it. A completed run is steered,
- * within the plan (it never climbs past the target peak), so its time bank
- * runs out at exactly FIXTURE_RUN_MS: quick right answers when the bank runs
- * low, misses when it would outlast the run, a pause to wait, and a final miss
- * that empties the bank as it ends. (A peak-1 plan ends earlier.)
- */
-export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs }: RunPlan): mm.MentalMathRun {
+/** Plays a run through the reducer and returns it. */
+export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs = mm.RUN_DURATION_MS }: RunPlan): mm.MentalMathRun {
   const peak = Math.max(startLevel, targetPeak);
-  const steer = stopAtMs === undefined;
-  const stop = stopAtMs ?? FIXTURE_RUN_MS;
   let run = mm.startRun({ seed, startLevel });
   let clock = 0;
-  for (let index = 0; clock < Math.min(stop, run.endsAtMs) && !mm.isTrialCapReached(run); index += 1) {
+  for (let index = 0; clock < stopAtMs && !mm.isTrialCapReached(run); index += 1) {
     run = mm.presentQuestion(run, clock);
     const current = run.current!;
-    let answerCorrectly = current.level < peak;
-    let rt = rtMs + (index % 5) * 37;
-    if (steer) {
-      const over = run.endsAtMs - FIXTURE_RUN_MS;
-      const left = FIXTURE_RUN_MS - clock;
-      const canGain = current.level < peak || run.staircase.levelStreak < mm.LEVEL_UP_STREAK - 1;
-      if (over >= 0 && over <= mm.WRONG_PENALTY_MS) {
-        if (left >= current.timeLimitMs) {
-          // Wait without moving the bank: pause until 1 s before the end.
-          run = mm.discardQuestion(run);
-          clock = FIXTURE_RUN_MS - 1_000;
-          continue;
-        }
-        // The last trial: a miss ending exactly at the end empties the bank there.
-        answerCorrectly = false;
-        rt = left;
-      } else if (over > mm.WRONG_PENALTY_MS) {
-        answerCorrectly = false; // drain 5 s
-      } else if (run.endsAtMs - clock < 15_000 && canGain) {
-        answerCorrectly = true; // top up the bank
-      }
-      // A plan that keeps the player at level 1 (peak 1) cannot keep the bank
-      // up; its run is still completed, when the bank runs out.
-    }
+    const answerCorrectly = current.level < peak;
+    const rt = rtMs + (index % 5) * 37;
     const answered = mm.answerQuestion(run, {
       questionId: current.id,
       response: answerCorrectly ? current.expected : current.expected + 1,
@@ -77,6 +37,32 @@ export function playRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs }
     if (!answered.accepted) {
       // Expiry wins: the question on screen is discarded and the run ends.
       run = mm.discardQuestion(run);
+      break;
+    }
+    run = answered.run;
+    clock = answered.trial.shownAtMs + answered.trial.rtMs;
+  }
+  return run;
+}
+
+/**
+ * Plays a gameVersion 2 (time bank, NFCT-60) run through the v2 reducer: the
+ * same player as playRun, until the bank runs out or `stopAtMs`.
+ */
+export function playTimeBankRun({ seed, startLevel, targetPeak, rtMs = 1_400, stopAtMs = Number.POSITIVE_INFINITY }: RunPlan): mentalMathV2.MentalMathRun {
+  const peak = Math.max(startLevel, targetPeak);
+  let run = mentalMathV2.startRun({ seed, startLevel });
+  let clock = 0;
+  for (let index = 0; clock < Math.min(stopAtMs, run.endsAtMs) && !mentalMathV2.isTrialCapReached(run); index += 1) {
+    run = mentalMathV2.presentQuestion(run, clock);
+    const current = run.current!;
+    const answered = mentalMathV2.answerQuestion(run, {
+      questionId: current.id,
+      response: current.level < peak ? current.expected : current.expected + 1,
+      rtMs: rtMs + (index % 5) * 37,
+    });
+    if (!answered.accepted) {
+      run = mentalMathV2.discardQuestion(run);
       break;
     }
     run = answered.run;
@@ -100,10 +86,12 @@ export type SessionPlan = RunPlan & {
   readonly timezone?: string;
   /** The value stored as createdAt; default: a timestamp one second after endedAt. */
   readonly createdAt?: unknown;
+  /** 1 (default): the fixed 90 s run. 2: the time-bank run (NFCT-60), completed when its bank runs out. */
+  readonly gameVersion?: 1 | 2;
 };
 
 /**
- * A Mental Math v1 session document as a conforming client writes it, with
+ * A Mental Math session document (gameVersion 1 by default, or 2) as a conforming client writes it, with
  * timestamps built by `timestamp` (the Admin SDK's Timestamp.fromMillis in
  * emulator tests, TestTimestamp in pure tests).
  */
@@ -112,16 +100,19 @@ export function mentalMathSession(
   timestamp: (ms: number) => FirestoreTimestamp,
 ): Record<string, unknown> {
   const status = plan.status ?? 'completed';
-  const run = playRun(status === 'abandoned' ? { stopAtMs: 30_000, ...plan } : plan);
+  const runPlan = status === 'abandoned' ? { stopAtMs: 30_000, ...plan } : plan;
+  const timeBank = plan.gameVersion === 2;
+  const run = timeBank ? playTimeBankRun(runPlan) : playRun(runPlan);
   const lastEnd = run.trials.reduce((end, trial) => Math.max(end, trial.shownAtMs + trial.rtMs), 0);
-  const activeDurationMs = status === 'completed' ? run.endsAtMs : lastEnd;
+  const completedMs = timeBank ? (run as mentalMathV2.MentalMathRun).endsAtMs : mm.RUN_DURATION_MS;
+  const activeDurationMs = status === 'completed' ? completedMs : lastEnd;
   const timezone = plan.timezone ?? 'America/Toronto';
   const scored = mm.score(run.trials, { modeId: mm.MODE_ID, startLevel: plan.startLevel });
   return {
     schemaVersion: 1,
     userId: plan.uid,
     gameId: mm.GAME_ID,
-    gameVersion: mm.GAME_VERSION,
+    gameVersion: timeBank ? mentalMathV2.GAME_VERSION : mm.GAME_VERSION,
     modeId: mm.MODE_ID,
     startLevel: plan.startLevel,
     seed: plan.seed,

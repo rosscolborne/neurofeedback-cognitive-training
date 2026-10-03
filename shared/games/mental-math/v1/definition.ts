@@ -7,14 +7,13 @@ import {
   MIN_PLAUSIBLE_RT_MS,
   MODE_ID,
   ONE_STEP_REVIEW_WEIGHT,
+  RUN_DURATION_MS,
   TWO_STEP_WEIGHT,
-  TYPICAL_RUN_MS,
 } from './params';
 import { ACTIVE_DURATION_TOLERANCE_MS } from './plausibility';
 import { matchesTemplate } from './questions';
 import { metricsSchema, trialSchema, type MentalMathMetrics, type MentalMathTrial } from './schemas';
 import { score } from './scoring';
-import { MAX_RUN_MS } from './timeBank';
 
 // Mental Math, gameVersion 1 and scoringVersion 1: the catalogue entry.
 
@@ -69,8 +68,7 @@ export const timed90: GameModeDefinition = {
   id: MODE_ID,
   levels: LEVELS.map((params) => ({ level: params.level, label: `Level ${params.level}`, params })),
   adaptive: true,
-  // Shown by the catalogue only; the time bank decides each run's length.
-  runDurationMs: TYPICAL_RUN_MS,
+  runDurationMs: RUN_DURATION_MS,
   initiallyUnlockedStartLevel: 1,
   unlockPolicy,
 };
@@ -87,7 +85,7 @@ export const definition = defineGame<MentalMathTrial, MentalMathMetrics>({
   limits: {
     maxTrials: MAX_TRIALS,
     minActiveMs: 0,
-    maxActiveMs: MAX_RUN_MS + ACTIVE_DURATION_TOLERANCE_MS,
+    maxActiveMs: RUN_DURATION_MS + ACTIVE_DURATION_TOLERANCE_MS,
     minPlausibleRtMs: MIN_PLAUSIBLE_RT_MS,
   },
   score,

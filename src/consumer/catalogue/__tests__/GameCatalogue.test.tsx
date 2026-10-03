@@ -54,7 +54,7 @@ describe('GameCatalogue', () => {
     expect((bar.children as ReactTestInstance[]).map((segment) => segment.props.style)).toEqual([{ flexGrow: 70 }, { flexGrow: 20 }, { flexGrow: 10 }]);
     // The mix replaces the domain chips.
     expect(card!.findAll((node) => String(node.props.className).includes('train-card-tag'))).toHaveLength(0);
-    expect(visibleTextOf(card!.findByProps({ className: 'train-card-facts' }))).toBe('90 seconds10 levels');
+    expect(visibleTextOf(card!.findByProps({ className: 'train-card-facts' }))).toBe('Up to 3 minutes10 levels');
   });
 
   it('describes the button with the card text, by ids that exist', () => {

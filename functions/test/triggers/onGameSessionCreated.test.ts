@@ -143,7 +143,7 @@ describe('onGameSessionCreated', () => {
 
   it('marks a session of an unsupported game version unsupported, not invalid', async () => {
     const uid = newUid();
-    const id = await createSession(uid, { seed: 110, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(3) }, { gameVersion: 2 });
+    const id = await createSession(uid, { seed: 110, startLevel: 1, targetPeak: 3, endedAtMs: minutesAgo(3) }, { gameVersion: 3 });
 
     const session = await processed(uid, id);
 

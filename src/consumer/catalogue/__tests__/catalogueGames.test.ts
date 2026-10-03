@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_CATALOGUE, type GameListing, type GameModeDefinition } from '@nfct/shared';
-import { catalogueGames, runLengthLabel, toCatalogueGame } from '../catalogueGames';
+import { GAME_CATALOGUE, mentalMath, type GameListing, type GameModeDefinition } from '@nfct/shared';
+import { catalogueGames, maxRunLengthLabel, runLengthLabel, toCatalogueGame } from '../catalogueGames';
 
 const mode = (id: string, levels: number, runDurationMs?: number | null): GameModeDefinition => ({
   id,
@@ -30,9 +30,12 @@ describe('catalogue games', () => {
         { id: 'processing-speed', label: 'Processing speed', weight: 0.2, percent: 20 },
         { id: 'memory', label: 'Memory', weight: 0.1, percent: 10 },
       ],
-      runLengthMs: { min: 90_000, max: 90_000 },
+      // The time bank (NFCT-60): no fixed length, at most MAX_RUN_MS.
+      runLengthMs: null,
+      maxRunLengthMs: mentalMath.MAX_RUN_MS,
       levels: 10,
     }]);
+    expect(maxRunLengthLabel(mentalMath.MAX_RUN_MS)).toBe('Up to 3 minutes');
   });
 
   it('keeps catalogue order', () => {

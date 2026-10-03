@@ -312,6 +312,17 @@ Run these from a clean checkout of the commit to deploy (normally
    `npx firebase deploy --only firestore --project dev`. Answer **No** to
    deleting indexes, never pass `--force`, and wait until every index has
    built (Firebase console > Firestore > Indexes).
+
+   **Mental Math gameVersion 2 (NFCT-60, the time bank).** Builds from that
+   change on write sessions with `gameVersion: 2`, which rules older than it
+   refuse (`supportedGameVersions()` now allows 1 to 2): deploy these rules
+   before anyone plays on such a build, or its runs fail to save (the canary
+   fails the same way). Older builds keep writing `gameVersion: 1`, which stays
+   allowed. Functions from this commit register both versions: every run saved
+   before the deploy is a fixed 90 s gameVersion 1 run and is judged by v1's
+   own rules in step 7, exactly as before; time-bank runs are judged by v2's.
+   A player's records restart with their first time-bank run (the v1 records
+   are kept in `bestsArchive`), and unlocked start levels carry over.
 5. **Deploy the Functions:** `npx firebase deploy --only functions --project dev`.
    The CLI enables the APIs it needs (Cloud Functions, Cloud Build, Artifact
    Registry, Cloud Run, Eventarc, Pub/Sub, Cloud Scheduler) and grants the

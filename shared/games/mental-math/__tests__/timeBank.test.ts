@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mentalMathV1 as mm } from '@nfct/shared';
-import { correct, play, sessionOf, timeout, wrong, type Step } from './helpers';
+import { mentalMath, mentalMathV1, mentalMathV2 as mm } from '@nfct/shared';
+import { correct, play, sessionOf, timeout, wrong, type Step } from './helpersV2';
 
 const SEED = 0x00c0_ffee;
 
@@ -29,7 +29,7 @@ function playOut(startLevel: number, stepFor: (level: number) => Step): { run: m
   return { run, clock };
 }
 
-describe('Mental Math v1 time bank: gains and losses', () => {
+describe('Mental Math v2 time bank: gains and losses', () => {
   it('pays for speed relative to the level\'s limit: +3 s under a third, +2 s under two thirds, nothing slower', () => {
     // Level 1: an 8 s limit.
     expect(mm.timeBankChange(1, 'correct', 0)).toBe(3_000);
@@ -75,7 +75,7 @@ describe('Mental Math v1 time bank: gains and losses', () => {
   });
 });
 
-describe('Mental Math v1 time bank: cap and run limit', () => {
+describe('Mental Math v2 time bank: cap and run limit', () => {
   it('never holds more than 60 s, and never runs past 180 s of active time', () => {
     expect(mm.nextBankEnd(50_000, 1_000, 3_000)).toBe(53_000); // 49 s left + 3 s
     expect(mm.nextBankEnd(60_000, 1_000, 3_000)).toBe(61_000); // 59 s + 3 s, held at 60 s
@@ -110,7 +110,7 @@ describe('Mental Math v1 time bank: cap and run limit', () => {
   });
 });
 
-describe('Mental Math v1 time bank: starting-level fairness', () => {
+describe('Mental Math v2 time bank: starting-level fairness', () => {
   it('starts every run with the same bank, whatever the start level', () => {
     for (let level = mm.MIN_LEVEL; level <= mm.MAX_LEVEL; level += 1) {
       expect(mm.startRun({ seed: SEED, startLevel: level }).endsAtMs).toBe(mm.START_BANK_MS);
@@ -153,5 +153,33 @@ describe('Mental Math v1 time bank: starting-level fairness', () => {
     expect(mm.checkSession(sessionOf(SEED, run))).toEqual({ outcome: 'valid', reasons: [], issues: [] });
     // A completed session that claims the old fixed 90 s is flagged.
     expect(mm.checkSession(sessionOf(SEED, run, { activeDurationMs: 90_000 })).reasons).toEqual(['active-duration-mismatch']);
+  });
+});
+
+describe('Mental Math v2: the time-bank version beside the frozen v1', () => {
+  it('is gameVersion 2 (scoringVersion 1), the version new runs are played with; v1 keeps the fixed 90 s run', () => {
+    expect(mentalMath.definition).toBe(mm.definition);
+    expect(mm.definition).toMatchObject({
+      id: 'mental-math',
+      gameVersion: 2,
+      scoringVersion: 1,
+      limits: { maxTrials: 400, minActiveMs: 0, maxActiveMs: 181_000, minPlausibleRtMs: 250 },
+      recordMetrics: ['score', 'correct', 'peakLevel'],
+    });
+    expect(mm.definition.modes).toHaveLength(1);
+    expect(mm.definition.modes[0]).toMatchObject({ id: 'timed-90', adaptive: true, runDurationMs: null, maxRunDurationMs: 180_000, initiallyUnlockedStartLevel: 1 });
+    expect(mentalMathV1.definition.modes[0]).toMatchObject({ runDurationMs: 90_000 });
+    expect(mentalMathV1.RUN_DURATION_MS).toBe(90_000);
+  });
+
+  it('keeps every time-bank constant', () => {
+    expect({
+      START_BANK_MS: mm.START_BANK_MS,
+      BANK_CAP_MS: mm.BANK_CAP_MS,
+      MAX_RUN_MS: mm.MAX_RUN_MS,
+      FAST_GAIN_MS: mm.FAST_GAIN_MS,
+      STEADY_GAIN_MS: mm.STEADY_GAIN_MS,
+      WRONG_PENALTY_MS: mm.WRONG_PENALTY_MS,
+    }).toEqual({ START_BANK_MS: 45_000, BANK_CAP_MS: 60_000, MAX_RUN_MS: 180_000, FAST_GAIN_MS: 3_000, STEADY_GAIN_MS: 2_000, WRONG_PENALTY_MS: 5_000 });
   });
 });

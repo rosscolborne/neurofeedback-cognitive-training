@@ -132,7 +132,7 @@ describe('aggregate compatibility', () => {
 
   it.each([
     ['a newer aggregateVersion', { aggregateVersion: 3 }],
-    ['a newer gameVersion than any registered module', { gameVersion: 2 }],
+    ['a newer gameVersion than any registered module', { gameVersion: 3 }],
     ['a newer schemaVersion', { schemaVersion: 2 }],
   ])('never writes progress with %s: retried, then failed safely', async (_label, change) => {
     const uid = newUid();
