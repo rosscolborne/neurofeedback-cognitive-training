@@ -1,6 +1,6 @@
 import type { ScoreContext, ScoredResult } from '../../definition';
 import { isTapTooLate, judgeResponse, trialEndMs } from './limits';
-import { levelParams, MAX_FAST_TAP_PERCENT, MIN_PLAUSIBLE_TAP_MS, MODE_ID, TIMING_TOLERANCE_MS, TRIALS_PER_RUN } from './params';
+import { levelParams, MAX_FAST_TAP_PERCENT, MAX_RUN_MS, MIN_PLAUSIBLE_TAP_MS, MODE_ID, TIMING_TOLERANCE_MS, TRIALS_PER_RUN } from './params';
 import type { SequenceMemoryMetrics, SequenceMemoryTrial } from './schemas';
 import { isCorrectTrial, score } from './scoring';
 import { isLegalSequence, SEQUENCE_VARIANTS, sameSequence, sequenceAt, tileCount } from './sequences';
@@ -50,9 +50,14 @@ export const REASON_OUTCOMES = Object.freeze({
   'tap-below-floor': 'flagged',
   /** A trial starts before the previous one ended, beyond TIMING_TOLERANCE_MS. */
   'trial-overlap': 'flagged',
+  /**
+   * The first trial starts after active time 0, or a trial starts after the
+   * previous one ended, beyond TIMING_TOLERANCE_MS: active time no trial used.
+   */
+  'trial-gap': 'flagged',
   /** A completed session without exactly TRIALS_PER_RUN trials, or an abandoned one with all of them. */
   'trial-count-mismatch': 'flagged',
-  /** The session's activeDurationMs is not the end of its last trial, within TIMING_TOLERANCE_MS. */
+  /** The session's activeDurationMs is not the end of its last trial, within TIMING_TOLERANCE_MS, or exceeds MAX_RUN_MS. */
   'active-duration-mismatch': 'flagged',
   /** The client-reported peakLevel is not the highest trial level. */
   'peak-level-mismatch': 'diagnostic',
@@ -197,10 +202,11 @@ export type RunContext = {
 };
 
 /**
- * Trials follow one another without overlap, and the session's active time is
- * exactly its trials': time on a discarded trial is not active time, so a
- * conforming client's activeDurationMs is the end of its last trial (0 with
- * no trials), within TIMING_TOLERANCE_MS.
+ * Trials follow one another with neither overlap nor gap, from active time 0,
+ * and the session's active time is exactly its trials': time on a discarded
+ * trial is not active time, so a conforming client presents each trial where
+ * the last one ended and its activeDurationMs is the end of its last trial (0
+ * with no trials), within TIMING_TOLERANCE_MS and never beyond MAX_RUN_MS.
  */
 export function checkTiming(trials: readonly SequenceMemoryTrial[], { activeDurationMs }: RunContext): PlausibilityIssue[] {
   const issues: PlausibilityIssue[] = [];
@@ -210,9 +216,16 @@ export function checkTiming(trials: readonly SequenceMemoryTrial[], { activeDura
       || trial.shownAtMs + TIMING_TOLERANCE_MS < trialEndMs(previous));
   });
   if (overlap !== -1) issues.push(issue('trial-overlap', overlap));
+  const gap = trials.findIndex((trial, index) => {
+    const previousEnd = index === 0 ? 0 : trialEndMs(trials[index - 1]!);
+    return trial.shownAtMs > previousEnd + TIMING_TOLERANCE_MS;
+  });
+  if (gap !== -1) issues.push(issue('trial-gap', gap));
   const last = trials[trials.length - 1];
   const lastEnd = last === undefined ? 0 : trialEndMs(last);
-  if (Math.abs(activeDurationMs - lastEnd) > TIMING_TOLERANCE_MS) issues.push(issue('active-duration-mismatch', null));
+  if (Math.abs(activeDurationMs - lastEnd) > TIMING_TOLERANCE_MS || activeDurationMs > MAX_RUN_MS + TIMING_TOLERANCE_MS) {
+    issues.push(issue('active-duration-mismatch', null));
+  }
   return issues;
 }
 

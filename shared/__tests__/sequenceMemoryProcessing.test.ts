@@ -94,6 +94,12 @@ describe('trusted scoring of Sequence Memory v1', () => {
     expect(decision.progress).toMatchObject({ sessionsCompleted: 1, bestPeakLevel: {} });
   });
 
+  it('flags a run whose trials are spread apart to claim more active time', () => {
+    const evaluation = evaluate(forgedSequenceMemory(session(), 'trial-gap'));
+    expect(evaluation.kind).toBe('scored');
+    expect(codes(evaluation)).toEqual(expect.arrayContaining(['trial-gap', 'active-duration-mismatch']));
+  });
+
   it('treats a gameVersion outside the registry as unsupported, never invalid', () => {
     expect(evaluate({ ...session(), gameVersion: 2 })).toMatchObject({ kind: 'unsupported', reason: 'unknown-game-version' });
   });

@@ -93,6 +93,16 @@ describe('onGameSessionCreated: Sequence Memory v1', () => {
     expect(await readDoc(db, statsPath(uid))).toBeUndefined();
   });
 
+  it('flags a run whose trials are spread apart to claim more active time: no records or unlocks', async () => {
+    const uid = newUid();
+    const id = await createSession(uid, { seed: 304, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(3) }, 'trial-gap');
+
+    const { result } = await processed(uid, id);
+    expect(result.validity).toBe('flagged');
+    expect(result.reasons).toEqual(expect.arrayContaining(['trial-gap', 'active-duration-mismatch']));
+    expect(await readDoc(db, progressPath(uid, 'sequence-memory'))).toMatchObject({ bests: {}, bestPeakLevel: {}, unlocked: {} });
+  });
+
   it('flags a run with too many fast taps: totals only, no records or unlocks', async () => {
     const uid = newUid();
     const id = await createSession(uid, { seed: 303, startLevel: 1, targetPeak: 4, endedAtMs: minutesAgo(3) }, 'fast-taps');

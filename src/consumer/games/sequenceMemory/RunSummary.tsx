@@ -32,7 +32,7 @@ export interface RunSummaryProps {
   readonly onExit: () => void;
 }
 
-const TIMING_FLAGS = new Set(['trial-overlap', 'trial-count-mismatch', 'active-duration-mismatch']);
+const TIMING_FLAGS = new Set(['trial-overlap', 'trial-gap', 'trial-count-mismatch', 'active-duration-mismatch']);
 
 /** Why trusted scoring flagged a run, in plain words. */
 function flagExplanation(reasons: readonly string[]): string {

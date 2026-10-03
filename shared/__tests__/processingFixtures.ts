@@ -255,13 +255,13 @@ export function sequenceMemorySession(
   };
 }
 
-export type SequenceMemoryForgery = 'sequence' | 'level-sequence' | 'response' | 'fast-taps';
+export type SequenceMemoryForgery = 'sequence' | 'level-sequence' | 'response' | 'fast-taps' | 'trial-gap';
 
 /**
  * An honest Sequence Memory session with one forgery: a sequence the seed
  * cannot produce (an easier one), a level the staircase cannot reach, a
- * response that does not match the trial's verdict, or every tap too fast to
- * be plausible.
+ * response that does not match the trial's verdict, every tap too fast to
+ * be plausible, or trials spread apart to claim active time no trial used.
  */
 export function forgedSequenceMemory(session: Record<string, unknown>, forgery: SequenceMemoryForgery): Record<string, unknown> {
   const trials = (session.trials as sm.SequenceMemoryTrial[]).map((trial) => ({ ...trial }));
@@ -285,6 +285,11 @@ export function forgedSequenceMemory(session: Record<string, unknown>, forgery: 
     }
     case 'fast-taps':
       return sequenceMemorySessionWithTaps(session, 40);
+    case 'trial-gap': {
+      trials.forEach((trial, index) => { trial.shownAtMs += index * 150_000; });
+      const last = trials[trials.length - 1]!;
+      return { ...session, trials, activeDurationMs: last.shownAtMs + last.presentationMs + last.rtMs };
+    }
   }
   return { ...session, trials };
 }

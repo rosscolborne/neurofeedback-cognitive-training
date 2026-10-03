@@ -116,6 +116,24 @@ describe('Sequence Memory v1 plausibility', () => {
     expect(reasonsOf(withinTolerance)).toEqual([]);
   });
 
+  it('flags active time no trial used: a late first trial, a gap between trials, or more than a run can last', () => {
+    // Every trial pushed later, with activeDurationMs following: the session claims time it never played.
+    const shift = 170_000;
+    const spread = honest.trials.map((trial, index) => ({ ...trial, shownAtMs: trial.shownAtMs + index * shift }));
+    const spreadEnd = sm.trialEndMs(spread.at(-1)!);
+    const spreadReport = sm.checkSession(sessionOf(SEED, honest, { trials: spread, activeDurationMs: spreadEnd, summary: undefined }));
+    expect(spreadReport).toMatchObject({ outcome: 'flagged', reasons: ['trial-gap', 'active-duration-mismatch'] });
+
+    const late = honest.trials.map((trial) => ({ ...trial, shownAtMs: trial.shownAtMs + 3_000 }));
+    const lateReport = sm.checkSession(sessionOf(SEED, honest, { trials: late, activeDurationMs: sm.recordedActiveMs(honest) + 3_000, summary: undefined }));
+    expect(lateReport).toMatchObject({ outcome: 'flagged', reasons: ['trial-gap'] });
+    expect(lateReport.issues.find((entry) => entry.code === 'trial-gap')?.trialIndex).toBe(0);
+
+    // Within the tolerance is fine.
+    const nudged = honest.trials.map((trial) => ({ ...trial, shownAtMs: trial.shownAtMs + sm.TIMING_TOLERANCE_MS }));
+    expect(reasonsOf(sessionOf(SEED, honest, { trials: nudged, activeDurationMs: sm.recordedActiveMs(honest) + sm.TIMING_TOLERANCE_MS, summary: undefined }))).toEqual([]);
+  });
+
   it('flags a completed run without all its trials, and an abandoned one with all of them', () => {
     const short = play(SEED, 1, corrects(5));
     expect(reasonsOf(sessionOf(SEED, short, { status: 'completed' }))).toEqual(['trial-count-mismatch']);
@@ -144,6 +162,7 @@ describe('Sequence Memory v1 plausibility', () => {
       'sequence-not-from-seed': 'invalid',
       'tap-below-floor': 'flagged',
       'trial-overlap': 'flagged',
+      'trial-gap': 'flagged',
       'trial-count-mismatch': 'flagged',
       'active-duration-mismatch': 'flagged',
       'peak-level-mismatch': 'diagnostic',
