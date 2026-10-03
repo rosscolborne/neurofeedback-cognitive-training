@@ -1,5 +1,6 @@
 import React from 'react';
 import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../games/mentalMath/MentalMathProgressCard';
+import { SEQUENCE_MEMORY_PROGRESS_CARD_BUTTON_ID, SequenceMemoryProgressCard } from '../games/sequenceMemory/SequenceMemoryProgressCard';
 import { PROGRESS_PLAY_BUTTON_ID, ProgressOverview } from '../overview/ProgressOverview';
 import type { GameRequest } from './gameRequest';
 
@@ -24,7 +25,13 @@ export const ProgressScreen: React.FC<ProgressScreenProps> = ({ playerId, onOpen
       onPlay={() => onOpenGame({ gameId: 'mental-math', returnFocusTo: PROGRESS_PLAY_BUTTON_ID })}
       focusSection={focusSection}
       onSectionFocused={onSectionFocused}
-      games={<MentalMathProgressCard onOpen={() => onOpenGame({ gameId: 'mental-math', initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />}
+      games={(
+        <>
+          <MentalMathProgressCard onOpen={() => onOpenGame({ gameId: 'mental-math', initialView: 'progress', returnFocusTo: MENTAL_MATH_PROGRESS_CARD_BUTTON_ID })} />
+          {/* NFCT-93: opens the game's start screen; it has no records-and-history view yet. */}
+          <SequenceMemoryProgressCard onOpen={() => onOpenGame({ gameId: 'sequence-memory', returnFocusTo: SEQUENCE_MEMORY_PROGRESS_CARD_BUTTON_ID })} />
+        </>
+      )}
     />
   </div>
 );

@@ -5,7 +5,7 @@ import { subscribeWithRetry } from '../firestore/retryingSubscription';
 import type { GameSessionHistoryPage, GameSessionRepository } from '../repositories/gameSessionRepository';
 import type { ProfileRepository } from '../repositories/profileRepository';
 import type { AchievementsRead, DailyStatsRead, StatsRepository } from '../repositories/statsRepository';
-import { deviceTimezone } from '../games/mentalMath/sessionDraft';
+import { deviceTimezone } from '../games/common/sessionEnvironment';
 import { historyRow, isTimed90, type HistoryRow } from '../games/mentalMath/progressSummary';
 import { periodRange, playerToday, playerWeeklyGoal, playerZone, type ActivityPeriod, type PlayerZone } from './overviewModel';
 
@@ -180,21 +180,21 @@ export function usePlayerOverview(
   };
 }
 
-/** The newest runs of a game, live (Home's recent activity). */
+/** The newest runs of a game, or of every game when `gameId` is null, live (Home's recent activity; whether the player has played). */
 export function useRecentRuns(
   playerId: string,
   gameSessions: Pick<GameSessionRepository, 'subscribeToGameSessionHistory'>,
-  gameId: string,
+  gameId: string | null,
   pageSize: number,
 ): Loaded<GameSessionHistoryPage> {
-  return useKeyedSubscription<GameSessionHistoryPage>(`${playerId}:runs:${gameId}:${pageSize}`, (onNext, onError) =>
-    gameSessions.subscribeToGameSessionHistory({ gameId, pageSize }, onNext, onError));
+  return useKeyedSubscription<GameSessionHistoryPage>(`${playerId}:runs:${gameId ?? '*'}:${pageSize}`, (onNext, onError) =>
+    gameSessions.subscribeToGameSessionHistory(gameId === null ? { pageSize } : { gameId, pageSize }, onNext, onError));
 }
 
 /**
  * What the screens can say about the player's stats, before any figure is shown:
  * - 'stats': a readable summary;
- * - 'new': the server has no summary and the player has no runs;
+ * - 'new': the server has no summary and the player has no runs of any game;
  * - 'checking': no summary yet, and a run trusted scoring has not confirmed, briefly (see PENDING_RESULT_GRACE_MS);
  * - 'delayed': no summary yet, and a run has waited for its result past that grace, or scoring has recorded a delay:
  *   the result may be a long way off (on a backend without trusted scoring, it never comes), so this is not loading;
@@ -235,6 +235,12 @@ export function runRows(runs: Loaded<GameSessionHistoryPage>): HistoryRow[] | nu
   return runs.status === 'ready' ? runs.value.entries.filter(isTimed90).map(historyRow) : null;
 }
 
+/** The rows of a page of runs of every game (NFCT-93), or null while it loads or after it failed. */
+export function playedRows(runs: Loaded<GameSessionHistoryPage>): HistoryRow[] | null {
+  return runs.status === 'ready' ? runs.value.entries.map(historyRow) : null;
+}
+
+/** `runs`: the newest runs of every game (useRecentRuns with no game). */
 export function statsPhase(
   overview: Pick<PlayerOverview, 'summary' | 'todayState'>,
   runs: Loaded<GameSessionHistoryPage>,
@@ -252,7 +258,8 @@ export function statsPhase(
   if (read.fromCache) return online ? 'loading' : 'offline';
   if (runs.status === 'loading') return 'loading';
   if (runs.status === 'unavailable') return 'unavailable';
-  const rows = runRows(runs)!;
+  // A run of any game means the player has played (NFCT-93).
+  const rows = playedRows(runs)!;
   if (rows.length === 0) return 'new';
   if (rows.some((row) => row.state === 'delayed')) return 'delayed';
   const deadline = pendingDeadline(rows, openedAtMs);
@@ -268,7 +275,7 @@ export function useStatsPhase(
 ): StatsPhase {
   const [openedAtMs] = useState(() => clock.now());
   const [nowMs, setNowMs] = useState(openedAtMs);
-  const rows = runRows(runs);
+  const rows = playedRows(runs);
   const deadline = rows === null ? null : pendingDeadline(rows, openedAtMs);
   useEffect(() => {
     if (deadline === null) return undefined;

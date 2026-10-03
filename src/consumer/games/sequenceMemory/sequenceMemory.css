@@ -1,0 +1,166 @@
+/* Sequence Memory (NFCT-93): the board, on Mental Math's screen layout and the app's tokens. */
+
+.sm-hud-of {
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sm-play {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-card);
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.sm-board-correct {
+  border-color: var(--status-active);
+  background-color: var(--status-active-bg);
+}
+
+.sm-board-wrong {
+  border-color: var(--status-alert);
+  background-color: var(--status-alert-bg);
+}
+
+/* Reserved so the layout never shifts as the status changes. */
+.sm-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 1.5em;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sm-board-correct .sm-status {
+  color: var(--status-active-text);
+}
+
+.sm-board-wrong .sm-status {
+  color: var(--status-alert-text);
+}
+
+/* The response time left: full while the sequence plays, draining while the player taps. */
+.sm-timer {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-recessed);
+}
+
+.sm-timer-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--brand-primary);
+  transform-origin: left center;
+  transition: transform 0.25s linear;
+}
+
+.sm-play[data-phase='presenting'] .sm-timer-fill {
+  background-color: var(--border-default);
+}
+
+.sm-board {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  touch-action: manipulation;
+}
+
+/* At 320 px wide the 5×5 board still gives each tile about 48 px. */
+.sm-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 2px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-recessed);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background-color 0.08s ease, border-color 0.08s ease, transform 0.08s ease;
+}
+
+.sm-tile[aria-disabled='true'] {
+  cursor: default;
+}
+
+.sm-tile:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+/* Lit: filled, outlined and marked with a ring, so it reads without colour too. */
+.sm-tile-lit {
+  border-color: var(--brand-primary-hover);
+  background-color: var(--brand-primary);
+  transform: scale(1.04);
+}
+
+.sm-tile-mark {
+  width: 38%;
+  height: 38%;
+  border-radius: var(--radius-full);
+}
+
+.sm-tile-lit .sm-tile-mark {
+  border: 3px solid var(--brand-on-primary);
+  background-color: color-mix(in srgb, var(--brand-on-primary) 35%, transparent);
+  animation: sm-lit 0.18s ease-out;
+}
+
+/* The tile just tapped answers the finger. */
+.sm-tile-tapped {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-primary-subtle);
+  animation: sm-tapped 0.25s ease-out;
+}
+
+.sm-tile:active:not([aria-disabled='true']) {
+  background-color: var(--brand-primary-subtle);
+}
+
+@keyframes sm-lit {
+  from { transform: scale(0.4); opacity: 0.4; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sm-tapped {
+  from { transform: scale(0.94); }
+  to { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-play,
+  .sm-tile,
+  .sm-timer-fill {
+    transition: none;
+  }
+
+  .sm-tile-lit {
+    transform: none;
+  }
+
+  .sm-tile-lit .sm-tile-mark,
+  .sm-tile-tapped {
+    animation: none;
+  }
+}

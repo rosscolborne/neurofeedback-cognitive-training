@@ -17,6 +17,7 @@ import {
   offlineClock,
   readable,
   runEntry,
+  sequenceMemoryRunEntry,
   summaryWith,
   textOf,
   TODAY,
@@ -140,6 +141,18 @@ describe('Home', () => {
     expect(one(r, 'streak')).toBe('—');
     expect(one(r, 'streak-caption')).toBe('Your streak and achievements catch up after your next finished run.');
     expect(byData(r, 'recent-runs')).toHaveLength(1);
+  });
+
+  it('never calls a player whose only runs are Sequence Memory new, and lists only Mental Math runs (NFCT-93)', async () => {
+    const { r, sources } = await renderHome({ summary: missing(), runs: [sequenceMemoryRunEntry('sessionSMSMSMSMSMSM1')] });
+    expect(sources.gameSessions.subscribeToGameSessionHistory).toHaveBeenCalledWith({ pageSize: 3 }, expect.any(Function), expect.any(Function));
+    expect(one(r, 'hero-text')).not.toMatch(/first run/);
+    expect(visibleText(r)).not.toContain('Start here');
+    expect(one(r, 'streak-caption')).toBe('Your streak and achievements catch up after your next finished run.');
+    expect(byData(r, 'recent-runs')).toHaveLength(0);
+    const withBoth = await renderHome({ summary: readable(summaryWith([TODAY])), runs: [sequenceMemoryRunEntry('sessionSMSMSMSMSMSM1'), runEntry('sessionAAAAAAAAAAAA1')] });
+    expect(textOf(withBoth.r.root.findByProps({ id: 'ov-recent-title' }))).toBe('Recent Mental Math runs');
+    expect(withBoth.r.root.findAll((node) => node.type === 'li' && node.props.className?.includes?.('mm-history-row'))).toHaveLength(1);
   });
 
   it('shows a run whose result is pending as loading, never narrating how it is scored (NFCT-66)', async () => {

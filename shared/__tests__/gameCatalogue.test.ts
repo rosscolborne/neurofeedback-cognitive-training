@@ -7,14 +7,18 @@ import {
   GAME_MODULE_REGISTRY,
   domainWeightsSchema,
   mentalMath,
+  sequenceMemory,
   slugIdSchema,
 } from '@nfct/shared';
 
 describe('game catalogue', () => {
-  it('lists Mental Math, the one Stage 1 game, at the version new sessions play', () => {
-    expect(GAME_CATALOGUE.map((listing) => listing.definition.id)).toEqual(['mental-math']);
+  it('lists Mental Math, then Sequence Memory (NFCT-93), at the versions new sessions play', () => {
+    expect(GAME_CATALOGUE.map((listing) => listing.definition.id)).toEqual(['mental-math', 'sequence-memory']);
     expect(GAME_CATALOGUE[0]!.definition).toBe(mentalMath.definition);
     expect(GAME_CATALOGUE[0]).toMatchObject({ name: 'Mental Math', icon: 'calculator' });
+    expect(GAME_CATALOGUE[1]!.definition).toBe(sequenceMemory.definition);
+    expect(GAME_CATALOGUE[1]).toMatchObject({ name: 'Sequence Memory', icon: 'grid' });
+    expect(sequenceMemory.definition.domainWeights).toEqual({ memory: 0.6, spatial: 0.4 });
   });
 
   it('gives every listing a unique game, a name, one short sentence and a known icon', () => {

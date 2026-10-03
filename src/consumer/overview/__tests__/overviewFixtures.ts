@@ -17,6 +17,10 @@ import type { AchievementsRead, DailyStatsRead } from '../../repositories/statsR
 import { clientSessionDocument } from '../../games/mentalMath/runSummaryModel';
 import { previewDecision } from '../../games/mentalMath/startLevel';
 import { playRun } from '../../games/mentalMath/__tests__/fixtures';
+import { previewDecision as previewGameDecision } from '../../games/common/startLevel';
+import { SEQUENCE_MEMORY } from '../../games/sequenceMemory/runSummaryModel';
+import { clientSessionDocument as sequenceMemoryDocument } from '../../games/sequenceMemory/sessionDraft';
+import { playRun as playSequenceMemoryRun } from '../../games/sequenceMemory/__tests__/fixtures';
 import type { OverviewClock, OverviewSources } from '../usePlayerOverview';
 
 // Fakes for Home and Progress (NFCT-13 part 2): the player's own aggregates
@@ -102,6 +106,19 @@ export function runEntry(id: string, { verified = true, wallStartMs = NOW_MS - 3
   };
 }
 
+/** One finished Sequence Memory run (NFCT-93) as a history row, verified by the server or still on this device. */
+export function sequenceMemoryRunEntry(id: string, { verified = true, wallStartMs = NOW_MS - 3_600_000 }: { verified?: boolean; wallStartMs?: number } = {}): GameSessionHistoryEntry {
+  const outcome = playSequenceMemoryRun({ seed: 4242, wallStartMs });
+  const document = sequenceMemoryDocument(outcome, { timezone: 'UTC', appVersion: '0.0.0', platform: 'web' }, { sessionId: id, userId: 'player-1', seed: 4242 });
+  const result = verified ? previewGameDecision(SEQUENCE_MEMORY, null, id, document)!.result : undefined;
+  return {
+    id,
+    session: readSessionProgressFields({ ...document, ...(result ? { result } : {}) }),
+    awaitingResult: !verified,
+    hasPendingWrites: !verified,
+  };
+}
+
 export interface FakeState {
   summary?: DocumentRead<StatsSummary> | 'error';
   days?: readonly DailyStats[];
@@ -136,9 +153,13 @@ export function fakeSources(state: FakeState) {
       return state.profile ?? unreadableProfile;
     }) },
     gameSessions: {
-      subscribeToGameSessionHistory: vi.fn((_options: unknown, onNext: (page: GameSessionHistoryPage) => void, onError: (error: Error) => void) => {
+      // Like the repository: one game's runs when the options name a game, every game's otherwise.
+      subscribeToGameSessionHistory: vi.fn((options: { readonly gameId?: string }, onNext: (page: GameSessionHistoryPage) => void, onError: (error: Error) => void) => {
         if (state.runs === 'error') onError(new Error('unavailable'));
-        else onNext({ entries: [...(state.runs ?? [])], unreadable: [], nextCursor: null, fromCache: false });
+        else {
+          const entries = (state.runs ?? []).filter((entry) => options.gameId === undefined || entry.session.gameId === options.gameId);
+          onNext({ entries, unreadable: [], nextCursor: null, fromCache: false });
+        }
         return () => {};
       }),
     },

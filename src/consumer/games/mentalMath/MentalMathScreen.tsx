@@ -11,12 +11,13 @@ import { Keypad } from './Keypad';
 import { MentalMathProgress } from './MentalMathProgress';
 import { ProvisionalTag } from './ProvisionalTag';
 import { MentalMathRunController, type RunOutcome, type RunSnapshot } from './runController';
-import type { EegInfo, EegState, SaveState } from './runSave';
+import type { EegInfo, EegState, SaveState } from '../common/runSave';
 import { RunSummary } from './RunSummary';
 import { bestsFor, type RunIdentity } from './runSummaryModel';
-import { buildSessionDraft, type SessionEnvironment } from './sessionDraft';
+import type { SessionEnvironment } from '../common/sessionEnvironment';
+import { buildSessionDraft } from './sessionDraft';
 import { currentProgress, startLevelChoices, type StartLevelChoices } from './startLevel';
-import { documentVisibility, type VisibilitySource } from './visibility';
+import { documentVisibility, type VisibilitySource } from '../common/visibility';
 import './mentalMath.css';
 
 // Mental Math, playable end to end: the start-level picker, the run, the

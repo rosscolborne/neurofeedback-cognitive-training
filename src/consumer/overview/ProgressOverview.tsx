@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
-import { addDays, mentalMath, type LocalDate } from '@nfct/shared';
+import { addDays, type LocalDate } from '@nfct/shared';
 import { gameSessionRepository, profileRepository, statsRepository } from '../repositories';
 import { formatPlayTime } from '../games/mentalMath/progressSummary';
 import {
@@ -112,7 +112,8 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
   );
   // Whether the player has played at all: a missing summary alone does not say (runs scored before the
   // aggregates existed have none until the next run rebuilds it, and offline it may just not be cached).
-  const newest = useRecentRuns(playerId, sources.gameSessions, mentalMath.GAME_ID, NEWEST_RUNS);
+  // Runs of every game count (NFCT-93).
+  const newest = useRecentRuns(playerId, sources.gameSessions, null, NEWEST_RUNS);
   const phase = useStatsPhase(overview, newest, clock);
   const noRunsYet = phase === 'new';
   // The activity and achievements show their own data only once the stats are known to include every
@@ -139,7 +140,7 @@ export const ProgressOverview: React.FC<ProgressOverviewProps> = ({
       {noRunsYet ? (
         <section className="ov-card ov-empty" aria-labelledby="ov-progress-empty-title" data-overview="progress-empty">
           <h2 id="ov-progress-empty-title" className="ov-card-title">No runs yet</h2>
-          <p className="ov-help">Play Mental Math to start your streak, fill in your activity and earn achievements.</p>
+          <p className="ov-help">Play any game to start your streak, fill in your activity and earn achievements.</p>
           <button id={PROGRESS_PLAY_BUTTON_ID} type="button" className="btn btn-primary" onClick={onPlay}>
             <Play size={18} fill="currentColor" aria-hidden="true" /> Play Mental Math
           </button>
