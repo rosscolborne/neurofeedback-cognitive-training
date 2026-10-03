@@ -42,8 +42,44 @@ in the plan instead of planning around it.
 Plan the smallest change that meets the task. Do not add process, abstraction
 or hardening it does not need. Recommend parallel streams only when the work
 has independent parts large enough to justify an integration step; then the
-handoff names [nfct-orchestration](../nfct-orchestration/SKILL.md) instead of
-designing the topology here. One stream is the default.
+implementation prompt begins with `/nfct-orchestration` instead of designing
+the topology here. One stream is the default. Several files, bullets or
+acceptance criteria are not a reason to orchestrate.
+
+## Decide the execution strategy
+
+Settle these now, from AGENTS.md and the review, security and testing skills,
+so the implementation agent does not re-decide them. Apply existing policy;
+do not weaken a required gate, and do not add a reviewer, tester or suite the
+routing does not justify.
+
+- **Orchestration:** yes only for genuinely independent streams
+  ([nfct-orchestration](../nfct-orchestration/SKILL.md)); otherwise no.
+- **Primary model and effort,** for the agent that receives the prompt: the
+  lightest that reliably executes this plan, judged on remaining judgment,
+  architectural uncertainty, risk boundaries and how mechanical execution
+  now is, not on task size. For an orchestrator, which owns decomposition,
+  routing and integration, strongly prefer Opus at High effort unless a
+  concrete task-specific reason makes a lighter setting sufficient.
+- **Review:** whether an independent correctness review is required, the
+  security tier ([which PRs get review](../../../AGENTS.md#which-prs-get-review),
+  [security tier](../nfct-orchestration/SKILL.md#security-tier)), the scope
+  (full PR review, targeted review of a named change or range, verification
+  pass only, or none under policy, with the policy reason), and what the
+  reviewer should focus on. Keep it proportional: a tiny docs or display
+  change gets no broad review; auth, rules, persistence, migration or trusted
+  scoring gets a stronger one.
+- **Validation:** the local checks and test layers required, those that are
+  unnecessary, whether deterministic browser tests or exploratory QA apply,
+  whether a separate tester agent is warranted (exploratory QA may be the
+  implementer's own recorded pass), and the hosted-CI expectation, which is
+  skipped under the local-first policy unless the owner has authorized it.
+- **Child-agent settings:** a spawned agent's model can be set explicitly
+  (the Agent tool's `model` option). Its effort cannot be set per spawn: it
+  comes from the agent type's definition, or is inherited from the parent.
+  This repo defines no custom agent types. So give a model for each reviewer
+  or tester, and give effort only as guidance the parent honors by choosing
+  an agent type that sets it; if none does, say it inherits.
 
 ## Output
 
@@ -82,7 +118,11 @@ longer fence if the prompt contains backticks.
 
 The prompt is self-contained: the implementation agent has no access to this
 conversation or to the sections above. It carries the decisions, constraints,
-acceptance criteria and execution instructions, not the analysis:
+acceptance criteria and execution instructions, not the analysis.
+
+If orchestration is warranted, the prompt's first line is exactly
+`/nfct-orchestration`, followed by the task. Otherwise it does not invoke
+orchestration. The prompt is for a fresh Claude Code chat:
 
 - the goal, the Jira card if any, and the expected behavior;
 - the architectural decisions from the plan, stated as decisions, and the
@@ -90,7 +130,15 @@ acceptance criteria and execution instructions, not the analysis:
 - the scope boundaries, including which follow-ups to card rather than fix;
 - acceptance criteria the implementer can check;
 - the validation expected before the PR is ready;
-- the safety limits that apply: AGENTS.md hard rules, a task worktree per
+- an execution section carrying only the decisions from
+  [Decide the execution strategy](#decide-the-execution-strategy), as
+  applicable: orchestration yes or no; the primary model and effort; each
+  required review gate with its tier, scope, focus, and reviewer model and
+  effort guidance; the required and unnecessary validation; a separate tester
+  or exploratory-QA agent and its model and effort guidance, if warranted;
+  and the hosted-CI expectation;
+- the safety limits that apply (do not repeat policy the execution section
+  already carries): AGENTS.md hard rules, a task worktree per
   [nfct-worktrees](../nfct-worktrees/SKILL.md), no deploys, no hosted CI
   dispatch, PR to `development`, no self-merge;
 - when the root cause is not established, an instruction to confirm it before
@@ -103,12 +151,11 @@ acceptance criteria and execution instructions, not the analysis:
 Exactly three lines, after the implementation prompt, not fenced (the
 implementation prompt stays the response's only fenced block):
 
-- `Model:` the model, in the intended implementation tool.
-- `Effort:` the effort level, in that tool.
+- `Model:` the Claude model.
+- `Effort:` the Claude Code effort level.
 - `Reason:` one concise sentence.
 
-Recommend the lightest model and effort level available in the intended
-implementation tool that can reliably execute this specific plan. Base it on
-how much judgment remains after planning, architectural uncertainty, the
-risk and trust boundaries touched, and whether execution is mostly mechanical
-or still needs substantial reasoning.
+This is the fresh-chat configuration for the agent that receives the
+prompt: the orchestrator if the prompt starts with `/nfct-orchestration`.
+Choose it as in the execution strategy above. Reviewer and tester routing
+belongs in the implementation prompt, not here.
