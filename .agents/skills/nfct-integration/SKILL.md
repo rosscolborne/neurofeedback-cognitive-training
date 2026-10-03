@@ -34,7 +34,7 @@ integration report. Everything else keeps its owner:
 Read the parent objective: the epic or cards, their acceptance criteria, and
 the parts of the Stage 1 design and ADRs they touch. Then, for every stream,
 compare it with its PR's base (`baseRefName`), which for a stacked PR is
-another stream's branch rather than `main`:
+another stream's branch rather than `development`:
 
 ```bash
 gh pr view <n> --json number,title,url,baseRefName,headRefName,headRefOid,reviewDecision,statusCheckRollup
@@ -67,7 +67,7 @@ Write down the order and the predicted conflicts.
 
 ## Build the integration branch
 
-Create the integration branch and worktree from `origin/main` per
+Create the integration branch and worktree from `origin/development` per
 [nfct-worktrees](../nfct-worktrees/SKILL.md#integration-worktrees), then merge
 each stream in order with `git merge --no-ff --no-edit origin/<branch>`.
 
@@ -77,14 +77,14 @@ each stream in order with `git merge --no-ff --no-edit origin/<branch>`.
   unless a stream carries commits that must not ship; then cherry-pick the
   rest and record why, because that stream's PR no longer matches what ships.
 - Never rewrite, rebase or push to a stream branch.
-- To pick up a newer `origin/main`, merge it into the integration branch
+- To pick up a newer `origin/development`, merge it into the integration branch
   rather than rebasing, so stream commits keep their SHAs.
 - When a stream owner pushes a routed fix, see what it added with
   `git log --oneline <old-head>..origin/<branch>`, then merge the branch
   again.
 - If a stream was rewritten anyway (its old head is no longer an ancestor of
   the new one), do not merge both copies. Rebuild the integration branch from
-  `origin/main`, push it with `--force-with-lease` (it is your branch), and
+  `origin/development`, push it with `--force-with-lease` (it is your branch), and
   record the rebuild in the report. Do this before review starts where you
   can.
 
@@ -259,8 +259,8 @@ Only when the user explicitly asks for separate PRs:
 - Conflicts and defects go back to each stream's owner as findings. They fix
   and push their own branches, and you re-check in a fresh integration check.
 - Each PR merges on its own, in the recorded order. Before merging a stacked
-  PR, retarget it to `main` once its base has merged
-  (`gh pr edit <n> --base main`); otherwise it merges into its base branch.
+  PR, retarget it to `development` once its base has merged
+  (`gh pr edit <n> --base development`); otherwise it merges into its base branch.
 - The integration work is complete when the combined check has passed at
   the heads that will merge. Each PR is merge-ready once its own review and
   Pre-merge validation pass.

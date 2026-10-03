@@ -42,21 +42,21 @@ Use predictable names from the Jira card: branch `<type>/<CARD>-<slug>`
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch origin
 git -C "$PRIMARY" worktree add --no-track -b feature/NFCT-18-firestore-rules \
-  "$PRIMARY-NFCT-18" origin/main
+  "$PRIMARY-NFCT-18" origin/development
 ```
 
-Base on current `origin/main` unless the card depends on an unmerged branch;
+Base on current `origin/development` unless the card depends on an unmerged branch;
 then base on that branch's `origin/` ref and say so in the PR. Never base on
 whatever another feature worktree happens to have checked out. `--no-track`
-stops the branch tracking `origin/main`; set its own upstream on first push
+stops the branch tracking `origin/development`; set its own upstream on first push
 with `git push -u origin HEAD`. A new worktree has no `node_modules`; run
 `npm ci --legacy-peer-deps` in it before running checks.
 
 Check the base before the first commit:
 
 ```bash
-git log --oneline origin/main..HEAD   # only this task's commits
-git merge-base --is-ancestor origin/main HEAD && echo "based on origin/main"
+git log --oneline origin/development..HEAD   # only this task's commits
+git merge-base --is-ancestor origin/development HEAD && echo "based on origin/development"
 ```
 
 Only the branch's owner rebases it, and not once integration of it has
@@ -94,7 +94,7 @@ permanent tests in the findings), then
 ## Integration worktrees
 
 An integrator ([nfct-integration](../nfct-integration/SKILL.md)) works in its
-own worktree from `origin/main`, never in a stream's worktree or the primary
+own worktree from `origin/development`, never in a stream's worktree or the primary
 checkout. Either kind has no `node_modules`; install dependencies before
 running the suite.
 
@@ -106,7 +106,7 @@ running the suite.
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch origin
 git -C "$PRIMARY" worktree add --no-track -b integration/NFCT-1-mental-math \
-  "$PRIMARY-integration-NFCT-1-mental-math" origin/main
+  "$PRIMARY-integration-NFCT-1-mental-math" origin/development
 git -C "$PRIMARY-integration-NFCT-1-mental-math" merge --no-ff --no-edit \
   origin/feature/NFCT-17-mental-math-definition
 ```
@@ -121,7 +121,7 @@ worktree that merges the streams only to test that they work together:
 ```bash
 PRIMARY=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 git -C "$PRIMARY" fetch origin
-git -C "$PRIMARY" worktree add --detach "$PRIMARY-integration-check-<slug>" origin/main
+git -C "$PRIMARY" worktree add --detach "$PRIMARY-integration-check-<slug>" origin/development
 git -C "$PRIMARY-integration-check-<slug>" merge --no-ff --no-edit origin/feature/NFCT-18-firestore-rules
 ```
 
@@ -137,7 +137,7 @@ Before opening, updating or handing off a PR:
   reports; keep scratch work outside the repository;
 - keep permanent tests and documentation that the card needs;
 - confirm the diff contains only intended files (`git diff --stat
-  origin/main...HEAD`, `git status --short`);
+  origin/development...HEAD`, `git status --short`);
 - leave the working tree clean, with everything committed and pushed.
 
 ## Lifecycle
@@ -224,10 +224,10 @@ wt="$PRIMARY-NFCT-18"
   [ -z "$(git -C "$wt" status --porcelain)" ] || stop "$wt has uncommitted changes"
   [ "$(gh pr list --head "$b" --state open --json number -q length)" = 0 ] || stop "$b has an open PR (or gh failed)"
   sha=$(git -C "$PRIMARY" rev-parse "$b")
-  if ! git -C "$PRIMARY" merge-base --is-ancestor "$sha" origin/main; then
+  if ! git -C "$PRIMARY" merge-base --is-ancestor "$sha" origin/development; then
     # Squash merge: accept only if a merged PR's head is exactly this commit.
     [ "$(gh pr list --head "$b" --state merged --json headRefOid -q '.[0].headRefOid // ""')" = "$sha" ] \
-      || stop "$b is not merged into origin/main"
+      || stop "$b is not merged into origin/development"
   fi
   git -C "$PRIMARY" worktree remove "$wt"
   git -C "$PRIMARY" branch -D "$b"   # merged state verified above

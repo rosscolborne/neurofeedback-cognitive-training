@@ -54,8 +54,7 @@ higher-value work.
 - Give each independent writable task or PR its own branch and git worktree,
   based on current `origin/development` unless it deliberately stacks on
   another PR. Pull requests target `development`; only `development` is
-  promoted to `main`. Where a skill still says `origin/main`, use
-  `origin/development`.
+  promoted to `main`.
   Never modify another task's worktree or uncommitted work.
 - An open PR keeps its worktree. It becomes eligible for cleanup only once the
   PR is merged or abandoned **and** the worktree is clean and fully pushed.

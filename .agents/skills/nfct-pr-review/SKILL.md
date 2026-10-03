@@ -17,7 +17,7 @@ and return your findings to whoever asked for the review
 2. Read the parts of the canonical Stage 1 design, ADRs, [AGENTS.md](../../../AGENTS.md)
    and existing code contracts that the card touches. Know what the change is
    supposed to guarantee before judging how it does it.
-3. Identify the intended base (normally `origin/main`, or the PR it stacks on)
+3. Identify the intended base (normally `origin/development`, or the PR it stacks on)
    and fetch it. Review the complete diff against that base
    (`git diff <base>...<head>`), not only the latest commit.
 
@@ -29,7 +29,7 @@ branches. Never review one you integrated.
 - Read its integration report first: the streams and the SHAs merged, the
   conflict resolutions and the semantic decisions.
 - Inspect the integrator's own work. `git log --first-parent --oneline
-  origin/main..<head>` lists the stream merges and integration commits, and
+  origin/development..<head>` lists the stream merges and integration commits, and
   `git show --remerge-diff <merge>` shows how a merge resolved its conflicts.
 - Streams already reviewed at the SHAs merged need not be re-read line by
   line. Concentrate on the resolutions, the integration commits and the
