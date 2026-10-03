@@ -27,7 +27,12 @@ describe('bounded patient account deletion', () => {
       accountDeletionStartedAt: serverTimestamp(), clinicianId: null, linkedClinicianCode: null,
       clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(), name: 'Changed on the way out',
     }));
-    // A profile with no stored relationship starts deletion the same way the app writes it.
+    // A profile linked only through the legacy code, and one with no stored relationship,
+    // start deletion the same way the app writes it.
+    await assertSucceeds(updateDoc(doc(await as(ids.legacyPatient), `clients/${ids.legacyPatient}`), {
+      accountDeletionStartedAt: serverTimestamp(), clinicianId: null, linkedClinicianCode: null,
+      clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
+    }));
     await assertSucceeds(updateDoc(doc(await as(ids.unlinked), `clients/${ids.unlinked}`), {
       accountDeletionStartedAt: serverTimestamp(), clinicianId: null, linkedClinicianCode: null,
       clinicId: null, acceptedInvitationId: null, updatedAt: serverTimestamp(),
