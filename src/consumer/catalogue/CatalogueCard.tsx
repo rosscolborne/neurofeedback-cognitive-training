@@ -2,10 +2,9 @@ import React from 'react';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { catalogueCardButtonId } from './cardIds';
 
-// One entry on the Train tab: a game, or the optional headset experience. The
-// name is a real button stretched over the card, so the whole card is one
-// large target while keyboard and screen-reader users reach a single named
-// control. The rest of the card is its description.
+// One game on the Train tab. The name is a real button stretched over the
+// card, so the whole card is one large target while keyboard and screen-reader
+// users reach a single named control. The rest of the card is its description.
 
 export interface CatalogueCardFact {
   readonly icon: LucideIcon;

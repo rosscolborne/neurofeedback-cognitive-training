@@ -20,9 +20,8 @@ it was forked from. See [docs/nfct/FORK.md](docs/nfct/FORK.md).
   shared `brainflow-service` repository. Do not modify, refactor or extend it;
   backend changes go to `brainflow-service`.
 - **The clinical data model is transitional.** Do not add fields to
-  `clients/{uid}` / `ClientProfile` or `sessions/{id}` / `SessionRecord`, and do
-  not extend `Protocol`, `Experience`, `allowedExperiences` or the self-directed
-  plan to represent games. The consumer model (user profile, game session,
+  `clients/{uid}` / `ClientProfile`, and do not bring back the retired
+  `sessions/{id}` records, protocols or experiences to represent games. The consumer model (user profile, game session,
   separate EEG recording) is built new in `shared/` (`@nfct/shared`); see
   [ADR-001](docs/nfct/adr-001-consumer-domain-model.md). `shared/` imports
   only `zod` and its own modules.
@@ -486,7 +485,7 @@ cards.
   such as `page.waitForTimeout`.
 - Make sure CI runs every new spec. `playwright.protocol.config.ts` does not
   match every `*.local.spec.ts`: its `testMatch` lists fixed suite suffixes
-  (for example `persistence` in `session-history.persistence.local.spec.ts`).
+  (for example `persistence` in `offline-cache.persistence.local.spec.ts`).
   Give a new emulator spec a suffix `testMatch` already matches, or extend
   `testMatch` in the same PR. Then confirm the file is listed:
 

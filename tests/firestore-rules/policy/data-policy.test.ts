@@ -11,7 +11,7 @@ afterAll(closeEnvironment);
 describe('REVIEW: patient-writable clinical fields', () => {
     // POLICY. The patient owns clients/{uid} and may change every non-relationship field,
     // including care-team fields and the legacy embedded QEEG array stored under the
-    // retired clinician product, and the aggregates that createSession writes.
+    // retired clinician product.
     it('POLICY: a patient can rewrite their stored protocol, weekly target, condition and legacy QEEG', async () => {
         await assertSucceeds(updateDoc(doc(await as(ids.patientA), `clients/${ids.patientA}`), {
             assignedProtocol: 'alpha-enhancement', prescribedSessionsPerWeek: 0, condition: 'none', notes: 'patient edited',
@@ -19,10 +19,10 @@ describe('REVIEW: patient-writable clinical fields', () => {
         }));
     });
 
-    // FINE (inherent to client-recorded sessions). A patient can create a session for
-    // themselves with any measurements and any clinicianId label.
-    it('FINE/INHERENT: a patient can create a session with arbitrary measurements and clinicianId label', async () => {
-        await assertSucceeds(setDoc(doc(await as(ids.patientA), 'sessions/self-reported'), {
+    // RESOLVED. Neurofeedback session records are retired: a patient can no longer
+    // create one, with or without arbitrary measurements and a clinicianId label.
+    it('RESOLVED: a patient cannot create a session record', async () => {
+        await assertFails(setDoc(doc(await as(ids.patientA), 'sessions/self-reported'), {
             patientId: ids.patientA, clinicId: clinicA, clinicianId: ids.clinicianB, timeInZonePercent: 100, isDemo: false,
         }));
     });
@@ -30,7 +30,8 @@ describe('REVIEW: patient-writable clinical fields', () => {
 
 describe('REVIEW: record access after the clinician product was retired', () => {
     // POLICY. No clinician reads a patient's records any more, whatever relationship
-    // fields the patient's profile still stores.
+    // fields the patient's profile still stores. Session records are retired, so not
+    // even their patient reads them.
     it('POLICY: neither a current-link nor a former clinician, nor a colleague, reads sessions or QEEG', async () => {
         await seedDocuments({
             'sessions/old-under-b': { id: 'old-under-b', patientId: ids.unlinked, clinicId: clinicB, clinicianId: ids.clinicianB, clinicianNotes: 'private note by B' },
@@ -44,7 +45,7 @@ describe('REVIEW: record access after the clinician product was retired', () => 
             await assertFails(getDoc(doc(database, 'sessions/session-a')));
             await assertFails(getDoc(doc(database, `clients/${ids.patientA}/brainMaps/bm-a`)));
         }
-        await assertSucceeds(getDoc(doc(await as(ids.unlinked), 'sessions/old-under-b')));
+        await assertFails(getDoc(doc(await as(ids.unlinked), 'sessions/old-under-b')));
     });
 });
 

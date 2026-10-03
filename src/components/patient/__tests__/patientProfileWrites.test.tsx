@@ -5,10 +5,6 @@ import type { ClientProfile } from '../../../types';
 
 const state = vi.hoisted(() => ({
   muted: false,
-  getSessions: vi.fn(),
-  saveSession: vi.fn(),
-  getClient: vi.fn(),
-  exportCsv: vi.fn(),
   auth: { currentUser: null as null | { uid: string; email: string; delete: () => Promise<void> } },
   reauthenticate: vi.fn(),
   prepareDeletion: vi.fn(),
@@ -25,19 +21,15 @@ vi.mock('firebase/auth', () => ({ signOut: vi.fn(), reauthenticateWithCredential
   EmailAuthProvider: { credential: (email: string, password: string) => ({ email, password }) } }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions: state.getSessions, saveSession: state.saveSession, getClient: state.getClient, preparePatientAccountDeletion: state.prepareDeletion } }));
-vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
+vi.mock('../../../services/storageEngine', () => ({ storageEngine: { preparePatientAccountDeletion: state.prepareDeletion } }));
 vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
-vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
-vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 
 import { PatientShell } from '../PatientShell';
 
 const client: ClientProfile = {
-  id: 'patient-1', name: 'Patient One', email: 'patient@example.com', status: 'active',
-  allowedExperiences: ['neuro-gambit'], brainMaps: [], badges: [], completedSessionsCount: 0, currentStreak: 0,
+  id: 'patient-1', name: 'Patient One', email: 'patient@example.com', status: 'active', brainMaps: [],
 };
 
 // Firebase Auth and Firestore throw an Error carrying a string code.
@@ -80,7 +72,6 @@ describe('PatientShell persisted profile writes', () => {
     vi.clearAllMocks();
     state.reauthenticate.mockReset();
     state.prepareDeletion.mockReset();
-    state.getSessions.mockResolvedValue([]);
     state.auth.currentUser = null;
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
@@ -341,7 +332,7 @@ describe('PatientShell persisted profile writes', () => {
     });
 
     expect(renderer.root.findByProps({ role: 'alert' }).children.join('')).toContain('avatar save offline');
-    const refreshedClient = { ...client, completedSessionsCount: 3, badges: ['first-light'] };
+    const refreshedClient = { ...client, name: 'Patient Renamed' };
     await act(async () => {
       renderer.update(<PatientShell client={refreshedClient} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} />);
     });
@@ -350,8 +341,7 @@ describe('PatientShell persisted profile writes', () => {
     expect(onUpdateClient).toHaveBeenCalledTimes(2);
     expect(onUpdateClient.mock.calls[1][0]).toMatchObject({
       avatarUrl: 'data:image/png;base64,abc',
-      completedSessionsCount: 3,
-      badges: ['first-light'],
+      name: 'Patient Renamed',
     });
 
     renderer.unmount();
@@ -359,86 +349,13 @@ describe('PatientShell persisted profile writes', () => {
     Object.defineProperty(globalThis, 'FileReader', { configurable: true, value: OriginalReader });
   });
 
-  it('refreshes local profile state after the session transaction without resaving it', async () => {
-    const assigned = { ...client, assignedProtocol: 'theta-beta-ratio' as const, allowedExperiences: ['neuro-gambit' as const] };
-    const refreshed = { ...assigned, completedSessionsCount: 1 };
-    state.saveSession.mockResolvedValueOnce(undefined);
-    state.getClient.mockResolvedValueOnce(refreshed);
-    const onUpdateClient = vi.fn();
-    const onClientPersistedElsewhere = vi.fn();
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(<PatientShell client={assigned} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} />);
-    });
-    act(() => renderer.root.find((node) => (node.type as unknown) === 'home-screen').props.onStartSession('neuro-gambit'));
-    const session = { id: 'session-1', patientId: client.id };
-    await act(async () => {
-      await renderer.root.find((node) => (node.type as unknown) === 'session-runner').props.onComplete(session);
-    });
-
-    expect(state.saveSession).toHaveBeenCalledWith(session);
-    expect(state.getClient).toHaveBeenCalledWith(client.id);
-    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(refreshed);
-    expect(onUpdateClient).not.toHaveBeenCalled();
-    renderer.unmount();
-  });
-
-  it('exports every stored Profile row through the shared exporter, including demos and invalid timestamps', async () => {
-    const allRows = [
-      { id: 'demo', isDemo: true, timestamp: 0 },
-      { id: 'legacy', timestamp: Date.parse('2026-09-27T12:00:00Z') },
-    ];
-    state.getSessions.mockResolvedValueOnce(allRows);
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
-    });
-    act(() => renderer.root.findAllByType('button').find((button) =>
-      button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
-    )!.props.onClick());
-    await act(async () => {
-      await renderer.root.findAllByType('button').find((button) => button.children.some((child) => child === 'Export Data (CSV)'))!.props.onClick();
-    });
-    expect(state.getSessions).toHaveBeenCalledWith(client.id);
-    expect(state.exportCsv).toHaveBeenCalledTimes(1);
-    expect(state.exportCsv.mock.calls[0][0]).toBe(allRows);
-    renderer.unmount();
-  });
-
-  it('keeps Profile read-error and empty-result gates before export delivery', async () => {
-    const originalAlert = globalThis.alert;
-    const alert = vi.fn();
-    Object.defineProperty(globalThis, 'alert', { configurable: true, value: alert });
-    state.getSessions.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]);
-    let renderer!: ReactTestRenderer;
-    try {
-      await act(async () => {
-        renderer = create(<PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />);
-      });
-      act(() => renderer.root.findAllByType('button').find((button) =>
-        button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
-      )!.props.onClick());
-      const exportButton = () => renderer.root.findAllByType('button').find((button) => button.children.some((child) => child === 'Export Data (CSV)'))!;
-      await act(async () => { await exportButton().props.onClick(); });
-      await act(async () => { await exportButton().props.onClick(); });
-      expect(alert.mock.calls.map(([message]) => message)).toEqual([
-        'Session data is unavailable right now. Try again after the connection recovers.',
-        'No session data to export.',
-      ]);
-      expect(state.exportCsv).not.toHaveBeenCalled();
-      renderer.unmount();
-    } finally {
-      Object.defineProperty(globalThis, 'alert', { configurable: true, value: originalAlert });
-    }
-  });
-
-  it('offers headset setup without a profile write, and shows no calibration or protocol, even for a legacy saved baseline', async () => {
+  it('offers headset setup without a profile write, and shows no calibration, protocol or session data, even for a legacy saved profile', async () => {
     const onSetUpHeadset = vi.fn();
     const onUpdateClient = vi.fn();
     const legacyBaseline = { alphaPeakHz: 9.8, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-26T12:00:00Z' };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<PatientShell client={{ ...client, assignedProtocol: 'theta-beta-ratio', individualBaselineModel: legacyBaseline } as ClientProfile} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onSetUpHeadset={onSetUpHeadset} />);
+      renderer = create(<PatientShell client={{ ...client, assignedProtocol: 'theta-beta-ratio', completedSessionsCount: 4, individualBaselineModel: legacyBaseline } as ClientProfile} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={vi.fn()} onSetUpHeadset={onSetUpHeadset} />);
     });
     act(() => renderer.root.findAllByType('button').find((button) =>
       button.findAllByType('span').some((span) => span.children.join('') === 'Profile')
@@ -447,7 +364,7 @@ describe('PatientShell persisted profile writes', () => {
       typeof node === 'string' ? node : node.children.map(textContent).join('');
     const main = textContent(renderer.root.findByType('main'));
     expect(renderer.root.findAllByProps({ 'aria-label': 'Neural Imprint' })).toHaveLength(0);
-    expect(main).not.toMatch(/protocol|calibrat|imprint|9\.8 Hz|training setup/i);
+    expect(main).not.toMatch(/protocol|calibrat|imprint|9\.8 Hz|training setup|sessions total|Export Data/i);
     const setUp = renderer.root.findAllByType('button').find((button) => textContent(button).includes('Set Up Headset'))!;
     act(() => setUp.props.onClick());
     expect(onSetUpHeadset).toHaveBeenCalledTimes(1);

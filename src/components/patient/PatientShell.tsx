@@ -1,23 +1,18 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth, firestoreCache } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSignOut } from '../account/useSignOut';
-import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
+import { ClientProfile } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
-import { SessionRunner } from './SessionRunner';
-import { PostSessionSummary } from './PostSessionSummary';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, ChevronRight, Headphones } from 'lucide-react';
-import { FactGrid } from '../ui/FactGrid';
-import { canStartAssignedExperience } from './experienceCatalogue';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, VolumeX, Volume2, ChevronRight, Headphones } from 'lucide-react';
 import { TrainTab } from './TrainTab';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
-import { exportPatientSessionCsv } from './patientSessionCsv';
 import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
 import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
@@ -55,21 +50,11 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   // only for the Progress visit it opened: leaving Progress drops it (see below, after activeTab).
   const [progressFocus, setProgressFocus] = useState<'achievements' | null>(null);
   const [progressFocusTab, setProgressFocusTab] = useState<string>('home');
-  const [activeSessionExp, setActiveSessionExp] = useState<ExperienceType | null>(null);
   // The open catalogue game (NFCT-12), and the view it opens on: its start
   // screen, or its progress (NFCT-22's Progress-tab card). Closing it returns
   // focus to the control that opened it (NFCT-52).
   const [openGame, setOpenGame, closeGame] = useOpenGame(currentTabButton);
-  const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
-  const currentClientId = useRef(client.id);
-  const currentAllowedExperiences = useRef(client.allowedExperiences);
-  useLayoutEffect(() => { currentAllowedExperiences.current = client.allowedExperiences; }, [client.allowedExperiences]);
-  useEffect(() => {
-    currentClientId.current = client.id;
-  }, [client.id]);
-  const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
-  const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -181,55 +166,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     </form>
   ));
 
-  const handleStartSession = (exp: ExperienceType) => {
-    if (currentClientId.current !== client.id || !canStartAssignedExperience(currentAllowedExperiences.current, exp)) return;
-    setSessionOwnerId(client.id);
-    setActiveSessionExp(exp);
-  };
-
-  const handleSessionComplete = async (session: SessionRecord) => {
-    await storageEngine.saveSession(session);
-    const persistedClient = await storageEngine.getClient(client.id);
-    if (!persistedClient) throw new Error('The saved session could not be reloaded. Try again.');
-    onClientPersistedElsewhere(persistedClient);
-    setActiveSessionExp(null);
-    setCompletedSession(session);
-  };
-
   const handleToggleMute = () => {
     const newState = !isMuted;
     audioEngine.setMuted(newState);
     setIsMuted(newState);
   };
 
-  const exportCSV = async () => {
-    let allSessions: SessionRecord[];
-    try {
-      allSessions = await storageEngine.getSessions(client.id);
-    } catch {
-      alert('Session data is unavailable right now. Try again after the connection recovers.');
-      return;
-    }
-    if (allSessions.length === 0) {
-      alert('No session data to export.');
-      return;
-    }
-    exportPatientSessionCsv(allSessions, setExportStatus);
-  };
-
   if (openGame && openGame.ownerId === client.id) {
     return <GameScreen gameId={openGame.gameId} initialView={openGame.initialView} eegProvider={demoModeEegProvider} onExit={closeGame} />;
-  }
-
-  if (activeSessionExp && sessionOwnerId === client.id) {
-    return (
-      <SessionRunner
-        client={client}
-        selectedExperience={activeSessionExp}
-        onComplete={handleSessionComplete}
-        onCancel={() => setActiveSessionExp(null)}
-      />
-    );
   }
 
   if (client.accountDeletionStartedAt) {
@@ -241,18 +185,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
       <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={signOutFlow.busy}>{signOutFlow.busy ? 'Signing out…' : 'Log Out'}</button>
       {signOutFlow.dialog}
     </div>;
-  }
-
-  if (completedSession && completedSession.patientId === client.id) {
-    return (
-      <PostSessionSummary
-        session={completedSession}
-        onViewProgress={() => {
-          setCompletedSession(null);
-          setActiveTab('progress');
-        }}
-      />
-    );
   }
 
   return (
@@ -299,7 +231,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         {activeTab === 'home' && (
           <HomeScreen
             client={client}
-            onStartSession={handleStartSession}
             gamesSection={(
               <HomeOverview
                 playerId={client.id}
@@ -313,15 +244,12 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
         {activeTab === 'sessions' && (
           <TrainTab
-            allowedExperiences={client.allowedExperiences}
             onOpenGame={(gameId) => setOpenGame({ gameId, ownerId: client.id, returnFocusTo: gameCardButtonId(gameId) })}
-            onStartExperience={handleStartSession}
           />
         )}
 
         {activeTab === 'progress' && (
           <ProgressHistory
-            client={client}
             gamesSection={(
               <ProgressOverview
                 playerId={client.id}
@@ -445,13 +373,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   >Retry</button>
                 </div>
               )}
-
-              <FactGrid
-                style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}
-                facts={[
-                  { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
-                ]}
-              />
             </div>
             <div>
               <h2 className="section-label">Training</h2>
@@ -473,10 +394,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 <button type="button" className="list-row" onClick={handleToggleMute}>
                   {isMuted ? <VolumeX size={18} className="list-row-icon" aria-hidden="true" /> : <Volume2 size={18} className="list-row-icon" aria-hidden="true" />}
                   {isMuted ? 'Unmute App Audio' : 'Mute App Audio'}
-                </button>
-                <button type="button" className="list-row" onClick={exportCSV}>
-                  <FileText size={18} className="list-row-icon" aria-hidden="true" />
-                  {exportStatus === 'done' ? 'Exported ✓' : 'Export Data (CSV)'}
                 </button>
                 <button type="button" className="list-row" onClick={handleLogout} disabled={signOutFlow.busy}>
                   <LogOut size={18} className="list-row-icon" aria-hidden="true" />

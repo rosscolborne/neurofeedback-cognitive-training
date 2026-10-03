@@ -82,7 +82,7 @@ export function createDemoModeEegProvider(engine: DemoEngine = defaultEngine, no
         stopped = true;
         unsubscribe();
         engine.stop();
-        // Demo Mode belongs to this capture only, as in SessionRunner.
+        // Demo Mode belongs to this capture only.
         engine.isDemoMode = false;
         return true;
       };

@@ -1,46 +1,10 @@
-import type { Page } from '@playwright/test';
-import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import { readDeletionRecords, seedPatient, seedReviewSession } from './helpers/localEmulator';
-
-// Every protocol template now recommends the one remaining experience, NeuroGambit.
-const allExperienceNames = ['NeuroGambit'];
-const thetaIds = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
-const thetaNames = ['NeuroGambit'];
-
-async function expectPatientCatalogue(page: Page, names: string[]) {
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
-  for (const name of allExperienceNames) {
-    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(names.includes(name) ? 1 : 0);
-  }
-  await page.getByRole('button', { name: 'Train', exact: true }).click();
-  const cards = page.locator('main .card-patient');
-  await expect(cards).toHaveCount(names.length);
-  for (const name of names) await expect(cards.getByText(name, { exact: true })).toHaveCount(1);
-}
-
-async function readCurrentPatientAssignment(page: Page) {
-  return page.evaluate(async () => {
-    const { auth } = await import('/src/services/firebase.ts');
-    const { storageEngine } = await import('/src/services/storageEngine.ts');
-    if (!auth.currentUser) throw new Error('Expected a signed-in patient');
-    const profile = await storageEngine.getClient(auth.currentUser.uid);
-    if (!profile) throw new Error('Expected a persisted patient profile');
-    return {
-      assignedProtocol: profile.assignedProtocol,
-      allowedExperiences: profile.allowedExperiences,
-      customProtocolConfig: profile.customProtocolConfig,
-      completedSessionsCount: profile.completedSessionsCount,
-      tidalGardenState: profile.tidalGardenState,
-    };
-  });
-}
+import { readDeletionRecords, seedPatient } from './helpers/localEmulator';
 
 test('delete a patient linked under the retired clinician product, re-register the same email, and the new account cannot read the old one', async ({ browser, permissionErrorGuard }) => {
   // A profile linked under the retired clinician product still stores relationship fields; deletion clears them.
   const fixture = await seedPatient({ clinicianId: 'retired-clinician', clinicId: 'retired-clinic' });
-  const retainedSessionId = await seedReviewSession(fixture, 'Retained history');
   const oldContext = await browser.newContext();
   const newContext = await browser.newContext();
   try {
@@ -63,9 +27,6 @@ test('delete a patient linked under the retired clinician product, re-register t
     await arriveAtPatientDashboard(patient);
     const newUid = await authenticatedUserId(patient);
     expect(newUid).not.toBe(fixture.patient.uid);
-    // The new account starts from the default training setup.
-    expect(await readCurrentPatientAssignment(patient)).toMatchObject({ assignedProtocol: 'theta-beta-ratio', allowedExperiences: thetaIds });
-    await expectPatientCatalogue(patient, thetaNames);
 
     const stored = await readDeletionRecords(fixture.patient.uid, newUid);
     expect(stored.oldAuthExists).toBe(false);
@@ -75,11 +36,11 @@ test('delete a patient linked under the retired clinician product, re-register t
     expect(stored.newClient?.clinicianId).toBeUndefined();
     expect(stored.newClient?.clinicId).toBeUndefined();
     permissionErrorGuard.expectDenialsIn(newContext);
-    const oldReads = await patient.evaluate(async ({ oldUid, sessionId }) => {
-      const { probeDeletedPatientHistory } = await import('/e2e/helpers/firestoreProbe.ts');
-      return probeDeletedPatientHistory(oldUid, sessionId);
-    }, { oldUid: fixture.patient.uid, sessionId: retainedSessionId });
-    expect(oldReads).toEqual(['permission-denied', 'permission-denied']);
+    const oldRead = await patient.evaluate(async ({ oldUid }) => {
+      const { probeDeletedPatientProfile } = await import('/e2e/helpers/firestoreProbe.ts');
+      return probeDeletedPatientProfile(oldUid);
+    }, { oldUid: fixture.patient.uid });
+    expect(oldRead).toBe('permission-denied');
   } finally {
     await Promise.allSettled([oldContext.close(), newContext.close()]);
   }

@@ -1,56 +1,15 @@
-import {
-  ClientProfile,
-  MilestoneBadge,
-  SessionRecord,
-  SessionCreateResult,
-  SessionNotesPatch,
-} from '../types';
-import { getClinicalProtocolTemplate } from './clinicalProtocolTemplates';
-import { DEFAULT_ALLOWED_EXPERIENCES } from './experienceIds';
-import { DEFAULT_PROTOCOL } from './protocols';
+import { ClientProfile } from '../types';
 import { auth, db } from './firebase';
 import {
-  collection,
-  deleteField,
   doc,
   getDoc,
-  getDocs,
-  query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
 } from 'firebase/firestore';
-import {
-  applySessionCompletionToClient,
-  readClientProfile,
-  readSessionRecord,
-  removeUndefined,
-} from './dataMappers';
-
-export const INITIAL_BADGES: MilestoneBadge[] = [
-  {
-    id: 'first-light',
-    title: 'First Light',
-    description: 'Completed your very first neurofeedback training session.',
-    category: 'consistency',
-    iconName: 'Award',
-    unlockedAt: undefined,
-  },
-  {
-    id: 'steady-state',
-    title: 'Steady State',
-    description: 'Maintained a 7-day training consistency streak.',
-    category: 'consistency',
-    iconName: 'Waves',
-    unlockedAt: undefined,
-  },
-];
+import { readClientProfile, removeUndefined } from './dataMappers';
 
 export const createBlankProfile = (uid: string, email: string, displayName?: string | null): ClientProfile => {
-  const defaultTemplate = getClinicalProtocolTemplate(DEFAULT_PROTOCOL);
-  if (!defaultTemplate) throw new Error('The default clinical protocol is unavailable');
   const name = displayName?.trim() || '';
   const cleanName = name
     .replace(/[._]/g, ' ')
@@ -61,13 +20,7 @@ export const createBlankProfile = (uid: string, email: string, displayName?: str
     name: cleanName,
     email: email,
     status: 'active',
-    assignedProtocol: DEFAULT_PROTOCOL,
-    allowedExperiences: [...defaultTemplate.recommendedExperiences],
-    completedSessionsCount: 0,
-    currentStreak: 0,
     brainMaps: [],
-    badges: [],
-    tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' },
     isDemo: false,
   };
 };
@@ -123,19 +76,7 @@ class StorageEngine {
   public async saveClient(client: ClientProfile): Promise<void> {
     if (!auth.currentUser) throw new Error('Sign in to save a patient record');
 
-    const payload = removeUndefined(client) as unknown as Record<string, unknown>;
-    // saveClient can also create via setDoc(..., { merge: true }). Never create
-    // a current profile without an explicit experience assignment field.
-    payload.allowedExperiences = Array.isArray(client.allowedExperiences)
-      ? client.allowedExperiences : [...DEFAULT_ALLOWED_EXPERIENCES];
-    for (const field of ['condition', 'assignedProtocol', 'prescribedSessionsPerWeek', 'customProtocolConfig'] as const) {
-      if (client[field] === undefined) payload[field] = deleteField();
-    }
-    // A merged map keeps omitted nested keys. Clear a previous ratio rule
-    // when this assignment no longer includes one.
-    if (client.customProtocolConfig && !client.customProtocolConfig.ratioReward) {
-      (payload.customProtocolConfig as Record<string, unknown>).ratioReward = deleteField();
-    }
+    const payload = removeUndefined(client);
     await setDoc(doc(db, 'clients', client.id), payload, { merge: true });
   }
 
@@ -167,105 +108,6 @@ class StorageEngine {
     }
 
     return null;
-  }
-
-  /** The signed-in patient's own sessions, newest first. */
-  public async getSessions(patientId: string): Promise<SessionRecord[]> {
-    if (!auth.currentUser || auth.currentUser.uid !== patientId) return [];
-    try {
-      const snapshot = await getDocs(query(collection(db, 'sessions'), where('patientId', '==', patientId)));
-      return snapshot.docs
-        .map((entry) => readSessionRecord(entry.data(), entry.id))
-        .sort((a, b) => b.timestamp - a.timestamp);
-    } catch (err) {
-      console.warn('Failed to fetch sessions from Firestore:', err);
-      throw err;
-    }
-  }
-
-  public async createSession(session: SessionRecord): Promise<SessionCreateResult> {
-    const normalizedSession = readSessionRecord(
-      { ...session, schemaVersion: session.schemaVersion ?? 2 },
-      session.id
-    );
-    if (!auth.currentUser) throw new Error('Sign in to save a training session');
-    if (auth.currentUser.uid !== session.patientId) throw new Error('Not authorized to create a session for this patient');
-
-    const sessionRef = doc(db, 'sessions', session.id);
-    const clientRef = doc(db, 'clients', session.patientId);
-    return runTransaction(db, async (transaction) => {
-      const currentClient = await transaction.get(clientRef);
-      const timestamp = serverTimestamp();
-
-      // A brand-new session cannot be read under the patient-scoped Firestore
-      // rules because it has no patientId to authorize yet. Keep a bounded
-      // ledger on the already-authorized client profile instead, so retries do
-      // not apply its aggregate effects twice.
-      if (
-        currentClient.exists() &&
-        readClientProfile(currentClient.data(), currentClient.id)
-          .recentCompletedSessionIds?.includes(normalizedSession.id)
-      ) {
-        return { created: false, session: normalizedSession };
-      }
-
-      transaction.set(
-        sessionRef,
-        removeUndefined({
-          ...normalizedSession,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          completedAt: normalizedSession.completedAt ?? timestamp,
-        })
-      );
-
-      if (currentClient.exists()) {
-        const nextClient = applySessionCompletionToClient(
-          readClientProfile(currentClient.data(), currentClient.id),
-          normalizedSession
-        );
-        transaction.set(
-          clientRef,
-          removeUndefined({ ...nextClient, updatedAt: timestamp }),
-          { merge: true }
-        );
-      }
-
-      return { created: true, session: normalizedSession };
-    });
-  }
-
-  public async patchSessionNotes(sessionId: string, patch: SessionNotesPatch): Promise<void> {
-    if (!auth.currentUser) throw new Error('Sign in to update session notes');
-
-    const sessionRef = doc(db, 'sessions', sessionId);
-    await runTransaction(db, async (transaction) => {
-      const snapshot = await transaction.get(sessionRef);
-      if (!snapshot.exists()) throw new Error(`Session ${sessionId} does not exist`);
-
-      const session = readSessionRecord(snapshot.data(), snapshot.id);
-      if (session.patientId !== auth.currentUser?.uid) throw new Error('Not authorized to update this session');
-
-      transaction.set(
-        sessionRef,
-        { ...removeUndefined({ patientNotes: patch.patientNotes, moodRating: patch.moodRating }), updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-    });
-  }
-
-  /**
-   * Compatibility wrapper for current UI callers. A first call creates the
-   * immutable measurement and aggregates it once; repeats patch only notes.
-   */
-  public async saveSession(session: SessionRecord): Promise<void> {
-    const result = await this.createSession(session);
-    if (!result.created) {
-      await this.patchSessionNotes(session.id, {
-        patientNotes: session.patientNotes,
-        moodRating: session.moodRating,
-      });
-    }
   }
 }
 

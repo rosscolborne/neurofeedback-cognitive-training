@@ -1,28 +1,15 @@
-import { randomUUID } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { seedPatient, seedPersistedSession } from './helpers/localEmulator';
+import { seedPatient } from './helpers/localEmulator';
 import type { AuthorizedRead } from './helpers/authorizedFirestore';
-import {
-  expectDemoSessionPersisted,
-  expectRolePersisted,
-  type PersistenceRun,
-} from './helpers/persistenceAssertions';
+import { expectRolePersisted } from './helpers/persistenceAssertions';
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 test('persistence assertions read as the patient; outsider reads are denied', async ({ browser, permissionErrorGuard }) => {
   const owner = await seedPatient();
   const unrelated = await seedPatient();
-  const marker = randomUUID();
-  const runStartMs = Date.now() - 1_000;
-  await seedPersistedSession(owner, marker);
   // This local run has no privileged cleanup; the emulators discard all data.
-  const run: PersistenceRun = {
-    runStartMs,
-    runMarker: marker,
-    scope: { patientId: owner.patient.uid },
-  };
   const patientContext = await browser.newContext();
   const outsiderContext = await browser.newContext();
   permissionErrorGuard.expectDenialsIn(outsiderContext);
@@ -34,7 +21,6 @@ test('persistence assertions read as the patient; outsider reads are denied', as
     await loginThroughUi(outsider, unrelated.patient);
     await arriveAtPatientDashboard(outsider);
 
-    expect(await expectDemoSessionPersisted(run, patient)).toBe(`session-${marker}`);
     await expectRolePersisted(owner.patient, 'patient', patient);
 
     const identityGuards = await patient.evaluate(async ({ patientId }) => {
@@ -59,8 +45,6 @@ test('persistence assertions read as the patient; outsider reads are denied', as
     const forbidden: AuthorizedRead[] = [
       { kind: 'document', path: `clients/${owner.patient.uid}` },
       { kind: 'document', path: `users/${owner.patient.uid}` },
-      { kind: 'document', path: `sessions/session-${marker}` },
-      { kind: 'collection', path: 'sessions', where: { field: 'patientId', equals: owner.patient.uid } },
     ];
     for (const read of forbidden) {
       const outcome = await outsider.evaluate(async ({ uid, read }) => {

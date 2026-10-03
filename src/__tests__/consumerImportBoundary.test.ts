@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 // reach the transitional clinical model, directly or through anything it
 // imports:
 // - no storageEngine and no clinical types (src/types: ClientProfile,
-//   SessionRecord, Protocol, Experience, PersistedTimestamp, ...);
+//   PersistedTimestamp, ...);
 // - no Firestore path naming the clinical `clients` or `sessions` collections,
 //   in consumer code or anything it loads;
 // - no collection-group query: every consumer query stays inside users/{uid}.

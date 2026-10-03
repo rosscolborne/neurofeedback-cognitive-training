@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { FieldValue } from 'firebase-admin/firestore';
 
 const projectId = 'demo-neurasticity-protocol-e2e';
 if (process.env.GCLOUD_PROJECT !== projectId ||
@@ -33,8 +32,7 @@ export async function seedPatient(extra: Record<string, unknown> = {}): Promise<
     adminDb.doc(`users/${patient.uid}`).set({ role: 'patient' }),
     adminDb.doc(`clients/${patient.uid}`).set({
       id: patient.uid, name, email: patient.email, status: 'active',
-      allowedExperiences: ['neuro-gambit'], completedSessionsCount: 0, currentStreak: 0,
-      brainMaps: [], badges: [], isDemo: false, ...extra,
+      brainMaps: [], isDemo: false, ...extra,
     }),
   ]);
   return { patient, name };
@@ -60,29 +58,6 @@ export async function seedConsumerAccount(): Promise<{ uid: string; email: strin
   return account;
 }
 
-export async function seedReviewSession(fixture: LocalPatientFixture, patientNotes: string, experience = 'neuro-gambit', timestamp = Date.now(),
-  extra: Record<string, unknown> = {}) {
-  const id = `review-${randomUUID().replaceAll('-', '')}`;
-  await adminDb.doc(`sessions/${id}`).set({
-    id, patientId: fixture.patient.uid, clinicId: 'self-guided',
-    timestamp, date: new Date(timestamp).toLocaleDateString(), schemaVersion: 2,
-    experience, protocol: 'theta-beta-ratio', durationSeconds: 600,
-    isDemo: false, patientNotes, moodRating: 3,
-    timeSeries: [{ t: 5, alpha: 8, inZone: true }], ...extra,
-  });
-  return id;
-}
-
-/** A saved Demo session and its completion ledger entry, for the rules-bound persistence test. */
-export async function seedPersistedSession(fixture: LocalPatientFixture, marker: string): Promise<void> {
-  const { patient } = fixture;
-  await Promise.all([
-    adminDb.doc(`users/${patient.uid}`).set({ role: 'patient', email: patient.email }),
-    adminDb.doc(`clients/${patient.uid}`).update({ recentCompletedSessionIds: [`session-${marker}`] }),
-    adminDb.doc(`sessions/session-${marker}`).set({ patientId: patient.uid, clinicId: 'self-guided', patientNotes: marker, isDemo: true }),
-  ]);
-}
-
 /** The deleted and re-registered accounts' profiles, and whether the deleted Auth account still exists. */
 export async function readDeletionRecords(oldUid: string, newUid: string) {
   const [oldClient, newClient, oldAuth] = await Promise.all([
@@ -90,29 +65,6 @@ export async function readDeletionRecords(oldUid: string, newUid: string) {
     adminAuth.getUser(oldUid).then(() => true, () => false),
   ]);
   return { oldClient: oldClient.data(), newClient: newClient.data(), oldAuthExists: oldAuth };
-}
-
-/** Patient-owned self-directed history: one saved session plus grown Garden and progress fields. */
-export async function seedSelfDirectedHistory(patientUid: string) {
-  const sessionId = `self-directed-${randomUUID().replaceAll('-', '')}`;
-  const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
-  const timestamp = Date.now() - 60_000;
-  await Promise.all([
-    adminDb.doc(`sessions/${sessionId}`).set({
-      id: sessionId, patientId: patientUid, clinicId: 'self-guided', schemaVersion: 2,
-      timestamp, date: new Date(timestamp).toLocaleDateString(),
-      experience: 'neuro-gambit', protocol: 'alpha-enhancement', durationSeconds: 600,
-      isDemo: false, patientNotes: 'Self-directed reflection', moodRating: 4,
-      timeSeries: [{ t: 5, alpha: 8, inZone: true }],
-    }),
-    adminDb.doc(`clients/${patientUid}`).update({ tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'] }),
-  ]);
-  return { sessionId, garden };
-}
-
-/** Recreate a legacy profile written before these fields existed. */
-export async function removePatientFields(patientUid: string, fields: string[]) {
-  await adminDb.doc(`clients/${patientUid}`).update(Object.fromEntries(fields.map((field) => [field, FieldValue.delete()])));
 }
 
 /** NFCT-21: the consumer game sessions the app wrote for a user, read back from the emulator. */

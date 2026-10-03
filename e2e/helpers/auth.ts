@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { consumerHome } from './journeys';
 
 export type AuthenticatedE2EIdentity = {
     uid: string;
@@ -27,7 +28,7 @@ export async function loginThroughUi(page: Page, credentials: Credentials): Prom
 /** Uses the normal UI only when a newly configured patient is shown headset setup. */
 export async function skipHeadsetSetupIfPresent(page: Page): Promise<void> {
   const skipToDashboard = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
-  await skipToDashboard.or(page.getByText('Training Session', { exact: true })).first()
+  await skipToDashboard.or(consumerHome(page)).first()
     .waitFor({ state: 'visible', timeout: 15_000 });
   if (await skipToDashboard.isVisible().catch(() => false)) {
         await skipToDashboard.click();
@@ -36,33 +37,7 @@ export async function skipHeadsetSetupIfPresent(page: Page): Promise<void> {
 
 export async function arriveAtPatientDashboard(page: Page): Promise<void> {
     await skipHeadsetSetupIfPresent(page);
-    await expect(page.getByText('Training Session', { exact: true })).toBeVisible({ timeout: 15_000 });
-}
-
-/**
- * Starts a patient experience through the dashboard and uses the supported
- * Demo Mode only if the connection prompt is displayed. This does not test
- * physical Muse hardware, Bluetooth, or live EEG acquisition.
- */
-export async function startPatientTrainingInDemoMode(page: Page, experienceName?: string): Promise<void> {
-    await arriveAtPatientDashboard(page);
-
-    if (experienceName) {
-        await page.getByRole('button', { name: 'Train', exact: true }).click();
-        const experience = page.locator('.card-patient').filter({ hasText: experienceName }).first();
-        await expect(experience).toBeVisible();
-        await experience.click();
-    } else {
-        await page.getByRole('button', { name: 'Begin Session', exact: true }).click();
-    }
-
-    const demoMode = page.getByRole('button', { name: 'Try Demo Mode', exact: true });
-    if (await demoMode.isVisible().catch(() => false)) {
-        await demoMode.click();
-    }
-
-    // The Demo session starts straight away: NeuroGambit has no calibration step.
-    await expect(page.getByRole('region', { name: 'Demo state controls' })).toBeVisible();
+    await expect(consumerHome(page)).toBeVisible({ timeout: 15_000 });
 }
 
 /** Reads only the current Firebase UID from the authenticated app runtime. */

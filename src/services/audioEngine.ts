@@ -38,66 +38,6 @@ class AudioEngine {
     return this.isMuted;
   }
 
-  // Play a soft milestone achievement chime
-  public playChime(type: 'success' | 'complete' | 'breath-in' | 'breath-out') {
-    this.initContext();
-    if (!this.ctx || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const chimeGain = this.ctx.createGain();
-    chimeGain.connect(this.ctx.destination);
-
-    if (type === 'success' || type === 'complete') {
-      const freqs = type === 'complete' ? [261.63, 329.63, 392.00, 523.25] : [392.00, 523.25, 659.25];
-      freqs.forEach((f, idx) => {
-        if (!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const noteGain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(f, now + idx * 0.1);
-
-        noteGain.gain.setValueAtTime(0, now + idx * 0.1);
-        noteGain.gain.linearRampToValueAtTime(0.12, now + idx * 0.1 + 0.05);
-        noteGain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.1 + 1.2);
-
-        osc.connect(noteGain);
-        noteGain.connect(chimeGain);
-        osc.start(now + idx * 0.1);
-        osc.stop(now + idx * 0.1 + 1.3);
-      });
-    } else if (type === 'breath-in') {
-      const osc = this.ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(180, now);
-      osc.frequency.exponentialRampToValueAtTime(320, now + 3.0);
-      
-      chimeGain.gain.setValueAtTime(0.001, now);
-      chimeGain.gain.linearRampToValueAtTime(0.06, now + 1.5);
-      chimeGain.gain.exponentialRampToValueAtTime(0.0001, now + 3.5);
-
-      osc.connect(chimeGain);
-      osc.start(now);
-      osc.stop(now + 3.6);
-    }
-  }
-
-  // Play a short tactile blip or knock tone (e.g. chess piece move, button click, haptic chime)
-  public playBlip(freq = 440) {
-    this.initContext();
-    if (!this.ctx || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.16);
-  }
-
   // Play a rich, soothing meditative Tibetan singing bowl chime (432Hz solfeggio harmonic)
   public playMeditativeIntroChime() {
     this.initContext();

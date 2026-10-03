@@ -247,7 +247,7 @@ test('if the cache cannot be deleted, sign-out still completes, and the next acc
     await loginThroughUi(page, b.patient);
     await expect(page.getByText('Finishing sign-out on this device…')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Close any other tabs or windows with this app open to continue.')).toBeVisible();
-    await expect(page.getByText('Training Session', { exact: true })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Play Mental Math', exact: true })).toBeHidden();
     const waitingScreen = await page.locator('body').innerText();
     expect(waitingScreen).not.toContain(a.name);
     expect(waitingScreen).not.toContain(a.patient.email);
