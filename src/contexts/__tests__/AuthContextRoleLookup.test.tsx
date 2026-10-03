@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // NFCT-44: a slow or failed read of users/{uid} must never count as "no role"
 // (which routes a signed-in user to role selection). Only a server-confirmed
 // read showing no role does; otherwise the app keeps loading and, after an
-// error or ROLE_LOOKUP_RETRY_AFTER_MS, offers a retry.
+// error or ROLE_LOOKUP_RETRY_AFTER_MS, offers a retry. A transient failure
+// also retries by itself, so a brief outage does not need a tap.
 
 const firebaseAuth = vi.hoisted(() => ({ callback: null as null | ((user: unknown) => Promise<void>) }));
 const firestore = vi.hoisted(() => ({ getDoc: vi.fn(), setDoc: vi.fn() }));
@@ -35,7 +36,13 @@ vi.mock('firebase/firestore', () => ({
   setDoc: firestore.setDoc,
 }));
 
-import { AuthProvider, ROLE_LOOKUP_RETRY_AFTER_MS, useAuth } from '../AuthContext';
+import {
+  AuthProvider,
+  ROLE_LOOKUP_AUTO_RETRY_MAX_MS,
+  ROLE_LOOKUP_AUTO_RETRY_MS,
+  ROLE_LOOKUP_RETRY_AFTER_MS,
+  useAuth,
+} from '../AuthContext';
 import { deactivateClinicianDemoWorkspace } from '../../services/clinicianDemoBoundary';
 
 type Snapshot = { exists: () => boolean; data: () => Record<string, unknown> | undefined; metadata: { fromCache: boolean } };
@@ -45,6 +52,7 @@ const snapshot = (data: Record<string, unknown> | undefined, { fromCache = false
   metadata: { fromCache },
 });
 const unavailable = () => Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' });
+const denied = () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -82,6 +90,8 @@ function expectRoleUnknown() {
 describe('AuthContext role lookup (NFCT-44)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Unconsumed one-off answers must not leak into the next test.
+    firestore.getDoc.mockReset();
     vi.useFakeTimers();
     deactivateClinicianDemoWorkspace();
     vi.stubGlobal('localStorage', memoryStorage());
@@ -189,6 +199,125 @@ describe('AuthContext role lookup (NFCT-44)', () => {
     expect(observed.role).toBe('patient');
     expect(observed.loading).toBe(false);
     renderer.unmount();
+  });
+
+  it('retries a transient failure by itself, backing off, and opens the app once the read succeeds', async () => {
+    firestore.getDoc
+      .mockRejectedValueOnce(unavailable())
+      .mockRejectedValueOnce(unavailable())
+      .mockResolvedValueOnce(snapshot({ role: 'patient' }));
+    const renderer = await signIn();
+    expectRoleUnknown();
+    expect(observed.roleLookupFailed).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MS - 1); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(2);
+    // The retry screen stays up between automatic attempts instead of flickering.
+    expectRoleUnknown();
+    expect(observed.roleLookupFailed).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MS * 2 - 1); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(3);
+    expect(observed.role).toBe('patient');
+    expect(observed.loading).toBe(false);
+    expect(observed.roleLookupFailed).toBe(false);
+    renderer.unmount();
+  });
+
+  it('keeps retrying when only the device cache answers, and routes to role selection once the server confirms no role', async () => {
+    firestore.getDoc.mockResolvedValue(snapshot(undefined, { fromCache: true }));
+    const renderer = await signIn();
+    expectRoleUnknown();
+
+    // Backs off to the cap and keeps going while the server stays out of reach.
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS * 4); });
+    const attempts = firestore.getDoc.mock.calls.length;
+    expect(attempts).toBeGreaterThanOrEqual(4);
+    expectRoleUnknown();
+    expect(observed.roleLookupFailed).toBe(true);
+
+    firestore.getDoc.mockResolvedValue(snapshot(undefined));
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(attempts + 1);
+    expect(observed.role).toBeNull();
+    expect(observed.loading).toBe(false);
+    expect(observed.roleLookupFailed).toBe(false);
+    renderer.unmount();
+  });
+
+  it('does not retry a denied read by itself, and logs each kind of failure once', async () => {
+    firestore.getDoc.mockRejectedValueOnce(denied());
+    const renderer = await signIn();
+    expectRoleUnknown();
+    expect(observed.roleLookupFailed).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS * 2); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(1);
+    renderer.unmount();
+
+    // Offline twice, then denied: two warnings, and the denial ends the retries.
+    vi.mocked(console.warn).mockClear();
+    firestore.getDoc.mockReset();
+    firestore.getDoc.mockRejectedValueOnce(unavailable()).mockRejectedValueOnce(unavailable()).mockRejectedValueOnce(denied());
+    const again = await signIn();
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS * 4); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(console.warn).mock.calls.map(([message, error]) => [message, (error as { code: string }).code])).toEqual([
+      ['Could not read the account role:', 'unavailable'],
+      ['Could not read the account role:', 'permission-denied'],
+    ]);
+    again.unmount();
+  });
+
+  it('a tap on Try again replaces the pending automatic retry, and signing out stops retrying', async () => {
+    firestore.getDoc.mockRejectedValue(unavailable());
+    const renderer = await signIn();
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MS); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(2);
+
+    // Try again restarts the back-off: one read now, the next after the first delay.
+    await act(async () => { observed.retryRoleLookup(); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(3);
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MS - 1); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(3);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(4);
+
+    await act(async () => { await firebaseAuth.callback!(null); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS * 4); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(4);
+    expect(observed.user).toBeNull();
+    renderer.unmount();
+  });
+
+  it('stops retrying for an account that has been replaced, or once unmounted', async () => {
+    firestore.getDoc.mockRejectedValue(unavailable());
+    const renderer = await signIn();
+    expect(firestore.getDoc).toHaveBeenCalledTimes(1);
+
+    // Bob signs in while Alice's retry is pending: only Bob's lookup reads.
+    firestore.getDoc.mockReset();
+    const bob = deferred<Snapshot>();
+    firestore.getDoc.mockReturnValueOnce(bob.promise);
+    await act(async () => { void firebaseAuth.callback!({ uid: 'bob', email: 'bob@example.com' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS * 4); });
+    expect(firestore.getDoc.mock.calls.map(([ref]) => (ref as { id: string }).id)).toEqual(['bob']);
+    await act(async () => { bob.resolve(snapshot({ role: 'patient' })); });
+    expect(observed.user?.uid).toBe('bob');
+    expect(observed.role).toBe('patient');
+    renderer.unmount();
+
+    // Unmounted with a retry pending: no further reads.
+    firestore.getDoc.mockReset();
+    firestore.getDoc.mockRejectedValue(unavailable());
+    const again = await signIn();
+    expect(firestore.getDoc).toHaveBeenCalledTimes(1);
+    await act(async () => { again.unmount(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(ROLE_LOOKUP_AUTO_RETRY_MAX_MS * 4); });
+    expect(firestore.getDoc).toHaveBeenCalledTimes(1);
   });
 
   it('drops a failed lookup when the account signs out meanwhile', async () => {

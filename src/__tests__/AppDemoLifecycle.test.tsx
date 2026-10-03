@@ -487,4 +487,29 @@ describe('mounted App account/workspace lifecycle', () => {
     expect(retryRoleLookup).toHaveBeenCalledOnce();
     renderer.unmount();
   });
+
+  it('keeps the unsynced-writes question when the role arrives while it is open (NFCT-44 automatic retry)', async () => {
+    const logout = vi.fn().mockResolvedValueOnce('unsynced');
+    const rolePages = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'role-page');
+    const unsyncedDialog = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => (node.type as unknown) === 'unsynced-dialog');
+    authState.value = { user: { uid: 'patient-a' }, role: null, loading: true, roleLookupFailed: true, retryRoleLookup: vi.fn(), isDemoWorkspace: false, logout, cacheStatus: 'idle' };
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); await flush(); });
+    const button = (label: string) => renderer.root.findAllByType('button').find((node) => node.children.join('') === label)!;
+    await act(async () => { button('Sign out').props.onClick(); await flush(); });
+    expect(unsyncedDialog(renderer)).toHaveLength(1);
+
+    // The lookup retried by itself and the server confirmed a new account: no role.
+    authState.value = { ...authState.value, loading: false, roleLookupFailed: false };
+    await act(async () => { renderer.update(<App />); await flush(); });
+    expect(unsyncedDialog(renderer)).toHaveLength(1);
+    expect(rolePages(renderer)).toHaveLength(0);
+    expect(button('Try again').props.disabled).toBe(true);
+
+    // Staying signed in lets the app continue with the role it now has.
+    await act(async () => { unsyncedDialog(renderer)[0].props.onStaySignedIn(); await flush(); });
+    expect(unsyncedDialog(renderer)).toHaveLength(0);
+    expect(renderer.root.findAllByType('button').map((node) => node.children.join(''))).not.toContain('Try again');
+    renderer.unmount();
+  });
 });

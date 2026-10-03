@@ -223,11 +223,16 @@ export function App() {
   // account is shown, only what is happening. `ending` replaces the account's
   // screens before the page navigates away, so a page kept by the browser's
   // back/forward cache holds none of its data either.
-  if (loading || cacheStatus === 'ending') {
+  // A sign-out started from the role lookup's error screen keeps that screen,
+  // and its unsynced-writes question, until the user has answered: a lookup
+  // that succeeds meanwhile (one in flight, or the automatic retry) must not
+  // close it. Once signing out proceeds, the app loads afresh.
+  const roleLookupSignOutPending = roleLookupSignOut.phase === 'checking' || roleLookupSignOut.phase === 'unsynced';
+  if (loading || cacheStatus === 'ending' || roleLookupSignOutPending) {
     const waiting = cacheStatus === 'blocked' || cacheStatus === 'failed';
     // The signed-in account's role is unknown (not "no role"): it stays here,
     // never on role selection, until a read establishes it.
-    const roleUnavailable = Boolean(user) && roleLookupFailed && !waiting && cacheStatus !== 'ending';
+    const roleUnavailable = Boolean(user) && (roleLookupFailed || roleLookupSignOutPending) && !waiting && cacheStatus !== 'ending';
     const notice = cacheStatus === 'ending' ? { title: cacheEndingReason === 'account-deleted' ? 'Finishing account deletion…' : 'Signing out…' }
       : cacheStatus === 'blocked' ? {
         title: 'Finishing sign-out on this device…',

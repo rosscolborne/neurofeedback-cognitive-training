@@ -67,23 +67,44 @@ export const clockSeconds = (text) => {
 
 // ---- Shared steps ----
 
-/** The screens a launch can land on, named so a failure explains itself. */
+/**
+ * The screens a launch can land on, named so a failure explains itself. The
+ * first that matches wins, so the account-load error comes before the hash it
+ * can show at (#/role-selection).
+ */
 const LANDINGS = [
+  ['account-load-error', { target: { role: 'alert', hasText: 'Your account couldn' } }],
   ['signed-in', { target: button('Skip to Dashboard') }],
   ['signed-in', { target: button('Train') }],
   ['role-selection', { hash: '#/role-selection' }],
-  ['account-load-error', { target: { role: 'alert', hasText: 'Your account couldn' } }],
   ['signed-out', { target: button('Begin Journey') }],
   ['signed-out', { target: heading('Log In') }],
   ['signed-out', { target: heading('Create Account') }],
 ];
 
-/** Which screen the app shows after a launch: one of LANDINGS' names, or 'none'. */
+/**
+ * After a transient failure the role lookup retries by itself (2 s, then
+ * backing off to every 10 s; NFCT-44), so the account-load error counts only
+ * if it is still there after this long.
+ */
+const ACCOUNT_LOAD_RECOVERY_MS = 25_000;
+
+/**
+ * Which screen the app shows after a launch: one of LANDINGS' names, or
+ * 'none'. `recovered` says how long an account-load error showed first.
+ */
 async function landing(ctx, timeout = 45_000) {
   const seen = await ctx.app.waitIfAny(LANDINGS.map(([, condition]) => condition), { timeout });
-  if (seen) return { screen: LANDINGS[seen.index][0], hash: seen.hash };
-  return { screen: 'none', hash: (await ctx.app.state().catch(() => ({}))).hash };
+  if (!seen) return { screen: 'none', hash: (await ctx.app.state().catch(() => ({}))).hash };
+  if (LANDINGS[seen.index][0] !== 'account-load-error') return { screen: LANDINGS[seen.index][0], hash: seen.hash };
+  const started = Date.now();
+  const others = LANDINGS.slice(1);
+  const next = await ctx.app.waitIfAny(others.map(([, condition]) => condition), { timeout: ACCOUNT_LOAD_RECOVERY_MS });
+  if (!next) return { screen: 'account-load-error', hash: seen.hash };
+  return { screen: others[next.index][0], hash: next.hash, recovered: `${((Date.now() - started) / 1000).toFixed(1)} s` };
 }
+
+const landedOn = (landed) => `landed on ${landed.screen} at ${landed.hash || '#/'}${landed.recovered ? ` after the account-load error for ${landed.recovered}` : ''}`;
 
 /** Signs up a new account through the real onboarding UI and chooses the training role. */
 async function signUp(ctx) {
@@ -161,7 +182,7 @@ export const SCENARIOS = {
 
       await ctx.relaunch();
       const landed = await landing(ctx);
-      ctx.check('A cold relaunch restores the session and role', landed.screen === 'signed-in', `landed on ${landed.screen} at ${landed.hash || '#/'}`);
+      ctx.check('A cold relaunch restores the session and role', landed.screen === 'signed-in', landedOn(landed));
       await sleep(2_000);
       await ctx.checkpoint('relaunch-light');
       await ctx.device.appearance('dark');
@@ -295,7 +316,7 @@ export const SCENARIOS = {
       await app.wait(QUESTION_READY);
       await ctx.relaunch();
       const landed = await landing(ctx);
-      ctx.check('After a kill mid-run the app relaunches signed in', landed.screen === 'signed-in', `landed on ${landed.screen} at ${landed.hash || '#/'}`);
+      ctx.check('After a kill mid-run the app relaunches signed in', landed.screen === 'signed-in', landedOn(landed));
       const inRun = await app.waitIfAny({ target: HUD_TIME }, { timeout: 1_000 });
       ctx.check('The relaunched app is not in a run', !inRun);
       await ctx.checkpoint('after-kill-relaunch');

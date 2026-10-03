@@ -99,6 +99,17 @@ const AuthContext = createContext<AuthContextType>({
 export const ROLE_LOOKUP_RETRY_AFTER_MS = 15_000;
 
 /**
+ * After a transient failure (offline, or only the device cache answered), the
+ * lookup retries by itself, first after this delay and then backing off to
+ * ROLE_LOOKUP_AUTO_RETRY_MAX_MS, so a brief loss of connection right after
+ * sign-up or at launch does not leave the account waiting for a tap. Try
+ * again still retries at once. A denied read does not retry by itself.
+ */
+export const ROLE_LOOKUP_AUTO_RETRY_MS = 2_000;
+export const ROLE_LOOKUP_AUTO_RETRY_MAX_MS = 10_000;
+const TRANSIENT_ROLE_READ_CODES = new Set(['unavailable', 'deadline-exceeded']);
+
+/**
  * Reads the account's role from `users/{uid}`. Resolves `null` only when the
  * server confirms that the account has no role. Rejects when the role is
  * unknown: the read failed (offline with nothing cached, getDoc rejects with
@@ -109,7 +120,7 @@ const readUserRole = async (uid: string): Promise<UserRole> => {
   const snap = await getDoc(doc(db, 'users', uid));
   const role = snap.exists() ? (snap.data()?.role as UserRole) || null : null;
   if (role === null && snap.metadata.fromCache) {
-    throw new Error('Only the device cache answered, and it shows no role.');
+    throw Object.assign(new Error('Only the device cache answered, and it shows no role.'), { code: 'unavailable' });
   }
   return role;
 };
@@ -159,11 +170,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Only a read that establishes the role ends loading; until then the app
   // stays on the loading screen and never routes to role selection. A failed
-  // or slow read offers a retry there instead.
-  const lookUpRole = async (generation: number, uid: string) => {
+  // or slow read offers a retry there instead; a transient failure also
+  // retries by itself (`attempt` counts those retries, and keeps the retry
+  // screen up between them).
+  const lookUpRole = async (generation: number, uid: string, attempt = 0, lastErrorCode?: string) => {
     const lookup = ++roleLookupRef.current;
     const isCurrent = () => roleLookupRef.current === lookup && isCurrentProductionIdentity(generation, uid);
-    setRoleLookupFailed(false);
+    if (attempt === 0) setRoleLookupFailed(false);
     setLoading(true);
     const slow = setTimeout(() => { if (isCurrent()) setRoleLookupFailed(true); }, ROLE_LOOKUP_RETRY_AFTER_MS);
     try {
@@ -174,8 +187,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     } catch (error) {
       if (!isCurrent()) return;
-      console.warn('Could not read the account role:', error);
+      const code = String((error as { code?: unknown } | null)?.code);
+      // Once per kind of failure, not on every automatic retry.
+      if (attempt === 0 || code !== lastErrorCode) console.warn('Could not read the account role:', error);
       setRoleLookupFailed(true);
+      if (TRANSIENT_ROLE_READ_CODES.has(code)) {
+        // A newer lookup (Try again), a sign-out or an account switch makes this stale.
+        const delay = Math.min(ROLE_LOOKUP_AUTO_RETRY_MS * 2 ** attempt, ROLE_LOOKUP_AUTO_RETRY_MAX_MS);
+        setTimeout(() => { if (isCurrent()) void lookUpRole(generation, uid, attempt + 1, code); }, delay);
+      }
     } finally {
       clearTimeout(slow);
     }
