@@ -13,7 +13,7 @@ import { eegEngine as defaultEngine, type EEGEngine } from './eegEngine';
 // the model is 'unknown' (simulation is never modelled as a device) and the
 // service version says 'demo-mode'.
 
-type DemoEngine = Pick<EEGEngine, 'isDemoMode' | 'isHardwareConnected' | 'setSimulatedState' | 'start' | 'stop' | 'subscribe'>;
+type DemoEngine = Pick<EEGEngine, 'isDemoMode' | 'isHardwareConnected' | 'start' | 'stop' | 'subscribe'>;
 
 /** eegEngine ticks every 100 ms; ten samples make one 1-second window. */
 const SAMPLE_INTERVAL_MS = 100;
@@ -58,7 +58,6 @@ export function createDemoModeEegProvider(engine: DemoEngine = defaultEngine, no
       let voided = false;
 
       engine.isDemoMode = true;
-      engine.setSimulatedState('auto');
       engine.start(SAMPLE_INTERVAL_MS);
       const unsubscribe = engine.subscribe((point) => {
         if (stopped || voided) return;
@@ -82,7 +81,7 @@ export function createDemoModeEegProvider(engine: DemoEngine = defaultEngine, no
         stopped = true;
         unsubscribe();
         engine.stop();
-        // Demo Mode belongs to this capture only, as in SessionRunner.
+        // Demo Mode belongs to this capture only.
         engine.isDemoMode = false;
         return true;
       };

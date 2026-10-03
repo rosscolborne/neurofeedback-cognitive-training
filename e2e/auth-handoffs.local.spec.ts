@@ -41,7 +41,7 @@ async function expectUnsupportedAccountScreen(page: Page) {
   await expect(page.getByText(/ is for personal brain training\. Sign out, then create a new account to train\.$/)).toBeVisible();
   // Nothing of the retired clinician workspace, and no patient home.
   await expect(page.getByRole('button', { name: 'Patients', exact: true })).toHaveCount(0);
-  await expect(page.getByText('Training Session', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Play Mental Math', exact: true })).toHaveCount(0);
 }
 
 test('a practitioner account is told it is unsupported, and Sign out returns to Welcome', async ({ browser }) => {

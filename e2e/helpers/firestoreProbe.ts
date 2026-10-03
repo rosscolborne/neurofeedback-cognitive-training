@@ -7,11 +7,8 @@ async function outcome(probe: () => Promise<unknown>): Promise<string> {
     catch (error) { return (error as { code?: string }).code ?? 'unknown'; }
 }
 
-/** New UID must not inherit reads of the deleted UID's retained profile and session history. */
-export async function probeDeletedPatientHistory(oldUid: string, sessionId: string): Promise<string[]> {
+/** New UID must not inherit reads of the deleted UID's retained profile. */
+export async function probeDeletedPatientProfile(oldUid: string): Promise<string> {
     await auth.authStateReady();
-    return Promise.all([
-        () => getDoc(doc(db, 'clients', oldUid)),
-        () => getDoc(doc(db, 'sessions', sessionId)),
-    ].map(outcome));
+    return outcome(() => getDoc(doc(db, 'clients', oldUid)));
 }

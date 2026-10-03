@@ -4,10 +4,9 @@ import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard } from './helpers/auth';
 
 // NFCT-12: the Train tab is a game catalogue built from the code-owned shared
-// catalogue. Games come first, each filed under its domains; NeuroGambit, the
-// one EEG experience, follows in its own optional "Headset training" section
-// and keeps its launch path. Also runs in WebKit as an iPhone SE and an
-// iPhone 17 (playwright.webkit.config.ts), where the card layout matters most.
+// catalogue, each game filed under its domains. Also runs in WebKit as an
+// iPhone SE and an iPhone 17 (playwright.webkit.config.ts), where the card
+// layout matters most.
 
 async function signUpAndOpenTrain(page: Page): Promise<void> {
   await page.goto('/#/signup');
@@ -22,7 +21,6 @@ async function signUpAndOpenTrain(page: Page): Promise<void> {
 }
 
 const gamesSection = (page: Page) => page.getByRole('main').getByRole('region', { name: 'Games', exact: true });
-const headsetSection = (page: Page) => page.getByRole('main').getByRole('region', { name: 'Headset training', exact: true });
 
 /** The card's icon sits beside its name, and the whole card is a comfortable target. */
 async function expectRowCard(button: Locator): Promise<void> {
@@ -38,10 +36,9 @@ async function expectRowCard(button: Locator): Promise<void> {
   expect(box!.height).toBeGreaterThanOrEqual(44);
 }
 
-test('Train lists games first, filed under their domains, and NeuroGambit after them as optional headset training', async ({ page }) => {
+test('Train lists the games, filed under their domains, and nothing else', async ({ page }) => {
   await signUpAndOpenTrain(page);
   const games = gamesSection(page);
-  const headset = headsetSection(page);
 
   await expect(games.getByRole('listitem')).toHaveCount(1);
   const mentalMath = games.getByRole('button', { name: 'Mental Math', exact: true });
@@ -53,23 +50,16 @@ test('Train lists games first, filed under their domains, and NeuroGambit after 
   await expect(games.locator('.train-card-tag')).toHaveText([/^Math,?$/, /^Processing speed,?$/, /^Memory$/]);
   await expect(games.getByText(/^90 seconds,?$/)).toBeVisible();
   await expect(games.getByText(/^10 levels,?$/)).toBeVisible();
-  await expect(games.getByText('NeuroGambit')).toHaveCount(0);
-
-  await expect(headset.getByText('Optional', { exact: true })).toBeVisible();
-  await expect(headset.getByRole('listitem')).toHaveCount(1);
-  await expect(headset.getByRole('button', { name: 'NeuroGambit', exact: true })).toBeVisible();
-  await expect(headset.getByText('Muse headset or Demo Mode', { exact: true })).toBeVisible();
-  await expect(headset.getByText('Mental Math')).toHaveCount(0);
-  const [gamesBox, headsetBox] = await Promise.all([games.boundingBox(), headset.boundingBox()]);
-  expect(gamesBox!.y + gamesBox!.height).toBeLessThanOrEqual(headsetBox!.y);
+  // The Games section is the whole catalogue: no headset training section or experience.
+  await expect(page.getByRole('main').getByRole('region')).toHaveCount(1);
+  await expect(page.getByRole('main')).not.toContainText(/NeuroGambit|Headset training/);
 
   // One row layout at every width (NFCT-33: the Mental Math card used to stack below 420 px).
   await expectRowCard(mentalMath);
-  await expectRowCard(headset.getByRole('button', { name: 'NeuroGambit', exact: true }));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('Train opens Mental Math and NeuroGambit through their own paths, and Back returns to Train', async ({ page }) => {
+test('Train opens Mental Math, and Back returns to Train', async ({ page }) => {
   await signUpAndOpenTrain(page);
 
   await gamesSection(page).getByRole('button', { name: 'Mental Math', exact: true }).click();
@@ -77,12 +67,5 @@ test('Train opens Mental Math and NeuroGambit through their own paths, and Back 
   await expect(page.getByRole('radio', { name: 'Level 1', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(gamesSection(page).getByRole('button', { name: 'Mental Math', exact: true })).toBeVisible();
-
-  // NeuroGambit keeps its headset launch path: connect a Muse, or try Demo Mode.
-  await headsetSection(page).getByRole('button', { name: 'NeuroGambit', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Connect Muse Headband', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Try Demo Mode', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel & Return to Dashboard', exact: true }).click();
-  await expect(headsetSection(page).getByRole('button', { name: 'NeuroGambit', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Train', exact: true })).toBeVisible();
 });

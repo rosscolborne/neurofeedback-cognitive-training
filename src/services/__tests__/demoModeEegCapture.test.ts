@@ -11,7 +11,6 @@ function fakeEngine() {
   return {
     isDemoMode: false,
     isHardwareConnected: false,
-    setSimulatedState: vi.fn(),
     start: vi.fn(),
     stop: vi.fn(),
     subscribe: vi.fn((listener: (point: EEGDataPoint) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; }),

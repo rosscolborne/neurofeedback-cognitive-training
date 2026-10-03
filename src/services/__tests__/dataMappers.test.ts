@@ -1,97 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import type { ClientProfile, SessionRecord } from '../../types';
-import {
-  applySessionCompletionToClient,
-  readClientProfile,
-  readSessionRecord,
-  removeUndefined,
-  timestampToMillis,
-} from '../dataMappers';
-import { CLINICAL_PROTOCOL_TEMPLATES, getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
+import type { ClientProfile } from '../../types';
+import { readClientProfile, removeUndefined } from '../dataMappers';
 
 const clientFixture = (): ClientProfile => ({
   id: 'patient-1',
   name: 'Patient One',
   email: 'patient@example.test',
   avatarUrl: '',
-  condition: 'Peak Performance',
   status: 'active',
-  assignedProtocol: 'theta-beta-ratio',
   brainMaps: [],
-  allowedExperiences: ['neuro-gambit'],
-  prescribedSessionsPerWeek: 4,
-  completedSessionsCount: 0,
-  currentStreak: 0,
-  streakFreezeRemaining: 0,
-  brainCapacityScore: 0,
-  lastSessionDate: '',
-  nextSessionDate: '',
-  tidalGardenState: { stage: 1, plantsUnlocked: [], growthPoints: 0, lastWatered: '' },
-  skylineBiomesUnlocked: [],
-  badges: [],
 });
 
-const sessionFixture = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
-  id: 'session-1',
-  patientId: 'patient-1',
-  patientName: 'Patient One',
-  clinicId: 'clinic-1',
-  clinicianId: 'clinician-1',
-  date: 'Sep 15, 2026',
-  timestamp: 1_789_493_400_000,
-  protocol: 'theta-beta-ratio',
-  experience: 'neuro-gambit',
-  durationSeconds: 1_500,
-  timeInZonePercent: 82,
-  averageCoherence: null,
-  peakFocusScore: 70,
-  averageBands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
-  timeSeries: [],
-  adaptiveAdjustmentsCount: 0,
-  finalThreshold: 1.8,
-  ...overrides,
-});
+describe('client profile reader', () => {
+  it('fills the document ID, brain maps and schema version for a legacy document', () => {
+    const migrated = readClientProfile({ name: 'Legacy', email: 'legacy@example.test', status: 'active' }, 'legacy-1');
 
-describe('production data migration readers', () => {
-  it('removes ratio residue from merged default and single-band assignments on read', () => {
-    const ratioReward = { numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 }, targetCondition: 'below' as const, targetThreshold: 1.85 };
-    for (const protocol of ['smr-enhancement', 'alpha-enhancement', 'beta-downtraining'] as const) {
-      const template = getClinicalProtocolTemplate(protocol)!;
-      const persisted = { ...clientFixture(), assignedProtocol: protocol,
-        customProtocolConfig: { ...template, customRewardEnabled: false, ratioReward } };
-      const loaded = readClientProfile(persisted);
-      expect(loaded.customProtocolConfig?.ratioReward).toBeUndefined();
-      expect(persisted.customProtocolConfig.ratioReward).toBe(ratioReward);
-    }
-    const beta = getClinicalProtocolTemplate('beta-downtraining')!;
-    const customized = readClientProfile({ ...clientFixture(), assignedProtocol: 'beta-downtraining',
-      customProtocolConfig: { ...beta, customRewardEnabled: true, ratioReward,
-        rewardBand: { ...beta.rewardBand, freqMin: 13, freqMax: 30, targetCondition: 'below', targetThreshold: 2 } } });
-    expect(customized.customProtocolConfig?.ratioReward).toBeUndefined();
-    expect(customized.customProtocolConfig?.rewardBand).toMatchObject({ freqMin: 13, freqMax: 30, targetThreshold: 2 });
-  });
-
-  it('keeps unmarked ratio configurations as stored', () => {
-    const alpha = getClinicalProtocolTemplate('alpha-enhancement')!;
-    const loaded = readClientProfile({ ...clientFixture(), assignedProtocol: 'alpha-enhancement',
-      customProtocolConfig: { ...alpha, ratioReward: { numerator: { freqMin: 4, freqMax: 8 }, denominator: { freqMin: 13, freqMax: 30 }, targetCondition: 'below' as const, targetThreshold: 1.85 } } });
-    expect(loaded.customProtocolConfig?.ratioReward).toBeDefined();
-  });
-  it('normalizes every supported persisted timestamp representation', () => {
-    expect(timestampToMillis('2026-09-15T12:00:00.000Z')).toBe(1_789_473_600_000);
-    expect(timestampToMillis(new Date('2026-09-15T12:00:00.000Z'))).toBe(1_789_473_600_000);
-    expect(timestampToMillis({ seconds: 1_789_473_600, nanoseconds: 500_000_000 })).toBe(1_789_473_600_500);
-    expect(timestampToMillis('not-a-date')).toBeNull();
-  });
-
-  it('reads retired legacy experience IDs as stored without mutating the document', () => {
-    const legacy = { ...clientFixture(), id: undefined, allowedExperiences: ['spatial-audio'] };
-    const migrated = readClientProfile(legacy, 'document-patient');
-
-    expect(migrated.id).toBe('document-patient');
-    expect(migrated.allowedExperiences).toEqual(['spatial-audio']);
-    expect(migrated.allowedExperiences).not.toBe(legacy.allowedExperiences);
-    expect(legacy.allowedExperiences).toEqual(['spatial-audio']);
+    expect(migrated.id).toBe('legacy-1');
+    expect(migrated.brainMaps).toEqual([]);
     expect(migrated.schemaVersion).toBe(1);
   });
 
@@ -105,58 +30,16 @@ describe('production data migration readers', () => {
     expect(migrated.clinicianId).toBeUndefined();
   });
 
-  it('repairs the broad mode for legacy custom protocol records on read', () => {
-    const sterman = CLINICAL_PROTOCOL_TEMPLATES.find((template) => template.id === 'proto-sterman-smr');
-    expect(sterman).toBeDefined();
+  it('does not mutate the stored document', () => {
+    const stored = { ...clientFixture(), id: '' };
+    const snapshot = structuredClone(stored);
+    readClientProfile(stored, 'patient-1');
 
-    const legacy = {
-      ...clientFixture(),
-      assignedProtocol: 'theta-beta-ratio' as const,
-      customProtocolConfig: {
-        ...sterman!,
-        id: 'custom-legacy',
-        protocolType: undefined,
-      },
-    };
-
-    const migrated = readClientProfile(legacy);
-
-    expect(migrated.assignedProtocol).toBe('smr-enhancement');
-    expect(legacy.assignedProtocol).toBe('theta-beta-ratio');
+    expect(stored).toEqual(snapshot);
   });
+});
 
-  it('does not invent a protocol for an incomplete unrecognized custom template', () => {
-    const raw = {
-      ...clientFixture(),
-      assignedProtocol: undefined,
-      customProtocolConfig: {
-        id: 'legacy-unknown',
-        name: '',
-        clinicalName: '',
-      },
-    };
-
-    expect(readClientProfile(raw).assignedProtocol).toBeUndefined();
-  });
-
-  it('prefers completedAt over legacy epoch timestamps and adds no legacy protocol-session fields', () => {
-    const migrated = readSessionRecord({
-      ...sessionFixture(),
-      id: undefined,
-      timestamp: 1,
-      completedAt: { seconds: 1_789_473_600 },
-      timeSeries: undefined,
-      averageCoherence: undefined,
-    }, 'document-session');
-
-    expect(migrated.id).toBe('document-session');
-    expect(migrated.timestamp).toBe(1_789_473_600_000);
-    expect(migrated.timeSeries).toBeUndefined();
-    expect(migrated.averageCoherence).toBeUndefined();
-    // A malformed legacy series still reads as an empty one.
-    expect(readSessionRecord({ ...sessionFixture(), timeSeries: 'corrupt' }).timeSeries).toEqual([]);
-  });
-
+describe('removeUndefined', () => {
   it('removes nested undefined values without damaging Dates or timestamp sentinels', () => {
     const date = new Date('2026-09-15T12:00:00.000Z');
     const sentinel = Object.create({ firestoreSentinel: true }) as { value?: string };
@@ -165,49 +48,5 @@ describe('production data migration readers', () => {
     expect(cleaned).toEqual({ nested: { keep: 1 }, date, sentinel });
     expect(cleaned.date).toBe(date);
     expect(cleaned.sentinel).toBe(sentinel);
-  });
-});
-
-describe('session aggregate migration behavior', () => {
-  it('never grows the Garden or awards a badge from EEG session data', () => {
-    const start = { ...clientFixture(), tidalGardenState: { stage: 2, growthPoints: 499, plantsUnlocked: [], lastWatered: '' } };
-    for (const session of [
-      sessionFixture({ protocol: 'alpha-enhancement', durationSeconds: 1_200, configuredDurationSeconds: 600, inZoneSeconds: 600, timeInZonePercent: 100 }),
-      sessionFixture({ protocol: 'theta-beta-ratio', timeInZonePercent: 95 }),
-      sessionFixture({ protocol: undefined, timeInZonePercent: undefined, averageMindfulness: 90 }),
-    ]) {
-      const updated = applySessionCompletionToClient(start, session);
-      expect(updated.tidalGardenState).toEqual(start.tidalGardenState);
-      expect(updated.badges).toEqual(['first-light']);
-    }
-  });
-
-  it('returns a new profile and leaves the source profile untouched', () => {
-    const client = clientFixture();
-    const updated = applySessionCompletionToClient(client, sessionFixture());
-
-    expect(updated).not.toBe(client);
-    expect(updated.completedSessionsCount).toBe(1);
-    expect(updated.badges).toContain('first-light');
-    expect(updated.badges).not.toContain('deep-focus');
-    expect(updated.brainCapacityScore).toBe(client.brainCapacityScore);
-    expect(client.completedSessionsCount).toBe(0);
-    expect(client.badges).toEqual([]);
-  });
-
-  it('does not invent score, streak, or garden state for a blank profile', () => {
-    const blank = {
-      ...clientFixture(),
-      brainCapacityScore: undefined,
-      currentStreak: 0,
-      tidalGardenState: undefined,
-      skylineBiomesUnlocked: undefined,
-    };
-    const updated = applySessionCompletionToClient(blank, sessionFixture({ experience: 'neuro-gambit' }));
-
-    expect(updated.brainCapacityScore).toBeUndefined();
-    expect(updated.currentStreak).toBe(0);
-    expect(updated.tidalGardenState).toBeUndefined();
-    expect(updated.skylineBiomesUnlocked).toBeUndefined();
   });
 });

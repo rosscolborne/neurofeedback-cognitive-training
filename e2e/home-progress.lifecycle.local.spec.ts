@@ -58,15 +58,15 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   );
   await expect(overview(page, 'streak-card')).toHaveCount(0);
   await expect(overview(page, 'home-achievements')).toHaveCount(0);
-  // The optional neurofeedback training is still offered, after the game.
-  await expect(page.getByRole('heading', { name: 'Neurofeedback training', exact: true })).toBeVisible();
+  // Home is the games: no neurofeedback training.
+  await expect(page.locator('main')).not.toContainText(/Neurofeedback|NeuroGambit|Begin Session/);
 
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
   await expect(overview(page, 'progress-empty')).toContainText('No runs yet');
   await expect(overview(page, 'achievement-count')).toHaveText('0 of 9 earned');
-  await expect(page.getByText('No neurofeedback sessions yet.', { exact: true })).toBeVisible();
-  await expect(page.getByText('Complete your first session to start tracking progress.')).toHaveCount(0);
+  // Progress is the games: no neurofeedback session history.
+  await expect(page.locator('main')).not.toContainText(/Neurofeedback|Session History|target zone/);
 
   // Play now, from Home: the existing Mental Math launch path.
   await page.getByRole('button', { name: 'Home', exact: true }).click();
@@ -118,9 +118,8 @@ test('a first run from Home shows a one-day streak, this week and the first achi
   await expect(page.getByRole('list', { name: 'Earned achievements, newest first' }).getByRole('listitem')).toHaveCount(1);
   await expect(page.getByRole('list', { name: 'Earned achievements, newest first' })).toContainText('First run');
   await expect(page.getByRole('list', { name: 'Achievements not earned yet' }).getByRole('listitem')).toHaveCount(8);
-  // Nothing EEG-derived in the game progress; the neurofeedback history stays its own section.
+  // Nothing EEG-derived in the game progress.
   await expect(overview(page, 'progress')).not.toContainText(/EEG|µV|alpha|theta|beta|gamma|zone|neurofeedback/i);
-  await expect(page.getByRole('heading', { name: 'Neurofeedback sessions', exact: true })).toBeVisible();
 
   // It survives a reload.
   await page.reload();

@@ -20,7 +20,7 @@ vi.mock('../contexts/AuthContext', () => ({
     requestPasswordReset: vi.fn(),
   }),
 }));
-vi.mock('../services/audioEngine', () => ({ audioEngine: { playChime: vi.fn(), playMeditativeIntroChime: vi.fn() } }));
+vi.mock('../services/audioEngine', () => ({ audioEngine: { playMeditativeIntroChime: vi.fn() } }));
 vi.mock('../services/eegEngine', () => ({
   eegEngine: {
     subscribe: vi.fn(() => vi.fn()),

@@ -14,7 +14,7 @@ vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => false, setMuted: vi.fn() } }));
 vi.mock('../../../services/storageEngine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/storageEngine')>()),
-  storageEngine: { getSessions: vi.fn(async () => []) },
+  storageEngine: {},
 }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../../../consumer/games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));

@@ -140,12 +140,6 @@ a, button, input, label, select, textarea {
   transition: border-color 0.2s ease;
 }
 
-.card-patient-recessed {
-  background-color: var(--surface-patient-recessed);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-}
-
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -305,56 +299,6 @@ a, button, input, label, select, textarea {
   }
 }
 
-/* A row of related figures in one card, separated by hairlines. */
-.stat-strip {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  text-align: center;
-}
-
-.stat-strip > div {
-  min-width: 0;
-  padding: 0 8px;
-}
-
-.stat-strip > div + div {
-  border-left: 1px solid var(--border-subtle);
-}
-
-.stat-strip-value {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--text-primary);
-  /* Wraps only between unit groups ("5 h" / "55 min") when a phone-width cell is too narrow. */
-  text-wrap: balance;
-}
-
-.stat-strip-label {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--text-secondary);
-}
-
-/* When one value wraps ("5 h / 55 min"), values share a bottom line and labels a top line. */
-@supports (grid-template-rows: subgrid) {
-  .stat-strip {
-    grid-template-rows: auto auto;
-  }
-
-  .stat-strip > div {
-    display: grid;
-    grid-row: span 2;
-    grid-template-rows: subgrid;
-  }
-
-  .stat-strip-value {
-    align-self: end;
-  }
-}
-
 /* Small uppercase heading above a group of cards or rows. */
 .section-label {
   margin: 0 0 8px;
@@ -442,116 +386,6 @@ a, button, input, label, select, textarea {
   color: #A94444;
 }
 
-/* Live session feedback values: equal columns that shrink together on small phones. */
-.session-telemetry {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  text-align: center;
-}
-
-.session-telemetry > div {
-  min-width: 0;
-  padding: 0 6px;
-}
-
-.session-telemetry > div + div {
-  border-left: 1px solid var(--border-default);
-}
-
-.session-telemetry-label {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--text-secondary);
-  overflow-wrap: break-word;
-}
-
-.session-telemetry-group {
-  white-space: nowrap;
-}
-
-/* Labels wrap to different line counts; subgrid rows keep every value on one shared baseline,
-   with each label sitting directly above its value. */
-@supports (grid-template-rows: subgrid) {
-  .session-telemetry {
-    grid-template-rows: auto auto auto;
-  }
-
-  .session-telemetry > div {
-    display: grid;
-    grid-row: span 3;
-    grid-template-rows: subgrid;
-  }
-
-  .session-telemetry-label {
-    align-self: end;
-  }
-}
-
-.session-telemetry-value {
-  margin-top: 2px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.ng-match-clock-bar {
-  flex: 1;
-  max-width: 140px;
-}
-
-@media (max-width: 360px) {
-  .session-telemetry > div {
-    padding: 0 3px;
-  }
-
-  .session-telemetry-label {
-    font-size: 10px;
-  }
-
-  .session-telemetry-value {
-    font-size: 13px;
-  }
-
-  .ng-tracks button {
-    font-size: 12px;
-  }
-
-  /* Track names must never truncate: drop the icons, tighten padding, and wrap if a font runs wide. */
-  .ng-tracks button {
-    padding: 6px 4px;
-  }
-
-  .ng-tracks button svg {
-    display: none;
-  }
-
-  .ng-tracks button span {
-    overflow: visible;
-    text-align: center;
-    text-overflow: clip;
-    white-space: normal;
-  }
-
-  /* Too narrow for clock, bar and rate badge side by side: the bar takes its own full-width row. */
-  .ng-match-clock {
-    flex-wrap: wrap;
-  }
-
-  .ng-match-clock-bar {
-    order: 3;
-    flex-basis: 100%;
-    max-width: none;
-  }
-}
-
-.session-telemetry-note {
-  font-size: 10px;
-  color: var(--text-secondary);
-}
-
 /* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field.
    !important is required: the patient bar sets display inline. */
 @media (max-width: 767px) {
@@ -587,7 +421,7 @@ a, button, input, label, select, textarea {
   border: 0;
 }
 
-/* Train (NFCT-12): the game catalogue, then optional headset training. Every
+/* Train (NFCT-12): the game catalogue. Every
    card is one row, icon beside the text, at every width: the shell column is
    at most 480px, and a row leaves room for domains and facts. */
 .train-tab {
@@ -615,29 +449,10 @@ a, button, input, label, select, textarea {
   gap: var(--space-3);
 }
 
-.train-section-head {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.train-section-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .train-section-title {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.3;
-}
-
-.train-section-note {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
 }
 
 .train-grid {
@@ -649,8 +464,7 @@ a, button, input, label, select, textarea {
   list-style: none;
 }
 
-/* The hairline card surface of .card-patient, which only the experience cards
-   carry (the e2e suites count them). */
+/* The hairline card surface of .card-patient. */
 .train-grid > .train-card {
   position: relative;
   display: grid;
@@ -771,152 +585,6 @@ a, button, input, label, select, textarea {
   color: var(--brand-primary);
   font-size: 13px;
   font-weight: 700;
-}
-
-/* NeuroGambit compact controls. */
-.ng-tracks {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--surface-patient-recessed);
-}
-
-.ng-tracks button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 8px;
-  font: 600 13px/1.2 var(--font-body);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.ng-tracks button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ng-quiet-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 34px;
-  padding: 6px 8px;
-  white-space: nowrap;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font: 600 12px/1.2 var(--font-body);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .ng-quiet-action:hover {
-    background: var(--surface-patient-recessed);
-  }
-}
-
-.ng-quiet-action:focus-visible,
-.ng-tracks button:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 1px;
-}
-
-/* Quiet, tappable protocol identity shown under patient headings. */
-.pill-scroller {
-  /* Bleeds to the card edge so the next pill visibly continues past it instead of being cut at the text column. */
-  --pill-bleed: var(--space-5);
-  display: flex;
-  gap: 8px;
-  margin-inline: calc(-1 * var(--pill-bleed));
-  padding: 2px var(--pill-bleed) 4px;
-  scroll-padding-inline: var(--pill-bleed);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  --pill-fade-end: 36px;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - var(--pill-fade-end)), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0, #000 var(--pill-bleed), #000 calc(100% - var(--pill-fade-end)), transparent 100%);
-}
-
-/* At the end, fade only the padding so the last pill lands un-faded. */
-.pill-scroller[data-scroll-end='true'] {
-  --pill-fade-end: var(--pill-bleed);
-}
-
-.pill-scroller::-webkit-scrollbar {
-  display: none;
-}
-
-.pill-scroller-item {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 6px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--surface-patient-recessed);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  scroll-snap-align: start;
-}
-
-.pill-scroller-item.is-selected {
-  border-color: var(--brand-primary);
-  background: var(--brand-primary-subtle);
-  color: var(--brand-primary);
-}
-
-@media (max-width: 360px) {
-  .pill-scroller {
-    --pill-bleed: 18px;
-  }
-}
-
-.protocol-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 100%;
-  min-height: 36px;
-  padding: 6px 12px 6px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-full);
-  background: var(--surface-patient-card);
-  color: var(--text-primary);
-  font: 600 13px/1.3 var(--font-body);
-  text-align: left;
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .protocol-chip:hover {
-    border-color: var(--text-tertiary);
-  }
-}
-
-.protocol-chip:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 2px;
-}
-
-.protocol-chip > span {
-  min-width: 0;
 }
 
 /* Animations */
