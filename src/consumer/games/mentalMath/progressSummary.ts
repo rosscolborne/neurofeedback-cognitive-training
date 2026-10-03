@@ -122,6 +122,44 @@ export function historyRow(entry: GameSessionHistoryEntry): HistoryRow {
   };
 }
 
+/**
+ * How a history row reads at a glance (NFCT-64), the same on Home and in the
+ * game's history. The score slot holds the trusted score, or "Pending" until
+ * there is one, or a dash for a run that does not count (its tag says so).
+ * One tag at most, by priority: a run that does not count, then a run ended
+ * early (finished runs are the norm, so only the exception is labelled), a
+ * flagged run, one not uploaded yet, and a new best.
+ */
+export type HistoryRowScore =
+  /** The trusted score; `muted` for a run ended early, whose score counts toward totals but never sets a record. */
+  | { readonly kind: 'score'; readonly value: number; readonly muted: boolean }
+  /** No trusted result yet (on this device, or not scored yet). */
+  | { readonly kind: 'pending' }
+  /** The run does not count, so it has no score. */
+  | { readonly kind: 'none' };
+
+export type HistoryRowTag = 'not-counted' | 'ended-early' | 'flagged' | 'not-uploaded' | 'new-best';
+
+export interface HistoryRowView {
+  readonly score: HistoryRowScore;
+  readonly tag: HistoryRowTag | null;
+}
+
+export function historyRowView(row: HistoryRow): HistoryRowView {
+  const resolved = row.state === 'verified' || row.state === 'flagged' || row.state === 'invalid';
+  const score: HistoryRowScore = !resolved ? { kind: 'pending' }
+    : row.score === null ? { kind: 'none' }
+      : { kind: 'score', value: row.score, muted: !row.completed };
+  const tag: HistoryRowTag | null = row.state === 'invalid' ? 'not-counted'
+    : !row.completed ? 'ended-early'
+      : row.state === 'flagged' ? 'flagged'
+        : row.state === 'on-device' ? 'not-uploaded'
+          // Point in time: the run set a best when it was scored; a later run may have beaten it since (ADR-001 decision 12).
+          : row.state === 'verified' && row.personalBest ? 'new-best'
+            : null;
+  return { score, tag };
+}
+
 /** Mental Math timed-90 rows only (the game's history query already filters the game). */
 export function isTimed90(entry: GameSessionHistoryEntry): boolean {
   return entry.session.gameId === mentalMath.GAME_ID && entry.session.modeId === mentalMath.MODE_ID;

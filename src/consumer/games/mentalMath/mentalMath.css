@@ -753,6 +753,19 @@
   line-height: 1.2;
 }
 
+/* A run ended early: its score counts toward totals but never sets a record, so it reads quieter (NFCT-64). */
+.mm-history-score-muted {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* No score yet: a quiet word in the score's place, never a dash. */
+.mm-history-pending {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .mm-best-detail,
 .mm-history-meta {
   color: var(--text-secondary);

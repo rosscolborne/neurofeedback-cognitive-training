@@ -5,7 +5,7 @@ import { FactGrid } from '../../../components/ui/FactGrid';
 import type { GameSessionCursor, GameSessionHistoryEntry, GameSessionHistoryPage, GameSessionRepository } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import { subscribeWithRetry } from '../../firestore/retryingSubscription';
-import { formatPlayTime, gameOverview, historyRow, isTimed90, type HistoryRow, type HistoryState } from './progressSummary';
+import { formatPlayTime, gameOverview, historyRow, historyRowView, isTimed90, type HistoryRow, type HistoryRowTag } from './progressSummary';
 import { ProvisionalTag } from './ProvisionalTag';
 import { currentProgress } from './startLevel';
 
@@ -37,19 +37,14 @@ interface OlderPages {
   readonly nextCursor: GameSessionCursor | null;
 }
 
-function historyTag(row: HistoryRow): { readonly text: string; readonly tone: string } | null {
-  const tags: Record<HistoryState, { text: string; tone: string } | null> = {
-    // Point in time: the run set a best when it was scored; a later run may have beaten it since (ADR-001 decision 12).
-    verified: row.personalBest ? { text: 'New best', tone: 'status-tag-completed' } : null,
-    flagged: { text: 'Flagged', tone: 'status-tag-paused' },
-    invalid: { text: 'Not counted', tone: 'status-tag-alert' },
-    'on-device': { text: 'Not uploaded yet', tone: 'status-tag-neutral' },
-    // No result yet (NFCT-66): one neutral word, whether scoring has not run or will run again.
-    checking: { text: 'Pending', tone: 'status-tag-neutral' },
-    delayed: { text: 'Pending', tone: 'status-tag-neutral' },
-  };
-  return tags[row.state];
-}
+const TAGS: Record<HistoryRowTag, { readonly text: string; readonly tone: string }> = {
+  'not-counted': { text: 'Not counted', tone: 'status-tag-alert' },
+  // Neutral, not a warning: quitting a run is a normal choice.
+  'ended-early': { text: 'Ended early', tone: 'status-tag-neutral' },
+  flagged: { text: 'Flagged', tone: 'status-tag-paused' },
+  'not-uploaded': { text: 'Not uploaded yet', tone: 'status-tag-neutral' },
+  'new-best': { text: 'New best', tone: 'status-tag-completed' },
+};
 
 function formatWhen(ms: number): string {
   const date = new Date(ms);
@@ -62,23 +57,24 @@ function formatWhen(ms: number): string {
 
 /** One run in a history list; Home (NFCT-13) shows the newest few. */
 export const HistoryItem: React.FC<{ readonly row: HistoryRow }> = ({ row }) => {
-  const tag = historyTag(row);
+  const { score, tag } = historyRowView(row);
+  const shownTag = tag === null ? null : TAGS[tag];
   return (
     // Focusable from script only: after "Show more runs", focus moves to the first run it added.
-    <li className="mm-history-row" data-history-row={row.id} tabIndex={-1}>
+    <li className="mm-history-row" data-history-row={row.id} data-run={row.completed ? 'completed' : 'ended-early'} data-score={score.kind} tabIndex={-1}>
       <span className="mm-history-main">
         <span className="mm-history-when">{formatWhen(row.endedAtMs)}</span>
-        <span className="mm-history-meta">
-          Start level {row.startLevel} · {row.completed ? formatPlayTime(row.activeMs) : 'Ended early'}
-        </span>
+        <span className="mm-history-meta">Start level {row.startLevel} · {formatPlayTime(row.activeMs)}</span>
       </span>
       <span className="mm-history-side">
-        <span className="mm-history-score">
-          {row.score === null
-            ? <><span aria-hidden="true">—</span><span className="mm-visually-hidden">{row.state === 'verified' || row.state === 'flagged' || row.state === 'invalid' ? 'No score' : 'Score pending'}</span></>
-            : numberFormat.format(row.score)}
-        </span>
-        {tag && <span className={`status-tag ${tag.tone}`}>{tag.text}</span>}
+        {score.kind === 'score' && (
+          <span className={`mm-history-score${score.muted ? ' mm-history-score-muted' : ''}`}>{numberFormat.format(score.value)}</span>
+        )}
+        {score.kind === 'pending' && <span className="mm-history-score mm-history-pending">Pending</span>}
+        {score.kind === 'none' && (
+          <span className="mm-history-score"><span aria-hidden="true">—</span><span className="mm-visually-hidden">No score</span></span>
+        )}
+        {shownTag && <span className={`status-tag ${shownTag.tone}`} data-history-tag={tag}>{shownTag.text}</span>}
       </span>
     </li>
   );

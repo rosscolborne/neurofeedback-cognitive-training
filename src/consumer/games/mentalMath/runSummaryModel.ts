@@ -74,11 +74,6 @@ export interface RunStats {
 export interface Totals {
   readonly sessionsCompleted: number;
   readonly activeMs: number;
-  /**
-   * The totals count a run trusted scoring has not checked yet: this one, when
-   * the preview counts it, or another still pending on this device.
-   */
-  readonly includesUnverified: boolean;
 }
 
 export interface RunSummaryModel {
@@ -172,8 +167,6 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   const base = state === null ? null : currentProgress(state, run.sessionId);
   let shown: ServerResult | null = null;
   let after: GameProgress | null = base?.progress ?? null;
-  /** The preview counted this run in the totals (an invalid run, or one this build cannot preview, counts nowhere). */
-  let previewCounted = false;
   /** The session with the result shown, as the upgrade would judge it. */
   let judged: SessionProgressFields | null = null;
   if (trusted) {
@@ -185,7 +178,6 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
     const decision = previewDecision(base.progress, run.sessionId, document);
     shown = decision?.result ?? null;
     after = decision?.progress ?? after;
-    previewCounted = decision !== null && decision.result.validity !== 'invalid';
     // The client document holds every field the upgrade reads (game, version, mode, start level).
     if (decision) judged = { ...document, result: decision.result } as unknown as SessionProgressFields;
   }
@@ -243,7 +235,6 @@ export function runSummary({ outcome, environment, run, save, state }: RunSummar
   const totals: Totals | null = state === null ? null : {
     sessionsCompleted: after?.sessionsCompleted ?? 0,
     activeMs: after?.activeMs ?? 0,
-    includesUnverified: (base?.previewed ?? false) || previewCounted,
   };
 
   return { status: outcome.status, startLevel, verification, score, breakdown, stats, record, unlock, totals };

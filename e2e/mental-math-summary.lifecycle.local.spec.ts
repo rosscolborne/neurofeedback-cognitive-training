@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { devices, type Page } from '@playwright/test';
+import { devices, type Locator, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtHome } from './helpers/auth';
 import { readGameSessions } from './helpers/localEmulator';
@@ -88,6 +88,19 @@ async function watchHighlightHeights(page: Page): Promise<void> {
 
 async function highlightHeights(page: Page): Promise<Array<{ name: string; text: string; height: number }>> {
   return page.evaluate(() => (window as unknown as { nfctHighlightHeights: Array<{ name: string; text: string; height: number }> }).nfctHighlightHeights);
+}
+
+/**
+ * A resolved run ended early, as a history row shows it (NFCT-64): one neutral
+ * "Ended early" tag, its trusted score quieter than a finished run's, its play
+ * time in the meta line, and neither a dash nor "Pending".
+ */
+async function expectEndedEarly(row: Locator): Promise<void> {
+  await expect(row).toHaveAttribute('data-run', 'ended-early');
+  await expect(row.locator('[data-history-tag]')).toHaveText('Ended early');
+  await expect(row.locator('.mm-history-score-muted')).toHaveText(/^\d[\d,]*$/);
+  await expect(row.locator('.mm-history-meta')).toHaveText('Start level 1 · 1\u00A0s');
+  await expect(row).not.toContainText(/—|Pending|No score/);
 }
 
 /** Back to the picker, once it has loaded the player's levels (page time must flow for Firestore meanwhile). */
@@ -235,24 +248,31 @@ test('the game’s progress shows per-game totals and a cursor-paged history of 
   // 6. History: the newest ten, then the next page from the cursor, with nothing repeated.
   const rows = page.locator('li[data-history-row]');
   await expect(rows).toHaveCount(10);
-  await expect(rows.first()).toContainText('Ended early');
+  await expectEndedEarly(rows.first());
   await page.getByRole('button', { name: 'Show more runs', exact: true }).click();
   await expect(rows).toHaveCount(11);
   await expect(page.getByRole('button', { name: 'Show more runs', exact: true })).toHaveCount(0);
   const ids = await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-history-row')));
   expect(new Set(ids).size).toBe(11);
-  // The oldest run is the finished one, with its trusted score.
-  await expect(rows.last()).toContainText(format(completed.score));
+  // The oldest run is the finished one (the player's first, so a new best), with its trusted score in the normal treatment.
+  await expect(rows.last().locator('.mm-history-score')).toHaveText(format(completed.score));
+  await expect(rows.last()).toHaveAttribute('data-run', 'completed');
+  await expect(rows.last().locator('.mm-history-score-muted')).toHaveCount(0);
+  await expect(rows.last().locator('[data-history-tag]')).toHaveText('New best');
   await expect(rows.last()).toContainText('Start level 1');
 
-  // The history and totals survive a reload.
+  // The history and totals survive a reload. Home's recent runs show the same rows, ended early, first.
   await page.reload();
   await arriveAtHome(page, { afterReload: true });
+  const homeRows = page.locator('[data-overview="recent-runs"] li[data-history-row]');
+  await expect(homeRows).toHaveCount(3);
+  for (const row of await homeRows.all()) await expectEndedEarly(row);
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   await page.getByRole('button', { name: 'Mental Math records and history', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Mental Math', exact: true })).toBeVisible();
   await expect(page.locator('[data-total="runs-completed"]')).toHaveText('1');
   await expect(rows).toHaveCount(10);
+  await expectEndedEarly(rows.first());
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Progress', exact: true })).toBeVisible();
 });
