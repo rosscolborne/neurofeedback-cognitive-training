@@ -47,6 +47,20 @@ export async function seedPlayer(): Promise<LocalPlayerFixture> {
   return { player, name };
 }
 
+/**
+ * An account made before the consumer profile (Phase 2): its users/{uid} is
+ * the inherited sign-up document, with no schemaVersion, as every account on
+ * nfct-dev had when Phase 2 merged. This app cannot read it.
+ */
+export async function seedLegacyAccount(): Promise<{ uid: string; email: string; password: string }> {
+  const id = randomUUID().slice(0, 12);
+  const account = { uid: `legacy-${id}`, email: `legacy-${id}@example.test`, password: 'LocalEmulator!123' };
+  const createdAt = new Date().toISOString();
+  await adminAuth.createUser({ ...account, displayName: 'Legacy Player' });
+  await adminDb.doc(`users/${account.uid}`).set({ email: account.email, displayName: 'Legacy Player', createdAt, role: 'patient', updatedAt: createdAt });
+  return account;
+}
+
 /** A consumer player: an Auth account only. The app creates its profile (users/{uid}) itself. */
 export async function seedConsumerAccount(): Promise<{ uid: string; email: string; password: string }> {
   const id = randomUUID().slice(0, 12);

@@ -204,6 +204,16 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     renderer.unmount();
   });
 
+  it('reports a new profile that is gone when read back as a failure, not as an unreadable profile', async () => {
+    profiles.getProfile.mockResolvedValueOnce(missing()).mockResolvedValueOnce(missing());
+    profiles.createProfile.mockReturnValueOnce(accepted());
+    const renderer = await signIn();
+    expectProfileUnknown();
+    expect(observed.profileLookupFailed).toBe(true);
+    expect(observed.profileUnreadable).toBe(false);
+    renderer.unmount();
+  });
+
   it('never opens on a refused profile write, and does not retry it by itself', async () => {
     profiles.getProfile.mockResolvedValueOnce(missing());
     const refused = Promise.reject(denied());
@@ -265,9 +275,23 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     const renderer = await signIn();
     expectProfileUnknown();
     expect(observed.profileLookupFailed).toBe(true);
+    // Told apart from a failed read: the app does not blame the connection or offer a retry.
+    expect(observed.profileUnreadable).toBe(true);
     await act(async () => { await vi.advanceTimersByTimeAsync(PROFILE_LOOKUP_AUTO_RETRY_MAX_MS * 2); });
     expect(profiles.getProfile).toHaveBeenCalledTimes(1);
     expect(profiles.createProfile).not.toHaveBeenCalled();
+
+    // A later lookup starts clean: a slow read is not shown as unreadable, and a readable one opens.
+    const slow = deferred<Read>();
+    profiles.getProfile.mockReturnValueOnce(slow.promise);
+    await act(async () => { observed.retryProfileLookup(); });
+    expect(observed.profileUnreadable).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PROFILE_LOOKUP_RETRY_AFTER_MS); });
+    expect(observed.profileLookupFailed).toBe(true);
+    expect(observed.profileUnreadable).toBe(false);
+    await act(async () => { slow.resolve(readable()); });
+    expectOpen();
+    expect(observed.profileUnreadable).toBe(false);
     renderer.unmount();
   });
 
@@ -404,6 +428,8 @@ describe('AuthContext profile lookup (NFCT-44)', () => {
     const renderer = await signIn();
     expectProfileUnknown();
     expect(observed.profileLookupFailed).toBe(true);
+    // A denied read is not an unreadable profile.
+    expect(observed.profileUnreadable).toBe(false);
     await act(async () => { await vi.advanceTimersByTimeAsync(PROFILE_LOOKUP_AUTO_RETRY_MAX_MS * 2); });
     expect(profiles.getProfile).toHaveBeenCalledTimes(1);
     renderer.unmount();
