@@ -107,7 +107,7 @@ It processes each session independently, in whatever order sessions arrive, and 
   - **`invalid`** carries nothing else, so trusted scoring can mark a session permanently processed without inventing gameplay values.
 - **Trusted peak level.** The session's own `peakLevel` is a client observation only. Trusted scoring compares it with the peak replayed from the trials as a plausibility check. `bestPeakLevel`, unlocks and the `peakLevel` record use only the replayed `result.peakLevel`.
 - **Totals.** Abandoned sessions add active time and last-played time, but do not count as completed or set records.
-- **`performanceIndex`.** `result.performanceIndex` and `performanceIndexVersion` are `number | null` and always null in Stage 1. `GameDefinition.performanceIndex` stays absent until a formula is validated on real gameplay data (NFCT-26).
+- **`performanceIndex`.** `result.performanceIndex` and `performanceIndexVersion` are `number | null` and always null in Stage 1. `GameDefinition.performanceIndex` stays absent until a formula is validated on real gameplay data (NFCT-26). See [ADR-003](adr-003-domain-indexes-and-training-score.md).
 - **Where the logic lives.** The per-game reducer `applySession` and `unlockedStartLevel` are pure functions in `shared/`. Trusted scoring, the client's optimistic preview and the rebuild script all call the same code.
 - **Stage 1 progress is limited.** It holds only personal bests, best peak level, unlocked start levels, completed-session count, active time and last-played time. Streaks, daily stats and achievements are separate cross-game aggregates (decision 13); weekly goals are computed on read; domain indexes and leaderboards are later stages.
 
@@ -201,6 +201,7 @@ So:
 - **Fractional weights.** A game belongs to one or more domains through `domainWeights`, which are non-negative and sum to 1 (e.g. `{ math: 0.7, 'processing-speed': 0.2, memory: 0.1 }`). Weights say how a game is filed; they are not measurements.
 - **Additive growth.** Adding a domain such as `attention` or `cognitive-flexibility` appends it and bumps the catalogue `version`. Aggregates are keyed maps, so weights written under v1 stay valid and no schema migration is needed. Domain IDs are never renamed, removed or reused.
 - **Older builds tolerate newer domains.** A build that reads contributions naming a domain its catalogue does not know ignores that domain rather than fail. Writes accept only the writer's own catalogue.
+- **Domain indexes and an aggregate score.** See [ADR-003](adr-003-domain-indexes-and-training-score.md).
 
 ### 11. EEG storage policy and simulated provenance
 
