@@ -245,7 +245,7 @@ describe('relationship transactions', () => {
         ['keeping clinicId', { clinicId: clinicA }],
         ['clearing only clinicianId', { clinicId: clinicA, acceptedInvitationId: 'INVA-AAAA-AAAA' }],
         ['relinking through linkedClinicianCode', { linkedClinicianCode: ids.clinicianB }],
-        ['changing the assignment', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['mandala'] }],
+        ['changing the assignment', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }],
         ['changing the custom protocol config', { customProtocolConfig: { id: 'custom', name: 'Patient-made rule' } }],
     ])('a disconnect write refuses %s', async (_label, profileExtra) => {
         const patientA = await as(ids.patientA);

@@ -14,7 +14,7 @@ import {
 const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 'session-1', patientId: 'patient-1', patientName: 'Patient', clinicId: 'clinic-1',
   date: '2026-09-19', timestamp: Date.parse('2026-09-19T12:00:00Z'),
-  protocol: 'theta-beta-ratio', experience: 'skyline-drift', durationSeconds: 600,
+  protocol: 'theta-beta-ratio', experience: 'neuro-gambit', durationSeconds: 600,
   timeInZonePercent: 50, averageCoherence: null, peakFocusScore: 0,
   averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
   timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0,
@@ -95,7 +95,7 @@ describe('patient metrics', () => {
       id: `proxy-${index}`,
       timestamp: Date.parse(`2026-09-${String(10 + index).padStart(2, '0')}T12:00:00Z`),
       protocol: 'alpha-enhancement',
-      experience: 'tidal-garden',
+      experience: 'neuro-gambit',
       durationSeconds: 1_800,
       timeInZonePercent: index === 0 ? 79 : 100,
     }));
@@ -109,19 +109,8 @@ describe('patient metrics', () => {
     expect(earned.has('steady-state')).toBe(false);
     expect(earned.has('deep-focus')).toBe(false);
     expect(earned.has('still-waters')).toBe(false);
-    expect(earned.has('garden-keeper')).toBe(false);
-    expect(earned.has('skyline-explorer')).toBe(false);
   });
 
-  it('earns Garden Keeper only from a persisted stage of at least three', () => {
-    expect(getEarnedBadgeIds([], 'UTC', 2).has('garden-keeper')).toBe(false);
-    expect(getEarnedBadgeIds([], 'UTC', 3).has('garden-keeper')).toBe(true);
-    expect(getEarnedBadgeIds([], 'UTC').has('garden-keeper')).toBe(false);
-    const options = { period: 'all' as const, nowMs: Date.now(), chartWidth: 300, chartHeight: 40, gardenStage: 3 };
-    expect(buildPatientProgressDisplayModel('loading', [], options).earnedBadgeIds).toBeNull();
-    expect(buildPatientProgressDisplayModel('error', [], options).earnedBadgeIds).toBeNull();
-    expect(buildPatientProgressDisplayModel('ready', [], options).earnedBadgeIds?.has('garden-keeper')).toBe(true);
-  });
 
   it('withholds all evidence conclusions while loading', () => {
     const model = buildPatientProgressDisplayModel('loading', [], {

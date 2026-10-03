@@ -21,6 +21,7 @@ import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 import { clearPendingInvitation } from './services/pendingInvitation';
+import { useSignOut } from './components/account/useSignOut';
 
 function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.RefObject<string | null> }) {
   const { invitationCode } = useParams();
@@ -41,7 +42,10 @@ function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.Ref
 }
 
 export function App() {
-  const { user, role, loading, logout, isDemoWorkspace, cacheStatus, cacheEndingReason, signOutWithoutFirestore } = useAuth();
+  const { user, role, loading, logout, isDemoWorkspace, cacheStatus, cacheEndingReason, signOutWithoutFirestore, roleLookupFailed, retryRoleLookup } = useAuth();
+  // Sign-out from the role lookup's error screen, which asks before
+  // discarding writes that have not uploaded, as the shells' Log Out does.
+  const roleLookupSignOut = useSignOut(logout);
   const navigate = useNavigate();
   const location = useLocation();
   const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
@@ -219,8 +223,16 @@ export function App() {
   // account is shown, only what is happening. `ending` replaces the account's
   // screens before the page navigates away, so a page kept by the browser's
   // back/forward cache holds none of its data either.
-  if (loading || cacheStatus === 'ending') {
+  // A sign-out started from the role lookup's error screen keeps that screen,
+  // and its unsynced-writes question, until the user has answered: a lookup
+  // that succeeds meanwhile (one in flight, or the automatic retry) must not
+  // close it. Once signing out proceeds, the app loads afresh.
+  const roleLookupSignOutPending = roleLookupSignOut.phase === 'checking' || roleLookupSignOut.phase === 'unsynced';
+  if (loading || cacheStatus === 'ending' || roleLookupSignOutPending) {
     const waiting = cacheStatus === 'blocked' || cacheStatus === 'failed';
+    // The signed-in account's role is unknown (not "no role"): it stays here,
+    // never on role selection, until a read establishes it.
+    const roleUnavailable = Boolean(user) && (roleLookupFailed || roleLookupSignOutPending) && !waiting && cacheStatus !== 'ending';
     const notice = cacheStatus === 'ending' ? { title: cacheEndingReason === 'account-deleted' ? 'Finishing account deletion…' : 'Signing out…' }
       : cacheStatus === 'blocked' ? {
         title: 'Finishing sign-out on this device…',
@@ -231,7 +243,12 @@ export function App() {
           detail: 'Close any other tabs or windows with this app open, then try again.',
           retry: true,
         }
-          : null;
+          : roleUnavailable ? {
+            title: 'Your account couldn’t be loaded.',
+            detail: 'Check your internet connection, then try again.',
+            retry: true,
+          }
+            : null;
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', textAlign: 'center', background: 'var(--surface-patient-base, #F8F7F4)', color: 'var(--text-secondary)' }}>
         <BrandLogo size={72} variant="terracotta" glow />
@@ -248,6 +265,14 @@ export function App() {
             <button type="button" className="btn btn-secondary" onClick={() => void signOutWithoutFirestore()}>Sign out</button>
           </div>
         )}
+        {roleUnavailable && (
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {/* Not while sign-out runs or asks about unsynced writes: a lookup that succeeds would close that step. */}
+            <button type="button" className="btn btn-primary" disabled={roleLookupSignOut.busy || roleLookupSignOut.phase === 'unsynced'} onClick={retryRoleLookup}>Try again</button>
+            <button type="button" className="btn btn-secondary" disabled={roleLookupSignOut.busy} onClick={roleLookupSignOut.requestSignOut}>Sign out</button>
+          </div>
+        )}
+        {roleUnavailable && roleLookupSignOut.dialog}
       </div>
     );
   }

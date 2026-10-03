@@ -1,32 +1,33 @@
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, Lock, Pause } from 'lucide-react';
-import { mentalMath } from '@nfct/shared';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { ArrowLeft, Lock, Pause, Trophy } from 'lucide-react';
+import { mentalMath, type GameProgress } from '@nfct/shared';
 import type { GameClock } from '../../clock/gameClock';
 import type { EegCapture, EegCaptureProvider } from '../../eeg/eegCapture';
-import type { EegSource } from '@nfct/shared';
-import type {
-  EegRecordingDraft,
-  EegRecordingRefusalReason,
-  EegRecordingRepository,
-  EegRecordingSave,
-  EegRecordingSkipReason,
-} from '../../repositories/eegRecordingRepository';
+import type { EegRecordingDraft, EegRecordingRepository, EegRecordingSave } from '../../repositories/eegRecordingRepository';
 import type { GameSessionRepository, SavedGameSession, StartedGameSession } from '../../repositories/gameSessionRepository';
 import type { ProgressRepository, ProgressWithRecentSessions } from '../../repositories/progressRepository';
 import { Keypad } from './Keypad';
+import { MentalMathProgress } from './MentalMathProgress';
+import { ProvisionalTag } from './ProvisionalTag';
 import { MentalMathRunController, type RunOutcome, type RunSnapshot } from './runController';
+import type { EegInfo, EegState, SaveState } from './runSave';
+import { RunSummary } from './RunSummary';
+import { bestsFor, type RunIdentity } from './runSummaryModel';
 import { buildSessionDraft, type SessionEnvironment } from './sessionDraft';
-import { startLevelChoices, type StartLevelChoices } from './startLevel';
+import { currentProgress, startLevelChoices, type StartLevelChoices } from './startLevel';
 import { documentVisibility, type VisibilitySource } from './visibility';
 import './mentalMath.css';
 
-// Mental Math, playable end to end: the start-level picker, the run, and the
-// minimal post-run handoff (the summary and progress screens are NFCT-22's).
+// Mental Math, playable end to end: the start-level picker, the run, the
+// post-session summary and the game's progress and history (NFCT-21, NFCT-22).
 // The session is written once, when the run ends, and never before: a run
 // closed early by the OS or by leaving the screen leaves nothing behind.
 
+/** Which screen Mental Math opens on. */
+export type MentalMathView = 'picker' | 'progress';
+
 export interface MentalMathScreenProps {
-  readonly gameSessions: Pick<GameSessionRepository, 'startGameSession' | 'getGameSession'>;
+  readonly gameSessions: Pick<GameSessionRepository, 'startGameSession' | 'getGameSession' | 'subscribeToGameSessionHistory' | 'listGameSessionHistory'>;
   /** Writes the run's EEG recording, after the session is queued. */
   readonly eegRecordings: Pick<EegRecordingRepository, 'saveRecording'>;
   readonly progress: Pick<ProgressRepository, 'subscribeToProgressWithRecentSessions'>;
@@ -35,30 +36,24 @@ export interface MentalMathScreenProps {
   readonly visibility?: VisibilitySource;
   /** An optional EEG provider the player may switch on; EEG is never required. */
   readonly eegProvider?: EegCaptureProvider | null;
+  /** The screen to open on: the start-level picker (default) or the game's progress and history. */
+  readonly initialView?: MentalMathView;
   readonly onExit: () => void;
 }
 
-/** The run's EEG recording, reported separately from the session: "run saved, EEG not saved" is a normal outcome. */
-type EegState =
-  | { readonly status: 'none' }
-  | { readonly status: 'checking' }
-  | { readonly status: 'queued' }
-  | { readonly status: 'saved' }
-  | { readonly status: 'not-saved'; readonly reason: EegRecordingSkipReason | EegRecordingRefusalReason | 'error' };
-
-type SaveState =
-  | { readonly status: 'saving' }
-  | { readonly status: 'queued'; readonly eeg: EegState }
-  | { readonly status: 'confirmed'; readonly eeg: EegState }
-  | { readonly status: 'failed'; readonly message: string };
-
-/** What the player is told about the EEG provider that ran: its label and its provenance. */
-type EegInfo = { readonly label: string; readonly source: EegSource };
+/** The picker's choices, kept while its Progress button shows the game's progress. */
+interface PickerChoice {
+  readonly level: number;
+  readonly withEeg: boolean;
+}
 
 type Stage =
-  | { readonly kind: 'picker' }
+  /** `restore`: the choices to show again. `focusProgress`: back from the progress screen, focus returns to the Progress button. */
+  | { readonly kind: 'picker'; readonly restore?: PickerChoice; readonly focusProgress?: boolean }
+  /** `back` is where Back leads: the picker, or out of the game when it opened on this screen. */
+  | { readonly kind: 'progress'; readonly back: 'picker' | 'exit'; readonly restore?: PickerChoice }
   | { readonly kind: 'playing'; readonly controller: MentalMathRunController; readonly eeg: EegInfo | null }
-  | { readonly kind: 'handoff'; readonly outcome: RunOutcome; readonly save: SaveState; readonly eeg: EegInfo | null }
+  | { readonly kind: 'handoff'; readonly outcome: RunOutcome; readonly run: RunIdentity; readonly save: SaveState; readonly eeg: EegInfo | null }
   | { readonly kind: 'start-failed'; readonly message: string };
 
 function errorMessage(error: unknown): string {
@@ -73,9 +68,10 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
   environment,
   visibility = documentVisibility,
   eegProvider = null,
+  initialView = 'picker',
   onExit,
 }) => {
-  const [stage, setStage] = useState<Stage>({ kind: 'picker' });
+  const [stage, setStage] = useState<Stage>(initialView === 'progress' ? { kind: 'progress', back: 'exit' } : { kind: 'picker' });
   const active = useRef<{ controller: MentalMathRunController; capture: EegCapture | null } | null>(null);
 
   /** Tears down a run that has not ended: no save, no partial state. */
@@ -94,6 +90,11 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
   // Leaving the screen mid-run keeps nothing.
   useEffect(() => discardActiveRun, [discardActiveRun]);
 
+  // Each screen starts at its top: the summary scrolls on a phone, and the next screen must not open part-way down.
+  useLayoutEffect(() => {
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+  }, [stage.kind]);
+
   // A run whose screen is gone is torn down, so it can never keep playing unseen.
   useEffect(() => {
     if (active.current && (stage.kind !== 'playing' || stage.controller !== active.current.controller)) discardActiveRun();
@@ -104,8 +105,9 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
     const setSave = (save: SaveState) => setStage((current) => (
       current.kind === 'handoff' && current.outcome === outcome ? { ...current, save } : current
     ));
+    const run: RunIdentity = { sessionId: game.sessionId, userId: game.userId, seed: game.seed };
     setStage((current) => (
-      current.kind === 'playing' && current.controller === controller ? { kind: 'handoff', outcome, save: { status: 'saving' }, eeg } : current
+      current.kind === 'playing' && current.controller === controller ? { kind: 'handoff', outcome, run, save: { status: 'saving' }, eeg } : current
     ));
     let eegRecording: EegRecordingDraft | null = null;
     try {
@@ -200,11 +202,42 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
 
   switch (stage.kind) {
     case 'picker':
-      return <StartLevelPicker progress={progress} eegProvider={eegProvider} onStart={startRun} onExit={onExit} />;
+      return (
+        <StartLevelPicker
+          progress={progress}
+          eegProvider={eegProvider}
+          restore={stage.restore}
+          focusProgress={stage.focusProgress ?? false}
+          onStart={startRun}
+          onViewProgress={(choice) => setStage({ kind: 'progress', back: 'picker', restore: choice })}
+          onExit={onExit}
+        />
+      );
+    case 'progress':
+      return (
+        <MentalMathProgress
+          progress={progress}
+          gameSessions={gameSessions}
+          onBack={() => (stage.back === 'exit' ? onExit() : setStage({ kind: 'picker', restore: stage.restore, focusProgress: true }))}
+          onPlay={() => setStage({ kind: 'picker', restore: stage.restore })}
+        />
+      );
     case 'playing':
       return <RunView controller={stage.controller} eeg={stage.eeg} visibility={visibility} />;
     case 'handoff':
-      return <RunHandoff outcome={stage.outcome} save={stage.save} eeg={stage.eeg} onPlayAgain={() => setStage({ kind: 'picker' })} onExit={onExit} />;
+      return (
+        <RunSummary
+          outcome={stage.outcome}
+          run={stage.run}
+          environment={environment}
+          save={stage.save}
+          eeg={stage.eeg}
+          progress={progress}
+          onPlayAgain={() => setStage({ kind: 'picker' })}
+          onViewProgress={() => setStage({ kind: 'progress', back: 'picker' })}
+          onExit={onExit}
+        />
+      );
     case 'start-failed':
       return (
         <div className="mm-screen">
@@ -225,8 +258,23 @@ export const MentalMathScreen: React.FC<MentalMathScreenProps> = ({
 
 type PickerData =
   | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly choices: StartLevelChoices }
+  /** `progress` is the cached progress with this device's pending runs applied, as the unlocks use it. */
+  | { readonly status: 'ready'; readonly choices: StartLevelChoices; readonly progress: GameProgress | null; readonly unchecked: ReadonlySet<string> }
   | { readonly status: 'unavailable'; readonly choices: StartLevelChoices };
+
+const numberFormat = new Intl.NumberFormat();
+
+/**
+ * The selected start level's best score, from the same preview as the
+ * unlocks: provisional when a run trusted scoring has not checked yet holds it.
+ */
+function bestLine(data: PickerData, level: number | null): { readonly text: string; readonly provisional: boolean } {
+  if (data.status !== 'ready' || level === null) return { text: '\u00A0', provisional: false };
+  const best = bestsFor(data.progress, level).score;
+  return best === undefined
+    ? { text: `No finished runs from level ${level} yet.`, provisional: false }
+    : { text: `Your best from level ${level}: ${numberFormat.format(best.value)}`, provisional: data.unchecked.has(best.sessionId) };
+}
 
 /**
  * Logs why the player's progress could not be loaded, for diagnosis (CI logs,
@@ -247,13 +295,25 @@ function logProgressReadFailure(error: unknown): void {
 const StartLevelPicker: React.FC<{
   readonly progress: MentalMathScreenProps['progress'];
   readonly eegProvider: EegCaptureProvider | null;
+  /** Choices to show again (back from the game's progress); otherwise the defaults. */
+  readonly restore?: PickerChoice;
+  /** Focus the Progress button on mount, instead of the heading. */
+  readonly focusProgress: boolean;
   readonly onStart: (startLevel: number, withEeg: boolean) => void;
+  readonly onViewProgress: (choice: PickerChoice | undefined) => void;
   readonly onExit: () => void;
-}> = ({ progress, eegProvider, onStart, onExit }) => {
+}> = ({ progress, eegProvider, restore, focusProgress, onStart, onViewProgress, onExit }) => {
   const [data, setData] = useState<PickerData>({ status: 'loading' });
-  const [selected, setSelected] = useState<number | null>(null);
-  const [withEeg, setWithEeg] = useState(false);
-  const touched = useRef(false);
+  const [selected, setSelected] = useState<number | null>(restore?.level ?? null);
+  const [withEeg, setWithEeg] = useState(restore?.withEeg ?? false);
+  // A restored level counts as the player's own choice: it stays selected while it is unlocked.
+  const touched = useRef(restore !== undefined);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const progressButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus starts on the heading, or back on the Progress button when returning from the game's progress.
+  const initialFocus = useRef(focusProgress ? progressButtonRef : headingRef);
+  useEffect(() => { initialFocus.current.current?.focus(); }, []);
 
   useEffect(() => {
     let stop: () => void = () => {};
@@ -264,7 +324,8 @@ const StartLevelPicker: React.FC<{
     };
     try {
       stop = progress.subscribeToProgressWithRecentSessions(mentalMath.GAME_ID, {}, (state: ProgressWithRecentSessions) => {
-        apply({ status: 'ready', choices: startLevelChoices(state) });
+        const current = currentProgress(state);
+        apply({ status: 'ready', choices: startLevelChoices(state), progress: current.progress, unchecked: current.unchecked });
       }, (error) => {
         logProgressReadFailure(error);
         apply({ status: 'unavailable', choices: startLevelChoices(null) });
@@ -277,6 +338,7 @@ const StartLevelPicker: React.FC<{
   }, [progress]);
 
   const choices = data.status === 'loading' ? null : data.choices;
+  const best = bestLine(data, selected);
   const levels = Array.from({ length: choices?.maxLevel ?? mentalMath.MAX_LEVEL }, (_, index) => index + 1);
 
   return (
@@ -285,10 +347,18 @@ const StartLevelPicker: React.FC<{
         <button type="button" className="btn btn-ghost mm-back" onClick={onExit}>
           <ArrowLeft size={18} aria-hidden="true" /> Back
         </button>
+        <button
+          ref={progressButtonRef}
+          type="button"
+          className="btn btn-ghost mm-topbar-action"
+          onClick={() => onViewProgress(selected === null ? undefined : { level: selected, withEeg })}
+        >
+          <Trophy size={18} aria-hidden="true" /> Progress
+        </button>
       </div>
       <div className="mm-panel">
         <div>
-          <h1 className="mm-title font-display">Mental Math</h1>
+          <h1 ref={headingRef} tabIndex={-1} className="mm-title font-display">Mental Math</h1>
           <p className="mm-muted">A 90-second run of arithmetic. Questions get harder as you answer correctly and easier after a miss.</p>
         </div>
 
@@ -322,6 +392,10 @@ const StartLevelPicker: React.FC<{
               : 'Every start level is unlocked.')}
             {data.status === 'unavailable' && 'Your progress couldn’t be loaded, so only level 1 is available right now.'}
           </p>
+          <p className="mm-level-best" data-picker="best">
+            {best.text}
+            {best.provisional && <> <ProvisionalTag /></>}
+          </p>
         </fieldset>
 
         {eegProvider && (
@@ -353,8 +427,6 @@ function formatRemaining(ms: number): string {
   const seconds = Math.ceil(ms / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
-
-const numberFormat = new Intl.NumberFormat();
 
 const RunView: React.FC<{
   readonly controller: MentalMathRunController;
@@ -481,78 +553,3 @@ const PausePanel: React.FC<{
     <p className="mm-help">Quitting ends the run now and saves it as unfinished.</p>
   </section>
 );
-
-// ---- Post-run handoff (NFCT-22 owns the full summary) ----
-
-function eegMessage(eeg: EegState, { label, source }: EegInfo): string {
-  const simulated = source === 'simulated' ? ' It is simulated data, not a measurement.' : '';
-  switch (eeg.status) {
-    case 'none':
-      return `No ${label} was captured during this run.`;
-    case 'checking':
-      return `Checking your EEG consent before saving ${label}…`;
-    case 'queued':
-      return `${label} recording saved on this device. Uploading…${simulated}`;
-    case 'saved':
-      return `${label} recording saved with this run.${simulated}`;
-    case 'not-saved':
-      switch (eeg.reason) {
-        case 'consent-required':
-          return `${label} was not saved: saving EEG needs your EEG consent.`;
-        case 'consent-unavailable':
-          return `${label} wasn’t saved because your EEG consent couldn’t be confirmed with the server (you may be offline, on a slow connection, or have profile changes still uploading).`;
-        case 'consent-withdrawn':
-          return `${label} was not saved: your EEG consent was withdrawn.`;
-        case 'invalid':
-          return `${label} was not saved: the recording was incomplete.`;
-        case 'session-not-saved':
-          return `${label} was not saved because the run was not saved.`;
-        case 'already-recorded':
-          return `${label} was already saved for this run.`;
-        case 'owner-changed':
-          return `${label} was not saved because you signed out.`;
-        case 'unknown':
-        case 'error':
-          return `${label} couldn’t be saved.`;
-      }
-  }
-}
-
-const RunHandoff: React.FC<{
-  readonly outcome: RunOutcome;
-  readonly save: SaveState;
-  readonly eeg: EegInfo | null;
-  readonly onPlayAgain: () => void;
-  readonly onExit: () => void;
-}> = ({ outcome, save, eeg, onPlayAgain, onExit }) => {
-  const scored = mentalMath.score(outcome.run.trials, { modeId: mentalMath.MODE_ID, startLevel: outcome.run.startLevel });
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { headingRef.current?.focus(); }, []);
-  const saveText = save.status === 'saving' ? 'Saving your run…'
-    : save.status === 'queued' ? 'Saved on this device. Uploading to your account…'
-      : save.status === 'confirmed' ? 'Run saved to your account.'
-        : `This run couldn’t be saved. ${save.message}`;
-  return (
-    <div className="mm-screen">
-      <section className="mm-panel" aria-labelledby="mm-handoff-title">
-        <h1 id="mm-handoff-title" ref={headingRef} tabIndex={-1} className="mm-title font-display">
-          {outcome.status === 'completed' ? 'Run complete' : 'Run ended early'}
-        </h1>
-        <div className="mm-result">
-          <span className="mm-result-value" data-result="score">{numberFormat.format(scored.score)}</span>
-          <span className="mm-hud-label">Score · not yet verified</span>
-        </div>
-        <p className="mm-muted">
-          {outcome.run.trials.length} {outcome.run.trials.length === 1 ? 'question' : 'questions'} attempted, {scored.metrics.correct} correct.
-        </p>
-        <p className={`mm-save mm-save-${save.status}`} role="status">{saveText}</p>
-        {eeg && save.status !== 'saving' && save.status !== 'failed' && <p className="mm-help mm-eeg-status" role="status">{eegMessage(save.eeg, eeg)}</p>}
-        <p className="mm-help">The server checks every run before it counts toward your records and unlocks. Until then this score is provisional.</p>
-        <div className="mm-actions">
-          <button type="button" className="btn btn-primary" onClick={onPlayAgain}>Play again</button>
-          <button type="button" className="btn btn-secondary" onClick={onExit}>Done</button>
-        </div>
-      </section>
-    </div>
-  );
-};

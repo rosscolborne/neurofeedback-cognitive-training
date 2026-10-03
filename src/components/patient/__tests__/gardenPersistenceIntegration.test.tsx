@@ -26,8 +26,8 @@ vi.mock('firebase/firestore', () => ({
   where: vi.fn(), query: vi.fn(), Timestamp: { fromDate: (date: Date) => date }, ...firestore,
 }));
 vi.mock('../../../services/eegEngine', () => ({ eegEngine: engine }));
-vi.mock('../../../services/audioEngine', () => ({ audioEngine: { playChime: vi.fn(), stopAll: vi.fn(), setMuted: vi.fn() } }));
-vi.mock('../../experiences/TidalGardenCanvas', () => ({ TidalGardenCanvas: 'experience-view' }));
+vi.mock('../../../services/audioEngine', () => ({ audioEngine: { playChime: vi.fn(), setMuted: vi.fn() } }));
+vi.mock('../../experiences/NeuroGambitExperience', () => ({ NeuroGambitExperience: 'experience-view' }));
 vi.mock('../HeadsetFitModal', () => ({ HeadsetFitModal: 'headset-fit' }));
 
 import { createBlankProfile, storageEngine } from '../../../services/storageEngine';
@@ -53,14 +53,13 @@ const frame = (inZone = true) => ({
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-it('opens a legacy garden, completes verified non-Demo training through the real transaction path, and reloads growth once', async () => {
+it('completes verified non-Demo alpha training through the real transaction path and reloads garden growth once', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   memory.client = { ...createBlankProfile('patient-1', 'patient@example.test'),
     name: 'Patient One', assignedProtocol: 'alpha-enhancement', notes: 'concurrent care note',
-    customProtocolConfig: { ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1 },
-    tidalGardenState: undefined } as ClientProfile;
+    customProtocolConfig: { ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1 } } as ClientProfile;
   memory.sessions = [];
   firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: unknown) => unknown) => callback({
     get: async () => snapshot(),
@@ -71,14 +70,10 @@ it('opens a legacy garden, completes verified non-Demo training through the real
     },
   }));
   firestore.getDoc.mockImplementation(async () => snapshot());
-  const newProfile = createBlankProfile('new-patient', 'new@example.test');
-  expect(newProfile.tidalGardenState).toMatchObject({ stage: 1, growthPoints: 0 });
-  const opened = await storageEngine.ensureTidalGardenState('patient-1');
-  expect(opened.tidalGardenState).toMatchObject({ stage: 1, growthPoints: 0 });
-  expect(memory.client?.notes).toBe('concurrent care note');
+  expect(memory.client.tidalGardenState).toMatchObject({ stage: 1, growthPoints: 0 });
   const persisted: { client: ClientProfile | null } = { client: null };
   let view!: ReactTestRenderer;
-  await act(async () => { view = create(<SessionRunner client={opened} selectedExperience="tidal-garden"
+  await act(async () => { view = create(<SessionRunner client={memory.client!} selectedExperience="neuro-gambit"
     onComplete={async (session) => { await storageEngine.createSession(session); persisted.client = await storageEngine.getClient('patient-1'); }}
     onCancel={vi.fn()} />); });
   await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
@@ -91,19 +86,16 @@ it('opens a legacy garden, completes verified non-Demo training through the real
       vi.advanceTimersByTime(1000);
     });
   }
-  const canvas = view.root.find((node) => (node.type as unknown) === 'experience-view');
-  expect(canvas.props.growthPoints).toBe(10);
   await act(async () => {
     stream.sequence++;
     stream.lastFrameAtMs = Date.now();
     stream.callback?.(frame(false));
     vi.advanceTimersByTime(1_000);
   });
-  expect(canvas.props.growthPoints).toBe(10);
   await act(async () => { button(view, 'End Session & Save').props.onClick(); });
   await act(async () => { await button(view, 'Save & View Summary').props.onClick(); });
   expect(memory.sessions).toHaveLength(1);
-  expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false, experience: 'tidal-garden',
+  expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false, experience: 'neuro-gambit',
     durationSeconds: 5, configuredDurationSeconds: 60, inZoneSeconds: 4, timeInZonePercent: 80 });
   expect(persisted.client?.tidalGardenState).toMatchObject({ stage: 1, growthPoints: 10 });
   expect(memory.client?.notes).toBe('concurrent care note');
@@ -134,7 +126,7 @@ it('caps a short completed session at 150 XP despite later in-zone frames and a 
   firestore.getDoc.mockImplementation(async () => snapshot());
 
   let view!: ReactTestRenderer;
-  await act(async () => { view = create(<SessionRunner client={memory.client!} selectedExperience="tidal-garden"
+  await act(async () => { view = create(<SessionRunner client={memory.client!} selectedExperience="neuro-gambit"
     onComplete={async (session) => { await storageEngine.createSession(session); }} onCancel={vi.fn()} />); });
   await act(async () => { view.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
   await act(async () => { button(view, 'Begin Training').props.onClick(); });
@@ -146,8 +138,6 @@ it('caps a short completed session at 150 XP despite later in-zone frames and a 
       vi.advanceTimersByTime(1_000);
     });
   }
-  const canvas = view.root.find((node) => (node.type as unknown) === 'experience-view');
-  expect(canvas.props.growthPoints).toBe(150);
   expect(memory.sessions).toHaveLength(1);
   expect(memory.sessions[0]).toMatchObject({ patientId: 'patient-1', isDemo: false,
     durationSeconds: 60, configuredDurationSeconds: 60, inZoneSeconds: 60 });
@@ -162,7 +152,6 @@ it('caps a short completed session at 150 XP despite later in-zone frames and a 
       vi.advanceTimersByTime(1_000);
     });
   }
-  expect(canvas.props.growthPoints).toBe(150);
   expect(memory.sessions[0]).toMatchObject({ durationSeconds: 60, inZoneSeconds: 60 });
   expect(memory.client?.tidalGardenState?.growthPoints).toBe(150);
 

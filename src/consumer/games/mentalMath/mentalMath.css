@@ -1,4 +1,4 @@
-/* Mental Math (NFCT-21). Same column, surfaces and tokens as the patient app. */
+/* Mental Math (NFCT-21, NFCT-22). Same column, surfaces and tokens as the patient app. */
 
 .mm-screen {
   width: 100%;
@@ -17,11 +17,22 @@
 .mm-topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .mm-back {
-  min-height: 44px;
   padding-left: var(--space-2);
+}
+
+.mm-topbar-action {
+  padding-right: var(--space-3);
+}
+
+/* .btn qualifies these so the phone-width .btn minimum (42 px) cannot shrink them below 44 px. */
+.btn.mm-back,
+.btn.mm-topbar-action {
+  min-height: 44px;
 }
 
 .mm-panel {
@@ -119,8 +130,14 @@
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-.mm-level:hover {
-  border-color: var(--brand-primary);
+@media (hover: hover) {
+  .mm-level:hover {
+    border-color: var(--brand-primary);
+  }
+
+  .mm-level-locked:hover {
+    border-color: var(--border-default);
+  }
 }
 
 .mm-level-selected {
@@ -136,10 +153,6 @@
   cursor: not-allowed;
 }
 
-.mm-level-locked:hover {
-  border-color: var(--border-default);
-}
-
 .mm-level:has(input:focus-visible) {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
@@ -147,6 +160,15 @@
 
 .mm-levels:disabled .mm-level {
   cursor: progress;
+}
+
+/* The selected start level's best; one line reserved so selecting a level never shifts the layout. */
+.mm-level-best {
+  min-height: 1.45em;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .mm-eeg-option {
@@ -191,8 +213,16 @@
 
 /* ---- The run ---- */
 
+/* The run is played by touch (NFCT-33): pressing the question, the HUD or a
+   key never selects text or opens the iOS callout, quick taps never zoom, and
+   a tap shows the control's own pressed state instead of the grey flash. */
 .mm-run {
   gap: var(--space-3);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mm-hud {
@@ -256,6 +286,10 @@
 .mm-key:focus-visible {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
+}
+
+.mm-pause:active:not(:disabled) {
+  background-color: var(--surface-patient-recessed);
 }
 
 .mm-pause:disabled {
@@ -351,6 +385,7 @@
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -396,12 +431,58 @@
   width: 100%;
 }
 
-/* ---- Handoff ---- */
+/* ---- Post-session summary (NFCT-22) ---- */
 
-.mm-result {
+.mm-summary {
+  gap: var(--space-3);
+}
+
+.mm-panel-compact {
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.mm-section-title {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.btn.mm-link {
+  min-height: 44px;
+  margin-right: calc(-1 * var(--space-3));
+  padding: 0 var(--space-3);
+  color: var(--brand-primary);
+  font-size: 14px;
+}
+
+@media (hover: hover) {
+  .btn.mm-link:hover {
+    color: var(--brand-primary-hover);
+  }
+}
+
+/* A link on its own row, aligned with the text above it. */
+.btn.mm-link-row {
+  align-self: flex-start;
+  margin: calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-2)) calc(-1 * var(--space-3));
+}
+
+.mm-score {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-patient-card);
+}
+
+.mm-score-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .mm-result-value {
@@ -410,6 +491,157 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
+}
+
+/* Provisional values read as provisional: the number is muted until the server confirms it. */
+.mm-score[data-verification='provisional'] .mm-result-value,
+.mm-score[data-verification='not-saved'] .mm-result-value {
+  color: var(--text-secondary);
+}
+
+/* Two lines reserved, so the longest caption never pushes the layout when the result arrives. */
+.mm-score-caption {
+  min-height: calc(2 * 1.45em);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mm-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-default);
+}
+
+.mm-breakdown dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mm-breakdown dd {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-scoring-help {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mm-scoring-help summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--brand-primary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mm-scoring-help summary:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.mm-scoring-help p {
+  padding-bottom: var(--space-1);
+}
+
+.mm-highlights {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mm-highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.mm-highlight-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-patient-recessed);
+  color: var(--text-secondary);
+}
+
+.mm-highlight-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* Room for three lines: a one-line title over a two-line detail, or a title
+     that wraps over a one-line detail. The cards keep their height when the
+     records load in and replace "Loading…" (NFCT-52). */
+  min-height: calc(2 * 15px * 1.35 + 2px + 13px * 1.45);
+}
+
+.mm-highlight-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.mm-highlight-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mm-highlight-achieved {
+  border-color: var(--status-completed);
+  background-color: var(--status-completed-bg);
+}
+
+.mm-highlight-achieved .mm-highlight-icon {
+  background-color: var(--surface-patient-card);
+  color: var(--status-completed);
+}
+
+/* Predicted by the provisional preview: the same words, drawn as not yet final. */
+.mm-highlight-pending {
+  border-style: dashed;
+}
+
+.mm-highlight-achieved.mm-highlight-pending {
+  background-color: var(--surface-patient-card);
+}
+
+.mm-highlight-achieved.mm-highlight-pending .mm-highlight-icon {
+  background-color: var(--status-completed-bg);
+}
+
+.mm-highlight-muted .mm-highlight-title {
+  color: var(--text-secondary);
+}
+
+
+.mm-save-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .mm-save {
@@ -429,6 +661,192 @@
 .mm-save-failed {
   background-color: var(--status-alert-bg);
   color: var(--status-alert-text);
+}
+
+/* The next step stays in reach while the summary scrolls on a phone. */
+.mm-summary-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4) max(var(--space-4), env(safe-area-inset-bottom, 16px));
+  background-color: var(--surface-patient-base);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* A value that counts a run the server hasn't checked yet: the pending highlight's dashed style, as a tag
+   that fits within a 13 px line (NFCT-52). */
+.status-tag.mm-provisional-tag {
+  padding: 0 6px;
+  border: 1px dashed var(--text-tertiary);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* ---- Per-game progress (NFCT-22) ---- */
+
+.mm-bests,
+.mm-history {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mm-best-row,
+.mm-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mm-best-row:last-child,
+.mm-history-row:last-child {
+  border-bottom: 0;
+}
+
+.mm-history-row:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.mm-best-level {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mm-best-values,
+.mm-history-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+
+.mm-best-score-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mm-best-score,
+.mm-history-score {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.mm-best-detail,
+.mm-history-meta {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.mm-best-empty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.mm-history-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mm-history-when {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mm-more {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.mm-more > .btn {
+  min-height: 48px;
+}
+
+.mm-more > .btn[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Mental Math on the Progress tab. */
+.mm-progress-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-patient-card);
+}
+
+.mm-progress-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background-color: var(--brand-primary-subtle);
+  color: var(--brand-primary);
+}
+
+.mm-progress-card-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mm-progress-card-title {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mm-progress-card .mm-link {
+  margin-right: calc(-1 * var(--space-2));
+  flex-shrink: 0;
+}
+
+/* iPhone SE to iPhone 16 widths: tighter HUD spacing keeps all four stats and
+   the Pause label on one line with a four-digit score (NFCT-33). */
+@media (max-width: 400px) {
+  .mm-hud {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+
+  .mm-hud-stats {
+    gap: var(--space-2);
+  }
 }
 
 @media (max-width: 360px) {
@@ -457,6 +875,14 @@
 
   .mm-level-grid {
     gap: 6px;
+  }
+
+  .mm-panel-compact {
+    padding: var(--space-4);
+  }
+
+  .mm-result-value {
+    font-size: 40px;
   }
 }
 

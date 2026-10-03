@@ -5,7 +5,7 @@ import { serializePatientSessionCsv } from '../patientSessionCsv';
 const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 'session-1', patientId: 'patient-1', patientName: 'Synthetic Patient', clinicId: 'clinic-1',
   date: 'Sep 27, 2026', timestamp: Date.parse('2026-09-27T12:00:00Z'),
-  protocol: 'theta-beta-ratio', experience: 'skyline-drift', durationSeconds: 0,
+  protocol: 'theta-beta-ratio', experience: 'neuro-gambit', durationSeconds: 0,
   timeInZonePercent: 0, averageCoherence: null, peakFocusScore: 0,
   timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0,
   ...overrides,
@@ -51,8 +51,8 @@ describe('patient session CSV', () => {
       'Coherence %', 'Peak Score', 'Mood', 'Training Demo',
     ]);
     expect(rows[1]).toEqual(['Sep 27, 2026', 'theta-beta-ratio', 'a,"b"\r\nc', '0', '0', '', '0', 'N/A', 'Yes']);
-    expect(rows[2]).toEqual(['line\none', 'quote "and", comma', 'skyline-drift', '0', '0', '', '0', '5', 'No']);
-    expect(rows[3]).toEqual(['carriage\rreturn', 'theta-beta-ratio', 'skyline-drift', '45', '0', '12.5', '', 'N/A', 'Unknown']);
+    expect(rows[2]).toEqual(['line\none', 'quote "and", comma', 'neuro-gambit', '0', '0', '', '0', '5', 'No']);
+    expect(rows[3]).toEqual(['carriage\rreturn', 'theta-beta-ratio', 'neuro-gambit', '45', '0', '12.5', '', 'N/A', 'Unknown']);
     expect(csv).toContain('"a,""b""\r\nc"');
   });
 

@@ -12,7 +12,7 @@ const client: ClientProfile = { id: 'p', name: 'Patient', email: 'p@example.test
 /** Session `index` days ago (plus an hour), newest first. */
 const session = (index: number, now: number): SessionRecord => ({
   id: `s${index}`, patientId: 'p', patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27',
-  timestamp: now - index * DAY - 3_600_000, protocol: 'alpha-enhancement', experience: 'tidal-garden',
+  timestamp: now - index * DAY - 3_600_000, protocol: 'alpha-enhancement', experience: 'neuro-gambit',
   durationSeconds: 600, timeInZonePercent: index % 4 === 0 ? undefined as unknown as number : 50, averageCoherence: null, timeSeries: [],
   adaptiveAdjustmentsCount: 0, finalThreshold: 0.7, patientNotes: `Journal ${index}`, moodRating: 3,
 });
@@ -151,10 +151,13 @@ describe('bounded patient session history', () => {
     expect(text(r)).not.toContain('Showing');
     await act(async () => { r.unmount(); });
 
+    // No neurofeedback session at all: the optional section stays one line, with no empty charts or controls.
     storage.getSessions.mockResolvedValueOnce([]);
     r = await render();
-    expect(text(r)).toContain('No sessions in this period');
+    expect(text(r)).toContain('No neurofeedback sessions yet.');
+    expect(text(r)).not.toContain('No sessions in this period');
     expect(text(r)).not.toContain('Showing');
+    expect(text(r)).not.toContain('Milestones');
     await act(async () => { r.unmount(); });
   });
 });

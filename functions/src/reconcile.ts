@@ -1,18 +1,19 @@
 import type { Query, QuerySnapshot, Transaction } from 'firebase-admin/firestore';
 import {
   classifyProgress,
-  readSessionProgressFields,
-  SESSION_PROGRESS_FIELDS,
+  readSessionAggregateFields,
+  SESSION_AGGREGATE_FIELDS,
   upgradeBlocker,
   upgradeScanLevels,
   upgradeSession,
   type FirestoreTimestamp,
   type GameProgress,
   type ServerResult,
-  type SessionProgressFields,
+  type SessionAggregateFields,
 } from '@nfct/shared';
 import { accountDeleted, progressRef, sessionRef, sessionsOf, type ProcessingContext } from './context';
 import { describeError } from './errors';
+import { planStatsForUpgrades, writeStats, type StatsEvent } from './stats';
 
 // The start-level upgrade (NFCT-19): once progress unlocks a start level, a
 // session that was flagged only because that level was locked when it was
@@ -29,22 +30,24 @@ import { describeError } from './errors';
 //   session, after an admin rebuild, and from the admin scripts with no budget.
 //
 // Each upgrade applies only the session's valid-only effects (records, best
-// peak level, unlocks), never its totals, and nothing ever downgrades a
-// session. Upgrades are applied in scan order (start level, then session ID),
-// never by a device clock; the final progress does not depend on that order,
-// only the point-in-time `personalBest` and `unlocked` of each upgraded result
-// do.
+// peak level, unlocks; and in the stats, NFCT-13: the valid run, peak level,
+// training day and any achievement they earn), never its totals, and nothing
+// ever downgrades a session. Upgrades are applied in scan order (start level,
+// then session ID), never by a device clock; the final progress and stats do
+// not depend on that order, only the point-in-time `personalBest` and
+// `unlocked` of each upgraded result, and which session is credited with an
+// achievement, do.
 
 export type ReconcileTarget = { readonly gameId: string; readonly modeId: string };
 
 export type ReconcileReport = {
   readonly upgraded: readonly string[];
-  /** Why it stopped: nothing left, a budget, progress it must not write, or a deleted account. */
-  readonly stopped: 'fixpoint' | 'no-progress' | 'progress-not-current' | 'budget' | 'account-deleted';
+  /** Why it stopped: nothing left, a budget, progress or stats it must not write, or a deleted account. */
+  readonly stopped: 'fixpoint' | 'no-progress' | 'progress-not-current' | 'stats-not-current' | 'budget' | 'account-deleted';
 };
 
-/** A flagged session that may be upgradable: its ID and the fields progress depends on (its stored result included). */
-export type Candidate = { readonly id: string; readonly fields: SessionProgressFields };
+/** A flagged session that may be upgradable: its ID and the fields the aggregates depend on (its stored result included). */
+export type Candidate = { readonly id: string; readonly fields: SessionAggregateFields };
 
 /** Scan order: start level, then session ID. Never a device clock. */
 function byScanOrder(a: Candidate, b: Candidate): number {
@@ -86,16 +89,16 @@ async function scanUpgradable(
       .where('modeId', '==', target.modeId)
       .where('result.validity', '==', 'flagged')
       .where('startLevel', '==', level)
-      .select(...SESSION_PROGRESS_FIELDS);
+      .select(...SESSION_AGGREGATE_FIELDS);
     for (;;) {
       const pageLimit = Math.min(context.limits.scanPageSize, budget - read);
       if (pageLimit <= 0) return { candidates, read, exhausted: true };
       const page = await run(query.limit(pageLimit));
       read += page.size;
       for (const document of page.docs) {
-        let fields: SessionProgressFields;
+        let fields: SessionAggregateFields;
         try {
-          fields = readSessionProgressFields(document.data());
+          fields = readSessionAggregateFields(document.data());
         } catch (error) {
           context.log.warn('flagged session unreadable; not upgraded', { uid, sessionId: document.id, error: describeError(error) });
           continue;
@@ -112,8 +115,8 @@ async function scanUpgradable(
 export type TransactionUpgrade = {
   /** Progress after every upgrade made. */
   readonly progress: GameProgress;
-  /** The sessions to rewrite as valid, in the order they were upgraded. */
-  readonly upgrades: readonly { readonly sessionId: string; readonly result: ServerResult }[];
+  /** The sessions to rewrite as valid, in the order they were upgraded, with the fields the stats need. */
+  readonly upgrades: readonly { readonly sessionId: string; readonly fields: SessionAggregateFields; readonly result: ServerResult }[];
   /** False when a budget stopped it: the post-commit reconcile must finish the work. */
   readonly complete: boolean;
 };
@@ -152,7 +155,7 @@ export async function upgradeInTransaction(
   pending: readonly Candidate[] = [],
 ): Promise<TransactionUpgrade> {
   const { limits, registry } = context;
-  const upgrades: { sessionId: string; result: ServerResult }[] = [];
+  const upgrades: { sessionId: string; fields: SessionAggregateFields; result: ServerResult }[] = [];
   let current = progress;
   let scannedUpTo = upgradeScanLevels(registry, target.gameId, target.modeId, null).from - 1;
   let read = 0;
@@ -171,7 +174,7 @@ export async function upgradeInTransaction(
       if (upgrades.length >= limits.transactionUpgradeLimit) return { progress: current, upgrades, complete: false };
       const decision = upgradeSession(candidate.fields, current, { sessionId: candidate.id, upgradedAt, registry });
       if (decision === null) continue;
-      upgrades.push({ sessionId: candidate.id, result: decision.result });
+      upgrades.push({ sessionId: candidate.id, fields: candidate.fields, result: decision.result });
       current = decision.progress!;
     }
     if (scan.exhausted) return { progress: current, upgrades, complete: false };
@@ -182,38 +185,47 @@ export async function upgradeInTransaction(
  * Upgrades one batch in one transaction. It checks the deletion ledger,
  * re-reads progress and each session, and re-checks each with upgradeSession,
  * so a session upgraded concurrently (or no longer upgradable) is skipped; the
- * results and progress are written together.
+ * results, progress and the stats (planStatsForUpgrades) are written
+ * together. Stats this build must not write stop the batch before anything
+ * is written, just as progress that is not current does.
  */
 async function upgradeBatch(
   context: ProcessingContext,
   uid: string,
   gameId: string,
   batch: readonly Candidate[],
-): Promise<string[] | 'progress-not-current' | 'account-deleted'> {
+): Promise<string[] | 'progress-not-current' | 'stats-not-current' | 'account-deleted'> {
   return context.db.runTransaction(async (transaction) => {
     if (await accountDeleted(transaction, context.db, uid)) return 'account-deleted' as const;
     const storedProgress = await transaction.get(progressRef(context.db, uid, gameId));
     const state = classifyProgress(storedProgress.data(), gameId, context.registry);
     if (state.kind !== 'current' || state.progress === null) return 'progress-not-current' as const;
     const refs = batch.map(({ id }) => sessionRef(context.db, uid, id));
-    const snapshots = await transaction.getAll(...refs, { fieldMask: [...SESSION_PROGRESS_FIELDS] });
+    const snapshots = await transaction.getAll(...refs, { fieldMask: [...SESSION_AGGREGATE_FIELDS] });
     let progress = state.progress;
-    const upgraded: string[] = [];
+    const upgraded: { ref: typeof refs[number]; event: StatsEvent }[] = [];
     const upgradedAt = context.now();
     for (const snapshot of snapshots) {
       if (!snapshot.exists) continue;
-      const decision = upgradeSession(readSessionProgressFields(snapshot.data()), progress, {
+      const fields = readSessionAggregateFields(snapshot.data());
+      const decision = upgradeSession(fields, progress, {
         sessionId: snapshot.id,
         upgradedAt,
         registry: context.registry,
       });
       if (decision === null) continue;
-      transaction.update(snapshot.ref, { result: decision.result });
       progress = decision.progress!;
-      upgraded.push(snapshot.id);
+      upgraded.push({ ref: snapshot.ref, event: { kind: 'upgraded', sessionId: snapshot.id, session: fields, result: decision.result } });
     }
-    if (upgraded.length > 0) transaction.set(progressRef(context.db, uid, gameId), progress);
-    return upgraded;
+    if (upgraded.length === 0) return [];
+    const stats = await planStatsForUpgrades(context, transaction, uid, upgraded.map(({ event }) => event), upgradedAt);
+    if (stats === 'not-current') return 'stats-not-current' as const;
+
+    // Every read is done.
+    for (const { ref, event } of upgraded) transaction.update(ref, { result: event.result });
+    transaction.set(progressRef(context.db, uid, gameId), progress);
+    if (stats !== 'skip') writeStats(transaction, context.db, uid, stats);
+    return upgraded.map(({ event }) => event.sessionId);
   });
 }
 
@@ -262,7 +274,7 @@ export async function reconcileUpgrades(
       const batch = scan.candidates.slice(index, index + Math.min(limits.upgradeBatchSize, remaining));
       index += batch.length;
       const done = await upgradeBatch(context, uid, target.gameId, batch);
-      if (done === 'progress-not-current' || done === 'account-deleted') return { upgraded, stopped: done };
+      if (done === 'progress-not-current' || done === 'stats-not-current' || done === 'account-deleted') return { upgraded, stopped: done };
       upgraded.push(...done);
     }
     if (scan.exhausted) return stoppedByBudget(context, uid, target, upgraded, 'scan');

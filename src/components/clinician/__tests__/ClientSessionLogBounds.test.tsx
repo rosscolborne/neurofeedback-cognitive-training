@@ -14,7 +14,7 @@ const client = (id: string): ClientProfile => ({ id, name: `Patient ${id}`, emai
 /** Newest first, as the repository returns them. */
 const sessions = (count: number, prefix = 's', patientId = 'a'): SessionRecord[] => Array.from({ length: count }, (_, index) => ({
   id: `${prefix}${index}`, patientId, patientName: 'Patient', clinicId: 'clinic', date: 'Sep 27',
-  timestamp: 1_800_000_000_000 - index * 86_400_000, protocol: 'alpha-enhancement', experience: 'tidal-garden',
+  timestamp: 1_800_000_000_000 - index * 86_400_000, protocol: 'alpha-enhancement', experience: 'neuro-gambit',
   durationSeconds: index % 5 === 0 ? undefined as unknown as number : 600, timeInZonePercent: 50, averageCoherence: null,
   timeSeries: [], adaptiveAdjustmentsCount: 1, finalThreshold: 0.7,
 }));

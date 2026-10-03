@@ -10,7 +10,6 @@ vi.mock('../../../services/storageEngine', () => ({ storageEngine: { getSessions
   { id: 'deep-focus', title: 'Deep Focus Master', iconName: 'Award', description: '80 percent' },
   { id: 'garden-keeper', title: 'Garden Keeper', iconName: 'Award', description: 'Stage 3' },
   { id: 'still-waters', title: 'Still Waters', iconName: 'Award', description: 'Alpha' },
-  { id: 'skyline-explorer', title: 'Skyline Pilot', iconName: 'Award', description: 'Biomes' },
 ] }));
 vi.mock('../patientSessionCsv', () => ({ exportPatientSessionCsv: state.exportCsv }));
 
@@ -23,7 +22,7 @@ const client = {
 } as ClientProfile;
 const session = (id: string, timestamp: number, isDemo?: boolean): SessionRecord => ({
   id, patientId: client.id, patientName: client.name, clinicId: 'clinic-1',
-  date: 'Sep 27, 2026', timestamp, protocol: 'theta-beta-ratio', experience: 'skyline-drift',
+  date: 'Sep 27, 2026', timestamp, protocol: 'theta-beta-ratio', experience: 'neuro-gambit',
   durationSeconds: 100, timeInZonePercent: 50, averageCoherence: null,
   timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0, isDemo,
 });
@@ -40,18 +39,18 @@ describe('Progress CSV caller', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('shows only supported milestones and updates Garden Keeper from reloaded stage evidence', async () => {
-    state.getSessions.mockResolvedValueOnce([]);
+  it('shows only supported milestones, never the retired Tidal Garden badge', async () => {
+    // Milestones belong to the neurofeedback section, which shows them once there is a session.
+    state.getSessions.mockResolvedValueOnce([session('one', Date.now() - 86_400_000)]);
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<ProgressHistory client={client} />); });
+    // A legacy profile can still hold a grown garden; there is no garden to show for it.
+    await act(async () => { renderer = create(<ProgressHistory client={{ ...client, tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: [], lastWatered: '' } }} />); });
     const text = () => renderer.root.findAllByType('div').flatMap((node) => node.children.filter((child): child is string => typeof child === 'string')).join(' ');
-    expect(text()).toContain('Garden Keeper');
+    expect(text()).toContain('First Light');
+    expect(text()).toContain('Steady State');
+    expect(text()).toContain('Deep Focus Master');
+    expect(text()).not.toContain('Garden Keeper');
     expect(text()).not.toContain('Still Waters');
-    expect(text()).not.toContain('Skyline Pilot');
-    const gardenCard = () => renderer.root.findAllByType('div').find((node) => node.children.includes('Garden Keeper'))!.parent!;
-    expect(gardenCard().props['aria-label']).toContain('Garden Keeper: locked');
-    await act(async () => { renderer.update(<ProgressHistory client={{ ...client, tidalGardenState: { stage: 3, growthPoints: 501, plantsUnlocked: [], lastWatered: '' } }} />); });
-    expect(gardenCard().props['aria-label']).toContain('Garden Keeper: earned');
     renderer.unmount();
   });
 

@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, normalize, relative } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-// scripts/ci/classify-changes.sh decides which of ci.yml's gated jobs a pull
-// request runs: `code` (the emulators job) and `backend` (the nfct-dev canary).
+// scripts/ci/classify-changes.sh decides which gated jobs Pre-merge validation
+// (ci.yml) runs for a branch: `code` (the emulator suites and the Linux iOS
+// jobs), `backend` (the nfct-dev canary), `native` (the macOS job) and
+// `scenarios` (its Simulator scenarios; empty runs them all).
 
 const directory = mkdtempSync(join(tmpdir(), 'classify-changes-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -53,32 +55,71 @@ describe('classify-changes', () => {
     // Anything unlisted runs both: a new top-level file, a quoted path git could not print plainly.
     ['narrative.json', RUNS_BOTH], ['scripts/check-clinical-isolation.mjs', RUNS_BOTH], ['"src/caf\\303\\251.ts"', RUNS_BOTH],
   ])('%s', (path, expected) => {
-    expect(classify([path])).toEqual(expected);
+    const { code, backend } = classify([path]);
+    expect({ code, backend }).toEqual(expected);
   });
 
   it('runs a job if any one file needs it', () => {
-    expect(classify(['docs/nfct/ios.md', 'README.md'])).toEqual(NEITHER);
-    expect(classify(['docs/nfct/ios.md', 'e2e/protocol.local.spec.ts'])).toEqual(CODE_ONLY);
-    expect(classify(['ios/App/App/Info.plist', 'functions/src/index.ts', 'e2e/persistence.local.spec.ts', 'docs/a.md'])).toEqual(CODE_ONLY);
-    expect(classify(['ios/App/App/Info.plist', 'src/App.tsx'])).toEqual(RUNS_BOTH);
-    expect(classify(['e2e/protocol.local.spec.ts', 'e2e/helpers/journeys.ts'])).toEqual(RUNS_BOTH);
+    const jobs = (paths) => { const { code, backend } = classify(paths); return { code, backend }; };
+    expect(jobs(['docs/nfct/ios.md', 'README.md'])).toEqual(NEITHER);
+    expect(jobs(['docs/nfct/ios.md', 'e2e/protocol.local.spec.ts'])).toEqual(CODE_ONLY);
+    expect(jobs(['ios/App/App/Info.plist', 'functions/src/index.ts', 'e2e/persistence.local.spec.ts', 'docs/a.md'])).toEqual(CODE_ONLY);
+    expect(jobs(['ios/App/App/Info.plist', 'src/App.tsx'])).toEqual(RUNS_BOTH);
+    expect(jobs(['e2e/protocol.local.spec.ts', 'e2e/helpers/journeys.ts'])).toEqual(RUNS_BOTH);
+  });
+
+  const SMOKE = { native: 'true', scenarios: 'smoke' };
+  const ALL_SCENARIOS = { native: 'true', scenarios: '' };
+  const NO_MAC = { native: 'false', scenarios: 'smoke' };
+  it.each([
+    // The native build's own inputs start the macOS job.
+    ['ios/App/App/Info.plist', SMOKE], ['ios/App/App.xcodeproj/project.pbxproj', SMOKE], ['ios/App/ci_scripts/ci_post_clone.sh', SMOKE],
+    ['ci_scripts/ci_post_clone.sh', SMOKE], ['capacitor.config.ts', SMOKE], ['package.json', SMOKE], ['package-lock.json', SMOKE],
+    ['.nvmrc', SMOKE], ['vite.config.ts', SMOKE], ['scripts/verify-ios-release.mjs', SMOKE],
+    // So does app code that calls native APIs through Capacitor.
+    ['src/consumer/games/mentalMath/MentalMathGame.tsx', SMOKE], ['src/services/eegEngine.ts', SMOKE], ['src/services/pdfReportGenerator.ts', SMOKE],
+    // The scenario driver and the iOS workflow run every scenario.
+    ['scripts/ios/simulator-smoke.mjs', ALL_SCENARIOS], ['scripts/ios/simulator-scenarios.mjs', ALL_SCENARIOS], ['.github/workflows/ios.yml', ALL_SCENARIOS],
+    // Ordinary feature work does not, even on screens the scenarios drive.
+    ['src/App.tsx', NO_MAC], ['src/main.tsx', NO_MAC], ['src/contexts/AuthContext.tsx', NO_MAC], ['src/services/firebase.ts', NO_MAC],
+    ['src/services/firebaseConfig.ts', NO_MAC], ['src/pages/onboarding/RoleSelection.tsx', NO_MAC],
+    ['src/consumer/games/mentalMath/MentalMathScreen.tsx', NO_MAC], ['src/consumer/catalogue/GameCatalogue.tsx', NO_MAC], ['src/index.css', NO_MAC],
+    ['shared/games/mental-math/v1/params.ts', NO_MAC], ['firestore.rules', NO_MAC], ['e2e/mental-math.lifecycle.local.spec.ts', NO_MAC],
+    // Nor do tests, documentation (even under ios/) or the other workflows.
+    ['src/consumer/games/mentalMath/__tests__/MentalMathScreen.test.tsx', NO_MAC], ['src/services/__tests__/eegEngine.test.ts', NO_MAC],
+    ['ios/App/README.md', NO_MAC], ['docs/nfct/ios.md', NO_MAC], ['.github/workflows/ci.yml', NO_MAC],
+    ['.github/workflows/web.yml', NO_MAC], ['.github/workflows/backend.yml', NO_MAC], ['.github/workflows/release.yml', NO_MAC],
+    // A file that no longer exists is judged by its path alone.
+    ['src/services/removedNativeBridge.ts', NO_MAC],
+  ])('macOS job for %s', (path, expected) => {
+    const { native, scenarios } = classify([path]);
+    expect({ native, scenarios }).toEqual(expected);
+  });
+
+  it('runs the macOS job if any one file needs it, and every scenario only for the driver or the workflow', () => {
+    const mac = (paths) => { const { native, scenarios } = classify(paths); return { native, scenarios }; };
+    expect(mac(['src/App.tsx', 'ios/App/README.md', 'src/contexts/AuthContext.tsx'])).toEqual(NO_MAC);
+    expect(mac(['src/App.tsx', 'src/services/eegEngine.ts'])).toEqual(SMOKE);
+    expect(mac(['src/App.tsx', 'capacitor.config.ts', 'scripts/ios/simulator-runtime.mjs'])).toEqual(ALL_SCENARIOS);
+  });
+
+  it('counts every app file that uses Capacitor as native', () => {
+    const tracked = spawnSync('git', ['ls-files', 'src'], { encoding: 'utf8' }).stdout.trim().split('\n')
+      .filter((path) => /\.(ts|tsx)$/.test(path) && !/(^|\/)__tests__\/|\.test\.tsx?$/.test(path));
+    const native = tracked.filter((path) => /@capacitor\/|@capacitor-community\/|\bCapacitor\./.test(readFileSync(path, 'utf8')));
+    expect(native).toEqual(expect.arrayContaining(['src/services/eegEngine.ts', 'src/services/pdfReportGenerator.ts']));
+    for (const path of native) expect(classify([path]).native, path).toBe('true');
   });
 
   it('fails safe: an empty, missing or unreadable listing runs everything', () => {
-    expect(classify([])).toEqual(RUNS_BOTH);
-    expect(classify(null)).toEqual(RUNS_BOTH);
+    const everything = 'code=true\nbackend=true\nnative=true\nscenarios=\n';
+    expect(classify([])).toEqual({ ...RUNS_BOTH, ...ALL_SCENARIOS });
+    expect(classify(null)).toEqual({ ...RUNS_BOTH, ...ALL_SCENARIOS });
     const result = spawnSync('bash', ['scripts/ci/classify-changes.sh'], { encoding: 'utf8' });
-    expect(result.stdout).toBe('code=true\nbackend=true\n');
+    expect(result.stdout).toBe(everything);
     // grep fails (status 2) on a directory: that runs everything too.
     const unreadable = spawnSync('bash', ['scripts/ci/classify-changes.sh', directory], { encoding: 'utf8' });
-    expect(unreadable.stdout).toBe('code=true\nbackend=true\n');
-  });
-
-  it('skips the same documentation paths as ios.yml', () => {
-    const docsPaths = (text) => /docs_paths='([^']+)'/.exec(text)?.[1];
-    const script = docsPaths(readFileSync('scripts/ci/classify-changes.sh', 'utf8'));
-    expect(script).toBeTruthy();
-    expect(docsPaths(readFileSync('.github/workflows/ios.yml', 'utf8'))).toBe(script);
+    expect(unreadable.stdout).toBe(everything);
   });
 });
 
@@ -122,21 +163,63 @@ describe('the canary', () => {
   });
 });
 
-describe('ci.yml', () => {
-  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
-  const canaryJob = ci.slice(ci.indexOf('\n  canary:\n'));
+const workflow = (name) => readFileSync(`.github/workflows/${name}`, 'utf8');
+/** The workflow's top-level `on:` block. */
+const triggers = (text) => /^on:\n((?: {2}.*\n|\s*\n)+)/m.exec(text)?.[1] ?? '';
 
-  it('gates the canary on the backend classification, failing safe', () => {
-    expect(ci).toContain('backend: ${{ steps.filter.outputs.backend }}');
-    expect(ci).toContain('bash scripts/ci/classify-changes.sh "$RUNNER_TEMP/changed.txt"');
-    expect(canaryJob).toContain('name: nfct-dev canary');
-    expect(canaryJob).toContain('needs: [changes, web]');
-    expect(canaryJob).toContain("(needs.changes.result == 'failure' || needs.changes.outputs.backend == 'true')");
+describe('workflow triggers', () => {
+  it('runs no validation suite on a push or pull request update', () => {
+    for (const name of ['ci.yml', 'web.yml', 'backend.yml', 'ios.yml']) {
+      expect(triggers(workflow(name)), name).toBeTruthy();
+      expect(triggers(workflow(name)), name).not.toMatch(/^ {2}(push|pull_request|pull_request_target):/m);
+    }
+    expect(triggers(workflow('ci.yml'))).toMatch(/^ {2}workflow_dispatch:/m);
+    for (const name of ['web.yml', 'backend.yml', 'ios.yml']) {
+      expect(triggers(workflow(name)), name).toMatch(/^ {2}workflow_dispatch:/m);
+      expect(triggers(workflow(name)), name).toMatch(/^ {2}workflow_call:/m);
+    }
   });
 
+  it('runs only the release checks on development → main promotions', () => {
+    const release = workflow('release.yml');
+    expect(triggers(release)).toMatch(/^ {2}pull_request:\n {4}branches: \[main\]\n/m);
+    expect(release).toContain('uses: ./.github/workflows/ios.yml');
+    expect(release).toMatch(/webkit: false\n\s+native: true\n\s+simulator: false/);
+    expect(release).not.toMatch(/web\.yml|backend\.yml/);
+  });
+});
+
+describe('Pre-merge validation (ci.yml)', () => {
+  const ci = workflow('ci.yml');
+
+  it('calls each suite once and gates the canary on the backend classification, failing safe', () => {
+    expect(ci).toContain('bash scripts/ci/classify-changes.sh "$RUNNER_TEMP/changed.txt"');
+    for (const name of ['web.yml', 'backend.yml', 'ios.yml']) expect(ci.split(`uses: ./.github/workflows/${name}`)).toHaveLength(2);
+    expect(ci).toContain("canary: ${{ needs.changes.result != 'success' || needs.changes.outputs.backend == 'true' }}");
+    expect(ci).toContain("native: ${{ needs.changes.result != 'success' || needs.changes.outputs.native == 'true' }}");
+  });
+
+  it('reports one commit status on the validated head, and lets a job skip only for documentation-only changes', () => {
+    const result = ci.slice(ci.indexOf('\n  result:\n'));
+    expect(result).toContain('needs: [changes, web, backend, ios]');
+    expect(result).toMatch(/if: always\(\)\n/);
+    expect(result).toContain('[ "$result" = skipped ] && [ "$CHANGES" = success ] && [ "$CODE" = false ]');
+    expect(result).toContain("context='Pre-merge validation'");
+    // The head alone is tested: one without development's latest commit fails.
+    expect(result).toContain('if [ "$BEHIND" != false ]; then failed="$failed behind-development"; fi');
+    expect(result).toContain('statuses/$GITHUB_SHA');
+  });
+});
+
+describe('Backend (backend.yml)', () => {
+  const backend = workflow('backend.yml');
+  const canaryJob = backend.slice(backend.indexOf('\n  canary:\n'));
+
   it('gives the canary no secrets, refuses forks and publishes screenshots only', () => {
-    expect(ci).not.toMatch(/\$\{\{[^}]*\bsecrets\b/);
-    expect(ci).toMatch(/^permissions:\n {2}contents: read\n/m);
+    expect(canaryJob).toContain('name: nfct-dev canary');
+    expect(canaryJob).toContain('if: inputs.canary');
+    expect(backend).not.toMatch(/\$\{\{[^}]*\bsecrets\b/);
+    expect(backend).toMatch(/^permissions:\n {2}contents: read\n/m);
     expect(canaryJob).toContain("github.event.pull_request.head.repo.full_name != github.repository");
     expect(canaryJob).toMatch(/if: always\(\) && steps\.identity\.outcome != 'skipped'\n\s+continue-on-error: true/);
     expect(canaryJob).toContain('path: test-results/canary/**/*.png');

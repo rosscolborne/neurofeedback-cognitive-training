@@ -44,6 +44,30 @@ export function progressPath(uid: string, gameId = 'mental-math'): string {
   return `users/${uid}/progress/${gameId}`;
 }
 
+export function statsPath(uid: string): string {
+  return `users/${uid}/stats/summary`;
+}
+
+export function dailyStatsPath(uid: string, localDate: string): string {
+  return `users/${uid}/dailyStats/${localDate}`;
+}
+
+export function achievementPath(uid: string, achievementId: string): string {
+  return `users/${uid}/achievements/${achievementId}`;
+}
+
+/** Every stats document of a user, without write times, to compare stats reached at different moments or by a rebuild. */
+export async function statsContent(db: Firestore, uid: string) {
+  const summary = await readDoc(db, statsPath(uid));
+  const days = await db.collection(`users/${uid}/dailyStats`).get();
+  const achievements = await db.collection(`users/${uid}/achievements`).get();
+  return {
+    summary: summary ? { ...content(summary), achievements: [...(summary.achievements as string[])].sort() } : null,
+    days: Object.fromEntries(days.docs.map((document) => [document.id, content(document.data())])),
+    achievements: achievements.docs.map((document) => document.id).sort(),
+  };
+}
+
 export async function readDoc(db: Firestore, path: string): Promise<DocumentData | undefined> {
   return (await db.doc(path).get()).data();
 }

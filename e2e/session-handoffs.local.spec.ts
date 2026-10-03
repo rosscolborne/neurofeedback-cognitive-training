@@ -4,8 +4,8 @@ import { readReviewSessionFeedback, seedLinkedPatient, seedReviewSession } from 
 
 test('clinician opens the selected stored session and its feedback reaches the patient after reload', async ({ browser }) => {
   const fixture = await seedLinkedPatient();
-  const selectedId = await seedReviewSession(fixture, 'Selected session reflection', 'rhythm-lock', Date.now() - 60_000);
-  const otherId = await seedReviewSession(fixture, 'Other session reflection', 'signal-sort');
+  const selectedId = await seedReviewSession(fixture, 'Selected session reflection', 'neuro-gambit', Date.now() - 60_000);
+  const otherId = await seedReviewSession(fixture, 'Other session reflection', 'neuro-gambit');
   const clinicianContext = await browser.newContext();
   const patientContext = await browser.newContext();
   try {
@@ -31,7 +31,8 @@ test('clinician opens the selected stored session and its feedback reaches the p
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
-    const selectedCard = patient.locator('.card-patient').filter({ hasText: 'rhythm lock' }).first();
+    // History is newest first, so the older selected session is the second card.
+    const selectedCard = patient.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).nth(1);
     await expect(selectedCard).toBeVisible();
     await selectedCard.click();
     await expect(selectedCard).toContainText('From your clinician');
@@ -39,7 +40,7 @@ test('clinician opens the selected stored session and its feedback reaches the p
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
-    const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'rhythm lock' }).first();
+    const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).nth(1);
     await reloadedCard.click();
     await expect(reloadedCard).toContainText('Try the slower rhythm next session.');
   } finally {
@@ -56,7 +57,7 @@ test('patient edits an older session journal and sees the saved note and mood af
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
-    const card = patient.locator('.card-patient').filter({ hasText: 'skyline drift' }).first();
+    const card = patient.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).first();
     await expect(card).toBeVisible();
     await card.click();
     await card.getByRole('button', { name: 'Edit journal' }).click();
@@ -68,7 +69,7 @@ test('patient edits an older session journal and sees the saved note and mood af
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Progress', exact: true }).click();
-    const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'skyline drift' }).first();
+    const reloadedCard = patient.locator('.card-patient').filter({ hasText: 'NeuroGambit' }).first();
     await reloadedCard.click();
     await expect(reloadedCard).toContainText('After reviewing the session, I felt calmer.');
     await expect(reloadedCard).toContainText('Focused · 4/5');

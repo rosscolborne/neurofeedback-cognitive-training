@@ -20,7 +20,7 @@ const client = (overrides: Partial<ClientProfile> = {}): ClientProfile => ({
 const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   id: 'session-1', patientId: 'patient-1', patientName: 'Patient One', clinicId: 'clinic-1',
   date: 'Sep 19, 2026', timestamp: Date.parse('2026-09-19T12:00:00Z'),
-  protocol: 'alpha-enhancement', experience: 'tidal-garden', durationSeconds: 600,
+  protocol: 'alpha-enhancement', experience: 'neuro-gambit', durationSeconds: 600,
   timeInZonePercent: 0, averageCoherence: null, peakFocusScore: 98,
   averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
   timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0, ...overrides,

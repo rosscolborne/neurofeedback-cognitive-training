@@ -95,6 +95,10 @@ export async function startPatientTrainingInDemoMode(page: Page, experienceName?
     if (await demoMode.isVisible().catch(() => false)) {
         await demoMode.click();
     }
+
+    // NeuroGambit, the only EEG experience, opens with a full-screen baseline calibration. A Demo
+    // session never uses a saved baseline, so take the standard one to reach the session controls.
+    await page.getByRole('button', { name: 'Use Standard Baseline (Skip)', exact: true }).click();
 }
 
 export async function arriveAtClinicianDashboard(page: Page): Promise<void> {

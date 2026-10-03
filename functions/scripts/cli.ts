@@ -5,9 +5,11 @@ import { processingContext, type ProcessingContext } from '../src/context';
 import { EXHAUSTIVE_RECONCILE } from '../src/policy';
 import { rebuildableGames, rebuildUserProgress, type RebuildReport } from '../src/rebuild';
 import { reconcileUser, redriveSessions, type RedriveState } from '../src/redrive';
+import { rebuildUserStats, type StatsRebuildReport } from '../src/stats';
 
-// Admin-only scripts for trusted scoring (NFCT-19). They run with the Admin
-// SDK from an operator's machine; they are not deployed endpoints.
+// Admin-only scripts for trusted scoring (NFCT-19) and its aggregates
+// (progress; stats, daily stats and achievements, NFCT-13). They run with the
+// Admin SDK from an operator's machine; they are not deployed endpoints.
 //
 // Safety: there is no default project. `--project` is required. With
 // FIRESTORE_EMULATOR_HOST set, only a demo-* project is accepted (the
@@ -46,10 +48,16 @@ export type Output = (line: string) => void;
 
 /**
  * `rebuild-progress --project <id> --uid <uid> [--game <gameId>] [--live]`:
- * rebuilds the user's progress (every game with a module, or one) from their
- * stored trusted results, then runs the start-level upgrade with no budget.
+ * rebuilds the user's aggregates from their stored trusted results: progress
+ * (every game with a module, or one), then the cross-game stats (summary,
+ * daily stats and achievements), then runs the start-level upgrade with no
+ * budget (whose upgrades update progress and stats in their own commits).
  */
-export async function runRebuildProgress(argv: readonly string[], env: CliEnvironment, out: Output): Promise<RebuildReport[]> {
+export async function runRebuildProgress(
+  argv: readonly string[],
+  env: CliEnvironment,
+  out: Output,
+): Promise<{ progress: RebuildReport[]; stats: StatsRebuildReport }> {
   const { values } = parseArgs({
     args: [...argv],
     options: { project: { type: 'string' }, uid: { type: 'string' }, game: { type: 'string' }, live: { type: 'boolean', default: false } },
@@ -66,10 +74,12 @@ export async function runRebuildProgress(argv: readonly string[], env: CliEnviro
       reports.push(report);
       out(`${target.projectId} users/${values.uid}/progress/${gameId}: ${report.written}`);
     }
+    const stats = await rebuildUserStats(context, values.uid);
+    out(`${target.projectId} users/${values.uid}/stats: ${stats.written} (${stats.days} day(s), ${stats.achievements.length} achievement(s))`);
     for (const { gameId, modeId, report } of await reconcileUser(context, values.uid)) {
       if (report.upgraded.length > 0) out(`upgraded ${report.upgraded.length} session(s) in ${gameId}/${modeId}`);
     }
-    return reports;
+    return { progress: reports, stats };
   } finally {
     await deleteApp(app);
   }

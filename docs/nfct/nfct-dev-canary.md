@@ -22,11 +22,14 @@ fixture seeding, no Firestore polling and no retries.
 
 ## The check
 
-- **Workflow and check name:** `CI` / **`nfct-dev canary`**
-  (`.github/workflows/ci.yml`, job `canary`).
-- **Runs:** on pull requests into `development` once they are ready for review,
-  after `web` passes and alongside `emulators`. It also runs on manual
-  `workflow_dispatch` runs of `CI`. Drafts skip it, as they skip the rest of CI.
+- **Workflow and job:** `Backend (Firebase)` / **`nfct-dev canary`**
+  (`.github/workflows/backend.yml`, job `canary`).
+- **Runs:** in [Pre-merge validation](ci.md), started by hand on a pull
+  request's final head, after `web` passes and alongside `emulators`; or
+  alone, by hand: `gh workflow run backend.yml --ref <branch> -f
+  emulators=false`, once `backend.yml` is on `main`
+  ([when the buttons appear](ci.md#when-the-run-workflow-buttons-appear));
+  until then, through Pre-merge validation. No push starts it.
 - **Code:** `e2e/canary/nfct-dev.canary.spec.ts` with
   `playwright.canary.config.ts`, the shared journey helpers in
   `e2e/helpers/journeys.ts`, and `scripts/canary/canary.mjs` for the build,
@@ -69,7 +72,8 @@ Not checked yet:
 
 ## When it runs
 
-`scripts/ci/classify-changes.sh` sets ci.yml's `backend` output. The canary is
+In Pre-merge validation, `scripts/ci/classify-changes.sh` sets the `backend`
+output from the branch's changes relative to `development`. The canary is
 skipped only when **every** changed file is on its skip list:
 
 | Skipped | Paths |
@@ -79,27 +83,28 @@ skipped only when **every** changed file is on its skip list:
 | Native iOS and its tooling | `ios/`, `ci_scripts/`, `scripts/ios/` |
 | The inherited BrainFlow service | `brainflow_service/`, `pyproject.toml`, `uv.lock` |
 | Cloud Functions, while none are deployed to nfct-dev | `functions/` (remove it from the list once Functions are deployed) |
-| Other workflows | `.github/workflows/ios.yml`, `.github/workflows/main-source-guard.yml` |
+| Other workflows | `.github/workflows/ios.yml`, `.github/workflows/release.yml`, `.github/workflows/main-source-guard.yml` |
 | Media | images, fonts, audio, video |
 
 Everything else runs it: `src/`, `shared/`, styles, `index.html`,
 `package.json` and the lockfile, `vite.config.ts`, `firestore.rules`,
 `firestore.indexes.json`, `firebase.json`, `.firebaserc`,
-`capacitor.config.ts`, `ci.yml`, the classifier itself, and any file not
+`capacitor.config.ts`, `ci.yml`, `backend.yml`, the classifier itself, and any file not
 listed. The canary's own files always run it, even under `e2e/`: the spec and
 `device.ts`, `e2e/fixtures.ts`, and `e2e/helpers/auth.ts` and
 `journeys.ts`. A test keeps this list in step with the spec's imports.
 
 It fails safe toward more testing. A failed diff, a failed or empty
-classification, or a failed `Code changes` job runs the canary.
+classification, or a failed change detection job runs the canary.
 
 Other safety properties:
 
-- **Superseded runs:** ci.yml's concurrency group cancels them, including
-  conversion back to draft. The cleanup step runs on cancellation too.
-- **Forks:** a pull request from a fork fails the job instead of running fork
-  code against the shared backend; a skipped check would count as passing. A
-  maintainer pushes the branch to this repository instead.
+- **Superseded runs:** a newer run on the same branch cancels the older one.
+  The cleanup step runs on cancellation too.
+- **Forks:** only people with write access can start the workflow, so fork
+  code reaches the shared backend only after a maintainer pushes it to a
+  branch here. Should a `pull_request` trigger ever return, the job fails a
+  fork's pull request instead of running it.
 
 ## Reading a failure
 
@@ -232,20 +237,19 @@ credentials, never from a pull request.
 2. **Deploy the repository's rules and indexes to nfct-dev** (NFCT-24),
    following [rules and indexes](#rules-and-index-changes). Until then the
    canary fails at "Train my brain", exactly as the TestFlight build does.
-3. **Require the checks.** As of 2026-10-02, the `development` ruleset has no
+3. **Require the result.** As of 2026-10-02, the `development` ruleset has no
    required status checks at all, only deletion, non-fast-forward and
-   pull-request rules. A skipped required check counts as passing: the canary
-   and `emulators` skip when `web` fails, so requiring the canary alone would
-   let a PR with a red `web` merge. Require them together:
-   - CI: `Code changes`, `web`, `emulators`, `nfct-dev canary`;
-   - iOS: `Native changes`, `Release-bundle safety`, `WebKit iPhone (Playwright)`;
-   - optionally `Xcode build and Simulator smoke`.
+   pull-request rules. The canary is part of Pre-merge validation, whose
+   single `Pre-merge validation` commit status is the check to require
+   ([enforcing it](ci.md#enforcing-it-owner)). It fails when the canary fails,
+   or when the canary is skipped for any reason other than the
+   classification.
 4. Keep the fork-workflow approval setting at its default or stricter
-   (Settings > Actions > General). The job refuses fork pull requests anyway.
+   (Settings > Actions > General).
 
 ## Running it by hand
 
-CI runs the canary. The owner can run it against nfct-dev from their own
+GitHub Actions runs the canary. The owner can run it against nfct-dev from their own
 machine. The target is always explicit, and `run` builds the bundle first:
 
 ```bash
@@ -263,7 +267,7 @@ request that changes `firestore.rules` or `firestore.indexes.json` keeps three
 checks:
 
 1. **Candidate rules on the emulators:** `npm run test:rules`, the
-   repositories, Functions and Playwright suites. CI runs them.
+   repositories, Functions and Playwright suites. Pre-merge validation runs them.
 2. **Old clients against the new rules:** rules deploy before clients ship, so
    the new rules must still accept what the current `development` and
    TestFlight clients write.
@@ -278,10 +282,14 @@ checks:
      deleting indexes, and never pass `--force`.
    - Wait until the new indexes have finished building (Firebase console >
      Firestore > Indexes).
-   - Rerun the pull request's `nfct-dev canary` job.
-   - Run `CI` manually on `development` (`gh workflow run CI --ref
-     development`), so the current client runs the canary against the
-     candidate rules.
+   - Run the canary on the pull request's branch: Pre-merge validation
+     (`gh workflow run ci.yml --ref <branch>`, which runs it for a rules
+     change), or, once `backend.yml` is on `main`, the canary alone
+     (`gh workflow run backend.yml --ref <branch> -f emulators=false`).
+   - Run it on `development` too, so the current client runs against the
+     candidate rules: `gh workflow run ci.yml --ref development` (on
+     `development` it runs everything), or the canary alone with `backend.yml`
+     once it is on `main`.
    - Merge promptly. If the pull request is not merging, redeploy
      `development`'s rules.
 
@@ -296,8 +304,8 @@ client. It does not show that they *equal* the repository's. The planned
 complement is a cheap, read-only comparison of nfct-dev's deployed Firestore
 rules and indexes with the files in a pull request or release:
 
-- **Where:** pull requests into `development`, and, cheaply, the development →
-  main promotion (no full CI on `main`).
+- **Where:** Pre-merge validation, and, cheaply, the development → main
+  promotion's Release workflow (no development validation on `main`).
 - **Credentials:** keyless GitHub OIDC (Workload Identity Federation) with
   read-only access to rules and index metadata only, never data or admin
   access.
@@ -307,15 +315,19 @@ Until then, the owner can compare deployed rules in the Firebase console.
 
 ## Known limits
 
-- **Self-editing workflow:** a pull request runs its own version of `ci.yml`
-  (`pull_request`), so it could weaken this job. Review workflow changes as
-  security-sensitive. `main` is protected separately by
-  `main-source-guard.yml`.
-- **Slow sign-in:** on `development`, the app treats a role lookup slower than
-  1.8 seconds as "no role" (NFCT-44). A slow real-backend sign-in can then land
-  on role selection and fail step 6. That is the product bug, not a flaky
-  test. Its fix is in PR #26, which targets `main`; it has to land on
-  `development` before the canary becomes a required check.
+- **Self-editing workflow:** a manual run uses the branch's own
+  `backend.yml`, `ci.yml` and classifier, so a pull request could weaken this
+  job. Review workflow changes as security-sensitive. `main` is protected
+  separately by `main-source-guard.yml`.
+- **Slow sign-in:** a slow real-backend role lookup keeps the loading screen
+  and, after 15 seconds or a failed read, shows a retryable "Your account
+  couldn't be loaded" screen; it never treats the account as having no role
+  (NFCT-44, landed through PR #26). After a transient failure it also
+  retries by itself, backing off to every 10 s. If step 6 times out there, read it as a
+  slow or failing backend, not a flaky test.
+  `e2e/returning-user.auth-handoffs.local.spec.ts` covers the slow-lookup
+  case on the emulators. The precondition for making the canary a required
+  check is met.
 - **Public configuration:** the repository variables appear in the public
   Actions logs. They are nfct-dev's web config, which every build of the app
   already contains.

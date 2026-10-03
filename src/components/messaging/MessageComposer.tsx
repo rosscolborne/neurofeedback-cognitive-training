@@ -45,7 +45,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             if (sendView.canSend && isReady) event.currentTarget.form?.requestSubmit();
           }
         }}
-        style={{ flex: '1 1 auto', minWidth: 0, minHeight: 40, maxHeight: 120, padding: '8px 12px', resize: 'none', overflowY: 'auto', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', outlineColor: 'var(--border-focus)', backgroundColor: 'var(--surface-patient-card)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: '20px' }}
+        style={{ flex: '1 1 auto', minWidth: 0, minHeight: 40, maxHeight: 120, padding: '8px 12px', resize: 'none', overflowY: 'auto', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', outlineColor: 'var(--border-focus)', backgroundColor: 'var(--surface-patient-card)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 16, lineHeight: '20px' }}
       />
       {sendView.showRetry
         ? <button type="button" className={buttonClassName} onClick={() => void onRetry()} style={{ flexShrink: 0, minHeight: 40, padding: '9px 14px', fontSize: 14, whiteSpace: 'nowrap' }}><RefreshCw size={15} /> Retry</button>
