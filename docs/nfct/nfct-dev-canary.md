@@ -56,7 +56,7 @@ serves the bundle with `vite preview` and drives it as an ordinary user:
    `gameSessions` query, and real Firestore enforces the composite index that
    emulators do not.
 5. Start a run, **Pause**, **Quit run**: "Run saved to your account." appears
-   only after the server acknowledges the session write. No 90-second run is
+   only after the server acknowledges the session write. No whole run is
    needed.
 6. Sign in again in a new browser context with no cache: the account comes back
    home, reading its profile from the server. That the profile was saved is
