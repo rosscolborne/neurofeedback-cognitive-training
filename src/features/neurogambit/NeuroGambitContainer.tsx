@@ -1,107 +1,32 @@
-import React, { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { EEGDataPoint, IndividualBaselineModel } from '../../types';
-import { eegEngine } from '../../services/eegEngine';
-import { storageEngine } from '../../services/storageEngine';
-import { getCalibrationDisplayState, timestampToMillis } from '../../services/dataMappers';
-import { useAuth } from '../../contexts/AuthContext';
-import { NeuroGambitTrack, NeuroGambitBaseline, NGIScore } from './types';
-import { toBrainStateEvent, createDefaultBaseline, getNeuroGambitBaseline } from './services/eegAdapter';
+import React, { useState, useMemo } from 'react';
+import { EEGDataPoint } from '../../types';
+import { NeuroGambitTrack, NGIScore } from './types';
+import { toBrainStateEvent } from './services/eegAdapter';
 import { useNeuroGambitEngine } from './hooks/useNeuroGambitEngine';
 import { useVagalRecoveryGate } from './hooks/useVagalRecoveryGate';
 import { ChessboardView } from './components/ChessboardView';
 import { PeripheralAmbientGlow } from './components/PeripheralAmbientGlow';
 import { TimeDilationClock } from './components/TimeDilationClock';
 import { VagalBreathingPacer } from './components/VagalBreathingPacer';
-import { BaselineCalibrationModal } from './components/BaselineCalibrationModal';
 import { SessionSummaryModal } from './components/SessionSummaryModal';
-import { Crown, Zap, Shield, RotateCcw, Activity, Info } from 'lucide-react';
+import { Crown, Zap, Shield, Activity, Info } from 'lucide-react';
 
 interface NeuroGambitContainerProps {
   eegData: EEGDataPoint | null;
   onComplete?: (summary: any) => void;
   isPaused?: boolean;
-  isDemoSession?: boolean;
-  patientId: string;
-  savedBaselineModel?: IndividualBaselineModel;
-  onBaselinePersisted: (model: IndividualBaselineModel) => void;
 }
 
 export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
   eegData,
   onComplete,
-  isDemoSession = false,
-  patientId,
-  savedBaselineModel,
-  onBaselinePersisted,
 }) => {
-  const { user, role, isDemoWorkspace } = useAuth();
-  const identity = `${isDemoWorkspace ? 'demo' : 'production'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}:${patientId}:${isDemoSession ? 'demo-session' : 'measured-session'}`;
-  const identityRef = useRef(identity);
-  useLayoutEffect(() => { identityRef.current = identity; }, [identity]);
-  const mountedRef = useRef(false);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
   const [selectedTrack, setSelectedTrack] = useState<NeuroGambitTrack>('composed-tactics');
   const [showHowTo, setShowHowTo] = useState(false);
-  const [sessionBaseline, setSessionBaseline] = useState<{ identity: string; value: NeuroGambitBaseline } | null>(null);
-  const [calibrationPrompt, setCalibrationPrompt] = useState<{ identity: string; open: boolean } | null>(null);
   const [completedSummary, setCompletedSummary] = useState<NGIScore | null>(null);
-  const [expiryPulse, setExpiryPulse] = useState(0);
-  const savedModelExpired = getCalibrationDisplayState(savedBaselineModel).status === 'expired';
-  const savedBaseline = useMemo(() => isDemoSession || savedModelExpired ? null : getNeuroGambitBaseline(savedBaselineModel), [isDemoSession, savedBaselineModel, savedModelExpired]);
-  const baseline = sessionBaseline?.identity === identity ? sessionBaseline.value : savedBaseline;
-  const showCalibration = calibrationPrompt?.identity === identity ? calibrationPrompt.open : !baseline;
 
-  useEffect(() => {
-    if (isDemoSession || savedBaselineModel?.expiresAt == null) return;
-    let expiresAt: number | null = null;
-    try { expiresAt = timestampToMillis(savedBaselineModel.expiresAt); } catch { /* Invalid persisted timestamp. */ }
-    if (expiresAt == null) return;
-    const remaining = expiresAt - Date.now();
-    if (remaining <= 0) {
-      if (eegEngine.individualBaselineModel === savedBaselineModel) eegEngine.individualBaselineModel = null;
-      // Expiry may cross after render but before this effect runs. Wake the
-      // mounted view once; a render that already saw expiry needs no pulse.
-      if (!savedModelExpired) setExpiryPulse((current) => current + 1);
-      return;
-    }
-    const timeout = setTimeout(() => {
-      if (eegEngine.individualBaselineModel === savedBaselineModel) eegEngine.individualBaselineModel = null;
-      setExpiryPulse((current) => current + 1);
-    }, Math.min(remaining, 2_147_483_647));
-    return () => clearTimeout(timeout);
-  }, [expiryPulse, isDemoSession, savedBaselineModel, savedModelExpired]);
-
-  const handleBaselineReady = useCallback(async (calibrated: NeuroGambitBaseline, model: IndividualBaselineModel) => {
-    if (isDemoSession) {
-      setSessionBaseline({ identity, value: calibrated });
-      setCalibrationPrompt({ identity, open: false });
-      return;
-    }
-    if (!user || role !== 'patient') throw new Error('Sign in as a patient before saving this calibration.');
-    const requestIdentity = identity;
-    const client = await storageEngine.getExistingCurrentClient(user);
-    if (!mountedRef.current || identityRef.current !== requestIdentity) throw new Error('The account changed before calibration could be saved.');
-    if (!client || client.id !== patientId) throw new Error('Your patient profile is unavailable.');
-    await storageEngine.saveIndividualBaselineModel(client.id, model);
-    if (!mountedRef.current || identityRef.current !== requestIdentity) throw new Error('The account changed before calibration could be applied.');
-    eegEngine.individualBaselineModel = model;
-    onBaselinePersisted(model);
-    setSessionBaseline({ identity, value: calibrated });
-    setCalibrationPrompt({ identity, open: false });
-  }, [identity, isDemoSession, onBaselinePersisted, patientId, role, user]);
-
-  const handleSkipCalibration = useCallback(() => {
-    setSessionBaseline({ identity, value: createDefaultBaseline() });
-    setCalibrationPrompt({ identity, open: false });
-  }, [identity]);
-
-  // Convert raw EEG data point to clean BrainStateEvent
-  const brainState = useMemo(() => {
-    return toBrainStateEvent(eegData, baseline);
-  }, [eegData, baseline]);
+  // The generic neurofeedback level, as NeuroGambit's composure
+  const brainState = useMemo(() => toBrainStateEvent(eegData), [eegData]);
 
   // Main Chess FSM Engine
   const {
@@ -176,16 +101,6 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
         position: 'relative',
       }}
     >
-      {/* 15s Baseline Calibration Modal */}
-      {showCalibration && (
-        <BaselineCalibrationModal
-          key={identity}
-          eegData={eegData}
-          onBaselineReady={handleBaselineReady}
-          onSkip={handleSkipCalibration}
-        />
-      )}
-
       {/* End of Session Summary Modal */}
       {completedSummary && (
         <SessionSummaryModal
@@ -282,7 +197,6 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
       <div style={{ flex: '1 1 0', minHeight: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', containerType: 'size' }}>
         <PeripheralAmbientGlow
           normalizedComposure={brainState.normalizedComposure}
-          isClenching={brainState.isClenching}
         >
           <div style={{ position: 'relative', width: 'min(calc(100cqw - 6px), calc(100cqh - 6px), 460px)' }}>
             <ChessboardView
@@ -313,10 +227,6 @@ export const NeuroGambitContainer: React.FC<NeuroGambitContainerProps> = ({
       {/* Secondary controls sit below the board so they never compete with it. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0 4px' }}>
         <div style={{ display: 'flex', gap: '0' }}>
-          <button type="button" className="ng-quiet-action" onClick={() => setCalibrationPrompt({ identity, open: true })}>
-            <RotateCcw size={13} aria-hidden="true" />
-            Calibrate
-          </button>
           <button type="button" className="ng-quiet-action" aria-expanded={showHowTo} onClick={() => setShowHowTo((open) => !open)}>
             <Info size={13} aria-hidden="true" />
             How to play

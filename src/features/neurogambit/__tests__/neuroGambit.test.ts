@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Chess } from 'chess.js';
 import { PUZZLES } from '../data/puzzles';
-import { toBrainStateEvent, computeNGIScore, createDefaultBaseline } from '../services/eegAdapter';
+import { toBrainStateEvent, computeNGIScore } from '../services/eegAdapter';
 import { EEGDataPoint } from '../../../types';
 
 describe('NeuroGambit Chess Modality Test Suite', () => {
@@ -36,69 +36,31 @@ describe('NeuroGambit Chess Modality Test Suite', () => {
     });
   });
 
-  describe('2. EEG Data Adapter & Artifact Rejection', () => {
-    it('generates fallback BrainStateEvent when EEG data is null', () => {
-      const event = toBrainStateEvent(null, null);
-      expect(event.normalizedComposure).toBe(1.0);
-      expect(event.isClenching).toBe(false);
-      expect(event.isGoodFit).toBe(false);
+  describe('2. Neurofeedback adapter', () => {
+    const frame = (mindfulnessScore: number | null, restfulnessScore: number | null): EEGDataPoint => ({
+      timestamp: 1_000,
+      signalQuality: 'good',
+      channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+      brainflowScores: { mindfulnessScore, restfulnessScore, method: 'brainflow' },
     });
 
-    it('suppresses composure and flags jaw clench when EMG > 45 Hz artifact is detected', () => {
-      const mockEeg: EEGDataPoint = {
-        timestamp: Date.now(),
-        rawSignal: 10,
-        bands: { delta: 3, theta: 6, alpha: 12, smr: 7, beta: 5, gamma: 2 },
-        bandAvailability: {},
-        bandRatios: {},
-        thetaBetaRatio: 1.2,
-        thetaBetaRatioAvailable: true,
-        coherence: 80,
-        coherenceAvailable: true,
-        inZone: true,
-        inZoneAvailable: true,
-        zoneScore: 0.9,
-        signalQuality: 'excellent',
-        channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-        artifacts: { blink: false, clench: true }, // ACTIVE JAW CLENCH
-      };
-
-      const event = toBrainStateEvent(mockEeg, null);
-      expect(event.isClenching).toBe(true);
-      expect(event.normalizedComposure).toBeLessThanOrEqual(0.4); // Suppressed
+    it('holds composure neutral without EEG, so the game plays as it does without a headset', () => {
+      expect(toBrainStateEvent(null)).toMatchObject({ normalizedComposure: 1.0, hasSignal: false });
     });
 
-    it('normalizes composure against user baseline accurately', () => {
-      const baseline = createDefaultBaseline();
-      baseline.isReady = true;
-      baseline.highBetaMean = 5.0;
-      baseline.highBetaStd = 1.0;
-      baseline.alphaMean = 7.0;
-      baseline.alphaStd = 1.0;
-      baseline.thetaMean = 6.0;
-      baseline.thetaStd = 1.0;
+    it('holds composure neutral while a connected headset has no scores yet', () => {
+      expect(toBrainStateEvent(frame(null, null))).toMatchObject({ normalizedComposure: 1.0, hasSignal: false });
+      expect(toBrainStateEvent({ ...frame(null, null), brainflowScores: undefined }).hasSignal).toBe(false);
+    });
 
-      // High alpha (calm) and low beta (no panic)
-      const calmEeg: EEGDataPoint = {
-        timestamp: Date.now(),
-        rawSignal: 10,
-        bands: { delta: 3, theta: 6.0, alpha: 9.0, smr: 7, beta: 3.5, gamma: 2 },
-        bandAvailability: {},
-        bandRatios: {},
-        thetaBetaRatio: 1.7,
-        thetaBetaRatioAvailable: true,
-        coherence: 85,
-        coherenceAvailable: true,
-        inZone: true,
-        inZoneAvailable: true,
-        zoneScore: 0.95,
-        signalQuality: 'excellent',
-        channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-        artifacts: { blink: false, clench: false },
-      };
+    it('maps the mindfulness/restfulness level onto the composure scale (level 0.5 is neutral)', () => {
+      expect(toBrainStateEvent(frame(50, 50)).normalizedComposure).toBeCloseTo(1.0);
+      expect(toBrainStateEvent(frame(80, 70))).toMatchObject({ normalizedComposure: 1.5, hasSignal: true, timestamp: 1_000 });
+      expect(toBrainStateEvent(frame(20, 30)).normalizedComposure).toBeCloseTo(0.5);
+    });
 
-      const event = toBrainStateEvent(calmEeg, baseline);
-      expect(event.normalizedComposure).toBeGreaterThan(1.2);
+    it('uses whichever score is available', () => {
+      expect(toBrainStateEvent(frame(60, null)).normalizedComposure).toBeCloseTo(1.2);
     });
   });
 
@@ -133,7 +95,7 @@ describe('NeuroGambit Chess Modality Test Suite', () => {
       expect(result.interpretation).toContain('Grandmaster Composure');
     });
 
-    it('penalizes high-beta time in panic', () => {
+    it('penalizes time in panic', () => {
       const result = computeNGIScore(
         100,
         60,  // 60s panic out of 120s (50% panic!)
@@ -150,7 +112,7 @@ describe('NeuroGambit Chess Modality Test Suite', () => {
   });
 
   describe('4. Time-Dilation Clock Rate Math', () => {
-    it('applies 0.7x time dilation when in-zone composure >= 1.1', () => {
+    it('applies 0.7x time dilation when composure >= 1.1', () => {
       const composure = 1.25;
       const rate = composure >= 1.1 ? 0.7 : composure <= 0.7 ? 1.2 : 1.0;
       expect(rate).toBe(0.7);

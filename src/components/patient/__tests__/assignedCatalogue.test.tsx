@@ -5,17 +5,15 @@ import type { ClientProfile, ClinicBrandConfig, ExperienceType } from '../../../
 import { readClientProfile } from '../../../services/dataMappers';
 import { createBlankProfile } from '../../../services/storageEngine';
 
-const state = vi.hoisted(() => ({ getSessions: vi.fn(async () => []), saveSelfDirectedTrainingSetup: vi.fn(), muted: false }));
+const state = vi.hoisted(() => ({ getSessions: vi.fn(async () => []), muted: false }));
 vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: {} }));
 vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), deleteDoc: vi.fn() }));
 vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () => state.muted, setMuted: vi.fn() } }));
-vi.mock('../../../services/storageEngine', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../../services/storageEngine')>()), storageEngine: { getSessions: state.getSessions, saveSelfDirectedTrainingSetup: state.saveSelfDirectedTrainingSetup, hasPendingInvitationNotice: async () => false } }));
+vi.mock('../../../services/storageEngine', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../../services/storageEngine')>()), storageEngine: { getSessions: state.getSessions, hasPendingInvitationNotice: async () => false } }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
-vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
-vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
@@ -110,31 +108,6 @@ describe('patient assigned catalogue', () => {
     const missing = profile([]) as Partial<ClientProfile>;
     delete missing.allowedExperiences;
     expect(new Set(readClientProfile(missing).allowedExperiences)).toEqual(new Set(EXPERIENCE_IDS));
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('keeps an unlinked assessment protocol and its experiences paired', async () => {
-    const unlinked = {
-      ...createBlankProfile('self', 'self@example.com'),
-      customProtocolConfig: getClinicalProtocolTemplate('theta-beta-ratio'),
-    };
-    const onUpdateClient = vi.fn().mockResolvedValue(undefined);
-    const onClientPersistedElsewhere = vi.fn();
-    const saved = { ...unlinked, assignedProtocol: 'alpha-enhancement' as const, customProtocolConfig: undefined,
-      allowedExperiences: [...getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences] };
-    state.saveSelfDirectedTrainingSetup.mockResolvedValueOnce(saved);
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={unlinked} onUpdateClient={onUpdateClient} onClientPersistedElsewhere={onClientPersistedElsewhere} onOpenRebrand={vi.fn()} />); });
-    act(() => renderer.root.findAllByType('button').find((node) => node.props['aria-label'] === 'Profile')!.props.onClick());
-    act(() => renderer.root.findAllByType('button').find((node) => node.findAll((child) => child.children.includes('Redo Setup')).length > 0 || node.children.includes('Redo Setup'))!.props.onClick());
-    await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'alpha-enhancement' }); });
-    // WB-102: the unlinked assessment goes through the relationship-guarded self-directed write.
-    expect(onUpdateClient).not.toHaveBeenCalled();
-    expect(state.saveSelfDirectedTrainingSetup).toHaveBeenCalledWith('self', {
-      assignedProtocol: 'alpha-enhancement',
-      allowedExperiences: getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences,
-    });
-    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(saved);
     await act(async () => { renderer.unmount(); });
   });
 

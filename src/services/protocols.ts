@@ -1,3 +1,7 @@
+// The clinical protocol catalogue: part of the transitional clinical data
+// model (clients/{uid}.assignedProtocol, legacy sessions), read by the
+// clinician screens and legacy history. The consumer app has no EEG protocols
+// and nothing here drives EEG feedback.
 import type { ClientProfile, ProtocolTemplate, ProtocolType } from '../types';
 
 export const DEFAULT_PROTOCOL: ProtocolType = 'theta-beta-ratio';

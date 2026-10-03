@@ -141,7 +141,7 @@ export const ClinicalReportsView: React.FC<ClinicalReportsViewProps> = ({ client
   const inZoneSeries = analytics.sessions
     .filter((session) => typeof session.timeInZonePercent === 'number' && Number.isFinite(session.timeInZonePercent) && session.timeInZonePercent >= 0 && session.timeInZonePercent <= 100)
     .map((session) => ({
-      value: session.timeInZonePercent,
+      value: session.timeInZonePercent as number, // the filter above guarantees a number
       demo: session.isDemo === true,
       label: typeof session.timestamp === 'number' && Number.isFinite(session.timestamp)
         ? new Date(session.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: interval.timeZone })

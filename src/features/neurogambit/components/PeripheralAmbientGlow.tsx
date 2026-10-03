@@ -2,23 +2,21 @@ import React from 'react';
 
 interface PeripheralAmbientGlowProps {
   normalizedComposure: number;
-  isClenching?: boolean;
   children: React.ReactNode;
 }
 
 export const PeripheralAmbientGlow: React.FC<PeripheralAmbientGlowProps> = ({
   normalizedComposure,
-  isClenching = false,
   children,
 }) => {
   // Composure states:
-  // >= 1.1: In-zone flow state -> Ethereal warm gold / cyan halo
-  // 0.8 - 1.1: Neutral composed state
-  // < 0.8 or isClenching: High-beta tension / warning
+  // >= 1.1: Composed flow state -> Ethereal warm gold / cyan halo
+  // 0.9 - 1.1: Neutral composed state
+  // < 0.7: Tension / warning
   let borderColor = 'rgba(232, 230, 225, 0.8)';
   let glowBoxShadow = '0 8px 32px rgba(0, 0, 0, 0.12)';
 
-  if (isClenching || normalizedComposure < 0.7) {
+  if (normalizedComposure < 0.7) {
     borderColor = '#EF4444';
     glowBoxShadow = '0 0 28px rgba(239, 68, 68, 0.35)';
   } else if (normalizedComposure >= 1.1) {

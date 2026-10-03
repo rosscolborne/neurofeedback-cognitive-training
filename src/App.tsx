@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ClientProfile, ClinicBrandConfig, PatientInvitation, QEEGBrainMap } from './types';
 import { storageEngine } from './services/storageEngine';
-import { eegEngine } from './services/eegEngine';
-import { getReusableBaselineModel } from './services/dataMappers';
 import { applyBrandToDOM, BRAND_PRESETS } from './services/brandEngine';
 import { clinicSettingsRepository } from './services/clinicSettingsRepository';
 import type { ClinicSettingsSnapshot } from './services/clinicSettingsRepository';
@@ -111,7 +109,6 @@ export function App() {
     let stopRoster = () => {};
     let rosterRequest = 0;
     const isCurrent = () => active && loadGeneration.current === generation && accountIdentityRef.current === accountIdentity;
-    eegEngine.individualBaselineModel = null;
     setDataIdentity(profileDataIdentity);
     setClients([]);
     setCurrentClient(null);
@@ -128,9 +125,6 @@ export function App() {
       void storageEngine.getCurrentClient(user)
         .then((client) => {
           if (!isCurrent()) return;
-          if (profileRoutePhase !== 'hardware-setup') {
-            eegEngine.individualBaselineModel = getReusableBaselineModel(client?.individualBaselineModel);
-          }
           setCurrentClient(client);
         })
         .catch((error) => {
@@ -174,7 +168,6 @@ export function App() {
     return () => {
       active = false;
       stopRoster();
-      eegEngine.individualBaselineModel = null;
     };
   }, [accountIdentity, clinicianRosterLoadKey, clinicianRosterReload, isDemoWorkspace, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
 
@@ -289,11 +282,6 @@ export function App() {
     if (accountIdentityRef.current !== accountIdentity) return;
     if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
     setClients((current) => current.map((client) => client.id === updated.id ? updated : client));
-  };
-
-  const handleBaselinePersisted = (patientId: string, model: ClientProfile['individualBaselineModel']) => {
-    if (accountIdentityRef.current !== accountIdentity || !model) return;
-    setCurrentClient((current) => current?.id === patientId ? { ...current, individualBaselineModel: model } : current);
   };
 
   const handleAppendBrainMap = async (patientId: string, map: QEEGBrainMap) =>
@@ -411,8 +399,7 @@ export function App() {
           }}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}
-          onBaselinePersisted={handleBaselinePersisted}
-          onRecalibrate={() => navigate('/hardware-setup')}
+          onSetUpHeadset={() => navigate('/hardware-setup')}
           onOpenRebrand={() => setShowRebrandModal(true)}
         />
       );

@@ -26,14 +26,9 @@ vi.mock('../services/audioEngine', () => ({ audioEngine: { playChime: vi.fn(), p
 vi.mock('../services/eegEngine', () => ({
   eegEngine: {
     subscribe: vi.fn(() => vi.fn()),
-    getLatestSpectrum: vi.fn(() => []),
-    getLatestBands: vi.fn(() => null),
-    individualBaselineModel: null,
   },
 }));
 vi.mock('../services/storageEngine', () => ({ storageEngine: {} }));
-vi.mock('../components/onboarding/LiveBrainwaveCanvas', () => ({ LiveBrainwaveCanvas: 'brainwave-canvas' }));
-vi.mock('../components/onboarding/NeuralImprintCard', () => ({ NeuralImprintCard: 'neural-imprint-card' }));
 
 import { APP_DISPLAY_NAME } from '../config/appIdentity';
 import { BrandLogo } from '../components/brand/BrandLogo';

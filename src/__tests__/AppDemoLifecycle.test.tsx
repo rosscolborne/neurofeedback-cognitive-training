@@ -13,12 +13,10 @@ const storage = vi.hoisted(() => ({
   saveClient: vi.fn(),
 }));
 const settings = vi.hoisted(() => ({ load: vi.fn() }));
-const baselineEngine = vi.hoisted(() => ({ individualBaselineModel: null as unknown }));
 const routeState = vi.hoisted(() => ({ pathname: '/' }));
 
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState.value }));
 vi.mock('../services/storageEngine', () => ({ storageEngine: storage }));
-vi.mock('../services/eegEngine', () => ({ eegEngine: baselineEngine }));
 vi.mock('../services/brandEngine', () => ({
   applyBrandToDOM: vi.fn(),
   BRAND_PRESETS: [{ clinicId: 'app', name: 'NFCT', logoUrl: '', primaryAccent: '#000', primaryHover: '#000', primarySubtle: '#fff', onPrimary: '#fff', patientBaseSurface: '#fff', clinicianBaseSurface: '#fff', typographyStyle: 'modern-sans', createdAt: '' }],
@@ -64,104 +62,72 @@ describe('mounted App account/workspace lifecycle', () => {
     storage.getPatientInvitationsForClinician.mockResolvedValue([]);
     storage.saveClient.mockResolvedValue(undefined);
     settings.load.mockResolvedValue({ clinicId: 'clinic-1', clinic: { id: 'clinic-1' }, practitioner: { id: 'clinician-1' }, brand: null });
-    baselineEngine.individualBaselineModel = null;
     routeState.pathname = '/';
   });
 
-  it('reloads the saved calibration after returning from hardware setup', async () => {
-    const original = { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z' };
-    const recalibrated = { ...original, alphaPeakHz: 11 };
-    authState.value = { user: { uid: 'patient-a' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: original });
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<App />); await flush(); });
-    routeState.pathname = '/hardware-setup';
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: original });
-    await act(async () => { renderer.update(<App />); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBeNull();
-    baselineEngine.individualBaselineModel = recalibrated;
-    routeState.pathname = '/';
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: recalibrated });
-    await act(async () => { renderer.update(<App />); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBe(recalibrated);
-    expect(patientShell(renderer).props.client.individualBaselineModel).toBe(recalibrated);
-    renderer.unmount();
-  });
-
-  it('initializes a signed-in patient profile on a direct hardware setup route without hydrating an old baseline', async () => {
+  it('initializes a signed-in patient profile on a direct hardware setup route', async () => {
     authState.value = { user: { uid: 'new-patient' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
     routeState.pathname = '/hardware-setup';
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'new-patient', individualBaselineModel: { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z' } });
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'new-patient' });
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
     expect(storage.getCurrentClient).toHaveBeenCalledWith(authState.value.user);
-    expect(baselineEngine.individualBaselineModel).toBeNull();
     renderer.unmount();
   });
 
   it('hydrates the current patient before shell mount and clears across sign-out, roles, and workspaces', async () => {
-    const saved = { alphaPeakHz: 10, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z', thetaMean: 3, betaMean: 5 };
     authState.value = { user: { uid: 'patient-a' }, role: 'patient', loading: false, isDemoWorkspace: true, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a', individualBaselineModel: saved });
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'patient-a' });
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBe(saved);
-    expect(patientShell(renderer).props.client.individualBaselineModel).toBe(saved);
-
-    const recalibrated = { ...saved, thetaMean: 8 };
-    act(() => patientShell(renderer).props.onBaselinePersisted('patient-a', recalibrated));
-    expect(patientShell(renderer).props.client.individualBaselineModel).toBe(recalibrated);
-    const staleBaselineCallback = patientShell(renderer).props.onBaselinePersisted;
+    expect(patientShell(renderer).props.client.id).toBe('patient-a');
+    // Headset setup is the only EEG action the shell is given; there is no calibration to persist.
+    expect(patientShell(renderer).props.onSetUpHeadset).toEqual(expect.any(Function));
+    expect(patientShell(renderer).props).not.toHaveProperty('onBaselinePersisted');
 
     authState.value = { user: null, role: null, loading: false, isDemoWorkspace: false, logout: vi.fn() };
     act(() => { renderer.update(<App />); });
-    expect(baselineEngine.individualBaselineModel).toBeNull();
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
 
     authState.value = { user: { uid: 'patient-b' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
     let resolveB!: (value: unknown) => void;
     storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveB = resolve; }));
     act(() => { renderer.update(<App />); });
-    expect(baselineEngine.individualBaselineModel).toBeNull();
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
     await act(async () => { resolveB({ id: 'patient-b' }); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBeNull();
-    act(() => staleBaselineCallback('patient-a', saved));
-    expect(patientShell(renderer).props.client.individualBaselineModel).toBeUndefined();
+    expect(patientShell(renderer).props.client.id).toBe('patient-b');
     renderer.unmount();
   });
 
   it('rejects a late patient load after an account switch and isolates demo from production', async () => {
-    const saved = { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-27T08:00:00Z' };
     let resolveDemo!: (value: unknown) => void;
     authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: true, logout: vi.fn() };
     storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveDemo = resolve; }));
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); });
     authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'production', individualBaselineModel: saved });
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'production' });
     await act(async () => { renderer.update(<App />); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBe(saved);
-    await act(async () => { resolveDemo({ id: 'demo', individualBaselineModel: { ...saved, alphaPeakHz: 7 } }); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBe(saved);
+    expect(patientShell(renderer).props.client.id).toBe('production');
+    await act(async () => { resolveDemo({ id: 'demo' }); await flush(); });
     expect(patientShell(renderer).props.client.id).toBe('production');
     renderer.unmount();
   });
 
-  it('clears a production calibration before opening the sample workspace', async () => {
-    const saved = { alphaPeakHz: 9.5, oneOverFSlope: 1.1, lastCalibratedAt: '2026-09-27T08:00:00Z' };
+  it('replaces the production profile when opening the sample workspace', async () => {
     authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: false, logout: vi.fn() };
-    storage.getCurrentClient.mockResolvedValueOnce({ id: 'production', individualBaselineModel: saved });
+    storage.getCurrentClient.mockResolvedValueOnce({ id: 'production' });
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<App />); await flush(); });
-    expect(baselineEngine.individualBaselineModel).toBe(saved);
+    expect(patientShell(renderer).props.client.id).toBe('production');
 
     authState.value = { user: { uid: 'same-uid' }, role: 'patient', loading: false, isDemoWorkspace: true, logout: vi.fn() };
     let resolveDemo!: (value: unknown) => void;
     storage.getCurrentClient.mockReturnValueOnce(new Promise((resolve) => { resolveDemo = resolve; }));
     act(() => { renderer.update(<App />); });
-    expect(baselineEngine.individualBaselineModel).toBeNull();
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-shell')).toHaveLength(0);
     await act(async () => { resolveDemo({ id: 'demo' }); await flush(); });
     expect(patientShell(renderer).props.client.id).toBe('demo');
-    expect(baselineEngine.individualBaselineModel).toBeNull();
     renderer.unmount();
   });
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientProfile, IndividualBaselineModel, SessionRecord } from '../../types';
+import type { ClientProfile, SessionRecord } from '../../types';
 
 const state = vi.hoisted(() => ({
   auth: { currentUser: null as null | { uid: string; email?: string } },
@@ -53,7 +53,6 @@ import { getClinicalProtocolTemplate } from '../clinicalProtocolTemplates';
 import { DEFAULT_RATIO_REWARDS } from '../protocols';
 import { resolveProtocolRuntime } from '../adaptiveEngine';
 import { EXPERIENCE_IDS } from '../experienceIds';
-import { ClinicianManagedTrainingError } from '../patientTrainingAuthority';
 
 afterEach(() => deactivateClinicianDemoWorkspace());
 
@@ -167,137 +166,6 @@ const sessionDocument = (id: string, patientId: string) => ({
     averageBands: { delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 },
     timeSeries: [], adaptiveAdjustmentsCount: 0, finalThreshold: 0,
   }),
-});
-
-const measuredBaseline: IndividualBaselineModel = {
-  alphaPeakHz: 10.2, oneOverFSlope: 1.3, lastCalibratedAt: '2026-09-27T07:00:00.000Z',
-  thetaMean: 2.1, thetaStd: 0.2, betaMean: 1.4, betaStd: 0.1, alphaMean: 3.1, alphaStd: 0.3,
-};
-
-describe('individual baseline persistence', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    deactivateClinicianDemoWorkspace();
-    state.auth.currentUser = { uid: 'patient-1' };
-  });
-
-  it('does not provision a production profile missing before calibration lookup', async () => {
-    const user = { uid: 'patient-1', displayName: 'Patient One' };
-    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => false });
-
-    await expect(storageEngine.getExistingCurrentClient(user)).resolves.toBeNull();
-
-    expect(firestore.getDoc).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: user.uid });
-    expect(firestore.setDoc).not.toHaveBeenCalled();
-    expect(firestore.updateDoc).not.toHaveBeenCalled();
-  });
-
-  it('does not repair an unnamed production profile before writing its baseline', async () => {
-    const user = { uid: 'patient-1', displayName: 'Patient One' };
-    const stored = { id: user.uid, name: '', status: 'completed', notes: 'concurrent care note' };
-    firestore.getDoc.mockResolvedValueOnce({ id: user.uid, exists: () => true, data: () => stored });
-    firestore.updateDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
-      Object.assign(stored, payload);
-    });
-
-    const client = await storageEngine.getExistingCurrentClient(user);
-    expect(client?.name).toBe('');
-    await storageEngine.saveIndividualBaselineModel(client!.id, measuredBaseline);
-
-    expect(firestore.setDoc).not.toHaveBeenCalled();
-    expect(firestore.updateDoc).toHaveBeenCalledWith(
-      { type: 'doc', path: 'clients', id: user.uid },
-      { individualBaselineModel: measuredBaseline },
-    );
-    expect(stored).toEqual({ id: user.uid, name: '', status: 'completed', notes: 'concurrent care note',
-      individualBaselineModel: measuredBaseline });
-  });
-
-  it('resolves the current isolated demo profile without a production read', async () => {
-    activateClinicianDemoWorkspace();
-    storageEngine.resetToDefaultSeed();
-
-    const expected = await storageEngine.getCurrentClient();
-    await expect(storageEngine.getExistingCurrentClient({ uid: 'demo-clinician' }))
-      .resolves.toEqual(expected);
-    expect(firestore.getDoc).not.toHaveBeenCalled();
-  });
-
-  it('updates only the baseline field on an existing Firestore profile, preserving concurrent clinical edits', async () => {
-    const stored = { id: 'patient-1', status: 'paused', notes: 'new clinical note', assignedProtocol: 'smr-enhancement' };
-    firestore.updateDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
-      Object.assign(stored, payload);
-    });
-
-    await storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline);
-
-    expect(firestore.updateDoc).toHaveBeenCalledWith(
-      { type: 'doc', path: 'clients', id: 'patient-1' },
-      { individualBaselineModel: measuredBaseline },
-    );
-    expect(firestore.setDoc).not.toHaveBeenCalled();
-    expect(stored).toEqual({ id: 'patient-1', status: 'paused', notes: 'new clinical note',
-      assignedProtocol: 'smr-enhancement', individualBaselineModel: measuredBaseline });
-  });
-
-  it('propagates an update failure without creating a missing profile', async () => {
-    firestore.updateDoc.mockRejectedValueOnce(new Error('profile no longer exists'));
-
-    await expect(storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline))
-      .rejects.toThrow('profile no longer exists');
-    expect(firestore.setDoc).not.toHaveBeenCalled();
-  });
-
-  it('replaces an older baseline map as one field instead of merging obsolete measurements', async () => {
-    const stored: Record<string, unknown> = {
-      id: 'patient-1', status: 'completed', notes: 'concurrent care update',
-      individualBaselineModel: { alphaPeakHz: 8, obsoleteMeasurement: 99 },
-    };
-    firestore.updateDoc.mockImplementationOnce(async (_ref: unknown, payload: Record<string, unknown>) => {
-      Object.assign(stored, payload);
-    });
-
-    await storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline);
-
-    expect(firestore.updateDoc).toHaveBeenCalledWith(
-      { type: 'doc', path: 'clients', id: 'patient-1' },
-      { individualBaselineModel: measuredBaseline },
-    );
-    expect(stored).toEqual({ id: 'patient-1', status: 'completed', notes: 'concurrent care update',
-      individualBaselineModel: measuredBaseline });
-    expect(firestore.setDoc).not.toHaveBeenCalled();
-  });
-
-  it('rejects an unauthenticated production save without writing a profile', async () => {
-    state.auth.currentUser = null;
-
-    await expect(storageEngine.saveIndividualBaselineModel('patient-1', measuredBaseline))
-      .rejects.toThrow('Sign in to save a patient record');
-    expect(firestore.updateDoc).not.toHaveBeenCalled();
-    expect(firestore.setDoc).not.toHaveBeenCalled();
-  });
-
-  it.each(['paused', 'completed'] as const)('patches only the baseline in the %s demo profile', async (status) => {
-    activateClinicianDemoWorkspace();
-    storageEngine.resetToDefaultSeed();
-    const before = (await storageEngine.getCurrentClient())!;
-    await storageEngine.saveClient({ ...before, status, notes: 'new clinical note' });
-
-    await storageEngine.saveIndividualBaselineModel(before.id, measuredBaseline);
-
-    expect(await storageEngine.getCurrentClient()).toEqual({ ...before, status,
-      notes: 'new clinical note', individualBaselineModel: measuredBaseline });
-    expect(firestore.updateDoc).not.toHaveBeenCalled();
-  });
-
-  it('does not create a missing demo profile', async () => {
-    activateClinicianDemoWorkspace();
-    storageEngine.resetToDefaultSeed();
-
-    await expect(storageEngine.saveIndividualBaselineModel('missing-demo-patient', measuredBaseline))
-      .rejects.toThrow('patient profile is unavailable');
-    expect(await storageEngine.getClient('missing-demo-patient')).toBeNull();
-  });
 });
 
 describe('role-aware session repository', () => {
@@ -965,10 +833,11 @@ describe('authenticated simulator session persistence', () => {
     expect(writes[0]?.ref).toEqual({ type: 'doc', path: 'sessions', id: 'simulated-session' });
     expect(writes[0]?.payload).toMatchObject({ isDemo: true, patientId: 'patient-1' });
     expect(writes[1]?.payload).toMatchObject({ recentCompletedSessionIds: ['simulated-session'] });
-    expect(writes[1]?.payload).toMatchObject({ tidalGardenState: { stage: 1, growthPoints: 120, plantsUnlocked: [], lastWatered: '' } });
+    // A legacy in-zone figure on the record grows nothing: no progression comes from EEG.
+    expect(writes[1]?.payload).toMatchObject({ completedSessionsCount: 1, tidalGardenState: { stage: 1, growthPoints: 0, plantsUnlocked: [], lastWatered: '' } });
 
     firestore.getDoc.mockResolvedValueOnce({ id: 'patient-1', exists: () => true, data: () => writes[1].payload });
-    expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(120);
+    expect((await storageEngine.getClient('patient-1'))?.tidalGardenState?.growthPoints).toBe(0);
 
     firestore.getDocs.mockResolvedValueOnce({
       docs: [{ id: session.id, data: () => writes[0].payload }],
@@ -1705,83 +1574,6 @@ describe('write authorization safeguards', () => {
     await storageEngine.patchSessionNotes('session-1', { clinicianNotes: null, patientNotes: 'Cannot alter' });
     expect(writes[0]).toMatchObject({ clinicianNotes: null });
     expect(writes[0]).not.toHaveProperty('patientNotes');
-  });
-});
-
-describe('self-directed training setup', () => {
-  const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
-  const unlinked = () => ({
-    ...createBlankProfile('patient-1', 'patient@example.test'),
-    customProtocolConfig: { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Former clinician rule' },
-    completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: garden,
-  });
-  const transaction = (stored: Record<string, unknown> | null) => {
-    const update = vi.fn();
-    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: (transaction: unknown) => unknown) =>
-      callback({
-        get: vi.fn().mockResolvedValueOnce(stored
-          ? { id: 'patient-1', exists: () => true, data: () => stored }
-          : { exists: () => false }),
-        update,
-      }));
-    return update;
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    deactivateClinicianDemoWorkspace();
-    state.auth.currentUser = { uid: 'patient-1', email: 'patient@example.test' };
-  });
-
-  it('writes only the assignment fields and keeps patient-owned progress', async () => {
-    const update = transaction(unlinked());
-    const alpha = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
-    const saved = await storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
-    expect(update).toHaveBeenCalledWith({ type: 'doc', path: 'clients', id: 'patient-1' }, {
-      assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha,
-      customProtocolConfig: { __deleteField: true }, updatedAt: { __serverTimestamp: true },
-    });
-    expect(saved).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha,
-      completedSessionsCount: 7, badges: ['garden-keeper'], tidalGardenState: garden });
-    expect(saved.customProtocolConfig).toBeUndefined();
-  });
-
-  it('persists a deduplicated list in catalogue order', async () => {
-    const update = transaction(unlinked());
-    await storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit', 'neuro-gambit'] });
-    expect(update.mock.calls[0][1]).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: ['neuro-gambit'] });
-  });
-
-  it.each([
-    ['canonical link', { clinicianId: 'clinician-1', clinicId: 'clinic-1' }],
-    ['legacy link', { linkedClinicianCode: 'clinician-1' }],
-  ])('refuses to overwrite a clinician-managed assignment (%s) and returns the current profile', async (_label, link) => {
-    const clinicianAssigned = { ...unlinked(), ...link, assignedProtocol: 'smr-enhancement', allowedExperiences: [], customProtocolConfig: undefined };
-    const update = transaction(clinicianAssigned);
-    const attempt = storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] });
-    await expect(attempt).rejects.toBeInstanceOf(ClinicianManagedTrainingError);
-    await attempt.catch((error: ClinicianManagedTrainingError) => {
-      expect(error.current).toMatchObject({ assignedProtocol: 'smr-enhancement', allowedExperiences: [] });
-    });
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it('validates before any read and refuses another account, deletion, and missing profiles', async () => {
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: [] }))
-      .rejects.toThrow('Choose at least one training experience.');
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'individualized-upper-alpha', allowedExperiences: ['neuro-gambit'] }))
-      .rejects.toThrow('not available for self-directed training');
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('other-patient', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }))
-      .rejects.toThrow('Sign in as this patient');
-    expect(firestore.runTransaction).not.toHaveBeenCalled();
-
-    const deletingUpdate = transaction({ ...unlinked(), accountDeletionStartedAt: new Date() });
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }))
-      .rejects.toThrow('account deletion');
-    expect(deletingUpdate).not.toHaveBeenCalled();
-    transaction(null);
-    await expect(storageEngine.saveSelfDirectedTrainingSetup('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: ['neuro-gambit'] }))
-      .rejects.toThrow('profile is unavailable');
   });
 });
 

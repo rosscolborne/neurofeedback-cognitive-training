@@ -13,13 +13,10 @@ const engine = vi.hoisted(() => ({
   isDemoMode: false,
   demoState: 'auto',
   deviceName: null,
-  configureProtocol: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
   subscribe: vi.fn((callback: (data: unknown) => void) => { stream.callback = callback; return vi.fn(); }),
-  getBandPowerProvenance: vi.fn((): { algorithm: string; version: string; source: 'brainflow' | 'browser-dsp' } | null => null),
   getHardwareSourceState: vi.fn(() => ({ ...stream.sourceState })),
-  setThreshold: vi.fn(),
   setSimulatedState: vi.fn(),
   connectMuseBluetooth: vi.fn(),
 }));
@@ -36,7 +33,7 @@ vi.mock('../HeadsetFitModal', () => ({ HeadsetFitModal: 'headset-fit' }));
 
 import { resolveSessionCareProvenance, SessionRunner } from '../SessionRunner';
 import { ProgressHistory } from '../ProgressHistory';
-import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
+import { NEUROGAMBIT_SESSION_SECONDS } from '../../../services/trainingSession';
 
 const client = {
   id: 'patient-1', name: 'Patient One', email: 'patient@example.com', avatarUrl: '',
@@ -50,6 +47,14 @@ const client = {
 } as ClientProfile;
 
 const text = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
+const SESSION = NEUROGAMBIT_SESSION_SECONDS;
+/** An EEG frame as the engine now publishes it: fit and the two consumer scores. */
+const frame = (method: 'brainflow' | 'demo' | null, mindfulnessScore = 60, restfulnessScore = 50) => ({
+  timestamp: Date.now(),
+  signalQuality: 'good',
+  channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
+  ...(method ? { brainflowScores: { mindfulnessScore, restfulnessScore, method } } : {}),
+});
 /** Rendered text as a reader sees it, across inline spans. */
 const visibleText = (renderer: ReactTestRenderer) => {
   const parts: string[] = [];
@@ -91,13 +96,12 @@ describe('mounted patient Demo session lifecycle', () => {
       .toEqual({ clinicId: 'clinic-1', clinicianId: 'canonical' });
   });
 
-  it('passes the actual patient Demo session mode into NeuroGambit without changing session progress behavior', async () => {
+  it('gives NeuroGambit only the EEG frame and pause state: no patient, baseline or calibration', async () => {
     let runner!: ReactTestRenderer;
     await act(async () => { runner = create(<SessionRunner client={{ ...client, individualBaselineModel: { alphaPeakHz: 9, oneOverFSlope: 1, lastCalibratedAt: '2026-09-26T12:00:00Z' } }} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />); });
     await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
     const experience = runner.root.find((node) => (node.type as unknown) === 'experience-view');
-    expect(experience.props.isDemoSession).toBe(true);
-    expect(experience.props.patientId).toBe('patient-1');
+    expect(Object.keys(experience.props).sort()).toEqual(['eegData', 'isPaused']);
     await act(async () => { runner.unmount(); });
   });
 
@@ -107,68 +111,39 @@ describe('mounted patient Demo session lifecycle', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders the resolved default and clinician reward from the emitted feedback metric', async () => {
-    const renderTelemetry = async (profile: ClientProfile, measured: number, inZone = true) => {
-      let runner!: ReactTestRenderer;
-      await act(async () => {
-        runner = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />);
-      });
-      await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
-      await act(async () => {
-        stream.callback?.({
-          timestamp: Date.now(),
-          rawSignal: 0,
-          bands: { delta: 1, theta: 2, alpha: 99, smr: 8, beta: 4, gamma: 1 },
-          bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
-          bandRatios: {}, coherence: null, coherenceAvailable: false,
-          thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
-          activeRewardMetric: { value: measured, source: profile.customProtocolConfig?.customRewardEnabled ? 'custom-raw' : 'demo' },
-          inZone, inZoneAvailable: true, zoneScore: inZone ? 1 : 0,
-          signalQuality: 'good',
-          channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-          artifacts: { blink: false, clench: false },
-          brainflowScores: { mindfulnessScore: 88, restfulnessScore: 92, method: 'demo' },
-        });
-      });
-      const output = visibleText(runner);
-      await act(async () => { runner.unmount(); });
-      return output;
-    };
-
-    const defaultOutput = await renderTelemetry(client, 12.2);
-    expect(defaultOutput).toContain('ALPHA (8–13 Hz)');
-    expect(defaultOutput).toContain('12.2 µV');
-    expect(defaultOutput).toContain('In zone now');
-    expect(defaultOutput).toContain('Restfulness');
-    expect(defaultOutput).toContain('88');
-    expect(defaultOutput).toContain('92');
-    expect(defaultOutput).toContain('Simulated');
-    expect(defaultOutput).not.toContain('99.0 µV');
-
-    const template = getClinicalProtocolTemplate('alpha-enhancement')!;
-    const custom = (freqMin: number, freqMax: number): ClientProfile => ({
-      ...client,
-      customProtocolConfig: {
-        ...template, id: 'custom-alpha', customRewardEnabled: true,
-        rewardBand: { ...template.rewardBand, freqMin, freqMax, targetThreshold: 6 },
-      },
+  it('shows only mindfulness and restfulness, simulated in Demo, and never a protocol reward or time in zone', async () => {
+    let runner!: ReactTestRenderer;
+    await act(async () => {
+      runner = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />);
     });
-    const a = await renderTelemetry(custom(9, 11), 7.2);
-    expect(a).toContain('REWARD (9–11 Hz)');
-    expect(a).toContain('7.2 µV');
-    const b = await renderTelemetry(custom(16, 18), 0.8);
-    expect(b).toContain('REWARD (16–18 Hz)');
-    expect(b).toContain('0.8 µV');
-    expect(b).not.toContain('REWARD (9–11 Hz)');
+    await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
+    await act(async () => { stream.callback?.(frame('demo', 88, 92)); });
+    const output = visibleText(runner);
+    expect(output).toContain('Mindfulness88');
+    expect(output).toContain('Restfulness92');
+    expect(output).toContain('Simulated');
+    expect(output).not.toMatch(/zone|µV|ALPHA|BETA|THETA|REWARD|Target adjusted|calibration/i);
+    await act(async () => { runner.unmount(); });
+  });
 
-    const beta = await renderTelemetry({
-      ...client,
-      assignedProtocol: 'beta-downtraining',
-      customProtocolConfig: { ...getClinicalProtocolTemplate('beta-downtraining')!, alias: 'Test 123' },
-    }, 16.2, false);
-    expect(beta).toContain('BETA (13–30 Hz)');
-    expect(beta).toContain('16.2 µV');
-    expect(beta).toContain('Out of zone now');
+  it('shows no metric slots for a headset session without BrainFlow scores', async () => {
+    engine.isHardwareConnected = true;
+    let runner!: ReactTestRenderer;
+    await act(async () => {
+      runner = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={vi.fn()} onCancel={vi.fn()} />);
+    });
+    await act(async () => { runner.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
+    await act(async () => { button(runner, 'Begin Training').props.onClick(); });
+    await act(async () => { stream.callback?.(frame(null)); });
+    expect(visibleText(runner)).not.toContain('Mindfulness');
+    expect(visibleText(runner)).not.toContain('Unavailable');
+    // A simulated score never appears in a headset session.
+    await act(async () => { stream.callback?.(frame('demo', 70, 70)); });
+    expect(visibleText(runner)).not.toContain('Mindfulness');
+    await act(async () => { stream.callback?.(frame('brainflow', 71, 64)); });
+    expect(visibleText(runner)).toContain('Mindfulness71');
+    expect(visibleText(runner)).not.toContain('Simulated');
+    await act(async () => { runner.unmount(); });
   });
 
   it('saves and reloads one synthetic session, labels it in history, then restores the next headset gate', async () => {
@@ -210,34 +185,27 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { nextRunner.unmount(); });
   });
 
-  it('includes the final Demo clock tick in the saved verified time and reaches 150 XP', async () => {
+  it('includes the final Demo clock tick and saves duration and simulated mindfulness, never in-zone data', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
     const onComplete = vi.fn(async (_session: SessionRecord) => undefined);
-    const profile = { ...client, customProtocolConfig: {
-      ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
-    } };
     let runner!: ReactTestRenderer;
-    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
     await act(async () => { button(runner, 'Try Demo Mode').props.onClick(); });
     await act(async () => {
-      stream.callback?.({
-        timestamp: Date.now(), rawSignal: 0,
-        bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
-        bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
-        bandRatios: {}, thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
-        coherence: null, coherenceAvailable: false, inZone: true, inZoneAvailable: true, zoneScore: 1,
-        signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-        artifacts: { blink: false, clench: false },
-      });
-      vi.advanceTimersByTime(59_000);
+      stream.callback?.(frame('demo', 70, 40));
+      vi.advanceTimersByTime((SESSION - 1) * 1_000);
     });
     expect(onComplete).not.toHaveBeenCalled();
     await act(async () => { vi.advanceTimersByTime(1_000); });
     expect(onComplete).toHaveBeenCalledOnce();
-    expect(onComplete.mock.calls[0][0]).toMatchObject({
-      durationSeconds: 60, configuredDurationSeconds: 60, inZoneSeconds: 60, timeInZonePercent: 100, isDemo: true,
+    const saved = onComplete.mock.calls[0][0];
+    expect(saved).toMatchObject({
+      durationSeconds: SESSION, configuredDurationSeconds: SESSION, isDemo: true, averageMindfulness: 70, experience: 'neuro-gambit',
     });
+    for (const legacyField of ['protocol', 'timeInZonePercent', 'inZoneSeconds', 'averageBands', 'averageCoherence', 'timeSeries', 'finalThreshold', 'adaptiveAdjustmentsCount', 'averageTrainingScore', 'averageValence', 'averageArousal']) {
+      expect(saved).not.toHaveProperty(legacyField);
+    }
     await act(async () => { runner.unmount(); });
   });
 
@@ -245,31 +213,19 @@ describe('mounted patient Demo session lifecycle', () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
     engine.isHardwareConnected = true;
-    engine.getBandPowerProvenance.mockReturnValue({ algorithm: 'welch-psd', version: 'test', source: 'brainflow' });
     const attempts: SessionRecord[] = [];
     const onComplete = vi.fn(async (session: SessionRecord) => {
       attempts.push(session);
       if (attempts.length === 1) throw new Error('ambiguous response');
     });
-    const profile = { ...client, customProtocolConfig: {
-      ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
-    } };
     let runner!: ReactTestRenderer;
-    await act(async () => { runner = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
     await act(async () => { runner.root.find((node) => (node.type as unknown) === 'headset-fit').props.onConfirmReady(); });
     await act(async () => { button(runner, 'Begin Training').props.onClick(); });
-    for (let second = 0; second < 60; second++) {
+    for (let second = 0; second < SESSION; second++) {
       await act(async () => {
         stream.sourceState = { sequence: second + 1, lastFrameAtMs: Date.now() };
-        stream.callback?.({
-          timestamp: Date.now(), rawSignal: 1,
-          bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
-          bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
-          bandRatios: {}, thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
-          coherence: 40, coherenceAvailable: true, inZone: true, inZoneAvailable: true, zoneScore: 1,
-          signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-          artifacts: { blink: false, clench: false }, trainingMetric: { score: 70, baselineReady: true },
-        });
+        stream.callback?.(frame('brainflow', 64, 50));
         vi.advanceTimersByTime(1_000);
       });
     }
@@ -277,12 +233,13 @@ describe('mounted patient Demo session lifecycle', () => {
     expect(button(runner, 'Save & View Summary').props.disabled).toBe(false);
     expect(text(runner)).toContain("We couldn't confirm this session was saved");
     engine.isHardwareConnected = false;
-    await act(async () => { runner.update(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
+    await act(async () => { runner.update(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />); });
     expect(button(runner, 'Save & View Summary').props.disabled).toBe(false);
     expect(text(runner)).not.toContain('Connect Muse Headband');
     await act(async () => { await button(runner, 'Save & View Summary').props.onClick(); });
     expect(attempts[1]).toBe(attempts[0]);
-    expect(attempts[1]).toMatchObject({ durationSeconds: 60, inZoneSeconds: 60, configuredDurationSeconds: 60 });
+    expect(attempts[1]).toMatchObject({ durationSeconds: SESSION, configuredDurationSeconds: SESSION, averageMindfulness: 64, isDemo: false });
+    expect(attempts[1]).not.toHaveProperty('inZoneSeconds');
     await act(async () => { runner.unmount(); });
   });
 
@@ -337,7 +294,6 @@ describe('mounted patient Demo session lifecycle', () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
     engine.isHardwareConnected = true;
-    engine.getBandPowerProvenance.mockReturnValue({ algorithm: 'welch-psd', version: 'test', source: 'brainflow' });
     const onComplete = vi.fn(async () => undefined);
     let renderer!: ReactTestRenderer;
     await act(async () => {
@@ -350,19 +306,11 @@ describe('mounted patient Demo session lifecycle', () => {
 
     stream.sourceState = { sequence: 1, lastFrameAtMs: Date.now() };
     await act(async () => {
-      stream.callback?.({
-        timestamp: Date.now(), rawSignal: 1,
-        bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
-        bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
-        bandRatios: {}, thetaBetaRatio: 0.4, thetaBetaRatioAvailable: true,
-        coherence: 40, coherenceAvailable: true, inZone: true, inZoneAvailable: true, zoneScore: 1,
-        signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-        artifacts: { blink: false, clench: false }, trainingMetric: { score: 70, baselineReady: true },
-      });
+      stream.callback?.(frame('brainflow'));
       vi.advanceTimersByTime(1_000);
     });
     await act(async () => { vi.advanceTimersByTime(1_000); });
-    expect(text(renderer)).toContain('Verified EEG is unavailable. Training is paused');
+    expect(text(renderer)).toContain('Headset data has stopped. The session is paused until it returns.');
     expect(button(renderer, 'Resume')).toBeTruthy();
 
     await act(async () => { vi.advanceTimersByTime(2_001); });
@@ -373,7 +321,7 @@ describe('mounted patient Demo session lifecycle', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('freezes Demo time and XP and retries the identical session after an ambiguous save response', async () => {
+  it('freezes Demo time and retries the identical session after an ambiguous save response', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval });
     const attempts: SessionRecord[] = [];
@@ -381,24 +329,13 @@ describe('mounted patient Demo session lifecycle', () => {
       attempts.push(session);
       if (attempts.length === 1) throw new Error('ambiguous response');
     });
-    const profile = { ...client, customProtocolConfig: {
-      ...getClinicalProtocolTemplate('alpha-enhancement')!, sessionDurationMinutes: 1,
-    } };
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<SessionRunner client={profile} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
+      renderer = create(<SessionRunner client={client} selectedExperience="neuro-gambit" onComplete={onComplete} onCancel={vi.fn()} />);
     });
     await act(async () => { button(renderer, 'Try Demo Mode').props.onClick(); });
     await act(async () => {
-      stream.callback?.({
-        timestamp: Date.now(), rawSignal: 0,
-        bands: { delta: 1, theta: 2, alpha: 3, smr: 4, beta: 5, gamma: 6 },
-        bandAvailability: { delta: true, theta: true, alpha: true, smr: true, beta: true, gamma: true },
-        bandRatios: {}, thetaBetaRatio: 0.5, thetaBetaRatioAvailable: true,
-        coherence: null, coherenceAvailable: false, inZone: true, inZoneAvailable: true, zoneScore: 1,
-        signalQuality: 'good', channelQuality: { tp9: 'good', af7: 'good', af8: 'good', tp10: 'good' },
-        artifacts: { blink: false, clench: false },
-      });
+      stream.callback?.(frame('demo'));
       vi.advanceTimersByTime(30_000);
     });
     await act(async () => { button(renderer, 'End Session & Save').props.onClick(); });
@@ -412,7 +349,7 @@ describe('mounted patient Demo session lifecycle', () => {
     expect(onComplete).toHaveBeenCalledTimes(2);
     expect(attempts[0].id).toMatch(/^sess-[0-9a-f-]{36}$/i);
     expect(attempts[1]).toBe(attempts[0]);
-    expect(attempts[1]).toMatchObject({ durationSeconds: 30, inZoneSeconds: 30, configuredDurationSeconds: 60 });
+    expect(attempts[1]).toMatchObject({ durationSeconds: 30, configuredDurationSeconds: SESSION });
     await act(async () => { renderer.unmount(); });
   });
 

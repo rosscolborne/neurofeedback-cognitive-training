@@ -43,20 +43,21 @@ async function renderViews(client: ClientProfile) {
 }
 
 describe('shared protocol resolution on care surfaces', () => {
-  it('shows and trains the same deterministic default when no protocol was saved', async () => {
+  it('shows the same deterministic default to clinicians, and no protocol to the patient, when none was saved', async () => {
     const views = await renderViews(base);
     const runtime = resolveProtocolRuntime(base);
     expect(runtime).toMatchObject({ ok: true, config: { protocol: 'theta-beta-ratio' } });
     const defaultName = getClinicalProtocolTemplate('theta-beta-ratio')!.name;
     expect(views.roster).toContain(defaultName);
     expect(views.detail).toContain(defaultName);
-    expect(views.patient).toContain(defaultName);
+    // The consumer Home shows no protocol: the app has no EEG protocols.
+    expect(views.patient).not.toContain(defaultName);
     expect(views.patient).toContain('Begin Session');
     expect(views.roster).toContain('ADHD (Inattentive)');
     expect(views.detail).toContain('ADHD (Inattentive)');
   });
 
-  it('shows and trains the custom assigned protocol over the default', async () => {
+  it('shows clinicians the custom assigned protocol over the default, and the patient no protocol', async () => {
     const client: ClientProfile = {
       ...base,
       condition: 'Generalized Anxiety',
@@ -68,8 +69,8 @@ describe('shared protocol resolution on care surfaces', () => {
     const customName = getClinicalProtocolTemplate('alpha-enhancement')!.name;
     expect(views.roster).toContain(customName);
     expect(views.detail).toContain(customName);
-    expect(views.patient).toContain(customName);
-    expect(views.patient).toContain('Evening Alpha');
+    expect(views.patient).not.toContain(customName);
+    expect(views.patient).not.toContain('Evening Alpha');
     expect(views.roster).toContain('Generalized Anxiety');
     expect(views.detail).toContain('Generalized Anxiety');
   });

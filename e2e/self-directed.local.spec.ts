@@ -28,21 +28,16 @@ function profileFact(page: Page, label: string) {
   return page.getByText(label, { exact: true }).locator('..');
 }
 
-async function expectAuthority(page: Page, authority: 'Self-directed' | 'Clinician-managed', protocolName: string) {
+/** Who manages the plan. There is no protocol to show or choose: the consumer app has no EEG protocols. */
+async function expectAuthority(page: Page, authority: 'Self-directed' | 'Clinician-managed') {
   await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await expect(page.getByRole('button', { name: `Protocol: ${protocolName}. View protocol details`, exact: true })).toBeVisible();
-  await expect(page.getByText(`${authority} protocol`)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Change training setup', exact: true })).toHaveCount(authority === 'Self-directed' ? 1 : 0);
+  await expect(page.getByRole('button', { name: /^Protocol:/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Change training setup', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
-  if (authority === 'Self-directed') {
-    await expect(profileFact(page, 'Training setup')).toContainText(authority);
-    await expect(page.getByText('Connected to your clinician', { exact: true })).toHaveCount(0);
-  } else {
-    // Profile states a clinician-managed plan through the connection status, not a second fact.
-    await expect(page.getByText('Training setup', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Connected to your clinician', { exact: true })).toBeVisible();
-  }
-  await expect(page.getByRole('button', { name: 'Change Training Setup', exact: true })).toHaveCount(authority === 'Self-directed' ? 1 : 0);
+  await expect(page.getByText('Protocol', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Training setup', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Change Training Setup', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Connected to your clinician', { exact: true })).toHaveCount(authority === 'Clinician-managed' ? 1 : 0);
 }
 
 async function expectTrainCatalogue(page: Page, ids: string[]) {
@@ -91,17 +86,16 @@ async function inviteFromClinician(page: Page, email: string, name: string, prot
   await page.getByRole('button', { name: 'Done' }).click();
 }
 
-test('self-directed setup survives reloads, yields to a clinician invitation, and returns after unlink', async ({ browser }) => {
+test('a self-directed patient has no protocol setup, yields to a clinician invitation, and returns after unlink', async ({ browser }) => {
   test.setTimeout(240_000);
   const { clinician: clinicianAccount } = await seedLinkedPatient();
   const email = `self-directed-${randomUUID().slice(0, 12)}@example.test`;
   const name = 'Self Directed Patient';
-  const alpha = defaults('alpha-enhancement');
   const smr = defaults('smr-enhancement');
   const clinicianContext = await browser.newContext();
   const patientContext = await browser.newContext();
   try {
-    // 1. A new unlinked patient: default protocol, canonical list, no clinician destinations.
+    // 1. A new unlinked patient: the default experience list, no protocol, no clinician destinations.
     const patient = await patientContext.newPage();
     await patient.goto('/#/');
     await patient.getByRole('button', { name: 'Begin Journey' }).click();
@@ -113,7 +107,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await arriveAtPatientDashboard(patient);
     const uid = await authenticatedUserId(patient);
     await expectNavigation(patient, false);
-    await expectAuthority(patient, 'Self-directed', 'Lubar Theta/Beta Ratio Protocol');
+    await expectAuthority(patient, 'Self-directed');
     await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
     await expect(patient.getByText('Weekly target', { exact: true })).toHaveCount(0);
     await expectTrainCatalogue(patient, defaults('theta-beta-ratio'));
@@ -123,36 +117,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expectNavigation(patient, false);
     await expectHistory(patient, uid, sessionId);
 
-    // 2. Choose another supported protocol: its canonical experiences become active and persist.
-    await patient.getByRole('button', { name: 'Home', exact: true }).click();
-    await patient.getByRole('button', { name: 'Change training setup', exact: true }).click();
-    const setup = patient.getByRole('dialog', { name: 'Training setup' });
-    await expect(setup).toContainText('not a diagnosis or a treatment plan');
-    await setup.getByRole('radio', { name: /Hardt Alpha Synchrony Protocol/ }).check();
-    await expect(setup).toContainText('Using the 1 default for this protocol');
-    await setup.getByRole('button', { name: 'Save setup' }).click();
-    await expect(setup).toHaveCount(0);
-    await expectAuthority(patient, 'Self-directed', 'Hardt Alpha Synchrony Protocol');
-    await expectTrainCatalogue(patient, alpha);
-    await reloadPatient(patient);
-    await expectNavigation(patient, false);
-    await expectAuthority(patient, 'Self-directed', 'Hardt Alpha Synchrony Protocol');
-    await expectTrainCatalogue(patient, alpha);
-    expect(await readPatientTrainingRecord(uid)).toMatchObject({ clinicianId: null, assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
-
-    // 3. Customizing needs at least one experience; the saved list drives Home, Train and session start.
-    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await patient.getByRole('button', { name: 'Change Training Setup', exact: true }).click();
-    await setup.getByRole('button', { name: 'Customize experiences' }).click();
-    await setup.getByRole('checkbox', { name: 'NeuroGambit' }).uncheck();
-    await expect(setup).toContainText('Customized: 0 of 1 experience');
-    await expect(setup.getByRole('alert')).toContainText('Choose at least one training experience.');
-    await expect(setup.getByRole('button', { name: 'Save setup' })).toBeDisabled();
-    await setup.getByRole('button', { name: 'Use protocol defaults' }).click();
-    await expect(setup).toContainText('Using the 1 default for this protocol');
-    await setup.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(setup).toHaveCount(0);
-    expect(await readPatientTrainingRecord(uid)).toMatchObject({ assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
+    // 2. The assigned experience starts, in Demo Mode without a headset.
     await patient.getByRole('button', { name: 'Home', exact: true }).click();
     await expect(patient.getByRole('button', { name: 'NeuroGambit', exact: true })).toHaveCount(1);
     await startPatientTrainingInDemoMode(patient, 'NeuroGambit');
@@ -161,7 +126,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expect(patient.getByRole('button', { name: 'End Session & Save' })).toBeVisible();
     await reloadPatient(patient);
 
-    // 4. Accepting a clinician invitation replaces the self-directed setup completely.
+    // 3. Accepting a clinician invitation replaces the self-directed setup completely.
     const clinician = await clinicianContext.newPage();
     await loginThroughUi(clinician, clinicianAccount);
     await arriveAtClinicianDashboard(clinician);
@@ -170,7 +135,6 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     // The pending invitation (not a link) makes Connect available; the patient types the code.
     expect(await readInvitationNoticeClinicians(email)).toEqual([clinicianAccount.uid]);
     await reloadPatient(patient);
-    await expect(patient.getByText('Self-directed protocol')).toBeVisible();
     await expectNavigation(patient, false);
     await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
     await patient.getByLabel('Invitation code').fill(code);
@@ -178,14 +142,14 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await expect(patient.getByRole('region', { name: 'Clinician invitation' })).toHaveCount(0);
     expect(await readInvitationNoticeClinicians(email)).toEqual([]);
     await expectNavigation(patient, true);
-    await expectAuthority(patient, 'Clinician-managed', 'Sterman SMR Stillness Protocol');
+    await expectAuthority(patient, 'Clinician-managed');
     await expect(patient.getByText('Connected to your clinician')).toBeVisible();
     await expect(profileFact(patient, 'Goal')).toContainText('Peak Performance');
     await expect(profileFact(patient, 'Weekly target')).toContainText('3 sessions / week');
     await expectTrainCatalogue(patient, smr);
     await reloadPatient(patient);
     await expectNavigation(patient, true);
-    await expectAuthority(patient, 'Clinician-managed', 'Sterman SMR Stillness Protocol');
+    await expectAuthority(patient, 'Clinician-managed');
     await expectTrainCatalogue(patient, smr);
     await patient.getByRole('button', { name: 'Messages', exact: true }).click();
     await expect(patient.getByRole('heading', { name: 'Messages', exact: true })).toBeVisible();
@@ -195,7 +159,7 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
       hasCustomProtocolConfig: false, tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'],
     });
 
-    // 5. Unlinking removes clinician destinations and restores self-directed setup without losing history.
+    // 4. Unlinking removes clinician destinations and restores self-directed setup without losing history.
     await clinician.reload();
     await arriveAtClinicianDashboard(clinician);
     const rosterRow = clinician.getByRole('row').filter({ hasText: name });
@@ -206,25 +170,12 @@ test('self-directed setup survives reloads, yields to a clinician invitation, an
     await reloadPatient(patient);
     await expectNavigation(patient, false);
     // Existing unlink contract: the last clinician assignment stays as the self-directed starting point.
-    await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
+    await expectAuthority(patient, 'Self-directed');
     await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
     await expect(patient.getByText('Weekly target', { exact: true })).toHaveCount(0);
     await expectNoClinicianConnection(patient);
     await expectTrainCatalogue(patient, smr);
     await expectHistory(patient, uid, sessionId);
-    await patient.getByRole('button', { name: 'Home', exact: true }).click();
-    await patient.getByRole('button', { name: 'Change training setup', exact: true }).click();
-    await setup.getByRole('radio', { name: /Beta De-arousal Downtraining/ }).check();
-    await setup.getByRole('button', { name: 'Save setup' }).click();
-    await expect(setup).toHaveCount(0);
-    await reloadPatient(patient);
-    await expectNavigation(patient, false);
-    await expectAuthority(patient, 'Self-directed', 'Beta De-arousal Downtraining');
-    await expectTrainCatalogue(patient, defaults('beta-downtraining'));
-    expect(await readPatientTrainingRecord(uid)).toMatchObject({
-      clinicianId: null, assignedProtocol: 'beta-downtraining', allowedExperiences: defaults('beta-downtraining'),
-      tidalGardenState: garden, completedSessionsCount: 1, badges: ['garden-keeper'],
-    });
   } finally {
     await Promise.allSettled([clinicianContext.close(), patientContext.close()]);
   }
@@ -280,7 +231,7 @@ test('Connect appears only for a pending invitation, survives another clinician 
     await patient.getByLabel('Invitation code').fill(codeB);
     await patient.getByRole('button', { name: 'Accept Invitation' }).click();
     await expectNavigation(patient, true);
-    await expectAuthority(patient, 'Clinician-managed', 'Hardt Alpha Synchrony Protocol');
+    await expectAuthority(patient, 'Clinician-managed');
     expect(await readInvitationNoticeClinicians(email)).toEqual([]);
     expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: otherClinician.uid, acceptedInvitationId: codeB });
   } finally {
@@ -303,10 +254,9 @@ test('an invitation link opened while signed out pre-fills the same Connect flow
     await arriveAtPatientDashboard(page);
     await expect(page.getByLabel('Invitation code')).toHaveValue(code);
     await expectNavigation(page, false);
-    await expect(page.getByText('Self-directed protocol')).toBeVisible();
     await page.getByRole('button', { name: 'Accept Invitation' }).click();
     await expectNavigation(page, true);
-    await expectAuthority(page, 'Clinician-managed', 'Hardt Alpha Synchrony Protocol');
+    await expectAuthority(page, 'Clinician-managed');
     expect(await readInvitationNoticeClinicians(fixture.patient.email)).toEqual([]);
     await reloadPatient(page);
     await expectNavigation(page, true);
@@ -318,7 +268,6 @@ test('an invitation link opened while signed out pre-fills the same Connect flow
 test('a linked patient disconnects after confirming, keeps history and the last assignment, and stays disconnected', async ({ browser }) => {
   test.setTimeout(180_000);
   const smr = defaults('smr-enhancement');
-  const alpha = defaults('alpha-enhancement');
   const fixture = await seedLinkedPatient({ condition: 'Peak Performance', assignedProtocol: 'smr-enhancement', allowedExperiences: smr });
   const uid = fixture.patient.uid;
   const { sessionId, garden } = await seedSelfDirectedHistory(uid);
@@ -330,7 +279,7 @@ test('a linked patient disconnects after confirming, keeps history and the last 
     await loginThroughUi(patient, fixture.patient);
     await arriveAtPatientDashboard(patient);
     await expectNavigation(patient, true);
-    await expectAuthority(patient, 'Clinician-managed', 'Sterman SMR Stillness Protocol');
+    await expectAuthority(patient, 'Clinician-managed');
 
     // The action sits with account settings on Profile and always asks first.
     const account = patient.getByRole('heading', { name: 'Account', exact: true }).locator('..');
@@ -348,7 +297,7 @@ test('a linked patient disconnects after confirming, keeps history and the last 
     await confirm.getByRole('button', { name: 'Disconnect', exact: true }).click();
     await expect(confirm).toHaveCount(0);
     await expectNavigation(patient, false);
-    await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
+    await expectAuthority(patient, 'Self-directed');
     await expect(patient.getByText('Goal', { exact: true })).toHaveCount(0);
     await expectNoClinicianConnection(patient);
     await expectTrainCatalogue(patient, smr);
@@ -357,7 +306,7 @@ test('a linked patient disconnects after confirming, keeps history and the last 
     // Nothing recreates the relationship on reload, and the clinician's access has ended.
     await reloadPatient(patient);
     await expectNavigation(patient, false);
-    await expectAuthority(patient, 'Self-directed', 'Sterman SMR Stillness Protocol');
+    await expectAuthority(patient, 'Self-directed');
     expect(await readPatientRelationship(uid)).toEqual({
       clinicianId: null, clinicId: null, linkedClinicianCode: null, acceptedInvitationId: null, appointmentStatuses: ['cancelled'],
     });
@@ -368,18 +317,6 @@ test('a linked patient disconnects after confirming, keeps history and the last 
     await loginThroughUi(clinician, fixture.clinician);
     await arriveAtClinicianDashboard(clinician);
     await expect(clinician.getByRole('row').filter({ hasText: fixture.name })).toHaveCount(0);
-
-    // A self-directed save now works normally: no clinician authority is left to refuse it.
-    await patient.getByRole('button', { name: 'Home', exact: true }).click();
-    await patient.getByRole('button', { name: 'Change training setup', exact: true }).click();
-    const setup = patient.getByRole('dialog', { name: 'Training setup' });
-    await setup.getByRole('radio', { name: /Hardt Alpha Synchrony Protocol/ }).check();
-    await setup.getByRole('button', { name: 'Save setup' }).click();
-    await expect(setup).toHaveCount(0);
-    await reloadPatient(patient);
-    await expectAuthority(patient, 'Self-directed', 'Hardt Alpha Synchrony Protocol');
-    await expectTrainCatalogue(patient, alpha);
-    expect(await readPatientTrainingRecord(uid)).toMatchObject({ clinicianId: null, assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
   } finally {
     await Promise.allSettled([patientContext.close(), clinicianContext.close()]);
   }
@@ -409,9 +346,8 @@ test('a clinician can end the relationship from the phone roster without deletin
   }
 });
 
-test('an unlinked legacy profile without assignment fields stays usable and can be configured', async ({ browser }) => {
-  // Legacy field-missing records keep the full-catalogue fallback until the patient chooses; that catalogue is
-  // now NeuroGambit alone, which matches the default protocol's defaults.
+test('an unlinked legacy profile without assignment fields stays usable', async ({ browser }) => {
+  // Legacy field-missing records keep the full-catalogue fallback, which is NeuroGambit alone.
   const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
   await removePatientFields(fixture.patient.uid, ['allowedExperiences', 'assignedProtocol']);
   const context = await browser.newContext();
@@ -421,16 +357,9 @@ test('an unlinked legacy profile without assignment fields stays usable and can 
     await arriveAtPatientDashboard(page);
     await expectNavigation(page, false);
     await expectTrainCatalogue(page, Object.keys(EXPERIENCE_NAMES));
-    await page.getByRole('button', { name: 'Home', exact: true }).click();
-    await page.getByRole('button', { name: 'Change training setup', exact: true }).click();
-    const setup = page.getByRole('dialog', { name: 'Training setup' });
-    await expect(setup).toContainText('Using the 1 default for this protocol');
-    await setup.getByRole('radio', { name: /Peniston Alpha-Theta Protocol/ }).check();
-    await setup.getByRole('button', { name: 'Save setup' }).click();
-    await expect(setup).toHaveCount(0);
+    await expectAuthority(page, 'Self-directed');
     await reloadPatient(page);
-    await expectAuthority(page, 'Self-directed', 'Peniston Alpha-Theta Protocol');
-    await expectTrainCatalogue(page, defaults('alpha-theta-crossover'));
+    await expectTrainCatalogue(page, Object.keys(EXPERIENCE_NAMES));
   } finally {
     await context.close();
   }

@@ -8,12 +8,12 @@ vi.mock('../../../services/storageEngine', () => ({ storageEngine: { patchSessio
 
 import { PostSessionSummary } from '../PostSessionSummary';
 
+// A session as the runner now saves it: no protocol, in-zone, band or threshold data.
 const session: SessionRecord = {
   id: 'sess-durable', patientId: 'patient-1', patientName: 'Patient One', clinicId: 'clinic-1',
   clinicianId: 'clinician-1', date: 'Sep 19, 2026', timestamp: 1,
-  protocol: 'alpha-enhancement', experience: 'neuro-gambit', durationSeconds: 60,
-  timeInZonePercent: 50, averageCoherence: null, timeSeries: [],
-  adaptiveAdjustmentsCount: 0, finalThreshold: 11, isDemo: true,
+  experience: 'neuro-gambit', durationSeconds: 60, configuredDurationSeconds: 1_500,
+  averageMindfulness: 62, isDemo: true,
 };
 
 const text = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
@@ -32,12 +32,25 @@ describe('PostSessionSummary authenticity', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('labels Demo feedback synthetic and does not present synthetic bands as measurements', async () => {
+  it('labels Demo results simulated and shows only duration and mindfulness', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(<PostSessionSummary session={session} onViewProgress={vi.fn()} />); });
     expect(text(renderer)).toContain('Training Demo — these results are simulated');
-    expect(text(renderer)).toContain('Not measured in Demo');
-    expect(text(renderer)).not.toContain('θ=0.0');
+    expect(text(renderer)).toContain('1:00');
+    expect(text(renderer)).toContain('Simulated mindfulness');
+    expect(text(renderer)).toContain('62/100');
+    expect(text(renderer)).not.toMatch(/zone|protocol|theta|alpha|beta|µV|threshold|coherence/i);
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it('labels measured mindfulness plainly, and omits it when none was measured', async () => {
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<PostSessionSummary session={{ ...session, isDemo: false }} onViewProgress={vi.fn()} />); });
+    expect(text(renderer)).toContain('"Mindfulness"');
+    expect(text(renderer)).not.toContain('Simulated');
+    await act(async () => { renderer.update(<PostSessionSummary session={{ ...session, id: 'sess-2', isDemo: false, averageMindfulness: undefined }} onViewProgress={vi.fn()} />); });
+    expect(text(renderer)).not.toContain('Mindfulness');
+    expect(text(renderer)).toContain('Duration');
     await act(async () => { renderer.unmount(); });
   });
 

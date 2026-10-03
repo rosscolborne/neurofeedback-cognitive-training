@@ -39,7 +39,7 @@ describe('Progress CSV caller', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  it('shows only supported milestones, never the retired Tidal Garden badge', async () => {
+  it('shows only supported milestones, never a retired EEG or Tidal Garden badge', async () => {
     // Milestones belong to the neurofeedback section, which shows them once there is a session.
     state.getSessions.mockResolvedValueOnce([session('one', Date.now() - 86_400_000)]);
     let renderer!: ReactTestRenderer;
@@ -48,7 +48,7 @@ describe('Progress CSV caller', () => {
     const text = () => renderer.root.findAllByType('div').flatMap((node) => node.children.filter((child): child is string => typeof child === 'string')).join(' ');
     expect(text()).toContain('First Light');
     expect(text()).toContain('Steady State');
-    expect(text()).toContain('Deep Focus Master');
+    expect(text()).not.toContain('Deep Focus Master');
     expect(text()).not.toContain('Garden Keeper');
     expect(text()).not.toContain('Still Waters');
     renderer.unmount();

@@ -3,15 +3,11 @@ import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth, firestoreCache } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSignOut } from '../account/useSignOut';
-import { ClientProfile, ClinicBrandConfig, ExperienceType, IndividualBaselineModel, SessionRecord } from '../../types';
-import { getCalibrationDisplayState } from '../../services/dataMappers';
+import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
-import { OnboardingFlow } from './OnboardingFlow';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
-import { ProtocolDetailsModal } from './ProtocolDetailsModal';
-import { SelfDirectedSetupModal } from './SelfDirectedSetupModal';
 import { DisconnectClinicianDialog } from './DisconnectClinicianDialog';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
@@ -20,27 +16,18 @@ import { useMessageUnread } from '../messaging/useMessageUnread';
 import { messageRepository } from '../../services/messageRepository';
 import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, ClipboardList, RotateCcw, CheckCircle2, SlidersHorizontal, Unlink } from 'lucide-react';
-import { FactGrid, type Fact } from '../ui/FactGrid';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, Headphones, CheckCircle2, Unlink } from 'lucide-react';
+import { FactGrid } from '../ui/FactGrid';
 import { canStartAssignedExperience } from './experienceCatalogue';
 import { TrainTab } from './TrainTab';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
-import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
 import { clearPendingInvitation } from '../../services/pendingInvitation';
 import {
-  buildSelfDirectedTrainingSetup,
-  ClinicianManagedTrainingError,
   isPatientTabAvailable,
   resolveTrainingAuthority,
-  TRAINING_AUTHORITY_LABEL,
-  type SelfDirectedTrainingSetup,
 } from '../../services/patientTrainingAuthority';
 import { exportPatientSessionCsv } from './patientSessionCsv';
-import {
-  getClinicalProtocolTemplate,
-  getProtocolAssignmentAlias,
-} from '../../services/clinicalProtocolTemplates';
 import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
 import { MENTAL_MATH_PROGRESS_CARD_BUTTON_ID, MentalMathProgressCard } from '../../consumer/games/mentalMath/MentalMathProgressCard';
@@ -58,24 +45,14 @@ const demoModeEegProvider = createDemoModeEegProvider();
 /** Where focus goes when a closed game's opener is gone: the current tab (NFCT-52). */
 const currentTabButton = () => document.querySelector<HTMLElement>('.patient-bottom-nav [aria-current="page"]');
 
-// Same day-month-year style as session history, so dates read alike across Profile and Progress.
-const SHORT_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-
-const IMPRINT_TAG: Record<'valid' | 'expired' | 'invalid' | 'not-calibrated', string> = {
-  valid: 'status-tag-active',
-  expired: 'status-tag-paused',
-  invalid: 'status-tag-alert',
-  'not-calibrated': 'status-tag-neutral',
-};
-
 interface PatientShellProps {
   brand: ClinicBrandConfig;
   client: ClientProfile;
   onUpdateClient: (updated: ClientProfile) => Promise<void>;
   /** Update local UI for data already persisted by an atomic repository operation. */
   onClientPersistedElsewhere: (updated: ClientProfile) => void;
-  onBaselinePersisted?: (patientId: string, model: IndividualBaselineModel) => void;
-  onRecalibrate?: () => void;
+  /** Opens headset pairing and the fit check. */
+  onSetUpHeadset?: () => void;
   onOpenRebrand: () => void;
   initialInvitationCode?: string;
   invitationRouteCode?: string;
@@ -88,8 +65,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   client,
   onUpdateClient,
   onClientPersistedElsewhere,
-  onBaselinePersisted,
-  onRecalibrate,
+  onSetUpHeadset,
   initialInvitationCode,
   invitationRouteCode,
   onInvitationAccepted,
@@ -113,7 +89,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     currentClientId.current = client.id;
   }, [client.id]);
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
   const [showClinicianLink, setShowClinicianLink] = useState(!!initialInvitationCode);
@@ -133,8 +108,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
-  const [showProtocolDetails, setShowProtocolDetails] = useState(false);
-  const [showTrainingSetup, setShowTrainingSetup] = useState(false);
   const [showDisconnect, setShowDisconnect] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
@@ -143,25 +116,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
-  const resolvedProtocol = resolvePatientProtocol(client);
-  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
-  const protocolAlias = client.customProtocolConfig
-    ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
-    : undefined;
-  const imprintState = getCalibrationDisplayState(client.individualBaselineModel);
-  const imprintDate = imprintState.calibratedAt == null ? null : new Date(imprintState.calibratedAt).toLocaleDateString(undefined, SHORT_DATE);
-  const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
-  const imprintLabel = imprintState.status === 'valid' ? 'Current'
-    : imprintState.status === 'expired' ? 'Expired'
-      : imprintState.status === 'invalid' ? 'Needs recalibration' : 'Not calibrated';
-  const measuredAlphaPeakHz = client.individualBaselineModel?.algorithmVersion === 'neurogambit-15s-v1'
-    ? undefined : client.individualBaselineModel?.alphaPeakHz;
-  const imprintFacts: Fact[] = [
-    ...(imprintDate ? [{ label: 'Calibrated', value: <time dateTime={new Date(imprintState.calibratedAt!).toISOString()}>{imprintDate}</time> }] : []),
-    ...(imprintState.status === 'valid' && typeof measuredAlphaPeakHz === 'number' && Number.isFinite(measuredAlphaPeakHz)
-      ? [{ label: 'Alpha peak', value: `${measuredAlphaPeakHz.toFixed(1)} Hz` }] : []),
-    ...(imprintState.expiresAt != null ? [{ label: 'Expires', value: <time dateTime={new Date(imprintState.expiresAt).toISOString()}>{new Date(imprintState.expiresAt).toLocaleDateString(undefined, SHORT_DATE)}</time> }] : []),
-  ];
   const trainingAuthority = resolveTrainingAuthority(client);
   const isClinicianLinked = trainingAuthority === 'clinician';
   // Clinician-dependent destinations follow the live relationship; a hidden tab falls back to Home.
@@ -222,16 +176,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setShowDisconnect(false);
   };
 
-  const handleSaveTrainingSetup = async (setup: SelfDirectedTrainingSetup) => {
-    try {
-      onClientPersistedElsewhere(await storageEngine.saveSelfDirectedTrainingSetup(client.id, setup));
-      setShowTrainingSetup(false);
-    } catch (error) {
-      // A clinician linked this account elsewhere: show their plan and explain why nothing was saved.
-      if (error instanceof ClinicianManagedTrainingError) onClientPersistedElsewhere(error.current);
-      throw error;
-    }
-  };
 
   const handleDeleteAccount = async () => {
     if (isDeletingAccount || !deletePassword) return;
@@ -407,7 +351,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     return (
       <SessionRunner
         client={client}
-        onBaselinePersisted={(model) => onBaselinePersisted?.(client.id, model)}
         selectedExperience={activeSessionExp}
         onComplete={handleSessionComplete}
         onCancel={() => setActiveSessionExp(null)}
@@ -433,24 +376,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         onViewProgress={() => {
           setCompletedSession(null);
           setActiveTab('progress');
-        }}
-      />
-    );
-  }
-
-  if (showOnboarding) {
-    return (
-      <OnboardingFlow
-        client={client}
-        onFinish={async updated => {
-          const nextProtocol = updated.assignedProtocol;
-          if (!isClinicianLinked && nextProtocol) {
-            // Re-running setup only to re-pair a headband must not discard a customized experience list.
-            if (nextProtocol !== resolvedProtocol) await handleSaveTrainingSetup(buildSelfDirectedTrainingSetup(nextProtocol));
-          } else {
-            await onUpdateClient({ ...client, ...updated });
-          }
-          setShowOnboarding(false);
         }}
       />
     );
@@ -525,8 +450,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           <HomeScreen
             client={client}
             onStartSession={handleStartSession}
-            onOpenProtocolDetails={() => setShowProtocolDetails(true)}
-            onOpenTrainingSetup={isClinicianLinked ? undefined : () => setShowTrainingSetup(true)}
             gamesSection={(
               <HomeOverview
                 playerId={client.id}
@@ -684,9 +607,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                 facts={[
                   // Goal and weekly target are care-team fields: shown only while a clinician manages the plan (values are kept on unlink).
                   ...(isClinicianLinked ? [{ label: 'Goal', value: client.condition || 'Unavailable' }] : []),
-                  { label: 'Protocol', value: protocolAlias ? `${protocolAlias} · ${protocolName}` : protocolName },
-                  // A linked patient sees "Connected to your clinician" just below instead.
-                  ...(isClinicianLinked ? [] : [{ label: 'Training setup', value: TRAINING_AUTHORITY_LABEL[trainingAuthority] }]),
                   ...(isClinicianLinked
                     ? [{ label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' }] : []),
                   { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
@@ -700,45 +620,14 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               )}
               {canConnectToClinician && clinicianConnection}
             </div>
-            <section className="card-patient" aria-label="Neural Imprint" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px 12px' }}>
-                <h2 style={{ fontSize: '17px', fontWeight: 600, margin: 0, whiteSpace: 'nowrap' }}>Neural Imprint</h2>
-                <span className={`status-tag ${IMPRINT_TAG[imprintState.status]}`} style={{ flexShrink: 0, padding: '3px 10px' }}>{imprintLabel}</span>
-              </div>
-              {imprintState.status === 'not-calibrated' && (
-                <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
-                  Calibrate with your headset to set your personal training baseline.
-                </p>
-              )}
-              {imprintFacts.length > 0 && <FactGrid facts={imprintFacts} />}
-              <button type="button" className="btn btn-secondary" style={{ alignSelf: 'flex-start', padding: '9px 20px', fontSize: '14px' }} onClick={onRecalibrate}>
-                {imprintState.status === 'not-calibrated' ? 'Calibrate' : 'Recalibrate'}
-              </button>
-            </section>
-
             <div>
               <h2 className="section-label">Training</h2>
               <div className="list-group">
-                {!isClinicianLinked && (
-                  <button type="button" className="list-row" onClick={() => setShowTrainingSetup(true)} aria-label="Change Training Setup">
-                    <SlidersHorizontal size={18} className="list-row-icon" aria-hidden="true" />
-                    <span className="list-row-label">
-                      Change Training Setup
-                      <span className="list-row-hint">Protocol and experiences</span>
-                    </span>
-                    <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
-                  </button>
-                )}
-                <button type="button" className="list-row" onClick={() => setShowProtocolDetails(true)} aria-label="View Protocol Details">
-                  <ClipboardList size={18} className="list-row-icon" aria-hidden="true" />
-                  <span className="list-row-label">Protocol Details</span>
-                  <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
-                </button>
-                <button type="button" className="list-row" onClick={() => setShowOnboarding(true)}>
-                  <RotateCcw size={18} className="list-row-icon" aria-hidden="true" />
+                <button type="button" className="list-row" onClick={onSetUpHeadset} disabled={!onSetUpHeadset}>
+                  <Headphones size={18} className="list-row-icon" aria-hidden="true" />
                   <span className="list-row-label">
-                    Redo Setup
-                    <span className="list-row-hint">Training goal and headband</span>
+                    Set Up Headset
+                    <span className="list-row-hint">Pair a Muse and check its fit</span>
                   </span>
                   <ChevronRight size={16} className="list-row-trail" aria-hidden="true" />
                 </button>
@@ -788,17 +677,10 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         )}
       </main>
 
-      {showProtocolDetails && (
-        <ProtocolDetailsModal client={client} onClose={() => setShowProtocolDetails(false)} />
-      )}
-
       {showDisconnect && isClinicianLinked && (
         <DisconnectClinicianDialog onConfirm={handleDisconnectClinician} onClose={() => setShowDisconnect(false)} />
       )}
 
-      {showTrainingSetup && (
-        <SelfDirectedSetupModal client={client} onSave={handleSaveTrainingSetup} onClose={() => setShowTrainingSetup(false)} />
-      )}
 
       {/* Patient Mobile Bottom Tab Bar */}
       <nav

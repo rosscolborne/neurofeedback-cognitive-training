@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ClientProfile, ProtocolTemplate } from '../../../types';
 import { resolveProtocolRuntime } from '../../../services/adaptiveEngine';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
-import { EEGEngine } from '../../../services/eegEngine';
-import { calculateRewardAmplitudeUv, calculateRewardPowerRatio } from '../../../services/rewardSpectrum';
 import { DEFAULT_RATIO_REWARDS, DEFAULT_SINGLE_BAND_REWARDS } from '../../../services/protocols';
 import { ProtocolBuilderModal } from '../ProtocolBuilderModal';
 
@@ -175,41 +173,6 @@ describe('ProtocolBuilderModal persistence state', () => {
     renderer.unmount();
   });
 
-  it('saves two ratio band choices that produce different feedback from the same EEG', async () => {
-    const template = getClinicalProtocolTemplate('theta-beta-ratio')!;
-    const save = async (numeratorMin: number, numeratorMax: number) => {
-      const { renderer, onSave } = await renderModal(template);
-      await act(async () => {
-        renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
-      });
-      await act(async () => {
-        renderer.root.findByProps({ 'aria-label': 'Theta Min Frequency' }).props.onChange({ target: { value: String(numeratorMin) } });
-        renderer.root.findByProps({ 'aria-label': 'Theta Max Frequency' }).props.onChange({ target: { value: String(numeratorMax) } });
-      });
-      await submit(renderer);
-      const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
-      expect(saved.ratioReward?.targetThreshold).toBe(1.85);
-      renderer.unmount();
-      return saved;
-    };
-    const a = await save(4, 8);
-    const b = await save(9, 11);
-    const raw = Array.from({ length: 512 }, (_, index) => (
-      4 * Math.sin(2 * Math.PI * 6 * index / 256)
-      + 12 * Math.sin(2 * Math.PI * 10 * index / 256)
-      + 8 * Math.sin(2 * Math.PI * 17 * index / 256)
-    ));
-    const feedback = (saved: ProtocolTemplate) => {
-      const resolution = resolveProtocolRuntime({ assignedProtocol: 'theta-beta-ratio', customProtocolConfig: saved } as ClientProfile);
-      if (!resolution.ok) throw new Error(resolution.error);
-      const engine = new EEGEngine();
-      engine.configureProtocol(resolution.config);
-      return engine.evaluateFeedbackForBands({ delta: 0, theta: 0, alpha: 0, smr: 0, beta: 0, gamma: 0 }, {}, undefined,
-        calculateRewardPowerRatio([raw], 256, saved.ratioReward!));
-    };
-    expect(feedback(a)).toMatchObject({ available: true, inZone: true });
-    expect(feedback(b)).toMatchObject({ available: true, inZone: false });
-  });
   it('prefills beta customization with the active 13–30 Hz, below 14 µV rule', async () => {
     const beta = getClinicalProtocolTemplate('beta-downtraining')!;
     const { renderer, onSave } = await renderModal(beta);
@@ -225,20 +188,6 @@ describe('ProtocolBuilderModal persistence state', () => {
       customRewardEnabled: true,
       rewardBand: { freqMin: 13, freqMax: 30, targetCondition: 'below', targetThreshold: 14 },
     });
-    const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
-    const defaultRuntime = resolveProtocolRuntime({ assignedProtocol: 'beta-downtraining' } as ClientProfile);
-    const customRuntime = resolveProtocolRuntime({ assignedProtocol: 'beta-downtraining', customProtocolConfig: saved } as ClientProfile);
-    if (!defaultRuntime.ok || !customRuntime.ok) throw new Error('The beta assignment did not resolve.');
-    const defaultEngine = new EEGEngine();
-    defaultEngine.configureProtocol(defaultRuntime.config);
-    const customEngine = new EEGEngine();
-    customEngine.configureProtocol(customRuntime.config);
-    const betaBands = { delta: 0, theta: 4, alpha: 8, smr: 6, beta: 100, gamma: 3 };
-    const availability = { beta: true };
-    expect(defaultEngine.evaluateFeedbackForBands(betaBands, availability, 12).inZone)
-      .toBe(customEngine.evaluateFeedbackForBands(betaBands, availability, 12).inZone);
-    expect(defaultEngine.evaluateFeedbackForBands(betaBands, availability, 16).inZone)
-      .toBe(customEngine.evaluateFeedbackForBands(betaBands, availability, 16).inZone);
     renderer.unmount();
   });
 
@@ -261,7 +210,7 @@ describe('ProtocolBuilderModal persistence state', () => {
     renderer.unmount();
   });
 
-  it('saves a canonical assignment that resolves and starts training', async () => {
+  it('saves a canonical assignment that resolves', async () => {
     const { renderer, onSave, onClose } = await renderModal(canonical);
     expect(renderer.root.findAllByProps({ 'aria-label': 'Min Frequency' })).toHaveLength(0);
     await submit(renderer);
@@ -273,52 +222,7 @@ describe('ProtocolBuilderModal persistence state', () => {
     expect(saved.rewardBand.targetThreshold).toBe(11.5);
     const resolution = trainingConfig(saved);
     expect(resolution).toMatchObject({ ok: true, config: { initialThreshold: 11, source: 'patient-override' } });
-    if (!resolution.ok) throw new Error(resolution.error);
-    const engine = new EEGEngine();
-    engine.configureProtocol(resolution.config);
-    expect(engine.evaluateFeedbackForBands(
-      { delta: 0, theta: 4, alpha: 12, smr: 8, beta: 6, gamma: 3 },
-      { alpha: true },
-      12,
-    )).toMatchObject({ available: true, inZone: true });
     renderer.unmount();
-  });
-
-  it('saves two clinician-selected rewards that produce different training feedback', async () => {
-    const saveSelected = async (min: number, max: number) => {
-      const { renderer, onSave } = await renderModal(canonical);
-      await act(async () => {
-        renderer.root.findByProps({ 'aria-label': 'Use clinician-defined reward criteria' }).props.onChange({ target: { checked: true } });
-      });
-      await act(async () => {
-        renderer.root.findByProps({ 'aria-label': 'Min Frequency' }).props.onChange({ target: { value: String(min) } });
-        renderer.root.findByProps({ 'aria-label': 'Max Frequency' }).props.onChange({ target: { value: String(max) } });
-        renderer.root.findByProps({ 'aria-label': 'Reward threshold' }).props.onChange({ target: { value: '6' } });
-      });
-      await submit(renderer);
-      expect(onSave).toHaveBeenCalledOnce();
-      const saved = onSave.mock.calls[0][0] as ProtocolTemplate;
-      renderer.unmount();
-      return saved;
-    };
-    const raw = Array.from({ length: 512 }, (_, index) => 12 * Math.sin(2 * Math.PI * 10 * index / 256));
-    const feedbackFor = (template: ProtocolTemplate) => {
-      const resolution = trainingConfig(template);
-      if (!resolution.ok) throw new Error(resolution.error);
-      const engine = new EEGEngine();
-      engine.configureProtocol(resolution.config);
-      return engine.evaluateFeedbackForBands(
-        { delta: 0, theta: 4, alpha: 12, smr: 8, beta: 6, gamma: 3 },
-        { alpha: true },
-        calculateRewardAmplitudeUv([raw, raw, raw, raw], 256, template.rewardBand),
-      );
-    };
-    const a = await saveSelected(9, 11);
-    const b = await saveSelected(16, 18);
-    expect(a.customRewardEnabled).toBe(true);
-    expect(b.customRewardEnabled).toBe(true);
-    expect(feedbackFor(a)).toMatchObject({ available: true, inZone: true });
-    expect(feedbackFor(b)).toMatchObject({ available: true, inZone: false });
   });
 
   it('blocks malformed reward input before save and repairs a legacy assignment by editing it', async () => {

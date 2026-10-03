@@ -1,23 +1,14 @@
+/**
+ * What NeuroGambit knows about the player's state: one composure value derived
+ * from the generic neurofeedback level (BrainFlow mindfulness and restfulness).
+ * It never sees EEG bands, protocols or calibration.
+ */
 export interface BrainStateEvent {
   timestamp: number;
-  frontalTheta: number;        // 4–8 Hz (AF7, AF8) - calculation depth
-  frontalHighBeta: number;     // 20–30 Hz (AF7, AF8) - panic/stress
-  tpAlpha: number;             // 8–13 Hz (TP9, TP10) - poise/calm
-  normalizedComposure: number; // Scaled 0.0 to 2.0 against user baseline
-  isClenching: boolean;        // Artifact flag: jaw clench (EMG > 45 Hz)
-  isBlinking: boolean;         // Artifact flag: frontal blink
-  isGoodFit: boolean;          // Sensor contact quality
-}
-
-export interface NeuroGambitBaseline {
-  thetaMean: number;
-  thetaStd: number;
-  highBetaMean: number;
-  highBetaStd: number;
-  alphaMean: number;
-  alphaStd: number;
-  calibratedAt: number;
-  isReady: boolean;
+  /** 0.0–2.0. 1.0 is neutral, and is the value whenever no neurofeedback is available. */
+  normalizedComposure: number;
+  /** False when no neurofeedback level is available, so composure is held neutral. */
+  hasSignal: boolean;
 }
 
 export type NeuroGambitTrack = 'composed-tactics' | 'tilt-crucible';
@@ -51,7 +42,7 @@ export interface PieceChargeState {
 export interface NGIScore {
   compositeScore: number;         // 0 - 150 (100 is standard benchmark)
   tacticalAccuracyPercent: number; // 0 - 100
-  timeInHighBetaPanicSeconds: number;
+  timeInPanicSeconds: number;
   totalSessionTimeSeconds: number;
   recoveryLatencySeconds: number; // t_recover in seconds
   interpretation: string;

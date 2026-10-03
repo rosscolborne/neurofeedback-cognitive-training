@@ -4,11 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientProfile, ClinicBrandConfig } from '../../../types';
 import { createBlankProfile } from '../../../services/storageEngine';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
-import { ClinicianManagedTrainingError } from '../../../services/patientTrainingAuthority';
 import { APP_DISPLAY_NAME } from '../../../config/appIdentity';
 
 const state = vi.hoisted(() => ({
-  getSessions: vi.fn(async () => []), saveSelfDirectedTrainingSetup: vi.fn(), acceptPatientInvitation: vi.fn(), disconnectFromClinician: vi.fn(),
+  getSessions: vi.fn(async () => []), acceptPatientInvitation: vi.fn(), disconnectFromClinician: vi.fn(),
   hasPendingInvitationNotice: vi.fn(async () => false),
 }));
 vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: {} }));
@@ -18,7 +17,7 @@ vi.mock('../../../services/audioEngine', () => ({ audioEngine: { getMuted: () =>
 vi.mock('../../../services/storageEngine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/storageEngine')>()),
   storageEngine: {
-    getSessions: state.getSessions, saveSelfDirectedTrainingSetup: state.saveSelfDirectedTrainingSetup,
+    getSessions: state.getSessions,
     acceptPatientInvitation: state.acceptPatientInvitation, disconnectFromClinician: state.disconnectFromClinician,
     hasPendingInvitationNotice: state.hasPendingInvitationNotice,
   },
@@ -26,9 +25,7 @@ vi.mock('../../../services/storageEngine', async (importOriginal) => ({
 vi.mock('../../messaging/useMessageUnread', () => ({ useMessageUnread: () => ({ byPatient: {}, error: null }) }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
-vi.mock('../OnboardingFlow', () => ({ OnboardingFlow: 'onboarding-flow' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
-vi.mock('../ProtocolDetailsModal', () => ({ ProtocolDetailsModal: 'protocol-details' }));
 vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
 vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
@@ -36,7 +33,6 @@ vi.mock('../../../consumer/games/mentalMath/MentalMathGame', () => ({ MentalMath
 
 import { HomeScreen } from '../HomeScreen';
 import { PatientShell } from '../PatientShell';
-import { SelfDirectedSetupModal } from '../SelfDirectedSetupModal';
 import { DisconnectClinicianDialog } from '../DisconnectClinicianDialog';
 
 const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
@@ -91,17 +87,18 @@ describe('self-directed patient shell', () => {
     expect(trainCards(renderer)).toHaveLength(tbr.length);
   });
 
-  it('gives an unlinked patient a clean five-tab shell with the default protocol and no care-team gaps', async () => {
+  it('gives an unlinked patient a clean four-tab shell with no protocol setup and no care-team gaps', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(unlinked())); });
     expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
-    expect(text(renderer)).toContain('Self-directed');
-    expect(button(renderer, 'Change training setup')).toBeDefined();
+    expect(text(renderer)).not.toMatch(/protocol/i);
+    expect(button(renderer, 'Change training setup')).toBeUndefined();
     tab(renderer, 'Train');
     expect(trainCards(renderer)).toHaveLength(tbr.length);
     tab(renderer, 'Profile');
-    expect(button(renderer, 'Change Training Setup')).toBeDefined();
-    expect(factLabels(renderer)).toContain('Training setup');
+    expect(button(renderer, 'Change Training Setup')).toBeUndefined();
+    expect(text(renderer)).not.toMatch(/protocol|calibrat|imprint/i);
+    expect(factLabels(renderer)).not.toContain('Training setup');
     expect(factLabels(renderer)).not.toContain('Goal');
     expect(factLabels(renderer)).not.toContain('Weekly target');
     expect(text(renderer)).not.toContain('Unavailable');
@@ -112,7 +109,6 @@ describe('self-directed patient shell', () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(linked())); });
     expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Messages', 'Visits', 'Profile']);
-    expect(text(renderer)).toContain('Clinician-managed');
     expect(button(renderer, 'Change training setup')).toBeUndefined();
     tab(renderer, 'Profile');
     expect(button(renderer, 'Change Training Setup')).toBeUndefined();
@@ -127,13 +123,13 @@ describe('self-directed patient shell', () => {
     expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-messages')).toHaveLength(0);
     expect(renderer.root.findAllByType(HomeScreen)).toHaveLength(1);
-    expect(button(renderer, 'Change training setup')).toBeDefined();
+    expect(button(renderer, 'Change training setup')).toBeUndefined();
     // Unlinking keeps the last assignment as the self-directed starting point.
     tab(renderer, 'Train');
     expect(trainCards(renderer)).toHaveLength(smr.length);
     // The former clinician's goal and weekly target are kept but no longer presented as care-team facts.
     tab(renderer, 'Profile');
-    expect(text(renderer)).toContain('Self-directed');
+    expect(text(renderer)).not.toContain('Connected to your clinician');
     expect(factLabels(renderer)).not.toContain('Goal');
     expect(factLabels(renderer)).not.toContain('Weekly target');
 
@@ -143,73 +139,15 @@ describe('self-directed patient shell', () => {
     await act(async () => { renderer.unmount(); });
   });
 
-  it('saves a protocol choice with its canonical defaults and starts sessions from the persisted list', async () => {
+  it('starts sessions from the persisted experience list', async () => {
     const saved = { ...unlinked(), assignedProtocol: 'alpha-enhancement' as const, allowedExperiences: [...alpha] };
-    state.saveSelfDirectedTrainingSetup.mockResolvedValueOnce(saved);
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(unlinked())); });
-    act(() => button(renderer, 'Change training setup')!.props.onClick());
-    const modal = renderer.root.findByType(SelfDirectedSetupModal);
-    act(() => modal.findAll((node) => node.type === 'input' && node.props.value === 'alpha-enhancement')[0].props.onChange());
-    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
-    expect(state.saveSelfDirectedTrainingSetup).toHaveBeenCalledWith('patient-1', { assignedProtocol: 'alpha-enhancement', allowedExperiences: alpha });
-    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(saved);
-    expect(renderer.root.findAllByType(SelfDirectedSetupModal)).toHaveLength(0);
-
-    await act(async () => { renderer.update(shell(saved)); });
+    await act(async () => { renderer = create(shell(saved)); });
     tab(renderer, 'Train');
     expect(trainCards(renderer)).toHaveLength(alpha.length);
-    // Session start uses the same persisted list: the first Train card starts its own experience.
+    // The first Train card starts its own experience.
     act(() => trainCards(renderer)[0].props.onClick());
     expect(sessionRunners(renderer)[0].props.selectedExperience).toBe('neuro-gambit');
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('requires at least one experience when customizing and offers a defaults reset', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<SelfDirectedSetupModal client={unlinked()} onSave={onSave} onClose={vi.fn()} />); });
-    expect(text(renderer)).toContain('Using the 1 default for this protocol');
-    act(() => button(renderer, 'Customize experiences')!.props.onClick());
-    const checkbox = (name: string) => renderer.root.findAll((node) => node.type === 'label' && hasText(node, name))[0].findByType('input');
-    expect(checkbox('NeuroGambit').props.checked).toBe(true);
-    act(() => checkbox('NeuroGambit').props.onChange());
-    expect(text(renderer)).toContain('Customized: 0 of 1 experience');
-    expect(button(renderer, 'Save setup')!.props.disabled).toBe(true);
-    expect(text(renderer)).toContain('Choose at least one training experience.');
-    act(() => button(renderer, 'Use protocol defaults')!.props.onClick());
-    expect(text(renderer)).toContain('Using the 1 default for this protocol');
-    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
-    expect(onSave).toHaveBeenCalledWith({ assignedProtocol: 'theta-beta-ratio', allowedExperiences: ['neuro-gambit'] });
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('keeps a customized self-directed list when the assessment is re-run with the same protocol', async () => {
-    const customized = { ...unlinked(), allowedExperiences: [] as ClientProfile['allowedExperiences'] };
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(customized)); });
-    tab(renderer, 'Profile');
-    act(() => button(renderer, 'Redo Setup')!.props.onClick());
-    await act(async () => { await renderer.root.find((node) => (node.type as unknown) === 'onboarding-flow').props.onFinish({ assignedProtocol: 'theta-beta-ratio' }); });
-    expect(state.saveSelfDirectedTrainingSetup).not.toHaveBeenCalled();
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'onboarding-flow')).toHaveLength(0);
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('switches to the clinician plan and explains why nothing was saved when a clinician linked meanwhile', async () => {
-    const clinicianPlan = linked();
-    state.saveSelfDirectedTrainingSetup.mockRejectedValueOnce(new ClinicianManagedTrainingError(clinicianPlan));
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(unlinked())); });
-    act(() => button(renderer, 'Change training setup')!.props.onClick());
-    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
-    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(clinicianPlan);
-    expect(text(renderer)).toContain('now managed by your clinician');
-    expect(button(renderer, 'Save setup')!.props.disabled).toBe(true);
-    await act(async () => { button(renderer, 'Save setup')!.props.onClick(); });
-    expect(state.saveSelfDirectedTrainingSetup).toHaveBeenCalledTimes(1);
-    act(() => button(renderer, 'Close')!.props.onClick());
-    expect(renderer.root.findAllByType(SelfDirectedSetupModal)).toHaveLength(0);
     await act(async () => { renderer.unmount(); });
   });
 });
@@ -329,7 +267,7 @@ describe('clinician relationship lifecycle', () => {
 
     await act(async () => { renderer.update(shell(disconnected)); });
     expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
-    expect(button(renderer, 'Change Training Setup')).toBeDefined();
+    expect(button(renderer, 'Change Training Setup')).toBeUndefined();
     expect(button(renderer, 'Disconnect from Clinician')).toBeUndefined();
     expect(text(renderer)).not.toContain('Connected to your clinician');
     await act(async () => { renderer.unmount(); });

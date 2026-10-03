@@ -1,21 +1,12 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { ClientProfile, ExperienceType } from '../../types';
-import { protocolDisplayName, resolvePatientProtocol } from '../../services/protocols';
-import { resolveTrainingAuthority, TRAINING_AUTHORITY_LABEL } from '../../services/patientTrainingAuthority';
-import {
-  getClinicalProtocolTemplate,
-  getProtocolAssignmentAlias,
-} from '../../services/clinicalProtocolTemplates';
-import { Play, ChevronRight, Brain } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { EXPERIENCE_CATALOGUE, getAssignedExperienceIds, canStartAssignedExperience } from './experienceCatalogue';
 import { useScrollEdges } from '../ui/useScrollEdges';
 
 interface HomeScreenProps {
   client: ClientProfile;
   onStartSession: (exp: ExperienceType) => void;
-  onOpenProtocolDetails?: () => void;
-  /** Present only while the patient owns their training setup (no active clinician). */
-  onOpenTrainingSetup?: () => void;
   /**
    * The games (NFCT-13): play, the streak, achievements and recent runs. Shown
    * first; the optional neurofeedback training below it becomes secondary.
@@ -33,8 +24,6 @@ function getGreeting(): string {
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   client,
   onStartSession,
-  onOpenProtocolDetails,
-  onOpenTrainingSetup,
   gamesSection,
 }) => {
   const assignmentKey = client.allowedExperiences.join('|');
@@ -50,45 +39,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const latestAllowed = useRef(client.allowedExperiences);
   const pillScrollerRef = useScrollEdges<HTMLDivElement>();
   useLayoutEffect(() => { latestAllowed.current = client.allowedExperiences; }, [client.allowedExperiences]);
-  const resolvedProtocol = resolvePatientProtocol(client);
-  const evidenceProtocol = getClinicalProtocolTemplate(resolvedProtocol);
-  const protocolAlias = client.customProtocolConfig
-    ? getProtocolAssignmentAlias(client.customProtocolConfig, resolvedProtocol)
-    : undefined;
-  const protocolName = evidenceProtocol?.name ?? protocolDisplayName(resolvedProtocol);
-
-  const protocolControls = (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', maxWidth: '100%' }}>
-      <button
-        type="button"
-        className="protocol-chip"
-        onClick={onOpenProtocolDetails}
-        disabled={!onOpenProtocolDetails}
-        aria-label={`Protocol: ${protocolAlias ? `${protocolAlias}, ` : ''}${protocolName}. View protocol details`}
-      >
-        <Brain size={15} color="var(--brand-primary)" aria-hidden="true" style={{ flexShrink: 0 }} />
-        <span>
-          {protocolAlias && <>{protocolAlias}<span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}> · </span></>}
-          {protocolName}
-        </span>
-        {onOpenProtocolDetails && <ChevronRight size={14} color="var(--text-tertiary)" aria-hidden="true" style={{ flexShrink: 0 }} />}
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-        <span>{TRAINING_AUTHORITY_LABEL[resolveTrainingAuthority(client)]} protocol</span>
-        {onOpenTrainingSetup && <>
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            onClick={onOpenTrainingSetup}
-            aria-label="Change training setup"
-            style={{ background: 'none', border: 0, padding: '6px 2px', margin: '-6px 0', font: 'inherit', fontWeight: 600, color: 'var(--brand-primary)', cursor: 'pointer' }}
-          >
-            Change
-          </button>
-        </>}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
@@ -100,7 +50,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         >
           {getGreeting()}{client.name ? `, ${client.name.split(' ')[0]}.` : '.'}
         </h1>
-        {!gamesSection && protocolControls}
       </div>
 
       {gamesSection}
@@ -120,7 +69,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 Optional. Uses a Muse headset, and is separate from your game progress.
               </p>
             </div>
-            {protocolControls}
           </div>
         )}
 

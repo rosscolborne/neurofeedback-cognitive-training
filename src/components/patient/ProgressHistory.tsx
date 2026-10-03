@@ -24,7 +24,7 @@ interface ProgressHistoryProps {
 }
 
 const EMPTY_SESSIONS: SessionRecord[] = [];
-const VISIBLE_BADGE_IDS = new Set(['first-light', 'steady-state', 'deep-focus']);
+const VISIBLE_BADGE_IDS = new Set(['first-light', 'steady-state']);
 
 const BADGE_ICONS: Record<string, React.FC<{ size?: number }>> = {
   Award,
