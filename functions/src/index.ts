@@ -58,7 +58,7 @@ export const onGameSessionCreated = onDocumentCreated(
  * plan); the admin re-drive script runs the same code on demand.
  */
 export const sweepUnprocessedSessions = onSchedule(
-  { schedule: 'every 60 minutes', timeZone: 'UTC', retryCount: 0 },
+  { schedule: 'every 15 minutes', timeZone: 'UTC', retryCount: 0 },
   async () => {
     await sweepSessions(context);
   },

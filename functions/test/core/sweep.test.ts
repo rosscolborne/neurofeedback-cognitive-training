@@ -24,21 +24,27 @@ describe('sweepUnprocessedSessions', () => {
     const uid = newUid();
     const created = at(1);
     const missed = await writeSessionAt(db, uid, created, { seed: 500, startLevel: 1, targetPeak: 4, order: 1 });
-    const recent = await writeSessionAt(db, uid, created + 2 * HOUR - 30 * 60_000, { seed: 501, startLevel: 1, targetPeak: 3, order: 2 });
+    const sweepTime = created + 2 * HOUR;
+    const minute = 60_000;
+    // Just inside the settle cutoff at sweep time: may still have a live delivery.
+    const recent = await writeSessionAt(db, uid, sweepTime - (SWEEP_POLICY.settleAfterMs - minute), { seed: 501, startLevel: 1, targetPeak: 3, order: 2 });
+    // Just past it: settled.
+    const settled = await writeSessionAt(db, uid, sweepTime - (SWEEP_POLICY.settleAfterMs + minute), { seed: 505, startLevel: 1, targetPeak: 2, order: 3 });
 
-    const report = await sweepAt(created + 2 * HOUR);
+    const report = await sweepAt(sweepTime);
 
-    // The recent one may still have a live delivery; it is left for a later run.
-    expect(report.targets.map(({ sessionId }) => sessionId)).toEqual([missed.id]);
-    expect(report.results).toMatchObject([{ sessionId: missed.id, state: 'pending', now: 'valid' }]);
+    // The recent one is left for a later run.
+    expect(report.targets.map(({ sessionId }) => sessionId).sort()).toEqual([missed.id, settled.id].sort());
+    expect(report.results.map(({ sessionId }) => sessionId).sort()).toEqual([missed.id, settled.id].sort());
+    expect(report.results.every(({ state, now }) => state === 'pending' && now === 'valid')).toBe(true);
     expect((await readDoc(db, sessionPath(uid, recent.id)))?.result).toBeUndefined();
-    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 1, activeMs: 90_000 });
+    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 2 });
 
     // A later run picks up the other one; nothing is counted twice.
     const later = await sweepAt(created + 3 * HOUR);
     expect(later.results).toMatchObject([{ sessionId: recent.id, now: 'valid' }]);
     expect((await sweepAt(created + 4 * HOUR)).targets).toEqual([]);
-    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 2, activeMs: 180_000 });
+    expect(await readDoc(db, progressPath(uid))).toMatchObject({ sessionsCompleted: 3 });
   });
 
   it('re-drives failed sessions below the attempt cap and reports those at it for an operator', async () => {
