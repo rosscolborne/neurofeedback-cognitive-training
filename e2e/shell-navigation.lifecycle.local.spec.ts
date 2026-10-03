@@ -48,6 +48,7 @@ test('each tab has its own address, which survives a reload and the browser’s 
     // Headset setup from Profile, skipped, lands Home; Back returns to Profile, not to setup.
     await tab(page, 'Profile').click();
     await expectTab(page, 'Profile', /#\/profile$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Profile', exact: true })).toBeVisible();
     await page.getByRole('button', { name: /Set Up Headset/ }).click();
     await expect(skipHeadsetSetupButton(page)).toBeVisible();
     await skipHeadsetSetupButton(page).click();

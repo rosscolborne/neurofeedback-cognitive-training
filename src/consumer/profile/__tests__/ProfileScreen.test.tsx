@@ -36,6 +36,7 @@ vi.mock('../../../consumer/profile/profilePhoto', async (importOriginal) => ({
 }));
 
 import { ProfileScreen } from '../ProfileScreen';
+import { useProfileScreenState } from '../useProfileScreenState';
 import { ProfilePhotoError } from '../../../consumer/profile/profilePhoto';
 
 const player = { uid: 'player-1', email: 'player@example.com' } as User;
@@ -58,7 +59,13 @@ const stubWindow = (overrides: Record<string, unknown>) => {
   return () => Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
 };
 
-const screen = (props: Partial<React.ComponentProps<typeof ProfileScreen>> = {}) => <ProfileScreen user={player} profile={profile} {...props} />;
+type ScreenProps = Partial<Omit<React.ComponentProps<typeof ProfileScreen>, 'state'>> & { shown?: boolean };
+/** Holds the screen's state as the app shell does, so the tab can come and go while it lives on. */
+const Holder = ({ shown = true, ...props }: ScreenProps) => {
+  const state = useProfileScreenState(player.uid);
+  return shown ? <ProfileScreen user={player} profile={profile} state={state} {...props} /> : null;
+};
+const screen = (props: ScreenProps = {}) => <Holder {...props} />;
 const rendered = (renderer: ReactTestRenderer) => JSON.stringify(renderer.toJSON());
 const textContent = (node: ReactTestInstance | string): string =>
   typeof node === 'string' ? node : node.children.map(textContent).join('');
@@ -295,9 +302,41 @@ describe('Profile and account deletion', () => {
     }
   });
 
+  it('keeps a deletion in progress, and its error, when the player leaves Profile and comes back', async () => {
+    const signedIn = { uid: player.uid, email: player.email!, delete: vi.fn(async () => {}) };
+    state.auth.currentUser = signedIn;
+    let finishReauth!: (error: unknown) => void;
+    state.reauthenticate.mockReturnValueOnce(new Promise<void>((_, reject) => { finishReauth = reject; }));
+    let renderer!: ReactTestRenderer;
+    try {
+      await act(async () => { renderer = create(screen()); });
+      openProfileDeletion(renderer);
+      typeDeletionPassword(renderer, 'secret');
+      await act(async () => { submitDeletion(renderer); await Promise.resolve(); });
+      expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
+
+      // The player switches tab while it runs.
+      act(() => { renderer.update(screen({ shown: false })); });
+      act(() => { renderer.update(screen()); });
+      expect(deletionStatusText(renderer)).toEqual(['Deleting your account…']);
+      expect(deletionTrigger(renderer).props.disabled).toBe(true);
+
+      act(() => { renderer.update(screen({ shown: false })); });
+      await act(async () => { finishReauth(firebaseError('auth/wrong-password')); await flush(); });
+      act(() => { renderer.update(screen()); });
+      expect(deletionError(renderer)).toBe('Incorrect password. Please try again.');
+      expect(deletionTrigger(renderer).props.disabled).toBe(false);
+      expect(state.deleteProfile).not.toHaveBeenCalled();
+    } finally {
+      renderer?.unmount();
+    }
+  });
+
   it('shows the profile name, initials and sign-in email when there is no photo, and offers an upload', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(screen()); });
+    // Titled like Home, Train and Progress: one level-1 heading.
+    expect(renderer.root.findAllByType('h1').map(textContent)).toEqual(['Profile']);
     const text = textContent(renderer.root);
     expect(text).toContain('SP');
     expect(text).toContain('Sam Player');

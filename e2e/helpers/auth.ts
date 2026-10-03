@@ -36,18 +36,23 @@ export async function skipHeadsetSetupIfPresent(page: Page): Promise<void> {
 }
 
 /**
- * Arrives at Home: skips headset setup if it is shown, and presses Home when
- * the app opened on another tab (a reload keeps the tab the player was on).
+ * Arrives at Home, skipping headset setup if it is shown. After a reload, which
+ * keeps the tab the player was on, pass `afterReload` to press Home when the
+ * app opened on another tab; otherwise the app must open on Home itself.
  */
-export async function arriveAtHome(page: Page): Promise<void> {
-    const skipToDashboard = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
-    const homeTab = page.getByRole('button', { name: 'Home', exact: true });
-    await skipToDashboard.or(consumerHome(page)).or(homeTab).first()
-      .waitFor({ state: 'visible', timeout: 15_000 });
-    if (await skipToDashboard.isVisible().catch(() => false)) {
-        await skipToDashboard.click();
-    } else if (await homeTab.getAttribute('aria-current').catch(() => null) !== 'page') {
-        await homeTab.click();
+export async function arriveAtHome(page: Page, { afterReload = false }: { afterReload?: boolean } = {}): Promise<void> {
+    if (!afterReload) {
+        await skipHeadsetSetupIfPresent(page);
+    } else {
+        const skipToDashboard = page.getByRole('button', { name: 'Skip to Dashboard', exact: true });
+        const homeTab = page.getByRole('button', { name: 'Home', exact: true });
+        await skipToDashboard.or(consumerHome(page)).or(homeTab).first()
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        if (await skipToDashboard.isVisible().catch(() => false)) {
+            await skipToDashboard.click();
+        } else if (await homeTab.getAttribute('aria-current').catch(() => null) !== 'page') {
+            await homeTab.click();
+        }
     }
     await expect(consumerHome(page)).toBeVisible({ timeout: 15_000 });
 }

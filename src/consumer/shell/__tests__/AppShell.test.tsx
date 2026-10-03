@@ -14,6 +14,11 @@ vi.mock('../HomeScreen', () => ({ HomeScreen: 'home-screen' }));
 vi.mock('../TrainScreen', () => ({ TrainScreen: 'train-screen' }));
 vi.mock('../ProgressScreen', () => ({ ProgressScreen: 'progress-screen' }));
 vi.mock('../../profile/ProfileScreen', () => ({ ProfileScreen: 'profile-screen' }));
+vi.mock('../../profile/useProfileScreenState', async () => {
+  const { useState } = await import('react');
+  // Each holder gets its own state object, so its identity shows who holds it.
+  return { useProfileScreenState: (playerId: string) => useState(() => ({ playerId }))[0] };
+});
 
 import { AppShell } from '../AppShell';
 
@@ -116,6 +121,17 @@ describe('the app shell', () => {
     await render('/');
     const textOf = (node: ReactTestInstance | string): string => (typeof node === 'string' ? node : node.children.map(textOf).join(''));
     expect(textOf(renderer.root.findByType('header'))).not.toMatch(/Portal|patient|clinic/i);
+  });
+
+  it('holds Profile’s work in progress, so it outlives the Profile tab and an open game', async () => {
+    await render('/profile');
+    const held = element(renderer, 'profile-screen').props.state;
+    expect(held).toEqual({ playerId: 'player-1' });
+    pressTab(renderer, 'Train');
+    act(() => element(renderer, 'train-screen').props.onOpenGame({ gameId: 'mental-math' }));
+    act(() => element(renderer, 'game-screen').props.onExit());
+    pressTab(renderer, 'Profile');
+    expect(element(renderer, 'profile-screen').props.state).toBe(held);
   });
 
   describe('the "See all achievements" request', () => {

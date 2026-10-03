@@ -2,13 +2,10 @@ import React, { useRef, useState } from 'react';
 import type { User as AuthUser } from 'firebase/auth';
 import type { UserProfile } from '@nfct/shared';
 import { Camera, ChevronRight, Headphones, LogOut, Volume2, VolumeX } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useSignOut } from '../../components/account/useSignOut';
 import { ChangePasswordForm } from '../../components/account/ChangePasswordForm';
 import { DeleteAccount } from '../../components/account/DeleteAccount';
 import { audioEngine } from '../../services/audioEngine';
-import { auth } from '../../services/firebase';
-import { ProfilePhotoError, profilePhotoFromFile } from './profilePhoto';
+import type { ProfileScreenState } from './useProfileScreenState';
 
 /** Up to two initials for the profile avatar, from the player's name or else their email. */
 function initialsOf(name: string | null, email: string | null): string {
@@ -21,58 +18,17 @@ interface ProfileScreenProps {
   /** The signed-in player. Their email comes from Firebase Auth, not the profile. */
   user: AuthUser;
   profile: UserProfile;
+  /** From `useProfileScreenState`, held by the app shell. */
+  state: ProfileScreenState;
   /** Opens headset pairing and the fit check. */
   onSetUpHeadset?: () => void;
 }
 
 /** The Profile tab: who is signed in, headset setup, and account settings. */
-export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, profile, onSetUpHeadset }) => {
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, profile, state, onSetUpHeadset }) => {
+  const { isSavingProfile, profileSaveError, pendingPhoto, saveProfilePhoto, handlePhotoChosen, signOutFlow, deletion } = state;
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const photoInput = useRef<HTMLInputElement>(null);
-  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-  // A processed photo whose save failed, kept so Retry sends the same photo.
-  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  // Sign-out clears this device's Firestore cache and reloads the app; it asks
-  // first if some activity has not uploaded yet (AuthContext.logout).
-  const { logout, updateProfile } = useAuth();
-  const signOutFlow = useSignOut(logout);
-
-  const saveProfilePhoto = async (dataUrl: string) => {
-    setIsSavingProfile(true);
-    setProfileSaveError(null);
-    try {
-      // The photo belongs to this shell's player; never save it to another signed-in account.
-      if (auth.currentUser?.uid !== user.uid) throw new Error('The signed-in account changed.');
-      await updateProfile({ avatar: { kind: 'photo', dataUrl } });
-      setPendingPhoto(null);
-    } catch (error) {
-      console.warn('Could not save the profile photo:', error);
-      setPendingPhoto(dataUrl);
-      setProfileSaveError('The profile photo couldn’t be saved. Check your connection, then retry.');
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-
-  const handlePhotoChosen = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    // Choosing the same file again must still fire a change.
-    event.target.value = '';
-    if (!file || isSavingProfile) return;
-    let dataUrl: string;
-    setIsSavingProfile(true);
-    setProfileSaveError(null);
-    setPendingPhoto(null);
-    try {
-      dataUrl = await profilePhotoFromFile(file);
-    } catch (error) {
-      setProfileSaveError(error instanceof ProfilePhotoError ? error.message : 'This photo couldn’t be used. Choose a different photo.');
-      setIsSavingProfile(false);
-      return;
-    }
-    await saveProfilePhoto(dataUrl);
-  };
 
   const handleToggleMute = () => {
     const newState = !isMuted;
@@ -82,6 +38,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, profile, onS
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
+      <h1 className="font-display" style={{ fontSize: '28px', color: 'var(--text-primary)', fontWeight: 400 }}>
+        Profile
+      </h1>
+
       {/* Profile Info Card */}
       <div className="card-patient" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -196,7 +156,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, profile, onS
       <ChangePasswordForm />
 
       {/* Destructive action last, after routine account settings. */}
-      <DeleteAccount playerId={user.uid} />
+      <DeleteAccount deletion={deletion} />
       {signOutFlow.dialog}
     </div>
   );

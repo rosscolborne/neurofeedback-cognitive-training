@@ -9,6 +9,7 @@ import { createDemoModeEegProvider } from '../../services/demoModeEegCapture';
 import { GameScreen } from '../games/GameScreen';
 import { useOpenGame } from '../games/useOpenGame';
 import { ProfileScreen } from '../profile/ProfileScreen';
+import { useProfileScreenState } from '../profile/useProfileScreenState';
 import type { GameRequest } from './gameRequest';
 import { HomeScreen } from './HomeScreen';
 import { ProgressScreen } from './ProgressScreen';
@@ -52,6 +53,9 @@ export const AppShell: React.FC<AppShellProps> = ({ user, profile, onSetUpHeadse
   // that opened it (NFCT-52). It stays open if the location changes under it.
   const [openGame, setOpenGame, closeGame] = useOpenGame(currentTabButton);
   const openGameFor = (game: GameRequest) => setOpenGame({ ...game, ownerId: playerId });
+  // Held here, not in the Profile tab, so a deletion or photo save in progress
+  // survives switching tabs or opening a game.
+  const profileState = useProfileScreenState(playerId);
 
   if (openGame && openGame.ownerId === playerId) {
     return <GameScreen gameId={openGame.gameId} initialView={openGame.initialView} eegProvider={demoModeEegProvider} onExit={closeGame} />;
@@ -119,7 +123,7 @@ export const AppShell: React.FC<AppShellProps> = ({ user, profile, onSetUpHeadse
             onSectionFocused={() => navigate('/progress', { replace: true, state: null })}
           />
         )}
-        {activeTab.path === '/profile' && <ProfileScreen user={user} profile={profile} onSetUpHeadset={onSetUpHeadset} />}
+        {activeTab.path === '/profile' && <ProfileScreen user={user} profile={profile} state={profileState} onSetUpHeadset={onSetUpHeadset} />}
       </main>
 
       <nav

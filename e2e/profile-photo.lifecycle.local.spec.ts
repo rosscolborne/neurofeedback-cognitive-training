@@ -59,7 +59,7 @@ test('a player uploads a profile photo, which replaces their initials and persis
 
   // It is the account's photo: it comes back after a reload.
   await page.reload();
-  await arriveAtHome(page);
+  await arriveAtHome(page, { afterReload: true });
   await openProfile(page);
   await expect(profilePhoto(page)).toHaveAttribute('src', shown!);
 });
