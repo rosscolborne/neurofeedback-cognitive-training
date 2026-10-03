@@ -89,9 +89,12 @@ describe('per-game progress', () => {
     expect(historyRow(entry({}, valid))).toMatchObject({ state: 'verified', personalBest: true, startLevel: 1, completed: true, activeMs: document.activeDurationMs, score: valid.validity === 'valid' ? valid.score : -1 });
     expect(historyRow(entry({}, valid))).toMatchObject({ awaitingUnlock: false });
     expect(historyRow(entry({}, { ...valid, validity: 'flagged', reasons: ['run-overrun'] } as ServerResult))).toMatchObject({ state: 'flagged', personalBest: false, awaitingUnlock: false });
-    // Waiting on its start level to unlock only when that is the server's sole reason.
-    const flaggedFor = (reasons: string[]) => historyRow(entry({}, { ...valid, validity: 'flagged', reasons } as ServerResult));
+    // Waiting on its start level only when the server would upgrade it once that level unlocks:
+    // start-level-locked, beside diagnostics at most, scored by the registered module's scoringVersion.
+    const flaggedFor = (reasons: string[], extra: object = {}) => historyRow(entry({}, { ...valid, validity: 'flagged', reasons, ...extra } as ServerResult));
     expect(flaggedFor(['start-level-locked'])).toMatchObject({ state: 'flagged', awaitingUnlock: true });
+    expect(flaggedFor(['start-level-locked', 'late-upload'])).toMatchObject({ state: 'flagged', awaitingUnlock: true });
+    expect(flaggedFor(['start-level-locked'], { scoringVersion: valid.scoringVersion + 1 })).toMatchObject({ state: 'flagged', awaitingUnlock: false });
     for (const reasons of [['rt-below-floor', 'start-level-locked'], ['start-level-locked', 'reasons-truncated'], ['start-level-locked', 'some-future-code']]) {
       expect(flaggedFor(reasons)).toMatchObject({ state: 'flagged', awaitingUnlock: false });
     }

@@ -1,4 +1,4 @@
-import { maxLevelOf, mentalMath, unlockedStartLevel, type GameProgress } from '@nfct/shared';
+import { GAME_MODULE_REGISTRY, maxLevelOf, mentalMath, unlockedStartLevel, upgradeBlocker, type GameProgress } from '@nfct/shared';
 import type { GameSessionHistoryEntry } from '../../repositories/gameSessionRepository';
 import { bestsFor, nextUnlock, type UnlockLine } from './runSummaryModel';
 import { timed90, type CurrentProgress } from './startLevel';
@@ -104,10 +104,17 @@ export interface HistoryRow {
   readonly personalBest: boolean;
   /**
    * Flagged only because its start level was not unlocked yet when it was scored
-   * (the server's sole reason is `start-level-locked`). Trusted scoring upgrades
-   * it to valid once that level unlocks (ADR-001 decision 12), so it reads as waiting, not flagged.
+   * (`start-level-locked`, with at most diagnostic reasons beside it). Trusted
+   * scoring upgrades it to valid once that level unlocks (ADR-001 decision 12),
+   * so it reads as waiting, not flagged.
    */
   readonly awaitingUnlock: boolean;
+}
+
+/** The server's own upgrade test, against no progress: only the start level stands between the run and valid. */
+function upgradableOnceUnlocked(session: GameSessionHistoryEntry['session']): boolean {
+  const blocker = upgradeBlocker(session, null, GAME_MODULE_REGISTRY);
+  return blocker === null || blocker === 'still-locked';
 }
 
 export function historyRow(entry: GameSessionHistoryEntry): HistoryRow {
@@ -125,7 +132,7 @@ export function historyRow(entry: GameSessionHistoryEntry): HistoryRow {
     state,
     score: result && result.validity !== 'invalid' ? result.score : null,
     personalBest: result?.validity === 'valid' && result.personalBest,
-    awaitingUnlock: result?.validity === 'flagged' && result.reasons.length === 1 && result.reasons[0] === 'start-level-locked',
+    awaitingUnlock: upgradableOnceUnlocked(session),
   };
 }
 
