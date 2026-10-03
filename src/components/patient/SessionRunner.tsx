@@ -39,16 +39,6 @@ interface SessionRunnerProps {
   onCancel: () => void;
 }
 
-export const resolveSessionCareProvenance = (client: ClientProfile): Pick<SessionRecord, 'clinicId' | 'clinicianId'> => {
-  const clinicianId = client.clinicianId || client.linkedClinicianCode || undefined;
-  return {
-    // Legacy linked profiles can lack clinicId. Keep that provenance explicitly
-    // unavailable instead of misclassifying a clinician-linked session as self-guided.
-    clinicId: client.clinicId || (clinicianId ? '' : 'self-guided'),
-    clinicianId,
-  };
-};
-
 /** A headset frame counts as measured time only while new data is arriving from a connected headset. */
 const hasLiveHeadsetFrame = (data: EEGDataPoint | null, lastCoveredSequence: number): boolean => {
   const sourceState = eegEngine.getHardwareSourceState();
@@ -183,13 +173,12 @@ export const SessionRunner: React.FC<SessionRunnerProps> = ({
       return;
     }
 
-    const careProvenance = resolveSessionCareProvenance(client);
     const mindfulnessAcc = mindfulnessAccRef.current;
     const summary: SessionRecord = {
       id: completionIdentity.id,
       patientId: client.id,
       patientName: client.name,
-      ...careProvenance,
+      clinicId: 'self-guided',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: Date.now(),
       experience: selectedExperience,

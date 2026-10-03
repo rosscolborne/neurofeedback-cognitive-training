@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
 import type { CachedAccountData } from './helpers/cacheIsolation';
-import { seedAdditionalLinkedPatient, seedConsumerAccount, seedLinkedPatient } from './helpers/localEmulator';
+import { seedConsumerAccount, seedPatient } from './helpers/localEmulator';
 import { FIRESTORE_CACHE_STATE_KEY, type CacheState } from '../src/services/firestoreCacheLifecycle';
 
 // NFCT-20: the persistent Firestore cache belongs to one account at a time.
@@ -84,8 +84,8 @@ async function logOutOfPatientApp(page: Page): Promise<void> {
 test('after sign-out, the next account on this browser cannot read the previous account\'s cached data', async ({ page, context, permissionErrorGuard }) => {
     // The second account's probes of the first account's paths are refused by the rules, as they must be.
     permissionErrorGuard.expectDenialsIn(context);
-    const a = await seedLinkedPatient();
-    const b = await seedAdditionalLinkedPatient(a);
+    const a = await seedPatient();
+    const b = await seedPatient();
 
     await loginThroughUi(page, a.patient);
     await arriveAtPatientDashboard(page);
@@ -147,7 +147,7 @@ test('after sign-out, the next account on this browser cannot read the previous 
 test('switching accounts without signing out removes the previous player\'s profile, games and EEG', async ({ page, context, permissionErrorGuard }) => {
     permissionErrorGuard.expectDenialsIn(context);
     const player = await seedConsumerAccount();
-    const next = (await seedLinkedPatient()).patient;
+    const next = (await seedPatient()).patient;
 
     // A consumer player with EEG consent saves a game with a measured EEG recording.
     await loginThroughUi(page, player);
@@ -173,7 +173,7 @@ test('switching accounts without signing out removes the previous player\'s prof
 });
 
 test('a session that ends outside the app (another tab, a revoked sign-in) also deletes the cache', async ({ page }) => {
-    const a = await seedLinkedPatient();
+    const a = await seedPatient();
     await loginThroughUi(page, a.patient);
     await arriveAtPatientDashboard(page);
     const aData = await saveSessionAndReadClinicalDocument(page);
@@ -189,7 +189,7 @@ test('a session that ends outside the app (another tab, a revoked sign-in) also 
 });
 
 test('signing out in one tab reloads the other tabs, which do not hold the deletion up', async ({ page, context }) => {
-    const a = await seedLinkedPatient();
+    const a = await seedPatient();
     await loginThroughUi(page, a.patient);
     await arriveAtPatientDashboard(page);
     const aData = await saveSessionAndReadClinicalDocument(page);
@@ -213,8 +213,8 @@ test('signing out in one tab reloads the other tabs, which do not hold the delet
 
 test('if the cache cannot be deleted, sign-out still completes, and the next account waits until it is or signs out', async ({ page, context, permissionErrorGuard }) => {
     permissionErrorGuard.expectDenialsIn(context);
-    const a = await seedLinkedPatient();
-    const b = await seedAdditionalLinkedPatient(a);
+    const a = await seedPatient();
+    const b = await seedPatient();
     await loginThroughUi(page, a.patient);
     await arriveAtPatientDashboard(page);
     const aData = await saveSessionAndReadClinicalDocument(page);
@@ -270,7 +270,7 @@ test('if the cache cannot be deleted, sign-out still completes, and the next acc
 });
 
 test('the same account keeps its offline data across a reload, and it uploads later', async ({ page, context }) => {
-    const a = await seedLinkedPatient();
+    const a = await seedPatient();
     await loginThroughUi(page, a.patient);
     await arriveAtPatientDashboard(page);
 

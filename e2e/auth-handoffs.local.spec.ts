@@ -1,10 +1,10 @@
 import { expect, test } from './fixtures';
 import type { Page } from '@playwright/test';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { readPendingInvitationState, seedLinkedPatient, seedPendingLifecycleInvitation } from './helpers/localEmulator';
+import { seedPatient, seedPractitionerAccount } from './helpers/localEmulator';
 
 test('wrong current password does not change patient sign-in credentials', async ({ browser }) => {
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   const patientContext = await browser.newContext();
   const verificationContext = await browser.newContext();
   const proposedPassword = 'NewLocalPassword!456';
@@ -44,14 +44,13 @@ async function expectUnsupportedAccountScreen(page: Page) {
   await expect(page.getByText('Training Session', { exact: true })).toHaveCount(0);
 }
 
-test('a practitioner account is told it is unsupported, even from a patient invitation, and Sign out returns to Welcome', async ({ browser }) => {
+test('a practitioner account is told it is unsupported, and Sign out returns to Welcome', async ({ browser }) => {
   // users/{uid}.role is 'clinician' for the seeded practitioner account.
-  const fixture = await seedLinkedPatient({ clinicianId: null, clinicId: null });
-  const code = await seedPendingLifecycleInvitation(fixture);
+  const practitioner = await seedPractitionerAccount();
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
-    await loginThroughUi(page, fixture.clinician);
+    await loginThroughUi(page, practitioner);
     await expectUnsupportedAccountScreen(page);
     await page.reload();
     await expectUnsupportedAccountScreen(page);
@@ -66,17 +65,9 @@ test('a practitioner account is told it is unsupported, even from a patient invi
       return auth.currentUser?.uid ?? null;
     })).toBeNull();
 
-    // Signing in from a patient's invitation link shows the same screen, and accepts nothing.
-    await page.goto(`/#/connect/${code}`);
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await page.getByPlaceholder('name@example.com', { exact: true }).fill(fixture.clinician.email);
-    await page.getByPlaceholder('Your password', { exact: true }).fill(fixture.clinician.password);
-    await page.getByRole('button', { name: 'Log In', exact: true }).click();
+    // Signing in again shows the same screen.
+    await loginThroughUi(page, practitioner);
     await expectUnsupportedAccountScreen(page);
-    await expect(page.getByRole('button', { name: 'Accept Invitation' })).toHaveCount(0);
-    await expect(page.getByLabel('Invitation code')).toHaveCount(0);
-    expect(await readPendingInvitationState(fixture.clinician.uid, fixture.patient.email))
-      .toEqual({ pendingCount: 1, claimExists: true });
   } finally {
     await context.close();
   }

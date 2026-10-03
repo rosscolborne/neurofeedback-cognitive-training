@@ -5,7 +5,7 @@ import { defineConfig } from '@playwright/test';
 // canary (playwright.canary.config.ts).
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /(?:protocol|messaging|persistence|lifecycle|invitation-handoffs|session-handoffs|auth-handoffs|self-directed)\.local\.spec\.ts/,
+  testMatch: /(?:protocol|persistence|lifecycle|session-handoffs|auth-handoffs|self-directed)\.local\.spec\.ts/,
   workers: 1,
   timeout: 90_000,
   use: {

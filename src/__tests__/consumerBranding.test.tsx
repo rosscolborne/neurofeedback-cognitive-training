@@ -30,7 +30,6 @@ vi.mock('../services/storageEngine', () => ({ storageEngine: {} }));
 
 import { APP_DISPLAY_NAME } from '../config/appIdentity';
 import { BrandLogo } from '../components/brand/BrandLogo';
-import { BRAND_PRESETS, createBrandPalette } from '../services/brandEngine';
 import { HardwareSetup } from '../pages/onboarding/HardwareSetup';
 import { Login } from '../pages/onboarding/Login';
 import { RoleSelection } from '../pages/onboarding/RoleSelection';
@@ -84,8 +83,5 @@ describe('consumer branding', () => {
     const logo = await mount(<BrandLogo />);
     expect(logo.root.findByType('img').props.alt).toBe(`${APP_DISPLAY_NAME} logo`);
     await act(async () => { logo.unmount(); });
-
-    expect(BRAND_PRESETS[0].name).toBe(APP_DISPLAY_NAME);
-    expect(createBrandPalette('#A8482F').name).toBe(APP_DISPLAY_NAME);
   });
 });

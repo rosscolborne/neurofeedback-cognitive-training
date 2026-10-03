@@ -12,7 +12,6 @@ import {
 } from 'firebase/auth';
 import { auth, db, firestoreCache } from '../services/firebase';
 import type { CacheEndReason, CacheStatus } from '../services/firestoreCacheLifecycle';
-import { clearPendingInvitation } from '../services/pendingInvitation';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export type UserRole = 'patient' | 'clinician' | null;
@@ -187,10 +186,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // auth event follows) or the cache could not be cleared. Stay on the
         // loading screen, which explains the last two.
         if (preparation.status !== 'ready') {
-          // The account changed under this tab: a pending invitation belonged
-          // to the previous sign-in (App drops it on an account change, but
-          // the reload starts App afresh).
-          if (preparation.status === 'reloading') clearPendingInvitation();
           if (preparation.status !== 'ending') setLoading(true);
           return;
         }
@@ -311,7 +306,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return 'unsynced';
     }
     ++authGenerationRef.current;
-    clearPendingInvitation();
     identityRef.current = null;
     setUser(null);
     setRole(null);
@@ -335,7 +329,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOutWithoutFirestore = async () => {
     ++authGenerationRef.current;
-    clearPendingInvitation();
     identityRef.current = null;
     setUser(null);
     setRole(null);

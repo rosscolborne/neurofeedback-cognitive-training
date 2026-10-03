@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ClientProfile, ClinicBrandConfig } from './types';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { ClientProfile } from './types';
 import { storageEngine } from './services/storageEngine';
-import { applyBrandToDOM, BRAND_PRESETS } from './services/brandEngine';
 import { PatientShell } from './components/patient/PatientShell';
 import { BrandLogo } from './components/brand/BrandLogo';
 
@@ -14,27 +13,8 @@ import { RoleSelection } from './pages/onboarding/RoleSelection';
 import { HardwareSetup } from './pages/onboarding/HardwareSetup';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
-import { clearPendingInvitation } from './services/pendingInvitation';
 import { useSignOut } from './components/account/useSignOut';
 import { APP_DISPLAY_NAME } from './config/appIdentity';
-
-function InvitationEntryRedirect({ signedInUidRef }: { signedInUidRef: React.RefObject<string | null> }) {
-  const { invitationCode } = useParams();
-  const navigate = useNavigate();
-  const retainInvitation = useRef<boolean | null>(null);
-
-  useEffect(() => {
-    // Decided on first run, before App records the sign-out: an account that just
-    // signed out while a /connect URL was still open is not opening a new invitation.
-    retainInvitation.current ??= signedInUidRef.current === null;
-    if (invitationCode && retainInvitation.current) {
-      window.sessionStorage.setItem('waveable_pending_invitation', invitationCode.toUpperCase());
-    }
-    navigate('/welcome', { replace: true });
-  }, [invitationCode, navigate, signedInUidRef]);
-
-  return null;
-}
 
 export function App() {
   const { user, role, loading, logout, cacheStatus, cacheEndingReason, signOutWithoutFirestore, roleLookupFailed, retryRoleLookup } = useAuth();
@@ -44,18 +24,11 @@ export function App() {
   const unsupportedAccountSignOut = useSignOut(logout);
   const navigate = useNavigate();
   const location = useLocation();
-  const routeInvitationCode = location.pathname.match(/^\/connect\/([^/]+)$/i)?.[1];
-  const storedInvitationCode = typeof window === 'undefined'
-    ? undefined
-    : window.sessionStorage.getItem('waveable_pending_invitation') || undefined;
-  
-  const [brand, setBrand] = useState<ClinicBrandConfig>(() => BRAND_PRESETS[0]);
   const [currentClient, setCurrentClient] = useState<ClientProfile | null>(null);
   const [patientProfileError, setPatientProfileError] = useState<string | null>(null);
   const [patientProfileReload, setPatientProfileReload] = useState(0);
   const [dataIdentity, setDataIdentity] = useState('');
   const loadGeneration = useRef(0);
-  const brandGeneration = useRef(0);
   const accountIdentity = `${loading ? 'loading' : 'ready'}:${user?.uid ?? 'signed-out'}:${role ?? 'no-role'}`;
   const accountIdentityRef = useRef(accountIdentity);
   accountIdentityRef.current = accountIdentity;
@@ -63,27 +36,6 @@ export function App() {
   const profileDataIdentity = `${accountIdentity}:${profileRoutePhase}`;
   const hasCurrentData = dataIdentity === profileDataIdentity;
   const visibleCurrentClient = hasCurrentData ? currentClient : null;
-  const visibleBrand = hasCurrentData ? brand : BRAND_PRESETS[0];
-
-  useEffect(() => {
-    applyBrandToDOM(visibleBrand);
-  }, [visibleBrand]);
-
-  useEffect(() => {
-    if (routeInvitationCode) {
-      window.sessionStorage.setItem('waveable_pending_invitation', routeInvitationCode.toUpperCase());
-    }
-  }, [routeInvitationCode]);
-
-  // A pending invitation belongs to the sign-in it was opened for. When that
-  // account signs out or is replaced, drop it so the next login starts clean.
-  const signedInUidRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (loading) return;
-    const uid = user?.uid ?? null;
-    if (signedInUidRef.current && signedInUidRef.current !== uid) clearPendingInvitation();
-    signedInUidRef.current = uid;
-  }, [loading, user?.uid]);
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
@@ -111,22 +63,6 @@ export function App() {
       active = false;
     };
   }, [accountIdentity, loading, patientProfileReload, profileDataIdentity, profileRoutePhase, role, user]);
-
-  useEffect(() => {
-    const generation = ++brandGeneration.current;
-    const isCurrent = () => brandGeneration.current === generation;
-    setBrand(BRAND_PRESETS[0]);
-
-    if (loading || !user) return;
-
-    if (role === 'patient' && visibleCurrentClient?.clinicId) {
-      void storageEngine.getClinicBrandConfig(visibleCurrentClient.clinicId)
-        .then((nextBrand) => { if (isCurrent()) setBrand(nextBrand); })
-        .catch((error) => {
-          if (isCurrent()) console.warn('Error loading patient clinic branding:', error);
-        });
-    }
-  }, [accountIdentity, loading, role, user, visibleCurrentClient?.clinicId]);
 
   // While the cache is being cleared for an account change, nothing of any
   // account is shown, only what is happening. `ending` replaces the account's
@@ -198,7 +134,6 @@ export function App() {
     if (visibleCurrentClient?.id === updated.id) setCurrentClient(updated);
   };
 
-  const invitationCode = routeInvitationCode?.toUpperCase() || storedInvitationCode;
 
   const renderPrimaryApp = () => {
     if (!role) return <Navigate to="/role-selection" replace />;
@@ -223,18 +158,7 @@ export function App() {
       }
       return (
         <PatientShell
-          brand={visibleBrand}
           client={visibleCurrentClient}
-          initialInvitationCode={invitationCode}
-          invitationRouteCode={routeInvitationCode}
-          onInvitationAccepted={() => {
-            window.sessionStorage.removeItem('waveable_pending_invitation');
-            navigate('/', { replace: true });
-          }}
-          onInvitationDismissed={() => {
-            window.sessionStorage.removeItem('waveable_pending_invitation');
-            navigate('/', { replace: true });
-          }}
           onUpdateClient={handleUpdateClient}
           onClientPersistedElsewhere={handleClientPersistedElsewhere}
           onSetUpHeadset={() => navigate('/hardware-setup')}
@@ -265,7 +189,6 @@ export function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/connect/:invitationCode" element={<InvitationEntryRedirect signedInUidRef={signedInUidRef} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </>
       ) : (
@@ -275,7 +198,6 @@ export function App() {
           <Route path="/hardware-setup" element={<HardwareSetup key={accountIdentity} />} />
           
           <Route path="/" element={renderPrimaryApp()} />
-          <Route path="/connect/:invitationCode" element={renderPrimaryApp()} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </>
       )}

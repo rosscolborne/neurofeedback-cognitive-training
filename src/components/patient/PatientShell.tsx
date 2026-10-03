@@ -3,30 +3,20 @@ import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth, firestoreCache } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSignOut } from '../account/useSignOut';
-import { ClientProfile, ClinicBrandConfig, ExperienceType, SessionRecord } from '../../types';
+import { ClientProfile, ExperienceType, SessionRecord } from '../../types';
 import { HomeScreen } from './HomeScreen';
 import { ProgressHistory } from './ProgressHistory';
 import { SessionRunner } from './SessionRunner';
 import { PostSessionSummary } from './PostSessionSummary';
-import { DisconnectClinicianDialog } from './DisconnectClinicianDialog';
 import { ChangePasswordForm } from '../account/ChangePasswordForm';
 import { getAccountDeletionErrorMessage } from '../account/accountDeletionErrors';
-import { PatientMessagingView } from './PatientMessagingView';
-import { useMessageUnread } from '../messaging/useMessageUnread';
-import { messageRepository } from '../../services/messageRepository';
-import { PatientAppointmentsView } from './PatientAppointmentsView';
 import { BrandLogo } from '../brand/BrandLogo';
-import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, MessageSquare, CalendarDays, ChevronRight, Headphones, CheckCircle2, Unlink } from 'lucide-react';
+import { Home, Compass, Activity, User, Camera, LogOut, Trash2, FileText, VolumeX, Volume2, ChevronRight, Headphones } from 'lucide-react';
 import { FactGrid } from '../ui/FactGrid';
 import { canStartAssignedExperience } from './experienceCatalogue';
 import { TrainTab } from './TrainTab';
 import { storageEngine } from '../../services/storageEngine';
 import { audioEngine } from '../../services/audioEngine';
-import { clearPendingInvitation } from '../../services/pendingInvitation';
-import {
-  isPatientTabAvailable,
-  resolveTrainingAuthority,
-} from '../../services/patientTrainingAuthority';
 import { exportPatientSessionCsv } from './patientSessionCsv';
 import { gameCardButtonId } from '../../consumer/catalogue/cardIds';
 import { GameScreen } from '../../consumer/games/GameScreen';
@@ -46,31 +36,21 @@ const demoModeEegProvider = createDemoModeEegProvider();
 const currentTabButton = () => document.querySelector<HTMLElement>('.patient-bottom-nav [aria-current="page"]');
 
 interface PatientShellProps {
-  brand: ClinicBrandConfig;
   client: ClientProfile;
   onUpdateClient: (updated: ClientProfile) => Promise<void>;
   /** Update local UI for data already persisted by an atomic repository operation. */
   onClientPersistedElsewhere: (updated: ClientProfile) => void;
   /** Opens headset pairing and the fit check. */
   onSetUpHeadset?: () => void;
-  initialInvitationCode?: string;
-  invitationRouteCode?: string;
-  onInvitationAccepted?: () => void;
-  onInvitationDismissed?: () => void;
 }
 
 export const PatientShell: React.FC<PatientShellProps> = ({
-  brand,
   client,
   onUpdateClient,
   onClientPersistedElsewhere,
   onSetUpHeadset,
-  initialInvitationCode,
-  invitationRouteCode,
-  onInvitationAccepted,
-  onInvitationDismissed,
 }) => {
-  const [requestedTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'messages' | 'appointments' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'sessions' | 'progress' | 'profile'>('home');
   // Home's "See all achievements" opens Progress at its achievements (NFCT-13). The request lasts
   // only for the Progress visit it opened: leaving Progress drops it (see below, after activeTab).
   const [progressFocus, setProgressFocus] = useState<'achievements' | null>(null);
@@ -90,24 +70,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [completedSession, setCompletedSession] = useState<SessionRecord | null>(null);
   const [isMuted, setIsMuted] = useState(audioEngine.getMuted());
   const [exportStatus, setExportStatus] = useState<'idle' | 'done'>('idle');
-  const [showClinicianLink, setShowClinicianLink] = useState(!!initialInvitationCode);
-  const [invitationCode, setInvitationCode] = useState(initialInvitationCode || '');
-  useEffect(() => {
-    if (!initialInvitationCode) return;
-    setInvitationCode(initialInvitationCode);
-    setShowClinicianLink(true);
-    setActiveTab('home');
-  }, [initialInvitationCode]);
-  useEffect(() => {
-    if (!invitationRouteCode) return;
-    setInvitationCode(invitationRouteCode);
-    setShowClinicianLink(true);
-    setActiveTab('home');
-  }, [invitationRouteCode]);
-  const [linkError, setLinkError] = useState<string | null>(null);
-  const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
-  const [isLinking, setIsLinking] = useState(false);
-  const [showDisconnect, setShowDisconnect] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -115,66 +77,17 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
-  const trainingAuthority = resolveTrainingAuthority(client);
-  const isClinicianLinked = trainingAuthority === 'clinician';
-  // Clinician-dependent destinations follow the live relationship; a hidden tab falls back to Home.
-  const activeTab = isPatientTabAvailable(requestedTab, trainingAuthority) ? requestedTab : 'home';
   // Any change to a tab other than Progress drops a pending "See all achievements" request, so a later,
   // ordinary visit to Progress opens at the top (state adjusted while rendering, not in an effect).
   if (progressFocusTab !== activeTab) {
     setProgressFocusTab(activeTab);
     if (activeTab !== 'progress' && progressFocus !== null) setProgressFocus(null);
   }
-  // Reopening the link for the invitation this patient already accepted is not a conflicting invitation.
-  const pendingInvitationAlreadyAccepted = !!initialInvitationCode && !!client.acceptedInvitationId
-    && client.acceptedInvitationId.toUpperCase() === initialInvitationCode.toUpperCase();
-  useEffect(() => {
-    if (isClinicianLinked && pendingInvitationAlreadyAccepted) onInvitationDismissed?.();
-  }, [isClinicianLinked, pendingInvitationAlreadyAccepted, onInvitationDismissed]);
-  // A self-directed patient learns only whether some clinician has a pending invitation for their
-  // email. Rechecked on opening Home or Profile, where Connect is offered, so a new one shows up.
-  const showsConnectSurface = activeTab === 'home' || activeTab === 'profile';
-  useEffect(() => {
-    if (isClinicianLinked || !showsConnectSurface) return;
-    let active = true;
-    storageEngine.hasPendingInvitationNotice()
-      .then((pending) => { if (active) setHasPendingInvitation(pending); })
-      .catch(() => { if (active) setHasPendingInvitation(false); });
-    return () => { active = false; };
-  }, [client.id, isClinicianLinked, showsConnectSurface, activeTab]);
-  const messageUnread = useMessageUnread(isClinicianLinked ? [client.id] : [], messageRepository, true, client.clinicianId || client.linkedClinicianCode || '');
-  const hasUnreadMessage = messageUnread.byPatient[client.id]?.unread ?? false;
-
   // Sign-out clears this device's Firestore cache and reloads the app; it asks
   // first if some activity has not uploaded yet (AuthContext.logout).
   const { logout } = useAuth();
   const signOutFlow = useSignOut(logout);
   const handleLogout = signOutFlow.requestSignOut;
-
-  const handleLinkClinician = async () => {
-    if (!invitationCode.trim()) return;
-    setIsLinking(true);
-    setLinkError(null);
-    try {
-      const linkedClient = await storageEngine.acceptPatientInvitation(invitationCode, client);
-      onClientPersistedElsewhere(linkedClient);
-      onInvitationAccepted?.();
-      setInvitationCode('');
-      setShowClinicianLink(false);
-      setHasPendingInvitation(false);
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : 'Could not accept this invitation.');
-    } finally {
-      setIsLinking(false);
-    }
-  };
-
-  const handleDisconnectClinician = async () => {
-    const disconnected = await storageEngine.disconnectFromClinician(client.id);
-    onClientPersistedElsewhere(disconnected);
-    setShowDisconnect(false);
-  };
-
 
   const handleDeleteAccount = async () => {
     if (isDeletingAccount || !deletePassword) return;
@@ -207,7 +120,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         destination: '/welcome',
         before: async () => {
           await user.delete();
-          clearPendingInvitation();
         },
       });
     } catch (err) {
@@ -290,43 +202,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
     setIsMuted(newState);
   };
 
-  // Connect is offered only with a real invitation: a pending one for this email, or a code
-  // carried from an invitation link (which also pre-fills it). The code is what proves it.
-  const canConnectToClinician = !isClinicianLinked && (hasPendingInvitation || !!initialInvitationCode || !!invitationRouteCode);
-  const clinicianConnection = !showClinicianLink ? (
-    <button onClick={() => setShowClinicianLink(true)} className="btn btn-secondary" style={{ width: '100%' }}>
-      Connect to Clinician
-    </button>
-  ) : (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-      <label htmlFor="clinician-invitation-code" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-        Invitation code
-      </label>
-      <input
-        id="clinician-invitation-code"
-        value={invitationCode}
-        onChange={(event) => setInvitationCode(event.target.value.toUpperCase())}
-        placeholder="XXXX-XXXX-XXXX"
-        autoComplete="off"
-        autoFocus={!!initialInvitationCode}
-        className="font-mono"
-        style={{ width: '100%', padding: '11px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '16px', letterSpacing: '0.06em' }}
-      />
-      <div style={{ color: 'var(--text-secondary)', fontSize: '11px', lineHeight: 1.4 }}>
-        Use the code from your clinician. You must be signed in with the email address they invited.
-      </div>
-      {linkError && <div role="alert" style={{ color: 'var(--status-alert)', fontSize: '12px' }}>{linkError}</div>}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={() => void handleLinkClinician()} disabled={isLinking || !invitationCode.trim()} className="btn btn-primary" style={{ flex: 1, padding: '11px 14px', fontSize: '13px', opacity: isLinking ? 0.7 : 1 }}>
-          {isLinking ? 'Connecting…' : 'Accept Invitation'}
-        </button>
-        <button onClick={() => { setShowClinicianLink(false); setLinkError(null); }} disabled={isLinking} className="btn btn-ghost" style={{ padding: '11px 14px' }}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-
   const exportCSV = async () => {
     let allSessions: SessionRecord[];
     try {
@@ -360,7 +235,7 @@ export const PatientShell: React.FC<PatientShellProps> = ({
   if (client.accountDeletionStartedAt) {
     return <div className="account-deletion-recovery" role="alert" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', textAlign: 'center' }}>
       <h1>Finish deleting your account</h1>
-      <p>Your clinic connection has been removed. Confirm your password to finish deleting your sign-in.</p>
+      <p>Account deletion has started. Confirm your password to finish deleting your sign-in.</p>
       <button className="btn btn-secondary account-deletion-trigger account-deletion-finish" type="button" disabled={isDeletingAccount} onClick={openAccountDeletion}>Finish account deletion</button>
       {deletionPasswordForm}
       <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={signOutFlow.busy}>{signOutFlow.busy ? 'Signing out…' : 'Log Out'}</button>
@@ -410,17 +285,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {isClinicianLinked && brand.logoUrl && brand.logoUrl.startsWith('data:image') ? (
-            <img
-              src={brand.logoUrl}
-              alt="Clinic Logo"
-              style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px' }}
-            />
-          ) : (
-            <BrandLogo size={28} variant="terracotta" />
-          )}
+          <BrandLogo size={28} variant="terracotta" />
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{isClinicianLinked ? brand.name : APP_DISPLAY_NAME}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{APP_DISPLAY_NAME}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Training Portal</div>
           </div>
         </div>
@@ -429,22 +296,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
 
       {/* Main Tab Content */}
       <main style={{ flex: 1, padding: '20px' }}>
-        {activeTab === 'home' && isClinicianLinked && initialInvitationCode && !pendingInvitationAlreadyAccepted && (
-          <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px' }}>
-            <p role="alert">You're already connected to a clinician. Disconnect before accepting another invitation.</p>
-            <p>Invitation code: <span className="font-mono">{initialInvitationCode}</span></p>
-            <button type="button" className="btn btn-secondary" onClick={onInvitationDismissed}>Dismiss invitation</button>
-          </section>
-        )}
-        {activeTab === 'home' && canConnectToClinician && (
-          <section className="card-patient" aria-label="Clinician invitation" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 700 }}>Have an invitation from your clinician?</div>
-              <div style={{ marginTop: '3px', fontSize: '12px', color: 'var(--text-secondary)' }}>Connect your account so your clinician can manage your training plan.</div>
-            </div>
-            {clinicianConnection}
-          </section>
-        )}
         {activeTab === 'home' && (
           <HomeScreen
             client={client}
@@ -482,12 +333,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             )}
           />
         )}
-
-        {activeTab === 'messages' && (
-          <PatientMessagingView patientId={client.id} unreadMessageId={messageUnread.byPatient[client.id]?.unread ? messageUnread.byPatient[client.id].latestIncomingMessageId : null} notificationError={messageUnread.error} />
-        )}
-
-        {activeTab === 'appointments' && <PatientAppointmentsView />}
 
         {activeTab === 'profile' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
@@ -604,20 +449,9 @@ export const PatientShell: React.FC<PatientShellProps> = ({
               <FactGrid
                 style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}
                 facts={[
-                  // Goal and weekly target are care-team fields: shown only while a clinician manages the plan (values are kept on unlink).
-                  ...(isClinicianLinked ? [{ label: 'Goal', value: client.condition || 'Unavailable' }] : []),
-                  ...(isClinicianLinked
-                    ? [{ label: 'Weekly target', value: client.prescribedSessionsPerWeek != null ? `${client.prescribedSessionsPerWeek} sessions / week` : 'Unavailable' }] : []),
                   { label: 'Completed', value: `${client.completedSessionsCount} sessions total` },
                 ]}
               />
-              {isClinicianLinked && (
-                <span className="status-tag status-tag-active" style={{ alignSelf: 'flex-start', padding: '6px 12px', fontSize: '13px' }}>
-                  <CheckCircle2 size={15} aria-hidden="true" />
-                  <span>Connected to your clinician</span>
-                </span>
-              )}
-              {canConnectToClinician && clinicianConnection}
             </div>
             <div>
               <h2 className="section-label">Training</h2>
@@ -644,12 +478,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
                   <FileText size={18} className="list-row-icon" aria-hidden="true" />
                   {exportStatus === 'done' ? 'Exported ✓' : 'Export Data (CSV)'}
                 </button>
-                {isClinicianLinked && (
-                  <button type="button" className="list-row" onClick={() => setShowDisconnect(true)}>
-                    <Unlink size={18} className="list-row-icon" aria-hidden="true" />
-                    Disconnect from Clinician
-                  </button>
-                )}
                 <button type="button" className="list-row" onClick={handleLogout} disabled={signOutFlow.busy}>
                   <LogOut size={18} className="list-row-icon" aria-hidden="true" />
                   {signOutFlow.busy ? 'Signing out…' : 'Log Out'}
@@ -676,10 +504,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
         )}
       </main>
 
-      {showDisconnect && isClinicianLinked && (
-        <DisconnectClinicianDialog onConfirm={handleDisconnectClinician} onClose={() => setShowDisconnect(false)} />
-      )}
-
 
       {/* Patient Mobile Bottom Tab Bar */}
       <nav
@@ -699,17 +523,15 @@ export const PatientShell: React.FC<PatientShellProps> = ({
           { id: 'home', label: 'Home', icon: Home },
           { id: 'sessions', label: 'Train', icon: Compass },
           { id: 'progress', label: 'Progress', icon: Activity },
-          { id: 'messages', label: 'Messages', icon: MessageSquare },
-          { id: 'appointments', label: 'Visits', icon: CalendarDays },
           { id: 'profile', label: 'Profile', icon: User },
-        ].filter(tab => isPatientTabAvailable(tab.id, trainingAuthority)).map(tab => {
+        ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              aria-label={tab.id === 'messages' && hasUnreadMessage ? 'Messages, unread message' : tab.label}
+              aria-label={tab.label}
               aria-current={isActive ? 'page' : undefined}
               style={{
                 // Each tab fills its share of the bar so the whole column is tappable, not just the label.
@@ -730,7 +552,6 @@ export const PatientShell: React.FC<PatientShellProps> = ({
             >
               <span style={{ position: 'relative', display: 'inline-flex' }}>
                 <Icon size={19} />
-                {tab.id === 'messages' && hasUnreadMessage && <span aria-hidden="true" className="message-unread-dot" />}
               </span>
               <span className="patient-nav-label" style={{ fontWeight: isActive ? 700 : 500 }}>{tab.label}</span>
             </button>

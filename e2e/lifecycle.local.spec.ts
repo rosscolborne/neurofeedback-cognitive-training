@@ -2,15 +2,10 @@ import type { Page } from '@playwright/test';
 import { getClinicalProtocolTemplate } from '../src/services/clinicalProtocolTemplates';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import {
-  readLifecycleHistoryState, readLifecycleRecords, readPatientRelationship, seedFutureLifecycleAppointment,
-  seedLifecycleHistory, seedLinkedPatient, seedPendingInvitation, seedPendingLifecycleInvitation,
-} from './helpers/localEmulator';
+import { readDeletionRecords, seedPatient, seedReviewSession } from './helpers/localEmulator';
 
 // Every protocol template now recommends the one remaining experience, NeuroGambit.
 const allExperienceNames = ['NeuroGambit'];
-const alphaIds = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
-const alphaNames = ['NeuroGambit'];
 const thetaIds = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
 const thetaNames = ['NeuroGambit'];
 
@@ -42,12 +37,10 @@ async function readCurrentPatientAssignment(page: Page) {
   });
 }
 
-for (const invitationMode of ['existing', 'fresh'] as const) {
-test(`delete linked patient, re-register same email, and accept ${invitationMode} invitation as the new account`, async ({ browser, permissionErrorGuard }) => {
-  const fixture = await seedLinkedPatient();
-  let code = invitationMode === 'existing' ? await seedPendingLifecycleInvitation(fixture) : '';
-  if (invitationMode === 'fresh') await seedFutureLifecycleAppointment(fixture);
-  await seedLifecycleHistory(fixture);
+test('delete a patient linked under the retired clinician product, re-register the same email, and the new account cannot read the old one', async ({ browser, permissionErrorGuard }) => {
+  // A profile linked under the retired clinician product still stores relationship fields; deletion clears them.
+  const fixture = await seedPatient({ clinicianId: 'retired-clinician', clinicId: 'retired-clinic' });
+  const retainedSessionId = await seedReviewSession(fixture, 'Retained history');
   const oldContext = await browser.newContext();
   const newContext = await browser.newContext();
   try {
@@ -59,7 +52,6 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     await oldPatient.getByLabel('Enter your password to confirm account deletion').fill(fixture.patient.password);
     await oldPatient.getByRole('button', { name: 'Confirm account deletion' }).click();
     await expect(oldPatient).toHaveURL(/welcome/, { timeout: 20_000 });
-    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: null, clinicId: null });
 
     const patient = await newContext.newPage();
     await patient.goto('/#/signup');
@@ -71,49 +63,30 @@ test(`delete linked patient, re-register same email, and accept ${invitationMode
     await arriveAtPatientDashboard(patient);
     const newUid = await authenticatedUserId(patient);
     expect(newUid).not.toBe(fixture.patient.uid);
-    if (invitationMode === 'fresh') {
-      code = await seedPendingInvitation(fixture.clinician.uid, fixture.patient.email, fixture.name, { assignedProtocol: 'alpha-enhancement' });
-    }
-    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
-    await patient.getByLabel('Invitation code').fill(code);
-    await patient.getByRole('button', { name: 'Accept Invitation' }).click();
-    await expect(patient.getByText('Connected to your clinician')).toBeVisible();
-    const expectedIds = invitationMode === 'existing' ? thetaIds : alphaIds;
-    const expectedNames = invitationMode === 'existing' ? thetaNames : alphaNames;
-    const assigned = await readCurrentPatientAssignment(patient);
-    expect(assigned.assignedProtocol).toBe(invitationMode === 'existing' ? 'theta-beta-ratio' : 'alpha-enhancement');
-    expect(assigned.allowedExperiences).toEqual(expectedIds);
-    await expectPatientCatalogue(patient, expectedNames);
-    await patient.reload();
-    await arriveAtPatientDashboard(patient);
-    await expectPatientCatalogue(patient, expectedNames);
+    // The new account starts from the default training setup.
+    expect(await readCurrentPatientAssignment(patient)).toMatchObject({ assignedProtocol: 'theta-beta-ratio', allowedExperiences: thetaIds });
+    await expectPatientCatalogue(patient, thetaNames);
 
-    const stored = await readLifecycleRecords(fixture.patient.uid, newUid, fixture.clinician.uid, code, fixture.patient.email);
+    const stored = await readDeletionRecords(fixture.patient.uid, newUid);
     expect(stored.oldAuthExists).toBe(false);
     expect(stored.oldClient?.accountDeletionStartedAt).toBeDefined();
     expect(stored.oldClient?.clinicianId).toBeNull();
     expect(stored.oldClient?.clinicId).toBeNull();
-    expect(stored.newClient?.clinicianId).toBe(fixture.clinician.uid);
-    expect(stored.newClient?.allowedExperiences).toEqual(expectedIds);
-    expect(stored.invitation?.patientId).toBe(newUid);
-    expect(stored.claimExists).toBe(false);
-    expect(stored.appointmentStatuses).toEqual(['cancelled']);
+    expect(stored.newClient?.clinicianId).toBeUndefined();
+    expect(stored.newClient?.clinicId).toBeUndefined();
     permissionErrorGuard.expectDenialsIn(newContext);
-    const oldReads = await patient.evaluate(async ({ oldUid, clinicianUid }) => {
+    const oldReads = await patient.evaluate(async ({ oldUid, sessionId }) => {
       const { probeDeletedPatientHistory } = await import('/e2e/helpers/firestoreProbe.ts');
-      return probeDeletedPatientHistory(oldUid, clinicianUid);
-    }, { oldUid: fixture.patient.uid, clinicianUid: fixture.clinician.uid });
-    expect(oldReads).toEqual(['permission-denied', 'permission-denied', 'permission-denied']);
+      return probeDeletedPatientHistory(oldUid, sessionId);
+    }, { oldUid: fixture.patient.uid, sessionId: retainedSessionId });
+    expect(oldReads).toEqual(['permission-denied', 'permission-denied']);
   } finally {
     await Promise.allSettled([oldContext.close(), newContext.close()]);
   }
 });
-}
 
-test('wrong deletion password keeps the account, profile, and clinician relationship intact', async ({ browser }) => {
-  const fixture = await seedLinkedPatient();
-  const linked = { clinicianId: fixture.clinician.uid, clinicId: fixture.clinician.uid };
+test('wrong deletion password keeps the account and profile intact', async ({ browser }) => {
+  const fixture = await seedPatient();
   const patientContext = await browser.newContext();
   try {
     const patient = await patientContext.newPage();
@@ -136,71 +109,13 @@ test('wrong deletion password keeps the account, profile, and clinician relation
     await deletionPassword.fill('AnotherAttempt!123');
     await expect(confirmDeletion).toBeEnabled();
     expect(await authenticatedUserId(patient)).toBe(fixture.patient.uid);
-    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject(linked);
     await patient.reload();
     await arriveAtPatientDashboard(patient);
     await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await expect(patient.getByText('Connected to your clinician')).toBeVisible();
-    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject(linked);
-  } finally {
-    await patientContext.close();
-  }
-});
-
-test('disconnecting preserves the training list and Garden; a new invitation replaces the protocol and list together', async ({ browser }) => {
-  const garden = { stage: 3, growthPoints: 501, plantsUnlocked: ['kelp'], lastWatered: 'yesterday' };
-  const staleCustomProtocol = { ...getClinicalProtocolTemplate('theta-beta-ratio')!, alias: 'Old custom reward' };
-  const fixture = await seedLinkedPatient({
-    // An explicit empty list, so keeping it on disconnect and replacing it on relink are both visible.
-    assignedProtocol: 'theta-beta-ratio', allowedExperiences: [],
-    customProtocolConfig: staleCustomProtocol, tidalGardenState: garden, completedSessionsCount: 4,
-  });
-  await seedLifecycleHistory(fixture);
-  const patientContext = await browser.newContext();
-  try {
-    const patient = await patientContext.newPage();
-    await loginThroughUi(patient, fixture.patient);
-    await arriveAtPatientDashboard(patient);
-    await expectPatientCatalogue(patient, []);
-
-    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await patient.getByRole('button', { name: 'Disconnect from Clinician' }).click();
-    const confirm = patient.getByRole('alertdialog', { name: 'Disconnect from your clinician?' });
-    await confirm.getByRole('button', { name: 'Disconnect', exact: true }).click();
-    await expect(confirm).toHaveCount(0);
-    await expect.poll(async () => (await readPatientRelationship(fixture.patient.uid)).clinicianId).toBeNull();
-    await patient.reload();
-    await arriveAtPatientDashboard(patient);
-    await expectPatientCatalogue(patient, []);
-    expect(await readCurrentPatientAssignment(patient)).toMatchObject({
-      assignedProtocol: 'theta-beta-ratio', allowedExperiences: [],
-      customProtocolConfig: staleCustomProtocol, completedSessionsCount: 4, tidalGardenState: garden,
-    });
-    expect(await readLifecycleHistoryState(fixture.patient.uid, fixture.clinician.uid)).toEqual({
-      sessionPatientId: fixture.patient.uid, threadPatientId: fixture.patient.uid,
-    });
-
-    const code = await seedPendingInvitation(fixture.clinician.uid, fixture.patient.email, fixture.name, { assignedProtocol: 'alpha-enhancement' });
-    await patient.reload();
-    await arriveAtPatientDashboard(patient);
-    await patient.getByRole('button', { name: 'Profile', exact: true }).click();
-    await patient.getByRole('button', { name: 'Connect to Clinician' }).click();
-    await patient.getByLabel('Invitation code').fill(code);
-    await patient.getByRole('button', { name: 'Accept Invitation' }).click();
-    await expect(patient.getByText('Connected to your clinician')).toBeVisible();
-    await patient.reload();
-    await arriveAtPatientDashboard(patient);
-    await expectPatientCatalogue(patient, alphaNames);
-    const relinked = await readCurrentPatientAssignment(patient);
-    expect(relinked).toMatchObject({
-      assignedProtocol: 'alpha-enhancement', allowedExperiences: alphaIds,
-      completedSessionsCount: 4, tidalGardenState: garden,
-    });
-    expect(relinked.customProtocolConfig).toBeUndefined();
-    expect(await readLifecycleHistoryState(fixture.patient.uid, fixture.clinician.uid)).toEqual({
-      sessionPatientId: fixture.patient.uid, threadPatientId: fixture.patient.uid,
-    });
-    expect(await readPatientRelationship(fixture.patient.uid)).toMatchObject({ clinicianId: fixture.clinician.uid, acceptedInvitationId: code });
+    await expect(patient.getByText(fixture.patient.email)).toBeVisible();
+    const stored = await readDeletionRecords(fixture.patient.uid, fixture.patient.uid);
+    expect(stored.oldAuthExists).toBe(true);
+    expect(stored.oldClient?.accountDeletionStartedAt).toBeUndefined();
   } finally {
     await patientContext.close();
   }

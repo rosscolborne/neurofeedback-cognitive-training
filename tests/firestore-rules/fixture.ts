@@ -11,6 +11,10 @@ import { doc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
  * Seeded world for Firestore rules tests. Everything runs against the local
  * emulator under a demo project ID; nothing can reach a real project.
  *
+ * The clinician product is retired. The clinicians, clinics, relationship
+ * fields and clinical records below are residual data from it, kept so tests
+ * can prove that leftovers grant nothing to their former participants.
+ *
  *   clinic A: clinician-a (patient-a's canonical clinician) + colleague clinician-a2
  *   clinic B: clinician-b (patient-b's canonical clinician)
  *   clinic X: clinician-x (no patients)

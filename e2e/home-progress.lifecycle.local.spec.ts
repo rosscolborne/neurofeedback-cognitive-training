@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './helpers/auth';
-import { readGameSessions, readPlayerStats, seedLinkedPatient } from './helpers/localEmulator';
+import { readGameSessions, readPlayerStats, seedPatient } from './helpers/localEmulator';
 import { answer, runOut, startRun } from './helpers/mentalMath';
 
 // NFCT-13 part 2: Home and Progress around streaks, the week and
@@ -47,7 +47,7 @@ async function awayFromMidnight(page: Page): Promise<string> {
 test('a first run from Home shows a one-day streak, this week and the first achievement on Home and Progress', async ({ page }) => {
   test.setTimeout(150_000);
   await page.clock.install();
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   const uid = fixture.patient.uid;
   await loginThroughUi(page, fixture.patient);
   await arriveAtPatientDashboard(page);

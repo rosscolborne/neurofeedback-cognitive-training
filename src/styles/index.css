@@ -6,10 +6,10 @@
 @import './fonts.css';
 
 :root {
-  /* White-Label Brand Tokens (Dynamically overridden via brandEngine) */
-  --brand-primary: #E8967A;
-  --brand-primary-hover: #D4805E;
-  --brand-primary-subtle: #FDF0EB;
+  /* Brand tokens. The accent keeps at least 4.5:1 contrast on every light surface. */
+  --brand-primary: #A8482F;
+  --brand-primary-hover: #8F3D28;
+  --brand-primary-subtle: #FBF2EE;
   --brand-on-primary: #FFFFFF;
 
   /* Surfaces */
@@ -224,17 +224,6 @@ a, button, input, label, select, textarea {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
-}
-
-.message-unread-dot {
-  position: absolute;
-  top: -3px;
-  right: -5px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--brand-primary);
-  box-shadow: 0 0 0 2px var(--surface-patient-card);
 }
 
 /* Status Tags */
@@ -561,12 +550,6 @@ a, button, input, label, select, textarea {
 .session-telemetry-note {
   font-size: 10px;
   color: var(--text-secondary);
-}
-
-/* Cancelled appointments recede, but their status chip stays at full contrast: it is the one thing
-   on the card that must stay legible. */
-.card-patient.appt-cancelled > :not(.status-tag) {
-  opacity: 0.7;
 }
 
 /* Phones: while typing, the keyboard needs the tab bar's space, and a pinned bar can sit over the focused field.

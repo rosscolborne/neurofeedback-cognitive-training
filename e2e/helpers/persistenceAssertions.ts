@@ -5,8 +5,7 @@ import type { AuthorizedDocument, AuthorizedRead } from './authorizedFirestore';
 export type PersistenceRun = {
     runMarker: string;
     runStartMs: number;
-    clinicId: string;
-    scope: { patientId: string; clinicianId: string };
+    scope: { patientId: string };
 };
 
 /** Markers are long random tokens; short strings could match ordinary text. */
@@ -40,7 +39,7 @@ function field(document: AuthorizedDocument | null, name: string): unknown {
 async function runDocuments(
     page: Page,
     run: PersistenceRun,
-    collection: 'sessions' | 'appointments',
+    collection: 'sessions',
     markerField: string,
 ): Promise<AuthorizedDocument[]> {
     const documents = await collectionAs(page, run.scope.patientId, collection, {
@@ -70,96 +69,10 @@ export async function expectDemoSessionPersisted(run: PersistenceRun, patientPag
     return sessionId;
 }
 
-export async function expectAppointmentPersisted(
-    run: PersistenceRun,
-    patientPage: Page,
-    expected: { notes: string; status: 'scheduled' | 'cancelled'; durationMinutes: number; type: string },
-): Promise<void> {
-    await expect.poll(async () => {
-        const documents = await runDocuments(patientPage, run, 'appointments', 'notes');
-        return documents.map((document) => ({
-            notes: field(document, 'notes'),
-            status: field(document, 'status'),
-            durationMinutes: field(document, 'durationMinutes'),
-            type: field(document, 'type'),
-            clinicianId: field(document, 'clinicianId'),
-            createdBy: field(document, 'createdBy'),
-        }));
-    }, persistenceTimeout).toEqual([{ ...expected, clinicianId: run.scope.clinicianId, createdBy: run.scope.clinicianId }]);
-}
-
-export async function expectMessagesPersisted(
-    run: PersistenceRun,
-    patientPage: Page,
-    expected: { text: string; senderRole: 'patient' | 'clinician' }[],
-): Promise<void> {
-    const path = `messageThreads/${run.scope.patientId}/relationships/${run.scope.clinicianId}/messages`;
-    const expectedRecords = expected.map((message) => ({
-        ...message,
-        senderId: message.senderRole === 'patient' ? run.scope.patientId : run.scope.clinicianId,
-    })).sort((left, right) => left.text.localeCompare(right.text));
-    await expect.poll(async () => {
-        const documents = await collectionAs(patientPage, run.scope.patientId, path);
-        return documents
-            .filter((document) => document.createTimeMs >= run.runStartMs && containsRunMarker(field(document, 'text'), run.runMarker))
-            .map((document) => ({
-                text: field(document, 'text'),
-                senderRole: field(document, 'senderRole'),
-                senderId: field(document, 'senderId'),
-            }))
-            .sort((left, right) => String(left.text).localeCompare(String(right.text)));
-    }, persistenceTimeout).toEqual(expectedRecords);
-}
-
-/** The patient can read their accepted invitation and the relationship on their profile. */
-export async function expectInvitationAcceptedPersisted(run: PersistenceRun, patientPage: Page, invitationCode: string): Promise<void> {
-    await expect.poll(async () => {
-        const [invitation, patient] = await Promise.all([
-            documentAs(patientPage, run.scope.patientId, `patientInvitations/${invitationCode}`),
-            documentAs(patientPage, run.scope.patientId, `clients/${run.scope.patientId}`),
-        ]);
-        return {
-            invitationMarked: containsRunMarker(field(invitation, 'patientName'), run.runMarker),
-            invitationStatus: field(invitation, 'status'),
-            invitationPatientId: field(invitation, 'patientId'),
-            patientClinicianId: field(patient, 'clinicianId'),
-            patientAcceptedInvitationId: field(patient, 'acceptedInvitationId'),
-        };
-    }, persistenceTimeout).toEqual({
-        invitationMarked: true,
-        invitationStatus: 'accepted',
-        invitationPatientId: run.scope.patientId,
-        patientClinicianId: run.scope.clinicianId,
-        patientAcceptedInvitationId: invitationCode,
-    });
-}
-
-export async function expectClinicBrandPersisted(run: PersistenceRun, patientPage: Page, brandName: string): Promise<void> {
-    await expect.poll(async () => {
-        const clinic = await documentAs(patientPage, run.scope.patientId, `clinics/${run.clinicId}`);
-        return field(clinic, 'branding.name');
-    }, persistenceTimeout).toBe(brandName);
-}
-
 /** An account reads its own user profile through its own rules grant. */
 export async function expectRolePersisted(account: { uid: string; email: string }, role: 'patient', accountPage: Page): Promise<void> {
     await expect.poll(async () => {
         const user = await documentAs(accountPage, account.uid, `users/${account.uid}`);
         return { email: String(field(user, 'email') ?? '').toLowerCase(), role: field(user, 'role') };
     }, persistenceTimeout).toEqual({ email: account.email.toLowerCase(), role });
-}
-
-/** Used by the local messaging scenario to inspect saved data as the patient, without Admin. */
-export async function readPersistedMessagesAs(patientPage: Page, patientId: string, clinicianId: string) {
-    const thread = `messageThreads/${patientId}/relationships/${clinicianId}`;
-    const [summary, messages, patientRead] = await Promise.all([
-        documentAs(patientPage, patientId, thread),
-        collectionAs(patientPage, patientId, `${thread}/messages`),
-        documentAs(patientPage, patientId, `${thread}/reads/${patientId}`),
-    ]);
-    return {
-        summary: summary?.fields,
-        messages: messages.map((message) => message.fields),
-        patientRead: patientRead?.fields,
-    };
 }

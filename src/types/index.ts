@@ -179,33 +179,6 @@ export interface QEEGBrainMap {
   rawTelemetrySnippet?: string;
 }
 
-export interface ClinicBrandConfig {
-  clinicId: string;
-  name: string;
-  tagline: string;
-  logoUrl: string; // Base64 data URL or preset identifier
-  primaryAccent: string;      // e.g. #E8967A
-  primaryHover: string;
-  primarySubtle: string;
-  onPrimary: string;
-  patientBaseSurface: string; // #F8F7F4
-  clinicianBaseSurface: string; // #FAFAFA
-  typographyStyle: 'editorial-serif' | 'modern-sans';
-  createdAt: string;
-  updatedAt?: PersistedTimestamp;
-  schemaVersion?: number;
-}
-
-export interface ClinicProfile {
-  id: string;
-  name: string;
-  timezone: string;
-  branding?: ClinicBrandConfig;
-  practitionerIds: string[];
-  createdAt?: PersistedTimestamp;
-  updatedAt?: PersistedTimestamp;
-}
-
 export interface SessionRecord {
   id: string;
   patientId: string;
@@ -268,31 +241,6 @@ export interface SessionCreateResult {
   session: SessionRecord;
 }
 
-export type PatientInvitationStatus = 'pending' | 'accepted' | 'cancelled' | 'expired';
-
-export interface PatientInvitation {
-  id: string;
-  clinicianId: string;
-  /** Owning clinic for canonical invitations; absent only on legacy records. */
-  clinicId?: string;
-  clinicianName: string;
-  patientEmail: string;
-  patientName: string;
-  condition: ClientProfile['condition'];
-  assignedProtocol: ProtocolType;
-  prescribedSessionsPerWeek: number;
-  notes?: string;
-  status: PatientInvitationStatus;
-  patientId?: string;
-  createdAt?: PersistedTimestamp;
-  updatedAt?: PersistedTimestamp;
-  acceptedAt?: PersistedTimestamp;
-  expiresAt?: PersistedTimestamp;
-  /** Normalized email key under patientInvitationClaims/{clinicianId}/emails. */
-  uniquenessClaimId?: string;
-  schemaVersion: number;
-}
-
 export interface ClientProfile {
   id: string;
   name: string;
@@ -352,13 +300,3 @@ export interface MilestoneBadge {
   iconName: string;
   unlockedAt?: string;
 }
-
-export type AppointmentType =
-  | 'remote-training'
-  | 'in-clinic-evaluation'
-  | 'qeeg-mapping'
-  | 'protocol-review'
-  | 'consultation';
-
-export type AppointmentStatus = 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'missed';
-

@@ -1,14 +1,13 @@
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientProfile, ClinicBrandConfig } from '../../../types';
+import type { ClientProfile } from '../../../types';
 import { createBlankProfile } from '../../../services/storageEngine';
 import { getClinicalProtocolTemplate } from '../../../services/clinicalProtocolTemplates';
 import { APP_DISPLAY_NAME } from '../../../config/appIdentity';
 
 const state = vi.hoisted(() => ({
-  getSessions: vi.fn(async () => []), acceptPatientInvitation: vi.fn(), disconnectFromClinician: vi.fn(),
-  hasPendingInvitationNotice: vi.fn(async () => false),
+  getSessions: vi.fn(async () => []),
 }));
 vi.mock('../../../services/firebase', () => ({ auth: { currentUser: null }, db: {} }));
 vi.mock('firebase/auth', () => ({ signOut: vi.fn() }));
@@ -18,28 +17,21 @@ vi.mock('../../../services/storageEngine', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/storageEngine')>()),
   storageEngine: {
     getSessions: state.getSessions,
-    acceptPatientInvitation: state.acceptPatientInvitation, disconnectFromClinician: state.disconnectFromClinician,
-    hasPendingInvitationNotice: state.hasPendingInvitationNotice,
   },
 }));
-vi.mock('../../messaging/useMessageUnread', () => ({ useMessageUnread: () => ({ byPatient: {}, error: null }) }));
 vi.mock('../SessionRunner', () => ({ SessionRunner: 'session-runner' }));
 vi.mock('../ProgressHistory', () => ({ ProgressHistory: 'progress-history' }));
 vi.mock('../PostSessionSummary', () => ({ PostSessionSummary: 'post-session-summary' }));
-vi.mock('../PatientMessagingView', () => ({ PatientMessagingView: 'patient-messages' }));
-vi.mock('../PatientAppointmentsView', () => ({ PatientAppointmentsView: 'patient-appointments' }));
 vi.mock('../../brand/BrandLogo', () => ({ BrandLogo: 'brand-logo' }));
 vi.mock('../../../consumer/games/mentalMath/MentalMathGame', () => ({ MentalMathGame: 'mental-math-game' }));
 
-import { HomeScreen } from '../HomeScreen';
 import { PatientShell } from '../PatientShell';
-import { DisconnectClinicianDialog } from '../DisconnectClinicianDialog';
 
-const brand = { name: 'Clinic', logoUrl: '' } as ClinicBrandConfig;
 const tbr = getClinicalProtocolTemplate('theta-beta-ratio')!.recommendedExperiences;
 const alpha = getClinicalProtocolTemplate('alpha-enhancement')!.recommendedExperiences;
 const smr = getClinicalProtocolTemplate('smr-enhancement')!.recommendedExperiences;
 const unlinked = (): ClientProfile => createBlankProfile('patient-1', 'patient@example.com', 'Pat Self');
+// A profile linked under the retired clinician product: its relationship and care-team fields are still stored.
 const linked = (): ClientProfile => ({
   ...unlinked(), clinicianId: 'clinician-1', clinicId: 'clinic-1', condition: 'Peak Performance',
   prescribedSessionsPerWeek: 3, assignedProtocol: 'smr-enhancement', allowedExperiences: [...smr],
@@ -60,7 +52,7 @@ const sessionRunners = (renderer: ReactTestRenderer) => renderer.root.findAll((n
 describe('self-directed patient shell', () => {
   let onClientPersistedElsewhere: ReturnType<typeof vi.fn<(updated: ClientProfile) => void>>;
   const shell = (client: ClientProfile) => (
-    <PatientShell brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} />
+    <PatientShell client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere} />
   );
 
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -97,45 +89,30 @@ describe('self-directed patient shell', () => {
     expect(trainCards(renderer)).toHaveLength(tbr.length);
     tab(renderer, 'Profile');
     expect(button(renderer, 'Change Training Setup')).toBeUndefined();
+    expect(factLabels(renderer)).toEqual(['Completed']);
     expect(text(renderer)).not.toMatch(/protocol|calibrat|imprint/i);
-    expect(factLabels(renderer)).not.toContain('Training setup');
     expect(factLabels(renderer)).not.toContain('Goal');
     expect(factLabels(renderer)).not.toContain('Weekly target');
     expect(text(renderer)).not.toContain('Unavailable');
     await act(async () => { renderer.unmount(); });
   });
 
-  it('shows Messages and Visits only while linked, following relationship changes and falling back to Home', async () => {
+  it('gives a profile linked under the retired clinician product the same self-directed shell', async () => {
     let renderer!: ReactTestRenderer;
     await act(async () => { renderer = create(shell(linked())); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Messages', 'Visits', 'Profile']);
-    expect(button(renderer, 'Change training setup')).toBeUndefined();
-    tab(renderer, 'Profile');
-    expect(button(renderer, 'Change Training Setup')).toBeUndefined();
-    expect(factLabels(renderer)).toEqual(expect.arrayContaining(['Goal', 'Weekly target']));
-    expect(factLabels(renderer)).not.toContain('Training setup');
-    expect(text(renderer)).toContain('Connected to your clinician');
-    tab(renderer, 'Messages');
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-messages')).toHaveLength(1);
-
-    // The clinician removes the relationship (Firestore writes null link fields).
-    await act(async () => { renderer.update(shell({ ...linked(), clinicianId: null as never, clinicId: null as never })); });
     expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
-    expect(renderer.root.findAll((node) => (node.type as unknown) === 'patient-messages')).toHaveLength(0);
-    expect(renderer.root.findAllByType(HomeScreen)).toHaveLength(1);
+    expect(text(renderer)).not.toMatch(/protocol/i);
+    expect(text(renderer)).not.toMatch(/clinician|clinic\b/i);
     expect(button(renderer, 'Change training setup')).toBeUndefined();
-    // Unlinking keeps the last assignment as the self-directed starting point.
+    // The stored assignment stays the starting point.
     tab(renderer, 'Train');
     expect(trainCards(renderer)).toHaveLength(smr.length);
-    // The former clinician's goal and weekly target are kept but no longer presented as care-team facts.
+    // Stored care-team fields are not presented.
     tab(renderer, 'Profile');
-    expect(text(renderer)).not.toContain('Connected to your clinician');
-    expect(factLabels(renderer)).not.toContain('Goal');
-    expect(factLabels(renderer)).not.toContain('Weekly target');
-
-    await act(async () => { renderer.update(shell(linked())); });
-    expect(navLabels(renderer)).toContain('Messages');
-    expect(navLabels(renderer)).toContain('Visits');
+    expect(button(renderer, 'Change Training Setup')).toBeUndefined();
+    expect(factLabels(renderer)).toEqual(['Completed']);
+    expect(text(renderer)).not.toMatch(/protocol|calibrat|imprint/i);
+    expect(text(renderer)).not.toMatch(/clinician|clinic\b/i);
     await act(async () => { renderer.unmount(); });
   });
 
@@ -161,128 +138,13 @@ describe('patient shell header name (NFCT-38)', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it.each([
-    ['an unlinked patient', unlinked, APP_DISPLAY_NAME],
-    ['a clinician-linked patient', linked, brand.name],
-  ] as const)('names the app or clinic, never Waveable, for %s', async (_who, client, name) => {
+    ['an unlinked patient', unlinked],
+    ['a profile linked under the retired clinician product', linked],
+  ] as const)('names the app, never Waveable or a clinic, for %s', async (_who, client) => {
     let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(<PatientShell brand={brand} client={client()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
-    expect(hasText(renderer.root.findByType('header'), name)).toBe(true);
+    await act(async () => { renderer = create(<PatientShell client={client()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={vi.fn()} />); });
+    expect(hasText(renderer.root.findByType('header'), APP_DISPLAY_NAME)).toBe(true);
     expect(text(renderer)).not.toMatch(/waveable/i);
-    await act(async () => { renderer.unmount(); });
-  });
-});
-
-describe('clinician relationship lifecycle', () => {
-  let onClientPersistedElsewhere: ReturnType<typeof vi.fn<(updated: ClientProfile) => void>>;
-  let onInvitationAccepted: ReturnType<typeof vi.fn<() => void>>;
-  let onInvitationDismissed: ReturnType<typeof vi.fn<() => void>>;
-  const shell = (client: ClientProfile, initialInvitationCode?: string) => (
-    <PatientShell
-      brand={brand} client={client} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere}
-      initialInvitationCode={initialInvitationCode} onInvitationAccepted={onInvitationAccepted} onInvitationDismissed={onInvitationDismissed}
-    />
-  );
-  const confirmDisconnect = (renderer: ReactTestRenderer) => renderer.root.findByType(DisconnectClinicianDialog)
-    .findAllByType('button').find((node) => node.children.includes('Disconnect'))!;
-  const invitationCards = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.type === 'section' && node.props['aria-label'] === 'Clinician invitation');
-
-  afterEach(() => { vi.unstubAllGlobals(); });
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    onClientPersistedElsewhere = vi.fn();
-    onInvitationAccepted = vi.fn();
-    onInvitationDismissed = vi.fn();
-    vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
-  const codeInputs = (renderer: ReactTestRenderer) => renderer.root.findAll((node) => node.type === 'input' && node.props.id === 'clinician-invitation-code');
-
-  it('offers no clinician connection to a self-directed patient without a pending invitation', async () => {
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(unlinked())); });
-    expect(state.hasPendingInvitationNotice).toHaveBeenCalled();
-    expect(invitationCards(renderer)).toHaveLength(0);
-    expect(button(renderer, 'Connect to Clinician')).toBeUndefined();
-    tab(renderer, 'Profile');
-    expect(button(renderer, 'Connect to Clinician')).toBeUndefined();
-    expect(codeInputs(renderer)).toHaveLength(0);
-    expect(button(renderer, 'Disconnect from Clinician')).toBeUndefined();
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('offers Connect with manual code entry when this email has a pending invitation', async () => {
-    state.hasPendingInvitationNotice.mockResolvedValueOnce(true);
-    state.acceptPatientInvitation.mockResolvedValueOnce(linked());
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(unlinked())); });
-    expect(invitationCards(renderer)).toHaveLength(1);
-    expect(codeInputs(renderer)).toHaveLength(0);
-    act(() => button(renderer, 'Connect to Clinician')!.props.onClick());
-    expect(codeInputs(renderer)[0].props.value).toBe('');
-    act(() => codeInputs(renderer)[0].props.onChange({ target: { value: 'abcd-efgh-jklm' } }));
-    await act(async () => { button(renderer, 'Accept Invitation')!.props.onClick(); });
-    expect(state.acceptPatientInvitation).toHaveBeenCalledWith('ABCD-EFGH-JKLM', expect.objectContaining({ id: 'patient-1' }));
-    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(linked());
-    expect(onInvitationAccepted).toHaveBeenCalledTimes(1);
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('pre-fills the same flow from an invitation link, and reopening the link returns to it', async () => {
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(unlinked(), 'ABCD-EFGH-JKLM')); });
-    expect(invitationCards(renderer)).toHaveLength(1);
-    expect(codeInputs(renderer)[0].props.value).toBe('ABCD-EFGH-JKLM');
-    tab(renderer, 'Train');
-    expect(invitationCards(renderer)).toHaveLength(0);
-    await act(async () => { renderer.update(
-      <PatientShell
-        brand={brand} client={unlinked()} onUpdateClient={vi.fn()} onClientPersistedElsewhere={onClientPersistedElsewhere}
-        initialInvitationCode="ABCD-EFGH-JKLM" invitationRouteCode="ABCD-EFGH-JKLM" onInvitationAccepted={onInvitationAccepted} onInvitationDismissed={onInvitationDismissed}
-      />); });
-    expect(invitationCards(renderer)).toHaveLength(1);
-    expect(codeInputs(renderer)[0].props.value).toBe('ABCD-EFGH-JKLM');
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('confirms before disconnecting, cancels without a write, and returns to self-directed training', async () => {
-    const disconnected = { ...linked(), clinicianId: undefined, clinicId: undefined };
-    state.disconnectFromClinician.mockResolvedValueOnce(disconnected);
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(linked())); });
-    tab(renderer, 'Profile');
-    act(() => button(renderer, 'Disconnect from Clinician')!.props.onClick());
-    expect(renderer.root.findAllByType(DisconnectClinicianDialog)).toHaveLength(1);
-    expect(text(renderer)).toContain('Your sessions, progress and journal stay in your account.');
-    act(() => button(renderer, 'Cancel')!.props.onClick());
-    expect(renderer.root.findAllByType(DisconnectClinicianDialog)).toHaveLength(0);
-    expect(state.disconnectFromClinician).not.toHaveBeenCalled();
-
-    act(() => button(renderer, 'Disconnect from Clinician')!.props.onClick());
-    await act(async () => { confirmDisconnect(renderer).props.onClick(); });
-    expect(state.disconnectFromClinician).toHaveBeenCalledWith('patient-1');
-    expect(onClientPersistedElsewhere).toHaveBeenCalledWith(disconnected);
-    expect(renderer.root.findAllByType(DisconnectClinicianDialog)).toHaveLength(0);
-
-    await act(async () => { renderer.update(shell(disconnected)); });
-    expect(navLabels(renderer)).toEqual(['Home', 'Train', 'Progress', 'Profile']);
-    expect(button(renderer, 'Change Training Setup')).toBeUndefined();
-    expect(button(renderer, 'Disconnect from Clinician')).toBeUndefined();
-    expect(text(renderer)).not.toContain('Connected to your clinician');
-    await act(async () => { renderer.unmount(); });
-  });
-
-  it('keeps the dialog open with the reason when disconnecting fails', async () => {
-    state.disconnectFromClinician.mockRejectedValueOnce(new Error('Network unavailable'));
-    let renderer!: ReactTestRenderer;
-    await act(async () => { renderer = create(shell(linked())); });
-    tab(renderer, 'Profile');
-    act(() => button(renderer, 'Disconnect from Clinician')!.props.onClick());
-    await act(async () => { confirmDisconnect(renderer).props.onClick(); });
-    expect(renderer.root.findAllByType(DisconnectClinicianDialog)).toHaveLength(1);
-    expect(text(renderer)).toContain('Network unavailable');
-    expect(onClientPersistedElsewhere).not.toHaveBeenCalled();
     await act(async () => { renderer.unmount(); });
   });
 });

@@ -18,14 +18,13 @@ const inputStyle: React.CSSProperties = {
 };
 
 export const ChangePasswordForm: React.FC = () => {
-  const { user, changePassword } = useAuth();
+  const { changePassword } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
-  const isDemoAccount = user?.uid === 'demo-clinician';
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -71,84 +70,69 @@ export const ChangePasswordForm: React.FC = () => {
         Change the password you use to sign in.
       </p>
 
-      {isDemoAccount ? (
-        <div
-          role="status"
-          style={{
-            padding: '10px 12px',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--surface-patient-recessed)',
-            color: 'var(--text-secondary)',
-            fontSize: '12px',
-          }}
-        >
-          Password changes are not available for the demo account.
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+          Current password
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            disabled={isSubmitting}
+            style={inputStyle}
+          />
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-            Current password
+            New password
             <input
               type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              disabled={isSubmitting}
+              aria-describedby="new-password-requirements"
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Confirm new password
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
               disabled={isSubmitting}
               style={inputStyle}
             />
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              New password
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                disabled={isSubmitting}
-                aria-describedby="new-password-requirements"
-                style={inputStyle}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Confirm new password
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                disabled={isSubmitting}
-                style={inputStyle}
-              />
-            </label>
-          </div>
-          <div id="new-password-requirements" style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-            Use at least 6 characters.
-          </div>
+        </div>
+        <div id="new-password-requirements" style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+          Use at least 6 characters.
+        </div>
 
-          {error && (
-            <div role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)' }}>
-              {error}
-            </div>
-          )}
-          {isComplete && (
-            <div role="status" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--status-active)' }}>
-              <CheckCircle2 size={15} aria-hidden="true" /> Password changed successfully.
-            </div>
-          )}
-
-          <div>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={isSubmitting}
-              style={{ padding: '10px 20px', fontSize: '14px', opacity: isSubmitting ? 0.7 : 1 }}
-            >
-              {isSubmitting ? 'Changing password…' : 'Change password'}
-            </button>
+        {error && (
+          <div role="alert" style={{ fontSize: '12px', color: 'var(--status-alert)' }}>
+            {error}
           </div>
-        </form>
-      )}
+        )}
+        {isComplete && (
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--status-active)' }}>
+            <CheckCircle2 size={15} aria-hidden="true" /> Password changed successfully.
+          </div>
+        )}
+
+        <div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={isSubmitting}
+            style={{ padding: '10px 20px', fontSize: '14px', opacity: isSubmitting ? 0.7 : 1 }}
+          >
+            {isSubmitting ? 'Changing password…' : 'Change password'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

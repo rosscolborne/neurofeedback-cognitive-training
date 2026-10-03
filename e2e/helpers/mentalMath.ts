@@ -3,7 +3,7 @@ import { evaluate } from '../../shared/games/mental-math/v1/questions';
 import type { Operator } from '../../shared/games/mental-math/v1/params';
 import { expect } from '../fixtures';
 import { arriveAtPatientDashboard, loginThroughUi } from './auth';
-import { seedLinkedPatient } from './localEmulator';
+import { seedPatient } from './localEmulator';
 
 // Mental Math driven through the signed-in UI (NFCT-21, NFCT-22). Time is
 // Playwright's page.clock: the game reads time only through performance.now()
@@ -37,7 +37,7 @@ export const questionText = async (page: Page) => (await page.locator('.mm-quest
 export async function openMentalMath(page: Page): Promise<string> {
   // Installed before navigation; page time flows normally until a run pauses it.
   await page.clock.install();
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   await loginThroughUi(page, fixture.patient);
   await arriveAtPatientDashboard(page);
   await page.getByRole('button', { name: 'Train', exact: true }).click();

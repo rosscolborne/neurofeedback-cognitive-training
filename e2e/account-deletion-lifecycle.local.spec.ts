@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { arriveAtPatientDashboard, authenticatedUserId, loginThroughUi } from './helpers/auth';
-import { seedLinkedPatient, type LocalPatientFixture } from './helpers/localEmulator';
+import { seedPatient, type LocalPatientFixture } from './helpers/localEmulator';
 import { FIRESTORE_CACHE_STATE_KEY } from '../src/services/firestoreCacheLifecycle';
 
 // Role, label and text locators only: Profile layout and classes differ between UI revisions.
@@ -78,7 +78,7 @@ async function openProfileDeletion(page: Page, fixture: LocalPatientFixture) {
 }
 
 test('Delete Account opens an in-app step with no browser dialog, and Cancel closes it and clears the password', async ({ page }) => {
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   const dialogs = recordBrowserDialogs(page);
   await openProfileDeletion(page, fixture);
 
@@ -111,7 +111,7 @@ test('Delete Account opens an in-app step with no browser dialog, and Cancel clo
 });
 
 test('successful deletion holds a pending status instead of the password form, lands on /welcome, and ends the old sign-in', async ({ page }) => {
-  const fixture = await seedLinkedPatient();
+  const fixture = await seedPatient();
   const dialogs = recordBrowserDialogs(page);
   await openProfileDeletion(page, fixture);
   await passwordField(page).fill(fixture.patient.password);
@@ -121,7 +121,7 @@ test('successful deletion holds a pending status instead of the password form, l
   await confirmButton(page).click();
   await expect(deletingStatus(page)).toBeVisible();
 
-  // Clinic cleanup has finished and only the Auth deletion is outstanding: the
+  // Profile cleanup has finished and only the Auth deletion is outstanding: the
   // point where the resume screen and masked field used to flash.
   await authDeletion.held;
   await expect(deletingStatus(page)).toBeVisible();
@@ -143,8 +143,8 @@ test('successful deletion holds a pending status instead of the password form, l
 });
 
 test('the Finish account deletion screen retries a wrong password and resumes an interrupted deletion to /welcome', async ({ page }) => {
-  // State left behind when clinic cleanup finished but Auth deletion did not.
-  const fixture = await seedLinkedPatient({ accountDeletionStartedAt: new Date(), clinicianId: null, clinicId: null });
+  // State left behind when profile cleanup finished but Auth deletion did not.
+  const fixture = await seedPatient({ accountDeletionStartedAt: new Date() });
   const dialogs = recordBrowserDialogs(page);
   await loginThroughUi(page, fixture.patient);
   await expect(page.getByRole('heading', { name: 'Finish deleting your account' })).toBeVisible({ timeout: 15_000 });
